@@ -89,10 +89,7 @@ jobs:
       url: https://staging.vegalife.example.com
     steps:
       - name: Deploy to Staging
-        run: |
-          echo "Deploying ${{ needs.docker-build.outputs.image-tag }} to staging"
-          # Add your staging deployment commands here
-          # Example: kubectl set image deployment/vegalife-backend backend=${{ needs.docker-build.outputs.image-tag }} -n staging
+        run: echo "Deploying to staging (placeholder - image built and pushed to GHCR)"
 
   deploy-production:
     name: Deploy to Production
@@ -104,7 +101,4 @@ jobs:
       url: https://api.vegalife.example.com
     steps:
       - name: Deploy to Production
-        run: |
-          echo "Deploying ${{ needs.docker-build.outputs.image-tag }} to production"
-          # Add your production deployment commands here
-          # Example: kubectl set image deployment/vegalife-backend backend=${{ needs.docker-build.outputs.image-tag }} -n production
+        run: echo "Deploying to production (placeholder - image built and pushed to GHCR)"
