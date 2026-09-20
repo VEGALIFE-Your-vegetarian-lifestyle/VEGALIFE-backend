@@ -189,6 +189,7 @@ _Description: Manages user comments on blog posts._
 | content | TEXT | - | No | Comment text |
 | created_at | TIMESTAMPTZ | - | No | Timestamp when the comment was submitted |
 | updated_at | TIMESTAMPTZ | - | No | Timestamp of last update |
+| deleted_at | TIMESTAMPTZ | - | Yes | Soft delete timestamp |
 
 **Constraints:**
 - FK: user_id REFERENCES "user"(id) ON DELETE CASCADE
@@ -199,6 +200,7 @@ _Description: Manages user comments on blog posts._
 - `idx_comment_post_id` ON (post_id)
 - `idx_comment_user_id` ON (user_id)
 - `idx_comment_parent_id` ON (parent_id)
+- `idx_comment_active` ON (id) WHERE deleted_at IS NULL
 
 ---
 
