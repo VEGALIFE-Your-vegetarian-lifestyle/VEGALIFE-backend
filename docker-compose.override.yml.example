@@ -1,0 +1,29 @@
+version: '3.8'
+
+# Development overrides - automatically applied by docker-compose
+# Copy to docker-compose.override.yml for local customization
+
+services:
+  postgres:
+    # Enable query logging for debugging
+    command: ["postgres", "-c", "log_statement=all", "-c", "log_min_duration_statement=0"]
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: vegalife
+      POSTGRES_USER: vegalife
+      POSTGRES_PASSWORD: vegalife
+
+  # pgAdmin for database management (optional)
+  # pgadmin:
+  #   image: dpage/pgadmin4:latest
+  #   container_name: vegalife-pgadmin
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: admin@vegalife.local
+  #     PGADMIN_DEFAULT_PASSWORD: admin
+  #   ports:
+  #     - "5050:80"
+  #   depends_on:
+  #     - postgres
+  #   profiles:
+  #     - tools
