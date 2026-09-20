@@ -89,7 +89,7 @@ branch I'm on right now" → `.agents/plans/`.
 
 ## Project conventions
 
-- **Commit messages**: Conventional Commits format — `<type>(<scope>): <description>` where type is one of `feat` / `fix` / `refactor` / `test` / `chore` / `docs` / `style` / `perf` / `ci`. Scope is optional (e.g., `auth`, `recipe`). Description is lowercase, no trailing period, under 72 characters.
+- **Commit messages**: Conventional Commits format — `<type>(<scope>): <summary>` where type is one of `feat` / `fix` / `refactor` / `test` / `chore` / `docs` / `style` / `perf` / `ci`. Scope is optional (e.g., `auth`, `recipe`). Summary is lowercase, no trailing period, under 72 characters. **Always include a body description** using `git commit -m "summary" -m "description"` — the body should explain what changed and why, not just repeat the summary.
 - **Branch naming**: `type/short-description` — e.g., `feat/user-registration`, `fix/login-bug`, `refactor/cleanup-auth`. One branch per plan, never reused across unrelated work.
 - **Package structure**: Package-by-layer (`controller/`, `service/`, `repository/`) with domain sub-packages as features grow (e.g., `controller/user/UserController.java`).
 - **Naming**: Standard Java/Spring conventions — `PascalCase` classes, `camelCase` methods/fields, `UPPER_SNAKE_CASE` constants. Entity names singular (`User`, not `Users`). REST endpoints plural (`/api/users`).
