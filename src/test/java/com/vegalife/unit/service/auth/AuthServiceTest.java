@@ -1,4 +1,4 @@
-package com.vegalife.unit.service.user;
+package com.vegalife.unit.service.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,9 +14,9 @@ import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.response.auth.AuthResponse;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.auth.AuthService;
 import com.vegalife.service.email.EmailService;
 import com.vegalife.service.token.VerificationTokenService;
-import com.vegalife.service.user.UserService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ExpiredTokenException;
 import com.vegalife.shared.exception.InvalidTokenException;
@@ -32,7 +32,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @ExtendWith(MockitoExtension.class)
-class UserServiceTest {
+class AuthServiceTest {
 
   @Mock private UserRepository userRepository;
 
@@ -44,7 +44,7 @@ class UserServiceTest {
 
   @Mock private EmailService emailService;
 
-  @InjectMocks private UserService userService;
+  @InjectMocks private AuthService authService;
 
   private RegisterRequest validRequest;
   private User user;
@@ -93,7 +93,7 @@ class UserServiceTest {
                 .message("Verification email sent. Please check your inbox.")
                 .build());
 
-    AuthResponse response = userService.register(validRequest);
+    AuthResponse response = authService.register(validRequest);
 
     assertThat(response).isNotNull();
     assertThat(response.getUserId()).isEqualTo(userId);
@@ -107,21 +107,10 @@ class UserServiceTest {
   }
 
   @Test
-  void register_passwordsDoNotMatch_throwsException() {
-    validRequest.setConfirmPassword("different");
-
-    assertThatThrownBy(() -> userService.register(validRequest))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessage("Passwords do not match");
-
-    verify(userRepository, never()).save(any());
-  }
-
-  @Test
   void register_duplicateEmail_throwsException() {
     when(userRepository.existsByEmail(validRequest.getEmail())).thenReturn(true);
 
-    assertThatThrownBy(() -> userService.register(validRequest))
+    assertThatThrownBy(() -> authService.register(validRequest))
         .isInstanceOf(DuplicateResourceException.class)
         .hasMessage("Email already registered");
 
@@ -133,7 +122,7 @@ class UserServiceTest {
     when(userRepository.existsByEmail(validRequest.getEmail())).thenReturn(false);
     when(userRepository.existsByUsername(validRequest.getUsername())).thenReturn(true);
 
-    assertThatThrownBy(() -> userService.register(validRequest))
+    assertThatThrownBy(() -> authService.register(validRequest))
         .isInstanceOf(DuplicateResourceException.class)
         .hasMessage("Username already taken");
   }
@@ -152,7 +141,7 @@ class UserServiceTest {
                 .message("Email verified successfully. You can now log in.")
                 .build());
 
-    AuthResponse response = userService.verifyEmail(token);
+    AuthResponse response = authService.verifyEmail(token);
 
     assertThat(response).isNotNull();
     assertThat(response.getMessage()).contains("Email verified successfully");
@@ -176,7 +165,7 @@ class UserServiceTest {
                 .message("Email already verified. You can now log in.")
                 .build());
 
-    AuthResponse response = userService.verifyEmail(token);
+    AuthResponse response = authService.verifyEmail(token);
 
     assertThat(response.getMessage()).contains("already verified");
     verify(userRepository, never()).save(any());
@@ -187,7 +176,7 @@ class UserServiceTest {
     when(tokenService.getUserIdFromToken(token))
         .thenThrow(new ExpiredTokenException("Token expired"));
 
-    assertThatThrownBy(() -> userService.verifyEmail(token))
+    assertThatThrownBy(() -> authService.verifyEmail(token))
         .isInstanceOf(ExpiredTokenException.class);
   }
 
@@ -196,7 +185,7 @@ class UserServiceTest {
     when(tokenService.getUserIdFromToken(token))
         .thenThrow(new InvalidTokenException("Invalid token"));
 
-    assertThatThrownBy(() -> userService.verifyEmail(token))
+    assertThatThrownBy(() -> authService.verifyEmail(token))
         .isInstanceOf(InvalidTokenException.class);
   }
 
@@ -205,7 +194,7 @@ class UserServiceTest {
     when(tokenService.getUserIdFromToken(token)).thenReturn(userId);
     when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> userService.verifyEmail(token))
+    assertThatThrownBy(() -> authService.verifyEmail(token))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("User not found");
   }

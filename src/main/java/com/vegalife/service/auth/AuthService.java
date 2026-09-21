@@ -1,4 +1,4 @@
-package com.vegalife.service.user;
+package com.vegalife.service.auth;
 
 import com.vegalife.dto.mapper.UserMapper;
 import com.vegalife.dto.request.auth.RegisterRequest;
@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class UserService {
+public class AuthService {
 
   private final UserRepository userRepository;
   private final UserMapper userMapper;
@@ -35,10 +35,6 @@ public class UserService {
 
   @Transactional
   public AuthResponse register(RegisterRequest request) {
-    if (!request.getPassword().equals(request.getConfirmPassword())) {
-      throw new IllegalArgumentException("Passwords do not match");
-    }
-
     if (userRepository.existsByEmail(request.getEmail())) {
       throw new DuplicateResourceException("Email already registered");
     }

@@ -1,4 +1,4 @@
-package com.vegalife.integration.service.user;
+package com.vegalife.integration.service.auth;
 
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.response.auth.AuthResponse;
@@ -6,9 +6,9 @@ import com.vegalife.model.user.User;
 import com.vegalife.model.user.User.Role;
 import com.vegalife.model.user.User.Status;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.auth.AuthService;
 import com.vegalife.service.email.EmailService;
 import com.vegalife.service.token.VerificationTokenService;
-import com.vegalife.service.user.UserService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +34,7 @@ import static org.mockito.Mockito.doNothing;
 @SpringBootTest
 @ActiveProfiles("integration")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
-class UserServiceIntegrationTest {
+class AuthServiceIntegrationTest {
 
     @Container
     @SuppressWarnings("resource")
@@ -53,7 +53,7 @@ class UserServiceIntegrationTest {
     }
 
     @Autowired
-    private UserService userService;
+    private AuthService authService;
 
     @Autowired
     private UserRepository userRepository;
@@ -78,7 +78,7 @@ class UserServiceIntegrationTest {
         request.setPassword("password123");
         request.setConfirmPassword("password123");
 
-        AuthResponse response = userService.register(request);
+        AuthResponse response = authService.register(request);
 
         assertThat(response).isNotNull();
         assertThat(response.getUsername()).isEqualTo("dbuser");
@@ -100,7 +100,7 @@ class UserServiceIntegrationTest {
         request1.setEmail("same@test.com");
         request1.setPassword("password123");
         request1.setConfirmPassword("password123");
-        userService.register(request1);
+        authService.register(request1);
 
         RegisterRequest request2 = new RegisterRequest();
         request2.setUsername("user2");
@@ -108,7 +108,7 @@ class UserServiceIntegrationTest {
         request2.setPassword("password123");
         request2.setConfirmPassword("password123");
 
-        assertThatThrownBy(() -> userService.register(request2))
+        assertThatThrownBy(() -> authService.register(request2))
             .isInstanceOf(DuplicateResourceException.class)
             .hasMessage("Email already registered");
     }
@@ -120,7 +120,7 @@ class UserServiceIntegrationTest {
         request1.setEmail("user1@test.com");
         request1.setPassword("password123");
         request1.setConfirmPassword("password123");
-        userService.register(request1);
+        authService.register(request1);
 
         RegisterRequest request2 = new RegisterRequest();
         request2.setUsername("sameuser");
@@ -128,7 +128,7 @@ class UserServiceIntegrationTest {
         request2.setPassword("password123");
         request2.setConfirmPassword("password123");
 
-        assertThatThrownBy(() -> userService.register(request2))
+        assertThatThrownBy(() -> authService.register(request2))
             .isInstanceOf(DuplicateResourceException.class)
             .hasMessage("Username already taken");
     }
@@ -140,12 +140,12 @@ class UserServiceIntegrationTest {
         request.setEmail("verify@test.com");
         request.setPassword("password123");
         request.setConfirmPassword("password123");
-        AuthResponse registerResponse = userService.register(request);
+        AuthResponse registerResponse = authService.register(request);
 
         User user = userRepository.findByEmail("verify@test.com").orElseThrow();
         String token = tokenService.generateToken(user);
 
-        AuthResponse verifyResponse = userService.verifyEmail(token);
+        AuthResponse verifyResponse = authService.verifyEmail(token);
 
         assertThat(verifyResponse.getMessage()).contains("verified");
 
@@ -161,14 +161,14 @@ class UserServiceIntegrationTest {
         request.setEmail("verify2@test.com");
         request.setPassword("password123");
         request.setConfirmPassword("password123");
-        AuthResponse registerResponse = userService.register(request);
+        AuthResponse registerResponse = authService.register(request);
 
         User user = userRepository.findByEmail("verify2@test.com").orElseThrow();
         String token = tokenService.generateToken(user);
 
-        userService.verifyEmail(token);
+        authService.verifyEmail(token);
 
-        AuthResponse verifyResponse = userService.verifyEmail(token);
+        AuthResponse verifyResponse = authService.verifyEmail(token);
         assertThat(verifyResponse.getMessage()).contains("already verified");
 
         User verifiedUser = userRepository.findById(user.getId()).orElseThrow();

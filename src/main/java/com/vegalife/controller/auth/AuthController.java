@@ -2,7 +2,7 @@ package com.vegalife.controller.auth;
 
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.response.auth.AuthResponse;
-import com.vegalife.service.user.UserService;
+import com.vegalife.service.auth.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,17 +18,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AuthController {
 
-  private final UserService userService;
+  private final AuthService authService;
 
   @PostMapping("/register")
   public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-    AuthResponse response = userService.register(request);
+    AuthResponse response = authService.register(request);
     return ResponseEntity.ok(response);
   }
 
   @GetMapping("/verify-email")
   public ResponseEntity<AuthResponse> verifyEmail(@RequestParam String token) {
-    AuthResponse response = userService.verifyEmail(token);
+    AuthResponse response = authService.verifyEmail(token);
     return ResponseEntity.ok(response);
   }
 }

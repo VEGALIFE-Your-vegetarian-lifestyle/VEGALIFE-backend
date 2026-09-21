@@ -12,7 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.controller.auth.AuthController;
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.response.auth.AuthResponse;
-import com.vegalife.service.user.UserService;
+import com.vegalife.service.auth.AuthService;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +32,7 @@ class AuthControllerTest {
 
   @Autowired private ObjectMapper objectMapper;
 
-  @MockitoBean private UserService userService;
+  @MockitoBean private AuthService authService;
 
   @Test
   void register_validRequest_returns200() throws Exception {
@@ -51,7 +51,7 @@ class AuthControllerTest {
             .message("Verification email sent. Please check your inbox.")
             .build();
 
-    when(userService.register(any(RegisterRequest.class))).thenReturn(response);
+    when(authService.register(any(RegisterRequest.class))).thenReturn(response);
 
     mockMvc
         .perform(
@@ -137,7 +137,7 @@ class AuthControllerTest {
     request.setPassword("password123");
     request.setConfirmPassword("password123");
 
-    when(userService.register(any(RegisterRequest.class)))
+    when(authService.register(any(RegisterRequest.class)))
         .thenThrow(
             new com.vegalife.shared.exception.DuplicateResourceException(
                 "Email already registered"));
@@ -161,7 +161,7 @@ class AuthControllerTest {
             .message("Email verified successfully. You can now log in.")
             .build();
 
-    when(userService.verifyEmail(anyString())).thenReturn(response);
+    when(authService.verifyEmail(anyString())).thenReturn(response);
 
     mockMvc
         .perform(get("/api/auth/verify-email").param("token", "valid.token"))
@@ -172,7 +172,7 @@ class AuthControllerTest {
 
   @Test
   void verifyEmail_invalidToken_returns400() throws Exception {
-    when(userService.verifyEmail(anyString()))
+    when(authService.verifyEmail(anyString()))
         .thenThrow(new com.vegalife.shared.exception.InvalidTokenException("Invalid token"));
 
     mockMvc
@@ -182,7 +182,7 @@ class AuthControllerTest {
 
   @Test
   void verifyEmail_expiredToken_returns400() throws Exception {
-    when(userService.verifyEmail(anyString()))
+    when(authService.verifyEmail(anyString()))
         .thenThrow(new com.vegalife.shared.exception.ExpiredTokenException("Token expired"));
 
     mockMvc
