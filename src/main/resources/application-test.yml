@@ -36,11 +36,14 @@ spring:
   thymeleaf:
     cache: false
 
+  security:
+    enabled: false
+
 app:
   verification:
     token-expiry-minutes: 30
     issuer: vegalife-backend-test
-    secret: test-verification-secret
+    secret: test-verification-secret-key-at-least-32-chars
 
 logging:
   level:

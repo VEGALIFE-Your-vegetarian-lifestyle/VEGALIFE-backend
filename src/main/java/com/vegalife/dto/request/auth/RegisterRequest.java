@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
+@PasswordMatch
 public class RegisterRequest {
 
     @NotBlank(message = "Username is required")
@@ -24,4 +25,8 @@ public class RegisterRequest {
 
     @NotNull(message = "Confirm password is required")
     private String confirmPassword;
+
+    public boolean isPasswordMatching() {
+        return password != null && password.equals(confirmPassword);
+    }
 }
