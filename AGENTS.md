@@ -28,7 +28,7 @@ Vegalife is a social platform for the vegan community. Users can share experienc
 - **Build**: Maven with Wrapper (`./mvnw`)
 - **Database**: PostgreSQL (Spring Data JPA / Hibernate)
 - **Code quality**: Checkstyle (style rules), Spotless (auto-formatting)
-- **Testing**: JUnit 5, Mockito, MockMvc, H2 (in-memory test DB)
+- **Testing**: JUnit 5, Mockito, MockMvc, H2 (unit tests), Testcontainers PostgreSQL (integration tests)
 - **API docs**: SpringDoc OpenAPI (Swagger UI)
 - **Utilities**: Lombok, MapStruct
 - **Observability**: Spring Boot Actuator
@@ -128,11 +128,12 @@ branch I'm on right now" → `.agents/plans/`.
 - Install dependencies: `./mvnw clean install`
 - Build: `./mvnw clean compile`
 - Run locally: `./mvnw spring-boot:run`
-- Test: `./mvnw test`
+- Unit tests: `./mvnw test`
+- Integration tests: `./mvnw verify -Pintegration-test`
 - Lint (Checkstyle): `./mvnw checkstyle:check`
 - Format check (Spotless): `./mvnw spotless:check`
 - Auto-format (Spotless): `./mvnw spotless:apply`
-- Full verification: `./mvnw clean verify` (build + test + checkstyle + spotless)
+- Full verification: `./mvnw clean verify` (build + unit tests + integration tests + checkstyle + spotless)
 
 ## Verification
 

@@ -70,19 +70,30 @@ src/main/java/com/vegalife/
 
 ```
 src/test/java/com/vegalife/
-├── VegalifeApplicationTests.java     # Context load test
+├── VegalifeApplicationTest.java          # Context load test (unit)
 │
-├── controller/                       # @WebMvcTest + MockMvc tests
-│   └── <domain>/
-│       └── <Domain>ControllerTest.java
+├── unit/                                 # mvn test (Surefire, H2)
+│   ├── controller/                       # @WebMvcTest + MockMvc tests
+│   │   └── <domain>/
+│   │       └── <Domain>ControllerTest.java
+│   │
+│   ├── service/                          # Unit tests with Mockito
+│   │   └── <domain>/
+│   │       └── <Domain>ServiceTest.java
+│   │
+│   └── repository/                       # @DataJpaTest + H2 in-memory DB
+│       └── <domain>/
+│           └── <Domain>RepositoryTest.java
 │
-├── service/                          # Unit tests with Mockito
-│   └── <domain>/
-│       └── <Domain>ServiceTest.java
-│
-└── repository/                       # @DataJpaTest + H2 in-memory DB
-    └── <domain>/
-        └── <Domain>RepositoryTest.java
+└── integration/                          # mvn verify -Pintegration-test (Failsafe, Testcontainers PostgreSQL)
+    ├── config/                           # Testcontainers config + base classes
+    ├── controller/                       # @SpringBootTest + MockMvc
+    │   └── <domain>/
+    │       └── <Domain>ControllerIntegrationTest.java
+    │
+    └── service/                          # @SpringBootTest + real DB
+        └── <domain>/
+            └── <Domain>ServiceIntegrationTest.java
 ```
 
 ## Package responsibilities
