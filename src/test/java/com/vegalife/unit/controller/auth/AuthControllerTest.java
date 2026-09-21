@@ -35,7 +35,7 @@ class AuthControllerTest {
   @MockitoBean private AuthService authService;
 
   @Test
-  void register_validRequest_returns200() throws Exception {
+  void register_validRequest_returns201() throws Exception {
     RegisterRequest request = new RegisterRequest();
     request.setUsername("testuser");
     request.setEmail("test@example.com");
@@ -48,7 +48,6 @@ class AuthControllerTest {
             .userId(userId)
             .username("testuser")
             .email("test@example.com")
-            .message("Verification email sent. Please check your inbox.")
             .build();
 
     when(authService.register(any(RegisterRequest.class))).thenReturn(response);
@@ -58,12 +57,12 @@ class AuthControllerTest {
             post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.userId").value(userId.toString()))
-        .andExpect(jsonPath("$.username").value("testuser"))
-        .andExpect(jsonPath("$.email").value("test@example.com"))
-        .andExpect(
-            jsonPath("$.message").value("Verification email sent. Please check your inbox."));
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("User registered successfully"))
+        .andExpect(jsonPath("$.data.userId").value(userId.toString()))
+        .andExpect(jsonPath("$.data.username").value("testuser"))
+        .andExpect(jsonPath("$.data.email").value("test@example.com"));
   }
 
   @Test
@@ -78,7 +77,8 @@ class AuthControllerTest {
             post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
   }
 
   @Test
@@ -94,7 +94,8 @@ class AuthControllerTest {
             post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
   }
 
   @Test
@@ -110,7 +111,8 @@ class AuthControllerTest {
             post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
   }
 
   @Test
@@ -126,7 +128,8 @@ class AuthControllerTest {
             post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
   }
 
   @Test
@@ -147,7 +150,9 @@ class AuthControllerTest {
             post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
-        .andExpect(status().isConflict());
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Email already registered"));
   }
 
   @Test
@@ -158,7 +163,6 @@ class AuthControllerTest {
             .userId(userId)
             .username("testuser")
             .email("test@example.com")
-            .message("Email verified successfully. You can now log in.")
             .build();
 
     when(authService.verifyEmail(anyString())).thenReturn(response);
@@ -166,8 +170,11 @@ class AuthControllerTest {
     mockMvc
         .perform(get("/api/auth/verify-email").param("token", "valid.token"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.userId").value(userId.toString()))
-        .andExpect(jsonPath("$.message").value("Email verified successfully. You can now log in."));
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Email verified successfully"))
+        .andExpect(jsonPath("$.data.userId").value(userId.toString()))
+        .andExpect(jsonPath("$.data.username").value("testuser"))
+        .andExpect(jsonPath("$.data.email").value("test@example.com"));
   }
 
   @Test
@@ -177,7 +184,9 @@ class AuthControllerTest {
 
     mockMvc
         .perform(get("/api/auth/verify-email").param("token", "invalid"))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Invalid token"));
   }
 
   @Test
@@ -187,6 +196,8 @@ class AuthControllerTest {
 
     mockMvc
         .perform(get("/api/auth/verify-email").param("token", "expired"))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Token expired"));
   }
 }

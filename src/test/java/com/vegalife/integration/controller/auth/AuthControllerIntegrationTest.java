@@ -1,7 +1,6 @@
 package com.vegalife.integration.controller.auth;
 
 import com.vegalife.dto.request.auth.RegisterRequest;
-import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.response.auth.AuthResponse;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.User.Status;
@@ -91,10 +90,11 @@ class AuthControllerIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(registerRequest)))
             .andDo(print())
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.username").value("integrationuser"))
-            .andExpect(jsonPath("$.email").value("integration@test.com"))
-            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Verification email sent")));
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.message").value("User registered successfully"))
+            .andExpect(jsonPath("$.data.username").value("integrationuser"))
+            .andExpect(jsonPath("$.data.email").value("integration@test.com"));
 
         User user = userRepository.findByEmail("integration@test.com").orElseThrow();
         assertThat(user.getEmailVerified()).isFalse();
@@ -106,7 +106,8 @@ class AuthControllerIntegrationTest {
                 .param("token", token))
             .andDo(print())
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("verified")));
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.message").value("Email verified successfully"));
 
         User verifiedUser = userRepository.findById(user.getId()).orElseThrow();
         assertThat(verifiedUser.getEmailVerified()).isTrue();
@@ -124,7 +125,7 @@ class AuthControllerIntegrationTest {
         mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(firstRequest)))
-            .andExpect(status().isOk());
+            .andExpect(status().isCreated());
 
         RegisterRequest secondRequest = new RegisterRequest();
         secondRequest.setUsername("user2");
@@ -135,7 +136,9 @@ class AuthControllerIntegrationTest {
         mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(secondRequest)))
-            .andExpect(status().isConflict());
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.message").value("Email already registered"));
     }
 
     @Test
@@ -149,7 +152,7 @@ class AuthControllerIntegrationTest {
         mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(firstRequest)))
-            .andExpect(status().isOk());
+            .andExpect(status().isCreated());
 
         RegisterRequest secondRequest = new RegisterRequest();
         secondRequest.setUsername("sameuser");
@@ -160,7 +163,9 @@ class AuthControllerIntegrationTest {
         mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(secondRequest)))
-            .andExpect(status().isConflict());
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.message").value("Username already taken"));
     }
 
     @Test
@@ -168,7 +173,9 @@ class AuthControllerIntegrationTest {
         mockMvc.perform(get("/api/auth/verify-email")
                 .param("token", "invalid.token.here"))
             .andDo(print())
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.message").value("Invalid token"));
     }
 
     @Test
@@ -176,6 +183,8 @@ class AuthControllerIntegrationTest {
         mockMvc.perform(get("/api/auth/verify-email")
                 .param("token", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0IiwiZXhwIjoxfQ.dummy"))
             .andDo(print())
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.message").value("Token expired"));
     }
 }

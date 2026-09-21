@@ -84,13 +84,12 @@ class AuthServiceTest {
     when(userMapper.toEntity(validRequest, encodedPassword)).thenReturn(user);
     when(userRepository.save(any(User.class))).thenReturn(user);
     when(tokenService.generateToken(user)).thenReturn(token);
-    when(userMapper.toAuthResponse(user, "Verification email sent. Please check your inbox."))
+    when(userMapper.toAuthResponse(user))
         .thenReturn(
             AuthResponse.builder()
                 .userId(userId)
                 .username("testuser")
                 .email("test@example.com")
-                .message("Verification email sent. Please check your inbox.")
                 .build());
 
     AuthResponse response = authService.register(validRequest);
@@ -99,7 +98,6 @@ class AuthServiceTest {
     assertThat(response.getUserId()).isEqualTo(userId);
     assertThat(response.getUsername()).isEqualTo("testuser");
     assertThat(response.getEmail()).isEqualTo("test@example.com");
-    assertThat(response.getMessage()).contains("Verification email sent");
 
     verify(userRepository).save(user);
     verify(tokenService).generateToken(user);
@@ -132,19 +130,17 @@ class AuthServiceTest {
     when(tokenService.getUserIdFromToken(token)).thenReturn(userId);
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
     when(userRepository.save(any(User.class))).thenReturn(user);
-    when(userMapper.toAuthResponse(user, "Email verified successfully. You can now log in."))
+    when(userMapper.toAuthResponse(user))
         .thenReturn(
             AuthResponse.builder()
                 .userId(userId)
                 .username("testuser")
                 .email("test@example.com")
-                .message("Email verified successfully. You can now log in.")
                 .build());
 
     AuthResponse response = authService.verifyEmail(token);
 
     assertThat(response).isNotNull();
-    assertThat(response.getMessage()).contains("Email verified successfully");
     assertThat(user.getEmailVerified()).isTrue();
     assertThat(user.getStatus()).isEqualTo(User.Status.activated);
   }
@@ -156,18 +152,17 @@ class AuthServiceTest {
 
     when(tokenService.getUserIdFromToken(token)).thenReturn(userId);
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-    when(userMapper.toAuthResponse(user, "Email already verified. You can now log in."))
+    when(userMapper.toAuthResponse(user))
         .thenReturn(
             AuthResponse.builder()
                 .userId(userId)
                 .username("testuser")
                 .email("test@example.com")
-                .message("Email already verified. You can now log in.")
                 .build());
 
     AuthResponse response = authService.verifyEmail(token);
 
-    assertThat(response.getMessage()).contains("already verified");
+    assertThat(response).isNotNull();
     verify(userRepository, never()).save(any());
   }
 

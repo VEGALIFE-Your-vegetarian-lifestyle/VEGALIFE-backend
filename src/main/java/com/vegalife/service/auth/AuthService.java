@@ -55,7 +55,7 @@ public class AuthService {
 
     log.info("User registered: {} ({})", user.getUsername(), user.getEmail());
 
-    return userMapper.toAuthResponse(user, "Verification email sent. Please check your inbox.");
+    return userMapper.toAuthResponse(user);
   }
 
   @Transactional
@@ -76,7 +76,7 @@ public class AuthService {
 
     if (user.getEmailVerified()) {
       log.info("Email already verified for user: {}", user.getUsername());
-      return userMapper.toAuthResponse(user, "Email already verified. You can now log in.");
+      return userMapper.toAuthResponse(user);
     }
 
     user.setEmailVerified(true);
@@ -85,6 +85,6 @@ public class AuthService {
 
     log.info("Email verified for user: {} ({})", user.getUsername(), user.getEmail());
 
-    return userMapper.toAuthResponse(user, "Email verified successfully. You can now log in.");
+    return userMapper.toAuthResponse(user);
   }
 }

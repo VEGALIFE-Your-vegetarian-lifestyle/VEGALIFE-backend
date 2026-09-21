@@ -25,6 +25,5 @@ public interface UserMapper {
   User toEntity(RegisterRequest request, String encodedPassword);
 
   @Mapping(target = "userId", source = "user.id")
-  @Mapping(target = "message", source = "message")
-  AuthResponse toAuthResponse(User user, String message);
+  AuthResponse toAuthResponse(User user);
 }

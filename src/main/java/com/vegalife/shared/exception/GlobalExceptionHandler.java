@@ -1,5 +1,6 @@
 package com.vegalife.shared.exception;
 
+import com.vegalife.shared.dto.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
@@ -17,17 +18,18 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
-  public ResponseEntity<ErrorResponse> handleValidationException(
+  public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationException(
       MethodArgumentNotValidException ex, HttpServletRequest request) {
     Map<String, String> errors = new HashMap<>();
     for (FieldError error : ex.getBindingResult().getFieldErrors()) {
       errors.put(error.getField(), error.getDefaultMessage());
     }
-    return buildErrorResponse(HttpStatus.BAD_REQUEST, "Validation failed", errors, request);
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(ApiResponse.failure("Validation failed"));
   }
 
   @ExceptionHandler(ConstraintViolationException.class)
-  public ResponseEntity<ErrorResponse> handleConstraintViolation(
+  public ResponseEntity<ApiResponse<Map<String, String>>> handleConstraintViolation(
       ConstraintViolationException ex, HttpServletRequest request) {
     Map<String, String> errors = new HashMap<>();
     ex.getConstraintViolations()
@@ -36,35 +38,40 @@ public class GlobalExceptionHandler {
               String field = violation.getPropertyPath().toString();
               errors.put(field, violation.getMessage());
             });
-    return buildErrorResponse(HttpStatus.BAD_REQUEST, "Validation failed", errors, request);
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(ApiResponse.failure("Validation failed"));
   }
 
   @ExceptionHandler(DuplicateResourceException.class)
-  public ResponseEntity<ErrorResponse> handleDuplicateResource(
+  public ResponseEntity<ApiResponse<Void>> handleDuplicateResource(
       DuplicateResourceException ex, HttpServletRequest request) {
-    return buildErrorResponse(HttpStatus.CONFLICT, ex.getMessage(), null, request);
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ApiResponse.failure(ex.getMessage()));
   }
 
   @ExceptionHandler(InvalidTokenException.class)
-  public ResponseEntity<ErrorResponse> handleInvalidToken(
+  public ResponseEntity<ApiResponse<Void>> handleInvalidToken(
       InvalidTokenException ex, HttpServletRequest request) {
-    return buildErrorResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), null, request);
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(ApiResponse.failure(ex.getMessage()));
   }
 
   @ExceptionHandler(ExpiredTokenException.class)
-  public ResponseEntity<ErrorResponse> handleExpiredToken(
+  public ResponseEntity<ApiResponse<Void>> handleExpiredToken(
       ExpiredTokenException ex, HttpServletRequest request) {
-    return buildErrorResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), null, request);
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(ApiResponse.failure(ex.getMessage()));
   }
 
   @ExceptionHandler(ResourceNotFoundException.class)
-  public ResponseEntity<ErrorResponse> handleResourceNotFound(
+  public ResponseEntity<ApiResponse<Void>> handleResourceNotFound(
       ResourceNotFoundException ex, HttpServletRequest request) {
-    return buildErrorResponse(HttpStatus.NOT_FOUND, ex.getMessage(), null, request);
+    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .body(ApiResponse.failure(ex.getMessage()));
   }
 
   @ExceptionHandler(DataIntegrityViolationException.class)
-  public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(
+  public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(
       DataIntegrityViolationException ex, HttpServletRequest request) {
     String message = "Data integrity violation";
     if (ex.getCause() != null && ex.getCause().getMessage() != null) {
@@ -73,37 +80,13 @@ public class GlobalExceptionHandler {
         message = "Email or username already exists";
       }
     }
-    return buildErrorResponse(HttpStatus.CONFLICT, message, null, request);
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ApiResponse.failure(message));
   }
 
   @ExceptionHandler(Exception.class)
-  public ResponseEntity<ErrorResponse> handleGeneric(Exception ex, HttpServletRequest request) {
-    return buildErrorResponse(
-        HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", null, request);
-  }
-
-  private ResponseEntity<ErrorResponse> buildErrorResponse(
-      HttpStatus status, String message, Map<String, String> errors, HttpServletRequest request) {
-    ErrorResponse response =
-        ErrorResponse.builder()
-            .timestamp(Instant.now())
-            .status(status.value())
-            .error(status.getReasonPhrase())
-            .message(message)
-            .path(request.getRequestURI())
-            .errors(errors)
-            .build();
-    return ResponseEntity.status(status).body(response);
-  }
-
-  @lombok.Builder
-  @lombok.Data
-  public static class ErrorResponse {
-    private Instant timestamp;
-    private int status;
-    private String error;
-    private String message;
-    private String path;
-    private Map<String, String> errors;
+  public ResponseEntity<ApiResponse<Void>> handleGeneric(Exception ex, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .body(ApiResponse.failure("Internal server error"));
   }
 }
