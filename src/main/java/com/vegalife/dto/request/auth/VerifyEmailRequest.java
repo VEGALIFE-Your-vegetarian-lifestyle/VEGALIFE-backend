@@ -6,6 +6,6 @@ import lombok.Data;
 @Data
 public class VerifyEmailRequest {
 
-    @NotBlank(message = "Token is required")
-    private String token;
+  @NotBlank(message = "Token is required")
+  private String token;
 }

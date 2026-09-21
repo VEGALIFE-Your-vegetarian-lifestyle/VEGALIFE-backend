@@ -10,21 +10,21 @@ import org.mapstruct.factory.Mappers;
 @Mapper(componentModel = "spring")
 public interface UserMapper {
 
-    UserMapper INSTANCE = Mappers.getMapper(UserMapper.class);
+  UserMapper INSTANCE = Mappers.getMapper(UserMapper.class);
 
-    @Mapping(target = "id", ignore = true)
-    @Mapping(target = "passwordHash", source = "encodedPassword")
-    @Mapping(target = "role", constant = "USER")
-    @Mapping(target = "status", constant = "created")
-    @Mapping(target = "emailVerified", constant = "false")
-    @Mapping(target = "lastLoginAt", ignore = true)
-    @Mapping(target = "avatarUrl", ignore = true)
-    @Mapping(target = "createdAt", ignore = true)
-    @Mapping(target = "updatedAt", ignore = true)
-    @Mapping(target = "deletedAt", ignore = true)
-    User toEntity(RegisterRequest request, String encodedPassword);
+  @Mapping(target = "id", ignore = true)
+  @Mapping(target = "passwordHash", source = "encodedPassword")
+  @Mapping(target = "role", constant = "USER")
+  @Mapping(target = "status", constant = "created")
+  @Mapping(target = "emailVerified", constant = "false")
+  @Mapping(target = "lastLoginAt", ignore = true)
+  @Mapping(target = "avatarUrl", ignore = true)
+  @Mapping(target = "createdAt", ignore = true)
+  @Mapping(target = "updatedAt", ignore = true)
+  @Mapping(target = "deletedAt", ignore = true)
+  User toEntity(RegisterRequest request, String encodedPassword);
 
-    @Mapping(target = "userId", source = "user.id")
-    @Mapping(target = "message", source = "message")
-    AuthResponse toAuthResponse(User user, String message);
+  @Mapping(target = "userId", source = "user.id")
+  @Mapping(target = "message", source = "message")
+  AuthResponse toAuthResponse(User user, String message);
 }

@@ -9,9 +9,13 @@ import java.lang.annotation.*;
 @Constraint(validatedBy = PasswordMatchValidator.class)
 @Documented
 public @interface PasswordMatch {
-    String message() default "Passwords do not match";
-    Class<?>[] groups() default {};
-    Class<? extends Payload>[] payload() default {};
-    String passwordField() default "password";
-    String confirmPasswordField() default "confirmPassword";
+  String message() default "Passwords do not match";
+
+  Class<?>[] groups() default {};
+
+  Class<? extends Payload>[] payload() default {};
+
+  String passwordField() default "password";
+
+  String confirmPasswordField() default "confirmPassword";
 }
