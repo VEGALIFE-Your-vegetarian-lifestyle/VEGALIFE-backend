@@ -6,16 +6,14 @@ import java.lang.annotation.*;
 
 @Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
-@Constraint(validatedBy = PasswordMatchValidator.class)
+@Constraint(validatedBy = FieldsEqualValidator.class)
 @Documented
-public @interface PasswordMatch {
-  String message() default "Passwords do not match";
+public @interface FieldsEqual {
+  String message() default "Fields must be equal";
 
   Class<?>[] groups() default {};
 
   Class<? extends Payload>[] payload() default {};
 
-  String passwordField() default "password";
-
-  String confirmPasswordField() default "confirmPassword";
+  String[] value();
 }

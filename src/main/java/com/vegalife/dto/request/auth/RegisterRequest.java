@@ -1,5 +1,6 @@
 package com.vegalife.dto.request.auth;
 
+import com.vegalife.shared.validation.FieldsEqual;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -7,7 +8,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
-@PasswordMatch
+@FieldsEqual({"password", "confirmPassword"})
 public class RegisterRequest {
 
   @NotBlank(message = "Username is required")
@@ -25,8 +26,4 @@ public class RegisterRequest {
 
   @NotNull(message = "Confirm password is required")
   private String confirmPassword;
-
-  public boolean isPasswordMatching() {
-    return password != null && password.equals(confirmPassword);
-  }
 }
