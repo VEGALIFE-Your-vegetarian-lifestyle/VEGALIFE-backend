@@ -123,11 +123,11 @@ class UserRepositoryTest {
             .build();
 
         User saved = userRepository.save(user);
+        entityManager.flush();
 
-        // Note: UUID generation and timestamps work in PostgreSQL but not in H2 test environment
-        // assertThat(saved.getId()).isNotNull();
-        // assertThat(saved.getCreatedAt()).isNotNull();
-        // assertThat(saved.getUpdatedAt()).isNotNull();
+        assertThat(saved.getId()).isNotNull();
+        assertThat(saved.getCreatedAt()).isNotNull();
+        assertThat(saved.getUpdatedAt()).isNotNull();
         assertThat(saved.getUsername()).isEqualTo("testuser");
         assertThat(saved.getEmail()).isEqualTo("test@example.com");
         assertThat(saved.getRole()).isEqualTo(User.Role.USER);
