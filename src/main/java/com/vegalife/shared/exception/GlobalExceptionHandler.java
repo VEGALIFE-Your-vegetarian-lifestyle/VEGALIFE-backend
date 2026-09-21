@@ -10,7 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -84,7 +84,7 @@ public class GlobalExceptionHandler {
     private ResponseEntity<ErrorResponse> buildErrorResponse(
             HttpStatus status, String message, Map<String, String> errors, HttpServletRequest request) {
         ErrorResponse response = ErrorResponse.builder()
-            .timestamp(OffsetDateTime.now())
+            .timestamp(Instant.now())
             .status(status.value())
             .error(status.getReasonPhrase())
             .message(message)
@@ -97,7 +97,7 @@ public class GlobalExceptionHandler {
     @lombok.Builder
     @lombok.Data
     public static class ErrorResponse {
-        private OffsetDateTime timestamp;
+        private Instant timestamp;
         private int status;
         private String error;
         private String message;

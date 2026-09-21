@@ -5,7 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -42,21 +42,21 @@ public class User {
     private Boolean emailVerified;
 
     @Column(name = "last_login_at")
-    private OffsetDateTime lastLoginAt;
+    private Instant lastLoginAt;
 
     @Column(name = "avatar_url")
     private String avatarUrl;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
-    private OffsetDateTime createdAt;
+    private Instant createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
-    private OffsetDateTime updatedAt;
+    private Instant updatedAt;
 
     @Column(name = "deleted_at")
-    private OffsetDateTime deletedAt;
+    private Instant deletedAt;
 
     public enum Role {
         ADMIN, USER
