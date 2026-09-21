@@ -1,4 +1,4 @@
-package com.vegalife.service.user;
+package com.vegalife.unit.service.user;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -16,6 +16,7 @@ import com.vegalife.model.user.User;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.email.EmailService;
 import com.vegalife.service.token.VerificationTokenService;
+import com.vegalife.service.user.UserService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ExpiredTokenException;
 import com.vegalife.shared.exception.InvalidTokenException;

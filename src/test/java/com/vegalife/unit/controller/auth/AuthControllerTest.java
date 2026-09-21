@@ -1,4 +1,4 @@
-package com.vegalife.controller.auth;
+package com.vegalife.unit.controller.auth;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.controller.auth.AuthController;
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.response.auth.AuthResponse;
 import com.vegalife.service.user.UserService;

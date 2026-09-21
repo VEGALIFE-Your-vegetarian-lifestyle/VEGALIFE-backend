@@ -1,4 +1,4 @@
-package com.vegalife.service.email;
+package com.vegalife.unit.service.email;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;

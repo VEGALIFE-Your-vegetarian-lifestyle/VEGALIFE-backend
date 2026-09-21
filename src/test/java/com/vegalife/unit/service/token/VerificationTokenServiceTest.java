@@ -1,9 +1,10 @@
-package com.vegalife.service.token;
+package com.vegalife.unit.service.token;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.vegalife.model.user.User;
+import com.vegalife.service.token.VerificationTokenService;
 import com.vegalife.shared.exception.ExpiredTokenException;
 import com.vegalife.shared.exception.InvalidTokenException;
 import java.util.UUID;

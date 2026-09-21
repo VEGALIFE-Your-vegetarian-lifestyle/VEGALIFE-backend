@@ -1,0 +1,33 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  mail:
+    host: localhost
+    port: 2525
+    username: ""
+    password: ""
+    properties:
+      mail:
+        smtp:
+          auth: "false"
+          starttls:
+            enable: "false"
+        debug: "false"
+
+app:
+  verification:
+    token-expiry-minutes: 30
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.testcontainers: INFO
+    org.springframework.mail: DEBUG
