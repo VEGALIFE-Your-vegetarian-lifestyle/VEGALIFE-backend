@@ -6,7 +6,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 
 import com.vegalife.dto.request.auth.RegisterRequest;
-import com.vegalife.dto.response.auth.AuthResponse;
+import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.User.Role;
 import com.vegalife.model.user.User.Status;
@@ -73,7 +73,7 @@ class AuthServiceIntegrationTest {
     request.setPassword("password123");
     request.setConfirmPassword("password123");
 
-    AuthResponse response = authService.register(request);
+    RegisterResponse response = authService.register(request);
 
     assertThat(response).isNotNull();
     assertThat(response.getUsername()).isEqualTo("dbuser");
@@ -135,12 +135,12 @@ class AuthServiceIntegrationTest {
     request.setEmail("verify@test.com");
     request.setPassword("password123");
     request.setConfirmPassword("password123");
-    AuthResponse registerResponse = authService.register(request);
+    RegisterResponse registerResponse = authService.register(request);
 
     User user = userRepository.findByEmail("verify@test.com").orElseThrow();
     String token = tokenService.generateToken(user);
 
-    AuthResponse verifyResponse = authService.verifyEmail(token);
+    RegisterResponse verifyResponse = authService.verifyEmail(token);
 
     assertThat(verifyResponse).isNotNull();
 
@@ -156,14 +156,14 @@ class AuthServiceIntegrationTest {
     request.setEmail("verify2@test.com");
     request.setPassword("password123");
     request.setConfirmPassword("password123");
-    AuthResponse registerResponse = authService.register(request);
+    RegisterResponse registerResponse = authService.register(request);
 
     User user = userRepository.findByEmail("verify2@test.com").orElseThrow();
     String token = tokenService.generateToken(user);
 
     authService.verifyEmail(token);
 
-    AuthResponse verifyResponse = authService.verifyEmail(token);
+    RegisterResponse verifyResponse = authService.verifyEmail(token);
     assertThat(verifyResponse).isNotNull();
 
     User verifiedUser = userRepository.findById(user.getId()).orElseThrow();

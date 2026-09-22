@@ -9,21 +9,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vegalife.controller.auth.AuthController;
+import com.vegalife.dto.request.auth.LoginRequest;
+import com.vegalife.dto.request.auth.RefreshTokenRequest;
 import com.vegalife.dto.request.auth.RegisterRequest;
-import com.vegalife.dto.response.auth.AuthResponse;
+import com.vegalife.dto.response.auth.LoginResponse;
+import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.service.auth.AuthService;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(AuthController.class)
+@SpringBootTest
 @ActiveProfiles("test")
 @AutoConfigureMockMvc(addFilters = false)
 class AuthControllerTest {
@@ -43,8 +45,8 @@ class AuthControllerTest {
     request.setConfirmPassword("password123");
 
     UUID userId = UUID.randomUUID();
-    AuthResponse response =
-        AuthResponse.builder()
+    RegisterResponse response =
+        RegisterResponse.builder()
             .userId(userId)
             .username("testuser")
             .email("test@example.com")
@@ -158,8 +160,8 @@ class AuthControllerTest {
   @Test
   void verifyEmail_validToken_returns200() throws Exception {
     UUID userId = UUID.randomUUID();
-    AuthResponse response =
-        AuthResponse.builder()
+    RegisterResponse response =
+        RegisterResponse.builder()
             .userId(userId)
             .username("testuser")
             .email("test@example.com")
@@ -199,5 +201,169 @@ class AuthControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(jsonPath("$.message").value("Token expired"));
+  }
+
+  @Test
+  void login_validRequest_returns200() throws Exception {
+    LoginRequest request = new LoginRequest();
+    request.setIdentifier("testuser");
+    request.setPassword("password123");
+
+    UUID userId = UUID.randomUUID();
+    LoginResponse response =
+        LoginResponse.builder()
+            .userId(userId)
+            .username("testuser")
+            .email("test@example.com")
+            .accessToken("access.token")
+            .refreshToken("refresh.token")
+            .tokenType("Bearer")
+            .expiresIn(900L)
+            .build();
+
+    when(authService.login(any(LoginRequest.class))).thenReturn(response);
+
+    mockMvc
+        .perform(
+            post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Login successful"))
+        .andExpect(jsonPath("$.data.userId").value(userId.toString()))
+        .andExpect(jsonPath("$.data.username").value("testuser"))
+        .andExpect(jsonPath("$.data.email").value("test@example.com"))
+        .andExpect(jsonPath("$.data.accessToken").value("access.token"))
+        .andExpect(jsonPath("$.data.refreshToken").value("refresh.token"))
+        .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+        .andExpect(jsonPath("$.data.expiresIn").value(900));
+  }
+
+  @Test
+  void login_invalidCredentials_returns400() throws Exception {
+    LoginRequest request = new LoginRequest();
+    request.setIdentifier("testuser");
+    request.setPassword("wrongpassword");
+
+    when(authService.login(any(LoginRequest.class)))
+        .thenThrow(
+            new com.vegalife.shared.exception.InvalidTokenException(
+                "Invalid email/username or password"));
+
+    mockMvc
+        .perform(
+            post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Invalid email/username or password"));
+  }
+
+  @Test
+  void login_unverifiedEmail_returns400() throws Exception {
+    LoginRequest request = new LoginRequest();
+    request.setIdentifier("testuser");
+    request.setPassword("password123");
+
+    when(authService.login(any(LoginRequest.class)))
+        .thenThrow(
+            new com.vegalife.shared.exception.InvalidTokenException(
+                "Email not verified. Please verify your email before logging in."));
+
+    mockMvc
+        .perform(
+            post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(
+            jsonPath("$.message")
+                .value("Email not verified. Please verify your email before logging in."));
+  }
+
+  @Test
+  void refresh_validToken_returns200() throws Exception {
+    RefreshTokenRequest request = new RefreshTokenRequest();
+    request.setRefreshToken("valid.refresh.token");
+
+    UUID userId = UUID.randomUUID();
+    LoginResponse response =
+        LoginResponse.builder()
+            .accessToken("new.access.token")
+            .tokenType("Bearer")
+            .expiresIn(900L)
+            .build();
+
+    when(authService.refreshToken(anyString())).thenReturn(response);
+
+    mockMvc
+        .perform(
+            post("/api/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Token refreshed successfully"))
+        .andExpect(jsonPath("$.data.accessToken").value("new.access.token"))
+        .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+        .andExpect(jsonPath("$.data.expiresIn").value(900));
+  }
+
+  @Test
+  void refresh_missingToken_returns400() throws Exception {
+    RefreshTokenRequest request = new RefreshTokenRequest();
+    request.setRefreshToken("");
+
+    mockMvc
+        .perform(
+            post("/api/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void refresh_invalidToken_returns400() throws Exception {
+    RefreshTokenRequest request = new RefreshTokenRequest();
+    request.setRefreshToken("invalid.token");
+
+    when(authService.refreshToken(anyString()))
+        .thenThrow(
+            new com.vegalife.shared.exception.InvalidTokenException("Invalid refresh token"));
+
+    mockMvc
+        .perform(
+            post("/api/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Invalid refresh token"));
+  }
+
+  @Test
+  void logout_validToken_returns200() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/auth/logout")
+                .header("Authorization", "Bearer valid.token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Logged out successfully"));
+  }
+
+  @Test
+  void logout_missingToken_returns200() throws Exception {
+    mockMvc
+        .perform(post("/api/auth/logout").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Logged out successfully"));
   }
 }

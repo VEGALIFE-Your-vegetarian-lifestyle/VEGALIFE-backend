@@ -1,7 +1,7 @@
 package com.vegalife.dto.mapper.auth;
 
 import com.vegalife.dto.request.auth.RegisterRequest;
-import com.vegalife.dto.response.auth.AuthResponse;
+import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.model.user.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -22,5 +22,5 @@ public interface AuthMapper {
   User toEntity(RegisterRequest request, String encodedPassword);
 
   @Mapping(target = "userId", source = "user.id")
-  AuthResponse toAuthResponse(User user);
+  RegisterResponse toRegisterResponse(User user);
 }
