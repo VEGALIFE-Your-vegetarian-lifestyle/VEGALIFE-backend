@@ -1,7 +1,7 @@
 package com.vegalife.controller.auth;
 
 import com.vegalife.dto.request.auth.RegisterRequest;
-import com.vegalife.dto.response.auth.AuthResponse;
+import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.service.auth.AuthService;
 import com.vegalife.shared.dto.ApiResponse;
 import jakarta.validation.Valid;
@@ -23,16 +23,16 @@ public class AuthController {
   private final AuthService authService;
 
   @PostMapping("/register")
-  public ResponseEntity<ApiResponse<AuthResponse>> register(
+  public ResponseEntity<ApiResponse<RegisterResponse>> register(
       @Valid @RequestBody RegisterRequest request) {
-    AuthResponse response = authService.register(request);
+    RegisterResponse response = authService.register(request);
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(ApiResponse.success(response, "User registered successfully"));
   }
 
   @GetMapping("/verify-email")
-  public ResponseEntity<ApiResponse<AuthResponse>> verifyEmail(@RequestParam String token) {
-    AuthResponse response = authService.verifyEmail(token);
+  public ResponseEntity<ApiResponse<RegisterResponse>> verifyEmail(@RequestParam String token) {
+    RegisterResponse response = authService.verifyEmail(token);
     return ResponseEntity.ok(ApiResponse.success(response, "Email verified successfully"));
   }
 }

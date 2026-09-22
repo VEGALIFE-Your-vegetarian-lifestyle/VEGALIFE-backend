@@ -11,7 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.mapper.auth.AuthMapper;
 import com.vegalife.dto.request.auth.RegisterRequest;
-import com.vegalife.dto.response.auth.AuthResponse;
+import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.auth.AuthService;
@@ -84,15 +84,15 @@ class AuthServiceTest {
     when(authMapper.toEntity(validRequest, encodedPassword)).thenReturn(user);
     when(userRepository.save(any(User.class))).thenReturn(user);
     when(tokenService.generateToken(user)).thenReturn(token);
-    when(authMapper.toAuthResponse(user))
+    when(authMapper.toRegisterResponse(user))
         .thenReturn(
-            AuthResponse.builder()
+            RegisterResponse.builder()
                 .userId(userId)
                 .username("testuser")
                 .email("test@example.com")
                 .build());
 
-    AuthResponse response = authService.register(validRequest);
+    RegisterResponse response = authService.register(validRequest);
 
     assertThat(response).isNotNull();
     assertThat(response.getUserId()).isEqualTo(userId);
@@ -130,15 +130,15 @@ class AuthServiceTest {
     when(tokenService.getUserIdFromToken(token)).thenReturn(userId);
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
     when(userRepository.save(any(User.class))).thenReturn(user);
-    when(authMapper.toAuthResponse(user))
+    when(authMapper.toRegisterResponse(user))
         .thenReturn(
-            AuthResponse.builder()
+            RegisterResponse.builder()
                 .userId(userId)
                 .username("testuser")
                 .email("test@example.com")
                 .build());
 
-    AuthResponse response = authService.verifyEmail(token);
+    RegisterResponse response = authService.verifyEmail(token);
 
     assertThat(response).isNotNull();
     assertThat(user.getEmailVerified()).isTrue();
@@ -152,15 +152,15 @@ class AuthServiceTest {
 
     when(tokenService.getUserIdFromToken(token)).thenReturn(userId);
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-    when(authMapper.toAuthResponse(user))
+    when(authMapper.toRegisterResponse(user))
         .thenReturn(
-            AuthResponse.builder()
+            RegisterResponse.builder()
                 .userId(userId)
                 .username("testuser")
                 .email("test@example.com")
                 .build());
 
-    AuthResponse response = authService.verifyEmail(token);
+    RegisterResponse response = authService.verifyEmail(token);
 
     assertThat(response).isNotNull();
     verify(userRepository, never()).save(any());

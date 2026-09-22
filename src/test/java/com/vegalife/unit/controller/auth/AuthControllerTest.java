@@ -10,7 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.request.auth.RegisterRequest;
-import com.vegalife.dto.response.auth.AuthResponse;
+import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.service.auth.AuthService;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -42,8 +42,8 @@ class AuthControllerTest {
     request.setConfirmPassword("password123");
 
     UUID userId = UUID.randomUUID();
-    AuthResponse response =
-        AuthResponse.builder()
+    RegisterResponse response =
+        RegisterResponse.builder()
             .userId(userId)
             .username("testuser")
             .email("test@example.com")
@@ -157,8 +157,8 @@ class AuthControllerTest {
   @Test
   void verifyEmail_validToken_returns200() throws Exception {
     UUID userId = UUID.randomUUID();
-    AuthResponse response =
-        AuthResponse.builder()
+    RegisterResponse response =
+        RegisterResponse.builder()
             .userId(userId)
             .username("testuser")
             .email("test@example.com")

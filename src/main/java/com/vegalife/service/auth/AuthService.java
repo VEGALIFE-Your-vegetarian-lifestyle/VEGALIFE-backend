@@ -2,7 +2,7 @@ package com.vegalife.service.auth;
 
 import com.vegalife.dto.mapper.auth.AuthMapper;
 import com.vegalife.dto.request.auth.RegisterRequest;
-import com.vegalife.dto.response.auth.AuthResponse;
+import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.email.EmailService;
@@ -34,7 +34,7 @@ public class AuthService {
   private String baseUrl;
 
   @Transactional
-  public AuthResponse register(RegisterRequest request) {
+  public RegisterResponse register(RegisterRequest request) {
     if (userRepository.existsByEmail(request.getEmail())) {
       throw new DuplicateResourceException("Email already registered");
     }
@@ -55,11 +55,11 @@ public class AuthService {
 
     log.info("User registered: {} ({})", user.getUsername(), user.getEmail());
 
-    return authMapper.toAuthResponse(user);
+    return authMapper.toRegisterResponse(user);
   }
 
   @Transactional
-  public AuthResponse verifyEmail(String token) {
+  public RegisterResponse verifyEmail(String token) {
     UUID userId;
     try {
       userId = tokenService.getUserIdFromToken(token);
@@ -76,7 +76,7 @@ public class AuthService {
 
     if (user.getEmailVerified()) {
       log.info("Email already verified for user: {}", user.getUsername());
-      return authMapper.toAuthResponse(user);
+      return authMapper.toRegisterResponse(user);
     }
 
     user.setEmailVerified(true);
@@ -85,6 +85,6 @@ public class AuthService {
 
     log.info("Email verified for user: {} ({})", user.getUsername(), user.getEmail());
 
-    return authMapper.toAuthResponse(user);
+    return authMapper.toRegisterResponse(user);
   }
 }
