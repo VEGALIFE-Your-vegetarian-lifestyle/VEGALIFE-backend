@@ -1,9 +1,13 @@
 package com.vegalife.controller.auth;
 
+import com.vegalife.dto.request.auth.LoginRequest;
+import com.vegalife.dto.request.auth.RefreshTokenRequest;
 import com.vegalife.dto.request.auth.RegisterRequest;
+import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.service.auth.AuthService;
 import com.vegalife.shared.dto.ApiResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -34,5 +38,29 @@ public class AuthController {
   public ResponseEntity<ApiResponse<RegisterResponse>> verifyEmail(@RequestParam String token) {
     RegisterResponse response = authService.verifyEmail(token);
     return ResponseEntity.ok(ApiResponse.success(response, "Email verified successfully"));
+  }
+
+  @PostMapping("/login")
+  public ResponseEntity<ApiResponse<LoginResponse>> login(
+      @Valid @RequestBody LoginRequest request) {
+    LoginResponse response = authService.login(request);
+    return ResponseEntity.ok(ApiResponse.success(response, "Login successful"));
+  }
+
+  @PostMapping("/refresh")
+  public ResponseEntity<ApiResponse<LoginResponse>> refresh(
+      @Valid @RequestBody RefreshTokenRequest request) {
+    LoginResponse response = authService.refreshToken(request.getRefreshToken());
+    return ResponseEntity.ok(ApiResponse.success(response, "Token refreshed successfully"));
+  }
+
+  @PostMapping("/logout")
+  public ResponseEntity<ApiResponse<Void>> logout(HttpServletRequest httpRequest) {
+    String authHeader = httpRequest.getHeader("Authorization");
+    if (authHeader != null && authHeader.startsWith("Bearer ")) {
+      String accessToken = authHeader.substring(7);
+      authService.logout(accessToken);
+    }
+    return ResponseEntity.ok(ApiResponse.success(null, "Logged out successfully"));
   }
 }
