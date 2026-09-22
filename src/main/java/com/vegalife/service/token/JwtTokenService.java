@@ -158,6 +158,11 @@ public class JwtTokenService {
     return UUID.fromString(claims.getSubject());
   }
 
+  public String extractRole(String token) {
+    Claims claims = parseAccessToken(token);
+    return claims.get("role", String.class);
+  }
+
   public RefreshToken validateRefreshToken(String rawToken) {
     String tokenHash = hashToken(rawToken);
 
