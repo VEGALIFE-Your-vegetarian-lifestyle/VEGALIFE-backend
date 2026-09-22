@@ -10,15 +10,17 @@ These are part of the current tech stack. Use freely.
 |---|---|---|
 | `spring-boot-starter-web` | REST API | In pom.xml |
 | `spring-boot-starter-test` | JUnit 5, Mockito, AssertJ | In pom.xml |
-| `spring-boot-starter-data-jpa` | JPA / Hibernate ORM | Planned — next |
-| `postgresql` | PostgreSQL JDBC driver | Planned — next |
-| `spring-boot-starter-validation` | `@Valid`, `@Email`, `@Size` | Planned — next |
-| `springdoc-openapi-starter-webmvc-ui` | Swagger UI / OpenAPI docs | Planned — next |
-| `org.projectlombok:lombok` | Boilerplate reduction | Planned — next |
-| `org.mapstruct:mapstruct` | Entity ↔ DTO mapping | Planned — next |
-| `spring-boot-starter-actuator` | Health checks, metrics | Planned — next |
-| `com.h2database:h2` | In-memory test DB | Planned — next |
-| `flyway-core` | DB schema migrations | Planned — next |
+| `spring-boot-starter-data-jpa` | JPA / Hibernate ORM | In pom.xml |
+| `postgresql` | PostgreSQL JDBC driver | In pom.xml |
+| `spring-boot-starter-validation` | `@Valid`, `@Email`, `@Size` | In pom.xml |
+| `springdoc-openapi-starter-webmvc-ui` | Swagger UI / OpenAPI docs | In pom.xml |
+| `org.projectlombok:lombok` | Boilerplate reduction | In pom.xml |
+| `org.mapstruct:mapstruct` | Entity ↔ DTO mapping | In pom.xml |
+| `spring-boot-starter-actuator` | Health checks, metrics | In pom.xml |
+| `com.h2database:h2` | In-memory unit test DB | In pom.xml |
+| `flyway-core` | DB schema migrations | In pom.xml |
+| `org.testcontainers:postgresql` | Real PostgreSQL for integration tests | In pom.xml |
+| `org.testcontainers:junit-jupiter` | Testcontainers JUnit 5 integration | In pom.xml |
 
 ## Planned (approved, add when a feature needs it)
 
@@ -30,7 +32,6 @@ These are approved in principle. Add them to pom.xml when a feature requires the
 | `spring-boot-starter-oauth2-resource-server` | JWT validation | When using JWT-based auth |
 | `spring-boot-starter-websocket` | Real-time chat / notifications | Chat feature implementation |
 | `com.github.ben-manes.caffeine:caffeine` | Local caching | When hot data needs caching (recipes, feeds) |
-| `org.testcontainers:testcontainers` | Real DB in integration tests | When integration tests need real Postgres |
 | `io.rest-assured:rest-assured` | Fluent API testing | When API tests become complex |
 | `net.logstash.logback:logstash-logback-encoder` | Structured JSON logging | When deploying to cloud with log aggregation |
 | `io.micrometer:micrometer-registry-prometheus` | Prometheus metrics | When monitoring is set up |

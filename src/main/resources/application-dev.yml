@@ -1,0 +1,27 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/vegalife
+    username: vegalife
+    password: vegalife
+
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  mail:
+    host: ${DEV_MAIL_HOST:localhost}
+    port: ${DEV_MAIL_PORT:1025}
+    username: ${DEV_MAIL_USERNAME:}
+    password: ${DEV_MAIL_PASSWORD:}
+
+logging:
+  level:
+    com.vegalife: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG

@@ -1,0 +1,51 @@
+spring:
+  config:
+    activate:
+      on-profile: test
+
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: false
+
+  flyway:
+    enabled: false
+
+  mail:
+    host: localhost
+    port: ${greenmail.smtp.port:2525}
+    username: test
+    password: test
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+  thymeleaf:
+    cache: false
+
+  security:
+    enabled: false
+
+app:
+  verification:
+    token-expiry-minutes: 30
+    issuer: vegalife-backend-test
+    secret: test-verification-secret-key-at-least-32-chars
+
+logging:
+  level:
+    com.vegalife: DEBUG
+    org.springframework.test: DEBUG

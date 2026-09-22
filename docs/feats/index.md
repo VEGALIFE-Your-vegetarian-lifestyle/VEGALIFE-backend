@@ -4,4 +4,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 
 | File | Title | Status | Date |
 |------|-------|--------|------|
-| | | | |
+| `user-registration.md` | User Registration with Email Verification | Implemented | 2026-09-22 |

@@ -1,96 +1,118 @@
-# API Reference: <service/module name>
+# API Reference Template
 
-## Overview
+## When to use
+Use this template for **each individual API endpoint**. One file per endpoint.
 
-<!-- One or two sentences: what this API is for, who calls it. -->
+## File naming convention
+`docs/apis/<feature>/<http-method>-<resource-path>.md`
 
-## Base path / versioning
+Examples:
+- `docs/apis/auth/post-register.md`
+- `docs/apis/auth/get-verify-email.md`
+- `docs/apis/recipes/get-recipes.md`
+- `docs/apis/users/get-profile.md`
 
-<!-- e.g. `/api/v1`. Note the versioning scheme if one exists (URL
-version, header version, none yet). -->
+Convert path: `/api/auth/register` → `post-register.md`
+Convert path: `/api/auth/verify-email` → `get-verify-email.md`
 
-## Authentication
+## Index format
+In `docs/apis/index.md`, list as:
 
-<!-- What every caller needs: token type, header name, scopes/roles
-required. If different endpoints need different auth, note it per
-endpoint below instead of here. -->
-
-## Endpoints
-
-<!-- Repeat this block per endpoint. Keep request/response fields to
-what's actually returned/accepted — don't document a hypothetical
-"could be added later" field. -->
-
-### `<METHOD>` `<path>`
-
-**Description**: <what this endpoint does, one sentence>
-
-**Auth**: <required role/scope, or "none" / "inherits base auth">
-
-**Request**:
-- Path params: <name: type — description>
-- Query params: <name: type — description, required/optional>
-- Body:
-  ```json
-  {}
-  ```
-
-**Response** (`<status code>`):
-```json
-{}
-```
-
-**Error responses**:
-| Status | Condition |
-|---|---|
-| | |
-
-## Relevant project conventions
-
-<!-- TODO: fill in once the repo is inspected — pagination scheme,
-error response shape used consistently across the API, rate limits. -->
+| File | Endpoint | Description |
+|------|----------|-------------|
+| `auth/post-register.md` | `POST /api/auth/register` | Register new user |
+| `auth/get-verify-email.md` | `GET /api/auth/verify-email` | Verify email with token |
 
 ---
 
-## Example
-
-# API Reference: Orders Service
+# API Reference: <HTTP Method> <Path>
 
 ## Overview
-Endpoints for creating, viewing, and cancelling customer orders.
+<!-- One sentence: what this endpoint does -->
 
-## Base path / versioning
-`/api/v1/orders` — versioned via URL path; breaking changes go to `/v2`.
-
-## Authentication
-All endpoints require a `Bearer` token in the `Authorization` header.
-Cancel requires the token's user to own the order or hold the `support`
-role.
-
-## Endpoints
-
-### `POST` `/api/v1/orders/{orderId}/cancel`
-
-**Description**: Cancels an order if it's still within the
-cancellation window.
-
-**Auth**: order owner, or `support` role
-
-**Request**:
-- Path params: `orderId: string` — the order to cancel
-- Body:
-  ```json
-  { "reason": "string (optional)" }
-  ```
-
-**Response** (`200`):
-```json
-{ "orderId": "string", "status": "cancelled", "refundId": "string | null" }
+## Endpoint
+```
+<HTTP_METHOD> /api/<resource-path>
 ```
 
-**Error responses**:
-| Status | Condition |
-|---|---|
-| 404 | Order not found or not owned by caller |
-| 409 | Order is outside the 24-hour cancellation window |
-| 409 | Order already cancelled or already shipped |
+## Authentication
+<!-- Auth requirement: JWT Bearer, API key, none, etc. -->
+
+## Request
+
+### Path Parameters
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+|      |      |          |             |
+
+### Query Parameters
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+|      |      |          |             |
+
+### Request Body
+```json
+{
+  "field": "type — description"
+}
+```
+<!-- If no body, write: "No request body" -->
+
+## Responses
+
+### Success Response (<status code>)
+```json
+{
+  "success": true,
+  "message": "string",
+  "data": { }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| success | boolean | Always true for success |
+| message | string | Human-readable message |
+| data | object | Response payload |
+
+### Error Responses
+| Status Code | Condition | Message |
+|-------------|-----------|---------|
+| 400 | Validation failed | "Validation failed" |
+| 401 | Unauthorized | "Authentication required" |
+| 403 | Forbidden | "Insufficient permissions" |
+| 404 | Not found | "Resource not found" |
+| 409 | Conflict | "Resource already exists" |
+| 500 | Server error | "Internal server error" |
+
+## Business Rules
+<!-- Link to relevant business rules: BR-AUTH-001, BR-AUTH-002, etc. -->
+
+## Example
+
+### Request
+```bash
+curl -X POST /api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"johndoe","email":"john@example.com","password":"securePass123","confirmPassword":"securePass123"}'
+```
+
+### Success Response (201)
+```json
+{
+  "success": true,
+  "message": "User registered successfully",
+  "data": {
+    "userId": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "johndoe",
+    "email": "john@example.com"
+  }
+}
+```
+
+---
+
+## Related
+- Feature Spec: `docs/feats/<feature-name>.md`
+- ADR: `docs/adrs/<NNNN>-<title>.md`
+- Business Rules: `docs/brs/<feature-name>.md`

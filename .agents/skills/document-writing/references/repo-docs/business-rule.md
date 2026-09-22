@@ -1,68 +1,78 @@
-# Business Rule: <short name>
+# Business Rules Template
+
+## When to use
+Use this template for documenting business rules. **Group all rules for one feature/domain into a single physical file** named `docs/brs/<feature-name>.md`.
+
+## Rule ID Format
+`BR-<FEATURE>-<NNN>` where:
+- FEATURE: 3-4 letter uppercase code (AUTH, USER, RECP, CONT, etc.)
+- NNN: 3-digit zero-padded sequence (001, 002, 003...)
+
+Examples:
+- `BR-AUTH-001` — Auth: Unique email/username
+- `BR-AUTH-002` — Auth: Password confirmation match
+- `BR-USER-001` — User: Profile visibility
+- `BR-RECP-001` — Recipe: Public/private visibility
+
+## Index format
+In `docs/brs/index.md`, list each rule individually:
+
+| Rule ID | Title | Status | Last Reviewed |
+|---------|-------|--------|---------------|
+| BR-AUTH-001 | Unique User Identity | Active | 2026-09-22 |
+| BR-AUTH-002 | Password Confirmation Match | Active | 2026-09-22 |
+| BR-AUTH-003 | Email Verification Required | Active | 2026-09-22 |
+
+---
+
+# Business Rule: <Short Descriptive Name>
+
+## Rule ID
+`BR-<FEATURE>-<NNN>`
 
 ## Status
-
-<!-- Active | Deprecated | Superseded by <rule name> -->
-Active
+Active | Deprecated | Superseded by BR-XXX-XXX
 
 ## Statement
-
-<!-- The rule itself, stated precisely enough to be unambiguous. If you
-need "usually" or "in most cases" to state it, the exceptions below
-aren't captured yet — make them explicit instead. -->
+<!-- The rule itself, stated precisely enough to be unambiguous. Avoid "usually" or "in most cases" — make exceptions explicit. -->
 
 ## Rationale
+<!-- Why this rule exists — business, legal, or product reason. Not "because the code does this." -->
 
-<!-- Why this rule exists — a business, legal, or product reason. Not
-"because the code does this" — the rule should exist independently of
-any particular implementation. -->
-
-## Scope & exceptions
-
-<!-- Who/what this applies to, and any explicit exceptions. A rule with
-unstated exceptions is a rule someone will implement wrong. -->
+## Scope & Exceptions
+<!-- Who/what this applies to, and any explicit exceptions. -->
 
 ## Enforcement
+<!-- Where this is enforced in the system — link to code/config. If not yet enforced in code (process-only), say so explicitly. -->
 
-<!-- Where this is actually enforced in the system — link to the
-code/config, don't duplicate the logic here. If it's not enforced in
-code yet (process-only, or pending implementation), say so explicitly. -->
-
-## Last reviewed
-
-<!-- Date, and by whom. A business rule that's never reviewed again is
-how stale rules end up silently violated. -->
+## Last Reviewed
+YYYY-MM-DD, by <name/role>
 
 ---
 
 ## Example
 
-# Business Rule: Order Cancellation Window
+# Business Rule: Unique User Identity
+
+## Rule ID
+`BR-AUTH-001`
 
 ## Status
 Active
 
 ## Statement
-An order can be cancelled by the customer, with a full refund, only
-within 24 hours of the order being placed. After 24 hours, cancellation
-requires manual support approval and is not guaranteed.
+A user's email and username must each be unique across the system.
 
 ## Rationale
-Orders are handed off to the fulfillment partner after 24 hours, at
-which point cancellation costs the company a restocking fee. The
-24-hour window balances customer flexibility against that cost.
+Prevents account confusion, ensures reliable login/identification, and supports password recovery via email.
 
-## Scope & exceptions
-Applies to all standard orders. Does not apply to:
-- Pre-order items (cancellable until 24 hours before the ship date
-  instead).
-- Orders flagged as fraud-review — these can be cancelled by support at
-  any time regardless of window.
+## Scope & Exceptions
+Applies to all user registrations. No exceptions.
 
 ## Enforcement
-Enforced in `OrderService.cancelOrder()` — see `docs/adr/0007-...` for
-the related architecture decision on how the window is computed. Support
-manual overrides are a process (support tooling), not code-enforced.
+- `AuthService.register()` checks `userRepository.existsByEmail()` and `existsByUsername()` before creation
+- Database: Unique constraints on `user.email` and `user.username`
+- API: Returns 409 Conflict with message "Email already registered" or "Username already taken"
 
-## Last reviewed
-2026-01-15, by Duy (product) and support lead.
+## Last Reviewed
+2026-09-22, by <name/role>
