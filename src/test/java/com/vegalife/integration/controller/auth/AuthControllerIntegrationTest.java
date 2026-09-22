@@ -15,6 +15,7 @@ import com.vegalife.model.user.User.Status;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.email.EmailService;
 import com.vegalife.service.token.VerificationTokenService;
+import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,8 +31,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-
-import java.time.Instant;
 
 @Testcontainers
 @SpringBootTest
@@ -86,7 +85,8 @@ class AuthControllerIntegrationTest {
     String token = tokenService.generateToken(user);
     // Manually create an expired token by parsing and modifying expiry
     // This is a simple approach - just use a token that's already expired
-    return token; // In real scenario, we'd manipulate the token, but for testing we just use the service
+    return token; // In real scenario, we'd manipulate the token, but for testing we just use the
+    // service
   }
 
   @Test
@@ -205,7 +205,9 @@ class AuthControllerIntegrationTest {
     // The service handles ExpiredTokenException, but generating a valid expired token
     // requires token manipulation. This test verifies the error handling path works.
     mockMvc
-        .perform(get("/api/auth/verify-email").param("token", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0IiwiZXhwIjoxfQ.dummy"))
+        .perform(
+            get("/api/auth/verify-email")
+                .param("token", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0IiwiZXhwIjoxfQ.dummy"))
         .andDo(print())
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
