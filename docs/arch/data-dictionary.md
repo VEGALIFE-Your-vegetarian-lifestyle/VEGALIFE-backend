@@ -493,6 +493,49 @@ _Description: Tracks AI usage per user per period._
 
 ---
 
+## Table 21: Refresh Token
+
+_Description: Stores SHA-256 hashes of opaque refresh tokens for JWT token refresh flow. Enables revocation and expiration tracking without storing raw tokens._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| id | UUID | PK | No | Unique identifier for each refresh token record |
+| user_id | UUID | FK | No | References "user"(id) ON DELETE CASCADE |
+| token_hash | CHAR(64) | Unique | No | SHA-256 hash of the raw refresh token (hex encoded) |
+| expires_at | TIMESTAMPTZ | - | No | Token expiration timestamp |
+| revoked_at | TIMESTAMPTZ | - | Yes | Revocation timestamp (NULL = active) |
+| created_at | TIMESTAMPTZ | - | No | Timestamp when token was issued |
+
+**Constraints:**
+- FK: user_id REFERENCES "user"(id) ON DELETE CASCADE
+- `uq_refresh_token_hash`: UNIQUE (token_hash)
+
+**Indexes:**
+- `idx_refresh_token_user_id` ON (user_id)
+- `idx_refresh_token_hash` ON (token_hash)
+- `idx_refresh_token_expires` ON (expires_at)
+
+---
+
+## Table 22: Blacklist Token
+
+_Description: Access token denylist for immediate revocation. Stores JWT ID (jti) and issuer from revoked access tokens. Entry persists until token's natural expiration._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| jti | VARCHAR(36) | PK (part 1) | No | JWT ID from revoked access token |
+| issuer | VARCHAR(100) | PK (part 2) | No | JWT issuer claim from revoked access token |
+| expires_at | TIMESTAMPTZ | - | No | Original JWT expiration timestamp |
+| revoked_at | TIMESTAMPTZ | - | No | Timestamp when token was blacklisted (DEFAULT NOW()) |
+
+**Constraints:**
+- Primary Key: (jti, issuer)
+
+**Indexes:**
+- `idx_blacklist_token_expires` ON (expires_at)
+
+---
+
 ## Relationship Summary
 
 - **User** 1:N **UserProfile** (1:1 via unique FK)
@@ -503,6 +546,7 @@ _Description: Tracks AI usage per user per period._
 - **User** 1:N **Menu**
 - **User** 1:N **AIConversation** (nullable for guests)
 - **User** 1:N **AIUsage** (nullable for guests)
+- **User** 1:N **RefreshToken** (auth tokens for session management)
 - **Post** M:N **Category** (via Post_Category)
 - **Post** M:N **Media** (via Post_Media)
 - **Post** M:N **Recipe** (via Post_Recipe)
@@ -518,3 +562,4 @@ _Description: Tracks AI usage per user per period._
 - **AIConversation** N:1 **User** (nullable)
 - **AIMessage** N:1 **AIConversation**
 - **AIUsage** N:1 **User** (nullable)
+- **BlacklistToken** — No direct FK (identified by JWT jti+issuer only)
