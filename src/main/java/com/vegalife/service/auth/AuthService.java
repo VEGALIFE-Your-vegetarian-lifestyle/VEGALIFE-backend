@@ -1,6 +1,6 @@
 package com.vegalife.service.auth;
 
-import com.vegalife.dto.mapper.UserMapper;
+import com.vegalife.dto.mapper.auth.AuthMapper;
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.response.auth.AuthResponse;
 import com.vegalife.model.user.User;
@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
   private final UserRepository userRepository;
-  private final UserMapper userMapper;
+  private final AuthMapper authMapper;
   private final PasswordEncoder passwordEncoder;
   private final VerificationTokenService tokenService;
   private final EmailService emailService;
@@ -45,7 +45,7 @@ public class AuthService {
 
     String encodedPassword = passwordEncoder.encode(request.getPassword());
 
-    User user = userMapper.toEntity(request, encodedPassword);
+    User user = authMapper.toEntity(request, encodedPassword);
     user = userRepository.save(user);
 
     String token = tokenService.generateToken(user);
@@ -55,7 +55,7 @@ public class AuthService {
 
     log.info("User registered: {} ({})", user.getUsername(), user.getEmail());
 
-    return userMapper.toAuthResponse(user);
+    return authMapper.toAuthResponse(user);
   }
 
   @Transactional
@@ -76,7 +76,7 @@ public class AuthService {
 
     if (user.getEmailVerified()) {
       log.info("Email already verified for user: {}", user.getUsername());
-      return userMapper.toAuthResponse(user);
+      return authMapper.toAuthResponse(user);
     }
 
     user.setEmailVerified(true);
@@ -85,6 +85,6 @@ public class AuthService {
 
     log.info("Email verified for user: {} ({})", user.getUsername(), user.getEmail());
 
-    return userMapper.toAuthResponse(user);
+    return authMapper.toAuthResponse(user);
   }
 }

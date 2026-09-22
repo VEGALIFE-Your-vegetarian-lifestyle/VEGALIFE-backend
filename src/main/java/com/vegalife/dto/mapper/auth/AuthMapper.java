@@ -1,16 +1,13 @@
-package com.vegalife.dto.mapper;
+package com.vegalife.dto.mapper.auth;
 
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.response.auth.AuthResponse;
 import com.vegalife.model.user.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
-import org.mapstruct.factory.Mappers;
 
 @Mapper(componentModel = "spring")
-public interface UserMapper {
-
-  UserMapper INSTANCE = Mappers.getMapper(UserMapper.class);
+public interface AuthMapper {
 
   @Mapping(target = "id", ignore = true)
   @Mapping(target = "passwordHash", source = "encodedPassword")

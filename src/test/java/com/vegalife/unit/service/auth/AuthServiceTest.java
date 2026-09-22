@@ -9,7 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.vegalife.dto.mapper.UserMapper;
+import com.vegalife.dto.mapper.auth.AuthMapper;
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.response.auth.AuthResponse;
 import com.vegalife.model.user.User;
@@ -36,7 +36,7 @@ class AuthServiceTest {
 
   @Mock private UserRepository userRepository;
 
-  @Mock private UserMapper userMapper;
+  @Mock private AuthMapper authMapper;
 
   @Mock private PasswordEncoder passwordEncoder;
 
@@ -81,10 +81,10 @@ class AuthServiceTest {
     when(userRepository.existsByEmail(validRequest.getEmail())).thenReturn(false);
     when(userRepository.existsByUsername(validRequest.getUsername())).thenReturn(false);
     when(passwordEncoder.encode(validRequest.getPassword())).thenReturn(encodedPassword);
-    when(userMapper.toEntity(validRequest, encodedPassword)).thenReturn(user);
+    when(authMapper.toEntity(validRequest, encodedPassword)).thenReturn(user);
     when(userRepository.save(any(User.class))).thenReturn(user);
     when(tokenService.generateToken(user)).thenReturn(token);
-    when(userMapper.toAuthResponse(user))
+    when(authMapper.toAuthResponse(user))
         .thenReturn(
             AuthResponse.builder()
                 .userId(userId)
@@ -130,7 +130,7 @@ class AuthServiceTest {
     when(tokenService.getUserIdFromToken(token)).thenReturn(userId);
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
     when(userRepository.save(any(User.class))).thenReturn(user);
-    when(userMapper.toAuthResponse(user))
+    when(authMapper.toAuthResponse(user))
         .thenReturn(
             AuthResponse.builder()
                 .userId(userId)
@@ -152,7 +152,7 @@ class AuthServiceTest {
 
     when(tokenService.getUserIdFromToken(token)).thenReturn(userId);
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-    when(userMapper.toAuthResponse(user))
+    when(authMapper.toAuthResponse(user))
         .thenReturn(
             AuthResponse.builder()
                 .userId(userId)
