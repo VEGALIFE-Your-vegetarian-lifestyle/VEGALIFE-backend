@@ -163,6 +163,25 @@ public class JwtTokenService {
     return claims.get("role", String.class);
   }
 
+  public long getAccessTokenExpirySeconds() {
+    return accessTokenExpiryMinutes * 60;
+  }
+
+  public String extractJti(String token) {
+    Claims claims = parseAccessToken(token);
+    return claims.getId();
+  }
+
+  public String extractIssuer(String token) {
+    Claims claims = parseAccessToken(token);
+    return claims.getIssuer();
+  }
+
+  public Instant extractExpiration(String token) {
+    Claims claims = parseAccessToken(token);
+    return claims.getExpiration().toInstant();
+  }
+
   public RefreshToken validateRefreshToken(String rawToken) {
     String tokenHash = hashToken(rawToken);
 
