@@ -26,6 +26,17 @@ app:
   verification:
     token-expiry-minutes: 30
 
+  auth:
+    access-token-expiry-minutes: 15
+    refresh-token-expiry-days: 7
+    jwt:
+      secret: integration-test-auth-jwt-secret-key-at-least-32-chars
+      issuer: vegalife-backend-integration
+      audience: vegalife-api
+
+  scheduling:
+    enabled: false
+
 logging:
   level:
     org.hibernate.SQL: DEBUG

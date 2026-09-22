@@ -57,6 +57,17 @@ app:
     issuer: vegalife-backend
     secret: ${VERIFICATION_SECRET:dev-verification-secret-change-in-production}
 
+  auth:
+    access-token-expiry-minutes: 15
+    refresh-token-expiry-days: 7
+    jwt:
+      secret: ${AUTH_JWT_SECRET:dev-auth-jwt-secret-change-in-production}
+      issuer: vegalife-backend
+      audience: vegalife-api
+
+  scheduling:
+    enabled: true
+
 logging:
   level:
     com.vegalife: DEBUG
