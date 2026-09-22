@@ -3,7 +3,6 @@ package com.vegalife.shared.exception;
 import com.vegalife.shared.dto.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -45,29 +44,25 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(DuplicateResourceException.class)
   public ResponseEntity<ApiResponse<Void>> handleDuplicateResource(
       DuplicateResourceException ex, HttpServletRequest request) {
-    return ResponseEntity.status(HttpStatus.CONFLICT)
-        .body(ApiResponse.failure(ex.getMessage()));
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.failure(ex.getMessage()));
   }
 
   @ExceptionHandler(InvalidTokenException.class)
   public ResponseEntity<ApiResponse<Void>> handleInvalidToken(
       InvalidTokenException ex, HttpServletRequest request) {
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(ApiResponse.failure(ex.getMessage()));
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.failure(ex.getMessage()));
   }
 
   @ExceptionHandler(ExpiredTokenException.class)
   public ResponseEntity<ApiResponse<Void>> handleExpiredToken(
       ExpiredTokenException ex, HttpServletRequest request) {
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(ApiResponse.failure(ex.getMessage()));
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.failure(ex.getMessage()));
   }
 
   @ExceptionHandler(ResourceNotFoundException.class)
   public ResponseEntity<ApiResponse<Void>> handleResourceNotFound(
       ResourceNotFoundException ex, HttpServletRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_FOUND)
-        .body(ApiResponse.failure(ex.getMessage()));
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.failure(ex.getMessage()));
   }
 
   @ExceptionHandler(DataIntegrityViolationException.class)
@@ -80,8 +75,7 @@ public class GlobalExceptionHandler {
         message = "Email or username already exists";
       }
     }
-    return ResponseEntity.status(HttpStatus.CONFLICT)
-        .body(ApiResponse.failure(message));
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.failure(message));
   }
 
   @ExceptionHandler(Exception.class)

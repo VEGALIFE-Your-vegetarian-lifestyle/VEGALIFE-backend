@@ -6,6 +6,6 @@ import org.springframework.context.annotation.Profile;
 @Configuration
 @Profile("integration")
 public class IntegrationTestConfig {
-    // Configuration class for integration test profile
-    // Testcontainers and DynamicPropertySource are in BaseIntegrationTest
+  // Configuration class for integration test profile
+  // Testcontainers and DynamicPropertySource are in BaseIntegrationTest
 }
