@@ -20,13 +20,22 @@
 3. **Spec** — for anything non-trivial, write a feature spec before
    coding, so scope and acceptance criteria are explicit. Skip this for
    small, obvious changes. If the feature involves a significant
-   architectural decision, record that decision separately.
+   architectural decision, record that decision separately. When the
+   feature adds or changes HTTP/API surface, also write an API
+   reference under `docs/apis/` describing what will actually exist
+   after the change. When it introduces a constraint that should
+   outlive this feature (independent of this implementation), write a
+   business rule under `docs/brs/`. After writing any permanent doc
+   under `docs/`, add or update that subdirectory's `index.md` row in
+   the same change (create the index only if it is missing).
 4. **Plan** — only after the spec (or the confirmed direction, for
    small changes) exists — before touching code, create a dedicated
    branch for this feature and break the implementation into
    commit-sized phases, each one a single concern that keeps the
    codebase buildable on its own. Write this down as a working plan —
-   it guides implementation but is never itself committed.
+   it guides implementation but is never itself committed. Link the
+   driving GitHub issue in the plan when one exists; do not invent an
+   issue solely to satisfy this step.
 5. **Implement** — follow the plan one phase at a time, one commit per
    phase; stay scoped to the feature and its acceptance criteria, don't
    bundle unrelated refactors.
@@ -40,16 +49,23 @@
    convention adherence, whether the verification gate above was
    actually met, and scope creep.
 9. **Write the PR description** — what changed, why, how it was
-   verified, and any risk/rollback notes.
+   verified, and any risk/rollback notes. If a driving GitHub issue
+   exists, link it so the PR closes or relates to it (use the PR
+   template's "Related issue(s)" line).
 
 ## Expected artifacts
 
 - A feature spec (for non-trivial features), and a separate decision
   record if a significant design decision was made.
-- A working plan broken into commit-sized phases (not committed).
+- An API reference under `docs/apis/` and/or a business rule under
+  `docs/brs/` only when step 3's conditions apply (API surface change;
+  standing constraint). Index rows updated for every permanent doc
+  written.
+- A working plan broken into commit-sized phases (not committed),
+  linking the driving issue when one exists.
 - Implementation code.
 - Tests covering the new feature.
-- A PR description.
+- A PR description, linking the driving issue when one exists.
 - Verification output (build/test/lint results actually run).
 
 ## Verification gates

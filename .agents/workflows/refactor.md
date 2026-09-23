@@ -20,10 +20,13 @@
    decision or planning phases. Don't record or plan against an
    assumed direction.
 4. **Record the decision** — if the refactor is significant or hard to
-   reverse, write it down as a decision record now that it's confirmed.
+   reverse, write it down as a decision record now that it's confirmed,
+   and add a row for it in `docs/adrs/index.md` in the same change.
 5. **Plan** — create a dedicated branch for this refactor and break the
    work into commit-sized phases, each one independently buildable and
    revertible — write this as a working plan, never committed itself.
+   Link the driving GitHub issue when one exists; do not invent an
+   issue solely to satisfy this step.
 6. **Refactor** — follow the plan one phase at a time, one commit per
    phase, preferring small reviewable steps over one large rewrite.
 7. **Verify no behavior change** — re-run the same test suite from step 1
@@ -34,15 +37,20 @@
    convention adherence, whether the change is genuinely
    behavior-preserving, and scope creep.
 9. **Write the PR description** — what structure changed, confirmation
-   that behavior is unchanged, and verification evidence.
+   that behavior is unchanged, and verification evidence. If a driving
+   GitHub issue exists, link it (use the PR template's "Related
+   issue(s)" line).
 
 ## Expected artifacts
 
-- A decision record (for non-trivial refactors) of the target structure.
-- A working plan broken into commit-sized phases (not committed).
+- A decision record (for non-trivial refactors) of the target
+  structure, with a row in `docs/adrs/index.md`.
+- A working plan broken into commit-sized phases (not committed),
+  linking the driving issue when one exists.
 - The refactored code.
 - A PR description stating what structure changed and confirming
-  behavior is unchanged, with verification evidence.
+  behavior is unchanged, with verification evidence, linking the
+  driving issue when one exists.
 
 ## Verification gates
 
