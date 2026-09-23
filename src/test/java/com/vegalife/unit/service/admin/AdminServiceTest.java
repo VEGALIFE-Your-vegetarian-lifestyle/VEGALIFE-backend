@@ -224,4 +224,64 @@ class AdminServiceTest {
     verify(userRepository, never()).save(any());
     verify(jwtTokenService, never()).revokeAllUserRefreshTokens(any());
   }
+
+  @Test
+  void restoreUser_success_setsStatusToActivated() {
+    user.setStatus(User.Status.suspended);
+    UserListResponse activatedResponse =
+        UserListResponse.builder()
+            .id(user.getId())
+            .username("jane")
+            .email("jane@example.com")
+            .role("USER")
+            .status("activated")
+            .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
+            .build();
+    when(userRepository.findById(user.getId())).thenReturn(java.util.Optional.of(user));
+    when(userRepository.save(user)).thenReturn(user);
+    when(adminUserMapper.toResponse(user)).thenReturn(activatedResponse);
+
+    UserListResponse result = adminService.restoreUser(user.getId());
+
+    assertThat(result).isEqualTo(activatedResponse);
+    assertThat(user.getStatus()).isEqualTo(User.Status.activated);
+    verify(userRepository).save(user);
+  }
+
+  @Test
+  void restoreUser_missingUser_throwsResourceNotFound() {
+    UUID missingId = UUID.randomUUID();
+    when(userRepository.findById(missingId)).thenReturn(java.util.Optional.empty());
+
+    assertThatThrownBy(() -> adminService.restoreUser(missingId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("User not found");
+
+    verify(userRepository, never()).save(any());
+  }
+
+  @Test
+  void restoreUser_softDeletedUser_throwsResourceNotFound() {
+    user.setStatus(User.Status.suspended);
+    user.setDeletedAt(Instant.now());
+    when(userRepository.findById(user.getId())).thenReturn(java.util.Optional.of(user));
+
+    assertThatThrownBy(() -> adminService.restoreUser(user.getId()))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("User not found");
+
+    verify(userRepository, never()).save(any());
+  }
+
+  @Test
+  void restoreUser_notSuspended_throwsDuplicateResource() {
+    user.setStatus(User.Status.activated);
+    when(userRepository.findById(user.getId())).thenReturn(java.util.Optional.of(user));
+
+    assertThatThrownBy(() -> adminService.restoreUser(user.getId()))
+        .isInstanceOf(DuplicateResourceException.class)
+        .hasMessage("User is not suspended");
+
+    verify(userRepository, never()).save(any());
+  }
 }
