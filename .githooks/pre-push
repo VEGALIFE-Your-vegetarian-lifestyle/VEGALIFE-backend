@@ -6,7 +6,7 @@ echo "pre-push: running unit tests ..."
 
 if ! ./mvnw -q test; then
   echo "" >&2
-  echo "ERROR: unit tests failed — push blocked." >&2
+  echo "ERROR: unit tests failed - push blocked." >&2
   echo "Fix the failing tests, then push again." >&2
   exit 1
 fi
