@@ -68,6 +68,9 @@ app:
   password-reset:
     otp-expiry-minutes: 10
 
+  email-verification:
+    otp-expiry-minutes: 10
+
   scheduling:
     enabled: true
 

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html xmlns:th="https://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Verify Your Email - Vegalife</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px;">
+        <h1 style="color: #2c7a7b; margin-bottom: 20px;">Verify Your Email 🌱</h1>
+
+        <p style="font-size: 16px; margin-bottom: 16px;">Hi <span th:text="${username}">User</span>,</p>
+
+        <p style="font-size: 16px; margin-bottom: 16px;">Welcome to Vegalife! Use the code below to verify your email address:</p>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <span th:text="${otp}"
+                  style="display: inline-block; background-color: #2c7a7b; color: white; padding: 16px 32px; border-radius: 6px; font-weight: bold; font-size: 32px; letter-spacing: 8px;">
+                000000
+            </span>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+
+        <p style="font-size: 14px; color: #666; margin-bottom: 8px;">This code expires in <strong th:text="${otpExpiryMinutes}">10</strong> minutes and can only be used once.</p>
+        <p style="font-size: 14px; color: #666; margin-bottom: 8px;">If you didn't create an account, you can safely ignore this email.</p>
+
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+            <p style="font-size: 12px; color: #999; margin: 0;">&copy; 2026 Vegalife. All rights reserved.</p>
+            <p style="font-size: 12px; color: #999; margin: 8px 0 0;">A social platform for the vegan community.</p>
+        </div>
+    </div>
+</body>
+</html>
