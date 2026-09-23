@@ -36,7 +36,7 @@ There is currently no way to regain access to an account whose password is forgo
 
 - [x] FR-001: `POST /api/auth/forgot-password` accepts `{ email }`; when the email belongs to a registered user, a 6-digit numeric OTP is generated, persisted with `expires_at = now + 10 minutes`, and emailed to that address.
 - [x] FR-002: `POST /api/auth/forgot-password` always returns the same 200 response regardless of whether the email exists (anti-enumeration).
-- [x] FR-003: Requesting a new OTP invalidates any previous unused OTP for that user; at most one active OTP exists per user.
+- [x] FR-003: Requesting a new OTP invalidates any previous unused OTP for that user **of the same purpose** (`PASSWORD_RESET`); at most one active reset OTP exists per user. Email-verification codes are unaffected (ADR-004).
 - [x] FR-004: `POST /api/auth/reset-password` accepts `{ email, otp, newPassword }`; on a valid, unexpired, unused OTP matching that user's active code, the password is BCrypt-encoded into `user.password_hash`, the OTP is marked used, and all of the user's refresh tokens are revoked.
 - [x] FR-005: Expired OTP → 400 with an explicit expiry message; wrong or already-used OTP → 400 with an invalid-code message.
 - [x] FR-006: Resending (calling forgot-password again) issues a new code that supersedes the old one.
@@ -51,7 +51,7 @@ There is currently no way to regain access to an account whose password is forgo
 
 ## Design overview
 
-Two new public endpoints on `AuthController`, logic in `AuthService`, a new `password_reset_otp` table (Flyway `V13`) with entity `PasswordResetOtp` + repository, a new `EmailService.sendPasswordResetOtp(...)` method with a Thymeleaf `email/password-reset-otp.html` template, and config `app.password-reset.otp-expiry-minutes`. OTP codes are SHA-256-hashed at rest, mirroring the refresh-token pattern (BR-AUTH-011). The storage decision is recorded in `docs/adrs/003-password-reset-otp-storage.md`.
+Two new public endpoints on `AuthController`, logic in `AuthService`, OTP storage initially as `password_reset_otp` (Flyway `V13`) with entity `PasswordResetOtp` + repository — renamed to `otp_code` + `OtpCode` with a `purpose` discriminator in V14 (issue #59 / ADR-004; reset codes use purpose `PASSWORD_RESET`) — a new `EmailService.sendPasswordResetOtp(...)` method with a Thymeleaf `email/password-reset-otp.html` template, and config `app.password-reset.otp-expiry-minutes`. OTP codes are SHA-256-hashed at rest, mirroring the refresh-token pattern (BR-AUTH-011). The storage decision is recorded in `docs/adrs/003-password-reset-otp-storage.md` (superseded in shape by `docs/adrs/004-generalized-otp-storage.md`; decision itself unchanged).
 
 ## Success metrics
 

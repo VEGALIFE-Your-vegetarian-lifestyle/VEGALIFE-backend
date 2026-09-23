@@ -72,10 +72,14 @@ The Vegalife backend requires a user registration system with email verification
 
 **Decision**: 
 - `POST /register` → 201 Created (resource created)
-- `GET /verify-email` → 200 OK (verification is idempotent read)
+- `POST /verify-email` → 200 OK (verification is idempotent; body carries
+  `{email, otp}` since issue #59 replaced the `GET ...?token=` link with a
+  6-digit OTP — see ADR-004)
 - Errors: 400, 404, 409, 500 as appropriate
 
-**Rationale**: REST semantics - creation returns 201, verification is read-like
+**Rationale**: REST semantics - creation returns 201; verification consumes a
+credential (OTP) rather than reading a link, so it is a POST with idempotent
+200 on repeat of an already-verified account
 
 ### 6. Exception Handling: GlobalExceptionHandler Returns ApiResponse
 

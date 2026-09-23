@@ -536,15 +536,16 @@ _Description: Access token denylist for immediate revocation. Stores JWT ID (jti
 
 ---
 
-## Table 23: Password Reset OTP
+## Table 23: OTP Code
 
-_Description: Stores SHA-256 hashes of 6-digit password-reset codes for the forgot-password flow. One row per issued code; at most one unused, unexpired row is active per user._
+_Description: Stores SHA-256 hashes of 6-digit auth codes for password reset and email verification (purpose column, V14 / ADR-004). One row per issued code; at most one unused, unexpired row is active per (user, purpose)._
 
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
 | id | UUID | PK | No | Unique identifier for each OTP record |
 | user_id | UUID | FK | No | References "user"(id) - Account the code was issued for |
 | otp_hash | CHAR(64) | - | No | SHA-256 hex hash of the raw 6-digit code (raw code never stored) |
+| purpose | VARCHAR(32) | - | No | PASSWORD_RESET or EMAIL_VERIFICATION (default PASSWORD_RESET for rows migrated from V13) |
 | expires_at | TIMESTAMPTZ | - | No | Code expiration timestamp (issued_at + 10 minutes) |
 | used_at | TIMESTAMPTZ | - | Yes | When the code was consumed or superseded (NULL = active) |
 | created_at | TIMESTAMPTZ | - | No | Timestamp when the code was issued |
@@ -553,8 +554,8 @@ _Description: Stores SHA-256 hashes of 6-digit password-reset codes for the forg
 - FK: user_id REFERENCES "user"(id) ON DELETE CASCADE
 
 **Indexes:**
-- `idx_password_reset_otp_user_id` ON (user_id)
-- `idx_password_reset_otp_expires` ON (expires_at)
+- `idx_otp_code_user_id` ON (user_id)
+- `idx_otp_code_expires` ON (expires_at)
 
 ---
 
@@ -569,7 +570,7 @@ _Description: Stores SHA-256 hashes of 6-digit password-reset codes for the forg
 - **User** 1:N **AIConversation** (nullable for guests)
 - **User** 1:N **AIUsage** (nullable for guests)
 - **User** 1:N **RefreshToken** (auth tokens for session management)
-- **User** 1:N **PasswordResetOtp** (password-reset codes; at most one active per user)
+- **User** 1:N **OtpCode** (password-reset and email-verification codes; at most one active per user per purpose)
 - **Post** M:N **Category** (via Post_Category)
 - **Post** M:N **Media** (via Post_Media)
 - **Post** M:N **Recipe** (via Post_Recipe)

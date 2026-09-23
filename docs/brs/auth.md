@@ -6,8 +6,8 @@
 |---------|-------|--------|---------------|
 | BR-AUTH-001 | Unique User Identity | Active | 2026-09-22 |
 | BR-AUTH-002 | Password Confirmation Match | Active | 2026-09-22 |
-| BR-AUTH-003 | Email Verification Required for Activation | Active | 2026-09-22 |
-| BR-AUTH-004 | Verification Token Expiration (24h) | Active | 2026-09-22 |
+| BR-AUTH-003 | Email Verification Required for Activation | Active | 2026-09-24 |
+| BR-AUTH-004 | Email Verification OTP Expiration (10 min) | Active | 2026-09-24 |
 | BR-AUTH-005 | Password Minimum Length (8 chars) | Active | 2026-09-22 |
 | BR-AUTH-006 | Username Format and Length (3-50 chars) | Active | 2026-09-22 |
 | BR-AUTH-007 | Email Format and Length (valid, max 100 chars) | Active | 2026-09-22 |
@@ -20,10 +20,11 @@
 | BR-AUTH-014 | Access Token Blacklist on Demand | Active | 2026-09-22 |
 | BR-AUTH-015 | Expired Token Cleanup Daily | Active | 2026-09-22 |
 | BR-AUTH-016 | Account State Checked on Every Authenticated Request | Active | 2026-09-23 |
-| BR-AUTH-017 | Password Reset OTP Lifecycle (6-digit, 10 min, single-use) | Active | 2026-09-24 |
+| BR-AUTH-017 | OTP Lifecycle (6-digit, 10 min, single-use, per user per purpose) | Active | 2026-09-24 |
 | BR-AUTH-018 | Forgot Password Does Not Reveal Account Existence | Active | 2026-09-24 |
-| BR-AUTH-019 | Password Reset OTP Stored as SHA-256 Hash | Active | 2026-09-24 |
+| BR-AUTH-019 | OTP Stored as SHA-256 Hash | Active | 2026-09-24 |
 | BR-AUTH-020 | Password Reset Revokes Refresh Tokens | Active | 2026-09-24 |
+| BR-AUTH-021 | Email Verification OTP Lifecycle and Resend | Active | 2026-09-24 |
 
 ---
 
@@ -90,7 +91,7 @@ Applies to all registration requests. No exceptions.
 Active
 
 ## Statement
-A newly registered user starts with `emailVerified=false` and `status=CREATED`. The account must be activated by verifying the email via token before full access.
+A newly registered user starts with `emailVerified=false` and `status=CREATED`. The account must be activated by verifying the email via a 6-digit OTP before full access.
 
 ## Rationale
 Ensures valid email ownership, reduces fake/spam accounts, enables reliable communication.
@@ -99,16 +100,17 @@ Ensures valid email ownership, reduces fake/spam accounts, enables reliable comm
 Applies to all user registrations. Future: Admin-created users may bypass.
 
 ## Enforcement
-- `AuthService.register()`: Sets `emailVerified=false`, `status=CREATED`
-- `AuthService.verifyEmail()`: On valid token, sets `emailVerified=true`, `status=ACTIVATED`
+- `AuthService.register()`: Sets `emailVerified=false`, `status=CREATED`; issues an `EMAIL_VERIFICATION` OTP (BR-AUTH-021) and emails the code instead of a link
+- `AuthService.verifyEmail({email, otp})`: On valid OTP, sets `emailVerified=true`, `status=ACTIVATED`; unknown email and wrong/used OTP return the same 400 (anti-enumeration, mirrors BR-AUTH-018)
+- `POST /api/auth/verify-email` replaces the former `GET /api/auth/verify-email?token=` (ADR-001 §5, ADR-004)
 - Future: Auth guards should check `emailVerified` and `status=ACTIVATED`
 
 ## Last Reviewed
-2026-09-22, by <name/role>
+2026-09-24, by <name/role>
 
 ---
 
-# Business Rule: Verification Token Expiration (24h)
+# Business Rule: Email Verification OTP Expiration (10 min)
 
 ## Rule ID
 `BR-AUTH-004`
@@ -117,21 +119,23 @@ Applies to all user registrations. Future: Admin-created users may bypass.
 Active
 
 ## Statement
-Email verification tokens expire after 24 hours.
+Email verification OTPs expire 10 minutes after issuance.
 
 ## Rationale
-Limits exposure window for token leakage, encourages prompt verification.
+Limits the exposure window for a leaked code and matches the password-reset
+OTP lifetime so users learn one "short code" behavior. (Supersedes the earlier
+24-hour JWT-link wording; issue #59 / ADR-004.)
 
 ## Scope & Exceptions
-Applies to all email verification tokens. No exceptions.
+Applies to all email-verification OTPs. Configurable via
+`app.email-verification.otp-expiry-minutes` (default 10). No exceptions.
 
 ## Enforcement
-- `VerificationTokenService.generateToken()`: Sets 24h expiration in JWT
-- `VerificationTokenService.getUserIdFromToken()`: Throws `ExpiredTokenException` if expired
-- `AuthService.verifyEmail()`: Catches and re-throws with user-friendly message
+- `AuthService.register()` / `AuthService.resendVerificationOtp()`: insert row with `expires_at = now + 10 minutes` (`OtpCode`, purpose `EMAIL_VERIFICATION`)
+- `AuthService.verifyEmail()`: expired active code → 400 `ExpiredTokenException` "Verification code has expired. Please request a new one."
 
 ## Last Reviewed
-2026-09-22, by <name/role>
+2026-09-24, by <name/role>
 
 ---
 
@@ -456,7 +460,7 @@ Applies to all authenticated API requests and to `/login` and `/refresh`. Blackl
 
 ---
 
-# Business Rule: Password Reset OTP Lifecycle
+# Business Rule: OTP Lifecycle
 
 ## Rule ID
 `BR-AUTH-017`
@@ -465,19 +469,19 @@ Applies to all authenticated API requests and to `/login` and `/refresh`. Blackl
 Active
 
 ## Statement
-A password-reset OTP is a 6-digit numeric code valid for 10 minutes from issuance, usable exactly once. At most one unused OTP exists per user at any time: issuing a new code supersedes (marks used) every previous unused code for that account. Expiry duration is configurable via `app.password-reset.otp-expiry-minutes` (default 10).
+An OTP is a 6-digit numeric code valid for 10 minutes from issuance, usable exactly once. At most one unused OTP exists **per user per purpose** at any time: issuing a new code supersedes (marks used) every previous unused code for that user **of the same purpose only** — a password-reset code never invalidates a pending email-verification code, and vice versa. Expiry is configurable per purpose (`app.password-reset.otp-expiry-minutes`, `app.email-verification.otp-expiry-minutes`, both default 10).
 
 ## Rationale
-A short, single-use window limits how long a leaked code is useful and ensures a user who never received (or lost) an email can always obtain a fresh code by requesting again.
+A short, single-use window limits how long a leaked code is useful and ensures a user who never received (or lost) an email can always obtain a fresh code by requesting again. Purpose scoping keeps independent recovery flows from interfering with each other.
 
 ## Scope & Exceptions
-Applies to all password-reset OTPs. No exceptions. The feature has no rate limit on issuance in Sprint 1 (tracked as risk in `docs/feats/forgot-password-reset.md`).
+Applies to all OTPs in the `otp_code` table (both purposes). No exceptions. The feature has no rate limit on issuance (tracked as risk in the feature specs).
 
 ## Enforcement
-- `AuthService.forgotPassword()`: invalidates prior unused OTPs, then inserts a new row with `expires_at = now + 10 minutes`
-- `AuthService.resetPassword()`: rejects expired codes with `ExpiredTokenException`, wrong/used/missing codes with `InvalidTokenException` (both HTTP 400)
-- DB: `password_reset_otp.used_at` / `expires_at` columns; hash match on `otp_hash`
-- API: `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`
+- `AuthService`: issuing any OTP calls `OtpCodeRepository.markAllUnusedByUserIdAndPurpose(userId, purpose, now)` first, then inserts the new row
+- Consumption lookups are `findLatestUnusedByUserIdAndPurpose`; expired codes → `ExpiredTokenException`, wrong/used/missing → `InvalidTokenException` (both HTTP 400)
+- DB: `otp_code.purpose` / `used_at` / `expires_at` columns; hash match on `otp_hash`
+- API: `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`, `POST /api/auth/register`, `POST /api/auth/verify-email`, `POST /api/auth/resend-email`
 
 ## Last Reviewed
 2026-09-24, by <name/role>
@@ -510,7 +514,7 @@ Applies only to the forgot-password response shape. Validation failures (malform
 
 ---
 
-# Business Rule: Password Reset OTP Stored as SHA-256 Hash
+# Business Rule: OTP Stored as SHA-256 Hash
 
 ## Rule ID
 `BR-AUTH-019`
@@ -519,18 +523,18 @@ Applies only to the forgot-password response shape. Validation failures (malform
 Active
 
 ## Statement
-Only the SHA-256 hex hash of the 6-digit OTP is persisted (`password_reset_otp.otp_hash`, CHAR(64)). The raw code is never written to the database, API responses, or logs.
+Only the SHA-256 hex hash of the 6-digit OTP is persisted (`otp_code.otp_hash`, CHAR(64)). The raw code is never written to the database, API responses, or logs.
 
 ## Rationale
-A database dump or log capture must not yield usable reset codes. Mirrors the refresh-token at-rest posture (BR-AUTH-011).
+A database dump or log capture must not yield usable codes. Mirrors the refresh-token at-rest posture (BR-AUTH-011).
 
 ## Scope & Exceptions
-Applies to all password-reset OTP persistence. The raw code exists only in process memory during generation/compare and in the outbound email.
+Applies to all OTP persistence (both purposes). The raw code exists only in process memory during generation/compare and in the outbound email.
 
 ## Enforcement
-- `PasswordResetOtpService` / `AuthService.forgotPassword()`: SHA-256(raw otp) written to `otp_hash`
-- `AuthService.resetPassword()`: SHA-256(submitted otp) compared to the stored hash
-- Decision record: `docs/adrs/003-password-reset-otp-storage.md`
+- `AuthService` issue paths: SHA-256(raw otp) written to `otp_code.otp_hash`
+- `AuthService` consume paths: SHA-256(submitted otp) compared to the stored hash
+- Decision records: `docs/adrs/003-password-reset-otp-storage.md`, `docs/adrs/004-generalized-otp-storage.md`
 
 ## Last Reviewed
 2026-09-24, by <name/role>
@@ -557,6 +561,35 @@ Applies to successful `POST /api/auth/reset-password` only. Access tokens are no
 ## Enforcement
 - `AuthService.resetPassword()`: calls `JwtTokenService.revokeAllUserRefreshTokens(userId)` (same mechanism as logout, BR-AUTH-013)
 - API: subsequent `POST /api/auth/refresh` with a pre-reset token → 400 "Refresh token has been revoked"
+
+## Last Reviewed
+2026-09-24, by <name/role>
+
+---
+
+# Business Rule: Email Verification OTP Lifecycle and Resend
+
+## Rule ID
+`BR-AUTH-021`
+
+## Status
+Active
+
+## Statement
+Registration issues an `EMAIL_VERIFICATION` OTP with the same lifecycle as BR-AUTH-017 (6-digit, 10 minutes, single-use, superseded per user per purpose). The code is consumed by `POST /api/auth/verify-email` with `{email, otp}`. `POST /api/auth/resend-email` with `{email}` always returns the same generic 200 regardless of whether the account exists or is already verified; a fresh code is sent only for an existing, unverified account, and issuing it supersedes any prior unused verification code for that user only.
+
+## Rationale
+Unifies the registration experience with the password-reset OTP flow (one code pattern to explain to users), removes the frontend callback route required by verification links, and preserves anti-enumeration on the resend path so attackers cannot probe which emails are registered.
+
+## Scope & Exceptions
+Applies to all email-verification OTP issuance and consumption. Rate limiting on resend is not in scope (tracked as risk in `docs/feats/email-verification-otp.md`). Already-verified accounts return 200 idempotently on verify without consuming a code.
+
+## Enforcement
+- `AuthService.register()`: supersede `EMAIL_VERIFICATION` for that user, insert new 10-minute OTP, email the code (no link)
+- `AuthService.verifyEmail()`: unknown email / wrong / used OTP → 400 "Invalid or already used verification code"; expired → 400 "Verification code has expired. Please request a new one."; success → `emailVerified=true`, `status=ACTIVATED`; already verified → 200 idempotent (no OTP consumed)
+- `AuthService.resendVerificationOtp()`: silent no-op for unknown/already-verified; otherwise supersede + issue + email; controller always returns the generic 200 message
+- Storage: `otp_code` with `purpose=EMAIL_VERIFICATION` (ADR-004); email via `EmailService.sendVerificationOtp(...)`
+- API: `POST /api/auth/verify-email`, `POST /api/auth/resend-email`
 
 ## Last Reviewed
 2026-09-24, by <name/role>

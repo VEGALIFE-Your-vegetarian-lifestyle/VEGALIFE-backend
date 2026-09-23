@@ -1,7 +1,7 @@
 # API Reference: POST /api/auth/register
 
 ## Overview
-Register a new user account with username, email, and password. Sends verification email with token.
+Register a new user account with username, email, and password. Sends a 6-digit email-verification OTP (no link).
 
 ## Endpoint
 ```
@@ -80,8 +80,8 @@ None
 3. Check username uniqueness (BR-AUTH-001)
 4. Hash password with BCrypt
 5. Create user with status=CREATED, emailVerified=false (BR-AUTH-003)
-6. Generate JWT verification token (24h expiry) (BR-AUTH-004)
-7. Send verification email with token link
+6. Issue 6-digit `EMAIL_VERIFICATION` OTP (10-min expiry, supersede prior unused verification OTPs for this user) (BR-AUTH-004, BR-AUTH-017, BR-AUTH-021)
+7. Send verification email containing the OTP (no link)
 8. Return 201 with user data
 
 ## Example
@@ -130,6 +130,6 @@ curl -X POST http://localhost:8080/api/auth/register \
 ```
 
 ## Related
-- Feature Spec: `docs/feats/user-registration.md`
-- ADR: `docs/adrs/001-user-registration-architecture.md`
+- Feature Spec: `docs/feats/user-registration.md`, `docs/feats/email-verification-otp.md`
+- ADR: `docs/adrs/001-user-registration-architecture.md`, `docs/adrs/004-generalized-otp-storage.md`
 - Business Rules: `docs/brs/auth.md`

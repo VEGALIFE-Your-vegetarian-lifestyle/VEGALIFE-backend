@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted
+Accepted — note: V14 (issue #59 / ADR-004) renames `password_reset_otp` →
+`otp_code` and adds a `purpose` column so this storage also serves
+email-verification codes. The decision (hashed rows, expiry/single-use
+columns, supersede) is unchanged and applies per `(user, purpose)`.
 
 ## Date
 
