@@ -11,6 +11,8 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `auth/post-login.md` | `POST /api/auth/login` | User login |
 | `auth/post-refresh.md` | `POST /api/auth/refresh` | Refresh access token |
 | `auth/post-logout.md` | `POST /api/auth/logout` | User logout |
+| `auth/post-forgot-password.md` | `POST /api/auth/forgot-password` | Request password-reset OTP by email |
+| `auth/post-reset-password.md` | `POST /api/auth/reset-password` | Reset password with OTP |
 | `profile/put-profile.md` | `PUT /api/profile` | Update user profile |
 | `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
 | `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |

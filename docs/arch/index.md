@@ -6,3 +6,4 @@ Permanent architecture documentation for the Vegalife backend.
 |---|---|
 | `project-structure.md` | Repo root layout, source tree, package responsibilities, conventions |
 | `dependencies.md` | Full dependency matrix — approved, planned, and not-approved |
+| `data-dictionary.md` | Database table/field reference, constraints, indexes, relationship summary |
