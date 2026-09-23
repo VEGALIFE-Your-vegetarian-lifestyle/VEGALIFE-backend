@@ -108,20 +108,39 @@ branch I'm on right now" → `.agents/plans/`.
 
 ## How to work in this repo
 
-1. **Read `.agents/workflows/index.md`, pick the matching workflow, and
-   read and follow it.** A workflow's steps are written in plain
-   language and don't name specific skills — that match happens next.
-   If nothing matches (a one-off script, a pure doc change, genuinely
-   novel work), say so rather than forcing the task into the nearest
-   workflow.
-2. **For each step of the workflow, read `.agents/skills/index.md` and
-   match the step to a skill by its description.** Use that skill for
-   the step. If no skill matches, do the step directly using judgment
-   consistent with the conventions in this file.
-3. Don't reference a specific skill or workflow file from within
-   another skill or workflow file — every file here stands on its own;
-   cross-cutting coordination happens through this process, not through
-   files pointing at each other.
+### 1. Workflow declaration gate (mandatory — before any work)
+
+**Before writing any code, editing any file, or creating any plan, your
+first output must be a workflow declaration.** Read
+`.agents/workflows/index.md` and declare exactly one of:
+
+- **A workflow match**: `Workflow: feature.md` (or `bugfix.md`,
+  `refactor.md`), then read that workflow and follow it.
+- **No match**: `No workflow matches this task because [specific
+  reason].` — then **stop and report back to the user**. Do not
+  proceed on your own interpretation. Wait for the user to either
+  confirm working without a workflow or reframe the task.
+
+**No declaration = no work.** If you find yourself editing files
+without having produced a declaration first, stop and emit one before
+continuing. Picking the nearest workflow "to keep moving" is not an
+option — a forced match is worse than an honest no-match.
+
+### 2. Skill matching (per workflow step)
+
+For each step of the chosen workflow, read `.agents/skills/index.md`
+and match the step to a skill by its description. Use that skill for
+the step. If no skill matches, do the step directly using judgment
+consistent with the conventions in this file.
+
+### 3. Standing rules
+
+- At each workflow's "Conditions for stopping or requesting human
+  input" — surface it to the user; don't push through silently.
+- Don't reference a specific skill or workflow file from within
+  another skill or workflow file — every file here stands on its own;
+  cross-cutting coordination happens through this process, not through
+  files pointing at each other.
 
 ## Build / test / lint commands
 
