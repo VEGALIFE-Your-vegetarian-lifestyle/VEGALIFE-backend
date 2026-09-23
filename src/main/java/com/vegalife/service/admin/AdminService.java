@@ -6,9 +6,13 @@ import com.vegalife.dto.response.admin.UserListResponse;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.repository.user.UserSpecifications;
+import com.vegalife.service.token.JwtTokenService;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.DuplicateResourceException;
+import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -26,6 +30,7 @@ public class AdminService {
 
   private final UserRepository userRepository;
   private final AdminUserMapper adminUserMapper;
+  private final JwtTokenService jwtTokenService;
 
   @Transactional(readOnly = true)
   public PageResponse<UserListResponse> listUsers(UserListRequest request) {
@@ -52,6 +57,27 @@ public class AdminService {
 
     Page<UserListResponse> mapped = page.map(adminUserMapper::toResponse);
     return PageResponse.from(mapped);
+  }
+
+  @Transactional
+  public UserListResponse suspendUser(UUID userId) {
+    User user =
+        userRepository
+            .findById(userId)
+            .filter(u -> u.getDeletedAt() == null)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+    if (user.getStatus() == User.Status.suspended) {
+      throw new DuplicateResourceException("User is already suspended");
+    }
+
+    user.setStatus(User.Status.suspended);
+    userRepository.save(user);
+
+    int revoked = jwtTokenService.revokeAllUserRefreshTokens(userId);
+    log.info("User {} suspended; revoked {} refresh tokens", userId, revoked);
+
+    return adminUserMapper.toResponse(user);
   }
 
   private User.Status parseStatus(String status) {

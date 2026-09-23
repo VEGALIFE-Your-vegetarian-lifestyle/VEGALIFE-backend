@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.User.Status;
+import com.vegalife.repository.token.RefreshTokenRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.email.EmailService;
 import com.vegalife.service.token.VerificationTokenService;
@@ -23,6 +24,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -63,6 +65,10 @@ class AuthControllerIntegrationTest {
   @Autowired private UserRepository userRepository;
 
   @Autowired private VerificationTokenService tokenService;
+
+  @Autowired private PasswordEncoder passwordEncoder;
+
+  @Autowired private RefreshTokenRepository refreshTokenRepository;
 
   @MockBean private EmailService emailService;
 
@@ -212,5 +218,79 @@ class AuthControllerIntegrationTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(jsonPath("$.message").value("Invalid verification link."));
+  }
+
+  @Test
+  void login_suspendedAccount_returnsBadRequestWithSuspendedMessage() throws Exception {
+    User suspendedUser =
+        userRepository.save(
+            User.builder()
+                .username("suspendedlogin")
+                .email("suspendedlogin@test.com")
+                .passwordHash(passwordEncoder.encode("password123"))
+                .role(User.Role.USER)
+                .status(User.Status.suspended)
+                .emailVerified(true)
+                .build());
+
+    String body = "{\"identifier\":\"suspendedlogin@test.com\",\"password\":\"password123\"}";
+
+    mockMvc
+        .perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Account is suspended"));
+
+    assertThat(userRepository.findById(suspendedUser.getId()).orElseThrow().getStatus())
+        .isEqualTo(User.Status.suspended);
+  }
+
+  @Test
+  void login_deactivatedAccount_returnsBadRequestWithNotActiveMessage() throws Exception {
+    userRepository.save(
+        User.builder()
+            .username("deactlogin")
+            .email("deactlogin@test.com")
+            .passwordHash(passwordEncoder.encode("password123"))
+            .role(User.Role.USER)
+            .status(User.Status.deactivated)
+            .emailVerified(true)
+            .build());
+
+    String body = "{\"identifier\":\"deactlogin@test.com\",\"password\":\"password123\"}";
+
+    mockMvc
+        .perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Account is not active"));
+  }
+
+  @Test
+  void refreshToken_suspendedAccount_returnsBadRequest() throws Exception {
+    User suspendedUser =
+        userRepository.save(
+            User.builder()
+                .username("refreshsuspended")
+                .email("refreshsuspended@test.com")
+                .passwordHash(passwordEncoder.encode("password123"))
+                .role(User.Role.USER)
+                .status(User.Status.suspended)
+                .emailVerified(true)
+                .build());
+    com.vegalife.model.token.RefreshToken stored =
+        com.vegalife.model.token.RefreshToken.builder()
+            .user(suspendedUser)
+            .tokenHash("hashed.value")
+            .expiresAt(java.time.Instant.now().plusSeconds(604800))
+            .revokedAt(null)
+            .build();
+    refreshTokenRepository.save(stored);
+
+    String body = "{\"refreshToken\":\"any.token.value\"}";
+
+    mockMvc
+        .perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest());
   }
 }

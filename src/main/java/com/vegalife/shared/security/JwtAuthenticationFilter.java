@@ -1,18 +1,16 @@
 package com.vegalife.shared.security;
 
-import com.vegalife.service.token.JwtTokenService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.List;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.lang.NonNull;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
@@ -27,7 +25,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private static final String AUTHORIZATION_HEADER = "Authorization";
   private static final String BEARER_PREFIX = "Bearer ";
 
-  private final JwtTokenService jwtTokenService;
+  private final ObjectProvider<org.springframework.security.authentication.AuthenticationManager>
+      authenticationManagerProvider;
 
   @Override
   protected void doFilterInternal(
@@ -40,25 +39,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     if (token != null) {
       try {
-        UUID userId = jwtTokenService.validateAccessTokenAndGetUserId(token);
-        List<SimpleGrantedAuthority> authorities = extractAuthorities(token);
-
-        UsernamePasswordAuthenticationToken authentication =
-            new UsernamePasswordAuthenticationToken(userId, null, authorities);
-
-        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        org.springframework.security.authentication.AuthenticationManager authenticationManager =
+            authenticationManagerProvider.getObject();
+        JwtAuthenticationToken authenticationRequest = new JwtAuthenticationToken(token);
+        Authentication authentication = authenticationManager.authenticate(authenticationRequest);
+        if (authentication instanceof JwtAuthenticationToken jwtAuthentication) {
+          jwtAuthentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        }
         SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        log.debug("Authenticated user: {}", userId);
       } catch (com.vegalife.shared.exception.ExpiredTokenException e) {
         log.debug("Expired access token: {}", e.getMessage());
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.getWriter().write("Access token has expired");
+        writeUnauthorized(response, "Access token has expired");
         return;
       } catch (com.vegalife.shared.exception.InvalidTokenException e) {
         log.debug("Invalid access token: {}", e.getMessage());
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.getWriter().write("Invalid access token");
+        writeUnauthorized(response, "Invalid access token");
+        return;
+      } catch (com.vegalife.shared.exception.AccountInactiveException e) {
+        log.debug("Account inactive for request: {}", e.getMessage());
+        writeUnauthorized(response, e.getMessage());
+        return;
+      } catch (AuthenticationException e) {
+        log.debug("Authentication failed: {}", e.getMessage());
+        writeUnauthorized(response, "Invalid access token");
         return;
       }
     }
@@ -74,11 +77,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     return null;
   }
 
-  private List<SimpleGrantedAuthority> extractAuthorities(String token) {
-    String role = jwtTokenService.extractRole(token);
-    if (role != null) {
-      return List.of(new SimpleGrantedAuthority("ROLE_" + role));
-    }
-    return List.of();
+  private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
+    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+    response.getWriter().write(message);
   }
 }
