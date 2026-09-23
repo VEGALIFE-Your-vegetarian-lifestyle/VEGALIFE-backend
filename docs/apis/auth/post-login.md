@@ -67,11 +67,13 @@ None
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
 | 400 | Validation failed | "Validation failed" |
-| 401 | Invalid credentials | "Invalid email/username or password" |
-| 403 | Account not activated | "Email not verified. Please verify your email before logging in." |
-| 403 | Account suspended | "Account is suspended" |
-| 403 | Account deactivated | "Account is not active" |
+| 400 | Invalid credentials | "Invalid email/username or password" |
+| 400 | Account not activated | "Email not verified. Please verify your email before logging in." |
+| 400 | Account suspended | "Account is suspended" |
+| 400 | Account deactivated | "Account is not active" |
 | 500 | Server error | "Internal server error" |
+
+> Note: login business errors are raised as `InvalidTokenException` and mapped to HTTP 400 by `GlobalExceptionHandler` (not 401/403).
 
 ## Business Rules
 - BR-AUTH-008: Login Requires Valid Credentials and Activated Account
@@ -82,16 +84,17 @@ None
 ## Flow
 1. Validate request body (identifier + password present)
 2. Find user by email OR username
-3. If user not found → 401 (generic message to prevent enumeration)
+3. If user not found → 400 (generic message to prevent enumeration)
 4. Verify password with BCrypt
-5. If password invalid → 401 (generic message)
-6. Check `emailVerified == true` and `status == ACTIVATED`
-7. If not verified/active → 403
-8. Generate access JWT (claims: sub, iss, aud, jti, iat, exp)
-9. Generate refresh token (SecureRandom 32 bytes → Base64URL)
-10. Store SHA-256(refreshToken) in `refresh_token` table with `expires_at = now + 7d`
-11. Update `user.last_login_at = NOW()`
-12. Return 200 with tokens
+5. If password invalid → 400 (generic message)
+6. Check status: suspended → 400 "Account is suspended"; deactivated → 400 "Account is not active"
+7. Check `emailVerified == true` and `status == ACTIVATED`
+8. If not verified/active → 400
+9. Generate access JWT (claims: sub, iss, aud, jti, iat, exp)
+10. Generate refresh token (SecureRandom 32 bytes → Base64URL)
+11. Store SHA-256(refreshToken) in `refresh_token` table with `expires_at = now + 7d`
+12. Update `user.last_login_at = NOW()`
+13. Return 200 with tokens
 
 ## Example
 
@@ -122,7 +125,7 @@ curl -X POST http://localhost:8080/api/auth/login \
 }
 ```
 
-### Error Response (401 - Invalid Credentials)
+### Error Response (400 - Invalid Credentials)
 ```json
 {
   "success": false,
@@ -131,11 +134,20 @@ curl -X POST http://localhost:8080/api/auth/login \
 }
 ```
 
-### Error Response (403 - Not Verified)
+### Error Response (400 - Not Verified)
 ```json
 {
   "success": false,
   "message": "Email not verified. Please verify your email before logging in.",
+  "data": null
+}
+```
+
+### Error Response (400 - Suspended)
+```json
+{
+  "success": false,
+  "message": "Account is suspended",
   "data": null
 }
 ```

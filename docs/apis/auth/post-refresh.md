@@ -58,10 +58,13 @@ None
 |-------------|-----------|---------|
 | 400 | Validation failed | "Validation failed" |
 | 400 | Missing refresh token | "Refresh token is required" |
-| 401 | Invalid refresh token | "Invalid refresh token" |
-| 401 | Expired refresh token | "Refresh token has expired" |
-| 401 | Revoked refresh token | "Refresh token has been revoked" |
+| 400 | Invalid refresh token | "Invalid refresh token" |
+| 400 | Expired refresh token | "Refresh token has expired" |
+| 400 | Revoked refresh token | "Refresh token has been revoked" |
+| 400 | Non-activated account | "Account is not active" |
 | 500 | Server error | "Internal server error" |
+
+> Note: refresh business errors are raised as `InvalidTokenException`/`ExpiredTokenException` and mapped to HTTP 400 by `GlobalExceptionHandler`.
 
 ## Business Rules
 - BR-AUTH-010: Refresh Token Long Lifetime (7 days)
@@ -72,10 +75,11 @@ None
 1. Validate request body (refreshToken present)
 2. Compute SHA-256 hash of provided refresh token
 3. Look up `refresh_token` by `token_hash`
-4. If not found → 401 "Invalid refresh token"
-5. If `revoked_at` is not null → 401 "Refresh token has been revoked"
-6. If `expires_at < NOW()` → 401 "Refresh token has expired"
+4. If not found → 400 "Invalid refresh token"
+5. If `revoked_at` is not null → 400 "Refresh token has been revoked"
+6. If `expires_at < NOW()` → 400 "Refresh token has expired"
 7. Load associated user
+8. If user soft-deleted or `status != activated` → 400 "Account is not active"
 9. Generate new access JWT (fresh jti, iat, exp)
 10. Return 200 with new access token (same refresh token remains valid)
 
@@ -103,7 +107,7 @@ curl -X POST http://localhost:8080/api/auth/refresh \
 }
 ```
 
-### Error Response (401 - Expired)
+### Error Response (400 - Expired)
 ```json
 {
   "success": false,
@@ -112,11 +116,20 @@ curl -X POST http://localhost:8080/api/auth/refresh \
 }
 ```
 
-### Error Response (401 - Revoked)
+### Error Response (400 - Revoked)
 ```json
 {
   "success": false,
   "message": "Refresh token has been revoked",
+  "data": null
+}
+```
+
+### Error Response (400 - Account Not Active)
+```json
+{
+  "success": false,
+  "message": "Account is not active",
   "data": null
 }
 ```
