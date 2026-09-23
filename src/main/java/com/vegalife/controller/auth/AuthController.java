@@ -1,8 +1,10 @@
 package com.vegalife.controller.auth;
 
+import com.vegalife.dto.request.auth.ForgotPasswordRequest;
 import com.vegalife.dto.request.auth.LoginRequest;
 import com.vegalife.dto.request.auth.RefreshTokenRequest;
 import com.vegalife.dto.request.auth.RegisterRequest;
+import com.vegalife.dto.request.auth.ResetPasswordRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.service.auth.AuthService;
@@ -62,5 +64,21 @@ public class AuthController {
       authService.logout(accessToken);
     }
     return ResponseEntity.ok(ApiResponse.success(null, "Logged out successfully"));
+  }
+
+  @PostMapping("/forgot-password")
+  public ResponseEntity<ApiResponse<Void>> forgotPassword(
+      @Valid @RequestBody ForgotPasswordRequest request) {
+    authService.forgotPassword(request);
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            null, "If an account with that email exists, a password reset code has been sent"));
+  }
+
+  @PostMapping("/reset-password")
+  public ResponseEntity<ApiResponse<Void>> resetPassword(
+      @Valid @RequestBody ResetPasswordRequest request) {
+    authService.resetPassword(request);
+    return ResponseEntity.ok(ApiResponse.success(null, "Password has been reset successfully"));
   }
 }
