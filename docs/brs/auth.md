@@ -19,6 +19,7 @@
 | BR-AUTH-013 | Logout Revokes Refresh Token | Active | 2026-09-22 |
 | BR-AUTH-014 | Access Token Blacklist on Demand | Active | 2026-09-22 |
 | BR-AUTH-015 | Expired Token Cleanup Daily | Active | 2026-09-22 |
+| BR-AUTH-016 | Account State Checked on Every Authenticated Request | Active | 2026-09-23 |
 
 ---
 
@@ -420,3 +421,31 @@ Runs daily via `@Scheduled`. Idempotent and safe to run multiple times.
 
 ## Last Reviewed
 2026-09-22, by <name/role>
+
+---
+
+# Business Rule: Account State Checked on Every Authenticated Request
+
+## Rule ID
+`BR-AUTH-016`
+
+## Status
+Active
+
+## Statement
+On every request that presents a JWT access token, the system must load the current account state for the token subject. Authentication succeeds only if the user exists, is not soft-deleted, and `status = activated`. Login and refresh token issuance must also require `status = activated`. Suspension takes effect for subsequent API calls without waiting for access-token expiry.
+
+## Rationale
+Access tokens are short-lived but still valid for up to 15 minutes. Without a per-request account check, a suspended or deactivated user could keep using a token issued before suspension. Revoking all outstanding access-token jtis is not supported by the current blacklist schema (PK is jti+issuer, not user-scoped), so status validation is the enforcement point.
+
+## Scope & Exceptions
+Applies to all authenticated API requests and to `/login` and `/refresh`. Blacklist checks (logout) remain separate and still apply. Does not require a cache; a single indexed primary-key lookup is acceptable at current scale.
+
+## Enforcement
+- `JwtAuthenticationProvider` (via `AuthenticationManager`): parse token → blacklist check → load account projection → reject if missing / soft-deleted / status != activated; authorities from DB `role`.
+- `JwtAuthenticationFilter`: thin shell that delegates to `AuthenticationManager`.
+- `AuthService.login` / `AuthService.refreshToken`: reject non-activated accounts with inactive-account message.
+- API: filter returns 401 plain-text on rejection (existing convention).
+
+## Last Reviewed
+2026-09-23, by <name/role>

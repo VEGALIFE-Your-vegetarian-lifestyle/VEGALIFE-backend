@@ -69,7 +69,8 @@ None
 | 400 | Validation failed | "Validation failed" |
 | 401 | Invalid credentials | "Invalid email/username or password" |
 | 403 | Account not activated | "Email not verified. Please verify your email before logging in." |
-| 403 | Account suspended/deactivated | "Account is not active" |
+| 403 | Account suspended | "Account is suspended" |
+| 403 | Account deactivated | "Account is not active" |
 | 500 | Server error | "Internal server error" |
 
 ## Business Rules

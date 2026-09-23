@@ -13,3 +13,4 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `auth/post-logout.md` | `POST /api/auth/logout` | User logout |
 | `profile/put-profile.md` | `PUT /api/profile` | Update user profile |
 | `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
+| `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |
