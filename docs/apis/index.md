@@ -12,3 +12,4 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `auth/post-refresh.md` | `POST /api/auth/refresh` | Refresh access token |
 | `auth/post-logout.md` | `POST /api/auth/logout` | User logout |
 | `profile/put-profile.md` | `PUT /api/profile` | Update user profile |
+| `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
