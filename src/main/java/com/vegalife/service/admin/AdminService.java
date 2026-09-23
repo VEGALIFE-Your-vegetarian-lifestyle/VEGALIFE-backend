@@ -5,6 +5,7 @@ import com.vegalife.dto.request.admin.UserListRequest;
 import com.vegalife.dto.response.admin.UserListResponse;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.repository.user.UserSpecifications;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
@@ -14,6 +15,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,7 +40,9 @@ public class AdminService {
 
     Pageable pageable =
         PageRequest.of(request.getPage(), request.getSize(), parseSort(request.getSort()));
-    Page<User> page = userRepository.findAllActive(status, role, createdFrom, createdTo, pageable);
+    Specification<User> spec =
+        UserSpecifications.activeWithFilters(status, role, createdFrom, createdTo);
+    Page<User> page = userRepository.findAll(spec, pageable);
 
     log.debug(
         "Listed users page={} size={} total={}",

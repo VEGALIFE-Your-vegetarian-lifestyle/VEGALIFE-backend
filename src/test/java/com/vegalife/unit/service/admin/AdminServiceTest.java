@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -30,6 +29,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 @ExtendWith(MockitoExtension.class)
 class AdminServiceTest {
@@ -71,8 +71,7 @@ class AdminServiceTest {
   @Test
   void listUsers_withDefaults_usesDefaultPaginationAndSort() {
     Page<User> page = new PageImpl<>(List.of(user), expectedPageable, 1);
-    when(userRepository.findAllActive(isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
-        .thenReturn(page);
+    when(userRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
     when(adminUserMapper.toResponse(user)).thenReturn(userResponse);
 
     PageResponse<UserListResponse> result = adminService.listUsers(new UserListRequest());
@@ -85,8 +84,7 @@ class AdminServiceTest {
     assertThat(result.isFirst()).isTrue();
     assertThat(result.isLast()).isTrue();
 
-    verify(userRepository)
-        .findAllActive(isNull(), isNull(), isNull(), isNull(), eq(expectedPageable));
+    verify(userRepository).findAll(any(Specification.class), eq(expectedPageable));
   }
 
   @Test
@@ -105,8 +103,7 @@ class AdminServiceTest {
             .build();
     Pageable pageable = PageRequest.of(1, 10, Sort.by(Sort.Direction.ASC, "createdAt"));
     Page<User> page = new PageImpl<>(List.of(user), pageable, 1);
-    when(userRepository.findAllActive(User.Status.activated, User.Role.USER, from, to, pageable))
-        .thenReturn(page);
+    when(userRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
     when(adminUserMapper.toResponse(user)).thenReturn(userResponse);
 
     PageResponse<UserListResponse> result = adminService.listUsers(request);
@@ -114,7 +111,7 @@ class AdminServiceTest {
     assertThat(result.getContent()).containsExactly(userResponse);
     assertThat(result.getPage()).isEqualTo(1);
     assertThat(result.getSize()).isEqualTo(10);
-    verify(userRepository).findAllActive(User.Status.activated, User.Role.USER, from, to, pageable);
+    verify(userRepository).findAll(any(Specification.class), eq(pageable));
   }
 
   @Test
@@ -160,8 +157,7 @@ class AdminServiceTest {
   @Test
   void listUsers_withEmptyPage_returnsEmptyContent() {
     Page<User> page = Page.empty(expectedPageable);
-    when(userRepository.findAllActive(isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
-        .thenReturn(page);
+    when(userRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
     PageResponse<UserListResponse> result = adminService.listUsers(new UserListRequest());
 
