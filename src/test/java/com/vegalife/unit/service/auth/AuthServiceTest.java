@@ -300,11 +300,42 @@ class AuthServiceTest {
 
     assertThatThrownBy(() -> authService.login(validLoginRequest))
         .isInstanceOf(InvalidTokenException.class)
-        .hasMessage("Email not verified. Please verify your email before logging in.");
+        .hasMessage("Account is not active");
   }
 
   @Test
-  void login_usernameIdentifier_success() {
+  void login_suspendedStatus_throwsException() {
+    user.setStatus(User.Status.suspended);
+    when(userRepository.findByEmail(validLoginRequest.getIdentifier()))
+        .thenReturn(Optional.of(user));
+    when(passwordEncoder.matches(validLoginRequest.getPassword(), user.getPasswordHash()))
+        .thenReturn(true);
+
+    assertThatThrownBy(() -> authService.login(validLoginRequest))
+        .isInstanceOf(InvalidTokenException.class)
+        .hasMessage("Account is suspended");
+  }
+
+  @Test
+  void refreshToken_nonActivatedAccount_throwsException() {
+    user.setStatus(User.Status.suspended);
+    RefreshToken storedToken =
+        RefreshToken.builder()
+            .id(UUID.randomUUID())
+            .user(user)
+            .tokenHash("hashed.token.value")
+            .expiresAt(Instant.now().plusSeconds(604800))
+            .build();
+
+    when(jwtTokenService.validateRefreshToken(refreshToken)).thenReturn(storedToken);
+
+    assertThatThrownBy(() -> authService.refreshToken(refreshToken))
+        .isInstanceOf(InvalidTokenException.class)
+        .hasMessage("Account is not active");
+  }
+
+  @Test
+  void refreshToken_usernameIdentifier_success() {
     when(userRepository.findByEmail(validLoginRequest.getIdentifier()))
         .thenReturn(Optional.empty());
     when(userRepository.findByUsername(validLoginRequest.getIdentifier()))

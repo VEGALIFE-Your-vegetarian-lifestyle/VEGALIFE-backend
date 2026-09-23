@@ -107,7 +107,16 @@ public class AuthService {
       throw new InvalidTokenException("Invalid email/username or password");
     }
 
-    if (!user.getEmailVerified() || user.getStatus() != User.Status.activated) {
+    if (user.getStatus() == User.Status.suspended) {
+      throw new InvalidTokenException("Account is suspended");
+    }
+
+    if (user.getStatus() == User.Status.deactivated) {
+      throw new InvalidTokenException("Account is not active");
+    }
+
+    if (!Boolean.TRUE.equals(user.getEmailVerified())
+        || user.getStatus() != User.Status.activated) {
       throw new InvalidTokenException(
           "Email not verified. Please verify your email before logging in.");
     }
@@ -133,6 +142,10 @@ public class AuthService {
     com.vegalife.model.token.RefreshToken storedToken =
         jwtTokenService.validateRefreshToken(refreshToken);
     User user = storedToken.getUser();
+
+    if (user.getDeletedAt() != null || user.getStatus() != User.Status.activated) {
+      throw new InvalidTokenException("Account is not active");
+    }
 
     String newAccessToken = jwtTokenService.generateAccessToken(user);
 
