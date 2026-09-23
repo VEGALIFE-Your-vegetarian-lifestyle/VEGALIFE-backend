@@ -5,3 +5,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | File | Title | Status | Date |
 |------|-------|--------|------|
 | `user-registration.md` | User Registration with Email Verification | Implemented | 2026-09-22 |
+| `edit-user-profile-api.md` | Edit User Profile API | In Progress | 2026-09-23 |
