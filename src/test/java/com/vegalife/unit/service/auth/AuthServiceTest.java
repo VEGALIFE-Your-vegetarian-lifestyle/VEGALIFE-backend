@@ -335,7 +335,7 @@ class AuthServiceTest {
   }
 
   @Test
-  void refreshToken_usernameIdentifier_success() {
+  void login_usernameIdentifier_success() {
     when(userRepository.findByEmail(validLoginRequest.getIdentifier()))
         .thenReturn(Optional.empty());
     when(userRepository.findByUsername(validLoginRequest.getIdentifier()))
