@@ -35,4 +35,10 @@ public class AdminController {
     UserListResponse user = adminService.suspendUser(userId);
     return ResponseEntity.ok(ApiResponse.success(user, "User suspended successfully"));
   }
+
+  @PostMapping("/users/{userId}/restore")
+  public ResponseEntity<ApiResponse<UserListResponse>> restoreUser(@PathVariable UUID userId) {
+    UserListResponse user = adminService.restoreUser(userId);
+    return ResponseEntity.ok(ApiResponse.success(user, "User restored successfully"));
+  }
 }

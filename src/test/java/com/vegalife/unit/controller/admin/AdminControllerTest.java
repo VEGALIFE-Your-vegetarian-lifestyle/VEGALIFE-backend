@@ -98,4 +98,28 @@ class AdminControllerTest {
     assertThat(response.getBody().getData().getStatus()).isEqualTo("suspended");
     verify(adminService).suspendUser(userId);
   }
+
+  @Test
+  void restoreUser_shouldReturnSuccessEnvelope() {
+    UUID userId = UUID.randomUUID();
+    UserListResponse restored =
+        UserListResponse.builder()
+            .id(userId)
+            .email("jane@example.com")
+            .username("jane")
+            .role("USER")
+            .status("activated")
+            .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
+            .build();
+    when(adminService.restoreUser(userId)).thenReturn(restored);
+
+    ResponseEntity<ApiResponse<UserListResponse>> response = adminController.restoreUser(userId);
+
+    assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().isSuccess()).isTrue();
+    assertThat(response.getBody().getMessage()).isEqualTo("User restored successfully");
+    assertThat(response.getBody().getData().getStatus()).isEqualTo("activated");
+    verify(adminService).restoreUser(userId);
+  }
 }

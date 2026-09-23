@@ -14,3 +14,4 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `profile/put-profile.md` | `PUT /api/profile` | Update user profile |
 | `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
 | `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |
+| `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |

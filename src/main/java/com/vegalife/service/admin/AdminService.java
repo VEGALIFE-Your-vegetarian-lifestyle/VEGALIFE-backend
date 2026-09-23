@@ -80,6 +80,26 @@ public class AdminService {
     return adminUserMapper.toResponse(user);
   }
 
+  @Transactional
+  public UserListResponse restoreUser(UUID userId) {
+    User user =
+        userRepository
+            .findById(userId)
+            .filter(u -> u.getDeletedAt() == null)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+    if (user.getStatus() != User.Status.suspended) {
+      throw new DuplicateResourceException("User is not suspended");
+    }
+
+    user.setStatus(User.Status.activated);
+    userRepository.save(user);
+
+    log.info("User {} restored; status set to activated", userId);
+
+    return adminUserMapper.toResponse(user);
+  }
+
   private User.Status parseStatus(String status) {
     if (status == null || status.isBlank()) {
       return null;
