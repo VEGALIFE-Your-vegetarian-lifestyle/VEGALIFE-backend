@@ -3,9 +3,11 @@ package com.vegalife.dto.mapper.profile;
 import com.vegalife.dto.request.profile.UpdateProfileRequest;
 import com.vegalife.dto.response.profile.ProfileResponse;
 import com.vegalife.model.user.UserProfile;
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
+import org.mapstruct.NullValuePropertyMappingStrategy;
 import org.mapstruct.factory.Mappers;
 
 @Mapper(componentModel = "spring")
@@ -21,6 +23,7 @@ public interface ProfileMapper {
   @Mapping(target = "userId", source = "user.id")
   ProfileResponse toResponse(UserProfile profile);
 
+  @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
   @Mapping(target = "id", ignore = true)
   @Mapping(target = "user", ignore = true)
   @Mapping(target = "updatedAt", ignore = true)
