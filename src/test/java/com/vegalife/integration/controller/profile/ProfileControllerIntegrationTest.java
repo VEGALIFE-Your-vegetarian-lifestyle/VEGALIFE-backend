@@ -84,12 +84,12 @@ class ProfileControllerIntegrationTest {
     String requestJson =
         """
         {
-          "height_cm": 175.5,
-          "weight_kg": 70.2,
+          "heightCm": 175.5,
+          "weightKg": 70.2,
           "age": 25,
           "gender": "male",
           "description": "Vegan enthusiast",
-          "avatar_url": "https://example.com/avatar.jpg"
+          "avatarUrl": "https://example.com/avatar.jpg"
         }
         """;
 
@@ -138,7 +138,7 @@ class ProfileControllerIntegrationTest {
     String requestJson =
         """
         {
-          "height_cm": 180.0,
+          "heightCm": 180.0,
           "description": "Updated description"
         }
         """;
@@ -164,7 +164,7 @@ class ProfileControllerIntegrationTest {
     String requestJson =
         """
         {
-          "height_cm": 175.5
+          "heightCm": 175.5
         }
         """;
 
@@ -193,7 +193,7 @@ class ProfileControllerIntegrationTest {
     String requestJson =
         """
         {
-          "height_cm": 400
+          "heightCm": 400
         }
         """;
 
@@ -233,7 +233,7 @@ class ProfileControllerIntegrationTest {
     String requestJson =
         """
         {
-          "avatar_url": "not-a-url"
+          "avatarUrl": "not-a-url"
         }
         """;
 
