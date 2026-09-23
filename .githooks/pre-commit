@@ -1,0 +1,22 @@
+#!/bin/sh
+# Fast local checks before allowing a commit.
+# Full suite still runs in CI and pre-push.
+
+echo "pre-commit: running spotless:check + checkstyle:check ..."
+
+if ! ./mvnw -q spotless:check; then
+  echo "" >&2
+  echo "ERROR: Spotless formatting check failed." >&2
+  echo "Run: ./mvnw spotless:apply  then re-stage and commit." >&2
+  exit 1
+fi
+
+if ! ./mvnw -q checkstyle:check; then
+  echo "" >&2
+  echo "ERROR: Checkstyle violations found." >&2
+  echo "Fix the reported violations, then re-stage and commit." >&2
+  exit 1
+fi
+
+echo "pre-commit: OK"
+exit 0

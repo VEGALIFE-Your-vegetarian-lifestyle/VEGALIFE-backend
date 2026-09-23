@@ -154,6 +154,25 @@ consistent with the conventions in this file.
 - Auto-format (Spotless): `./mvnw spotless:apply`
 - Full verification: `./mvnw clean verify` (build + unit tests + integration tests + checkstyle + spotless)
 
+## Local git hooks (one-time setup per clone)
+
+Hooks live in `.githooks/` and are plain POSIX shell scripts — git runs
+them with its own bundled shell, so they work whether your terminal is
+bash, cmd, or PowerShell. Enable them once per clone:
+
+```
+git config core.hooksPath .githooks
+```
+
+| Hook | Runs on | Blocks when |
+|------|---------|-------------|
+| `commit-msg` | `git commit` | subject doesn't match Conventional Commits or exceeds 72 chars |
+| `pre-commit` | `git commit` | `spotless:check` or `checkstyle:check` fails |
+| `pre-push` | `git push` | `./mvnw test` fails |
+
+CI remains the full safety net (including integration tests); hooks are
+fast local feedback only.
+
 ## Verification
 
 Never report a build, test, or migration as passing without having actually
