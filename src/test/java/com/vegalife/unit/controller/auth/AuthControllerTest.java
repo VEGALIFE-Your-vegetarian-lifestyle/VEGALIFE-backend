@@ -366,4 +366,149 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Logged out successfully"));
   }
+
+  @Test
+  void forgotPassword_validEmail_returns200_genericMessage() throws Exception {
+    com.vegalife.dto.request.auth.ForgotPasswordRequest request =
+        new com.vegalife.dto.request.auth.ForgotPasswordRequest();
+    request.setEmail("test@example.com");
+
+    org.mockito.Mockito.doNothing()
+        .when(authService)
+        .forgotPassword(any(com.vegalife.dto.request.auth.ForgotPasswordRequest.class));
+
+    mockMvc
+        .perform(
+            post("/api/auth/forgot-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data").doesNotExist())
+        .andExpect(
+            jsonPath("$.message")
+                .value(
+                    "If an account with that email exists, a password reset code has been sent"));
+  }
+
+  @Test
+  void forgotPassword_invalidEmail_returns400() throws Exception {
+    com.vegalife.dto.request.auth.ForgotPasswordRequest request =
+        new com.vegalife.dto.request.auth.ForgotPasswordRequest();
+    request.setEmail("not-an-email");
+
+    mockMvc
+        .perform(
+            post("/api/auth/forgot-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void resetPassword_validRequest_returns200() throws Exception {
+    com.vegalife.dto.request.auth.ResetPasswordRequest request =
+        new com.vegalife.dto.request.auth.ResetPasswordRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("482913");
+    request.setNewPassword("newPassword123");
+
+    org.mockito.Mockito.doNothing()
+        .when(authService)
+        .resetPassword(any(com.vegalife.dto.request.auth.ResetPasswordRequest.class));
+
+    mockMvc
+        .perform(
+            post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Password has been reset successfully"));
+  }
+
+  @Test
+  void resetPassword_invalidOtp_returns400() throws Exception {
+    com.vegalife.dto.request.auth.ResetPasswordRequest request =
+        new com.vegalife.dto.request.auth.ResetPasswordRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("000000");
+    request.setNewPassword("newPassword123");
+
+    org.mockito.Mockito.doThrow(
+            new com.vegalife.shared.exception.InvalidTokenException(
+                "Invalid or already used password reset code"))
+        .when(authService)
+        .resetPassword(any(com.vegalife.dto.request.auth.ResetPasswordRequest.class));
+
+    mockMvc
+        .perform(
+            post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Invalid or already used password reset code"));
+  }
+
+  @Test
+  void resetPassword_expiredOtp_returns400() throws Exception {
+    com.vegalife.dto.request.auth.ResetPasswordRequest request =
+        new com.vegalife.dto.request.auth.ResetPasswordRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("482913");
+    request.setNewPassword("newPassword123");
+
+    org.mockito.Mockito.doThrow(
+            new com.vegalife.shared.exception.ExpiredTokenException(
+                "Password reset code has expired. Please request a new one."))
+        .when(authService)
+        .resetPassword(any(com.vegalife.dto.request.auth.ResetPasswordRequest.class));
+
+    mockMvc
+        .perform(
+            post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(
+            jsonPath("$.message")
+                .value("Password reset code has expired. Please request a new one."));
+  }
+
+  @Test
+  void resetPassword_shortPassword_returns400() throws Exception {
+    com.vegalife.dto.request.auth.ResetPasswordRequest request =
+        new com.vegalife.dto.request.auth.ResetPasswordRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("482913");
+    request.setNewPassword("short");
+
+    mockMvc
+        .perform(
+            post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void resetPassword_nonDigitOtp_returns400() throws Exception {
+    com.vegalife.dto.request.auth.ResetPasswordRequest request =
+        new com.vegalife.dto.request.auth.ResetPasswordRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("abcdef");
+    request.setNewPassword("newPassword123");
+
+    mockMvc
+        .perform(
+            post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
 }

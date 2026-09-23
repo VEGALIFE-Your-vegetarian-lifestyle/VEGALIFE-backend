@@ -23,6 +23,9 @@ public class SmtpEmailServiceImpl implements EmailService {
   @Value("${app.verification.token-expiry-minutes:30}")
   private int tokenExpiryMinutes;
 
+  @Value("${app.password-reset.otp-expiry-minutes:10}")
+  private int otpExpiryMinutes;
+
   @Override
   public void sendVerificationEmail(String to, String username, String verificationLink) {
     try {
@@ -45,6 +48,31 @@ public class SmtpEmailServiceImpl implements EmailService {
     } catch (MessagingException e) {
       log.error("Failed to send verification email to: {}", to, e);
       throw new RuntimeException("Failed to send verification email", e);
+    }
+  }
+
+  @Override
+  public void sendPasswordResetOtp(String to, String username, String otp) {
+    try {
+      MimeMessage message = mailSender.createMimeMessage();
+      MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+      helper.setTo(to);
+      helper.setSubject("Reset your password - Vegalife");
+
+      Context context = new Context();
+      context.setVariable("username", username);
+      context.setVariable("otp", otp);
+      context.setVariable("otpExpiryMinutes", otpExpiryMinutes);
+
+      String htmlContent = templateEngine.process("email/password-reset-otp", context);
+      helper.setText(htmlContent, true);
+
+      mailSender.send(message);
+      log.info("Password reset email sent to: {}", to);
+    } catch (MessagingException e) {
+      log.error("Failed to send password reset email to: {}", to, e);
+      throw new RuntimeException("Failed to send password reset email", e);
     }
   }
 }

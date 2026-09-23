@@ -65,6 +65,9 @@ app:
       issuer: vegalife-backend
       audience: vegalife-api
 
+  password-reset:
+    otp-expiry-minutes: 10
+
   scheduling:
     enabled: true
 

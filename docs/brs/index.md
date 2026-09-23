@@ -25,3 +25,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-AUTH-014 | Access Token Always Blacklisted on Logout | Active | 2026-09-22 |
 | BR-AUTH-015 | Expired Token Cleanup Daily | Active | 2026-09-22 |
 | BR-AUTH-016 | Account State Checked on Every Authenticated Request | Active | 2026-09-23 |
+| BR-AUTH-017 | Password Reset OTP Lifecycle (6-digit, 10 min, single-use) | Active | 2026-09-24 |
+| BR-AUTH-018 | Forgot Password Does Not Reveal Account Existence | Active | 2026-09-24 |
+| BR-AUTH-019 | Password Reset OTP Stored as SHA-256 Hash | Active | 2026-09-24 |
+| BR-AUTH-020 | Password Reset Revokes Refresh Tokens | Active | 2026-09-24 |

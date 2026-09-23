@@ -20,6 +20,10 @@
 | BR-AUTH-014 | Access Token Blacklist on Demand | Active | 2026-09-22 |
 | BR-AUTH-015 | Expired Token Cleanup Daily | Active | 2026-09-22 |
 | BR-AUTH-016 | Account State Checked on Every Authenticated Request | Active | 2026-09-23 |
+| BR-AUTH-017 | Password Reset OTP Lifecycle (6-digit, 10 min, single-use) | Active | 2026-09-24 |
+| BR-AUTH-018 | Forgot Password Does Not Reveal Account Existence | Active | 2026-09-24 |
+| BR-AUTH-019 | Password Reset OTP Stored as SHA-256 Hash | Active | 2026-09-24 |
+| BR-AUTH-020 | Password Reset Revokes Refresh Tokens | Active | 2026-09-24 |
 
 ---
 
@@ -449,3 +453,110 @@ Applies to all authenticated API requests and to `/login` and `/refresh`. Blackl
 
 ## Last Reviewed
 2026-09-23, by <name/role>
+
+---
+
+# Business Rule: Password Reset OTP Lifecycle
+
+## Rule ID
+`BR-AUTH-017`
+
+## Status
+Active
+
+## Statement
+A password-reset OTP is a 6-digit numeric code valid for 10 minutes from issuance, usable exactly once. At most one unused OTP exists per user at any time: issuing a new code supersedes (marks used) every previous unused code for that account. Expiry duration is configurable via `app.password-reset.otp-expiry-minutes` (default 10).
+
+## Rationale
+A short, single-use window limits how long a leaked code is useful and ensures a user who never received (or lost) an email can always obtain a fresh code by requesting again.
+
+## Scope & Exceptions
+Applies to all password-reset OTPs. No exceptions. The feature has no rate limit on issuance in Sprint 1 (tracked as risk in `docs/feats/forgot-password-reset.md`).
+
+## Enforcement
+- `AuthService.forgotPassword()`: invalidates prior unused OTPs, then inserts a new row with `expires_at = now + 10 minutes`
+- `AuthService.resetPassword()`: rejects expired codes with `ExpiredTokenException`, wrong/used/missing codes with `InvalidTokenException` (both HTTP 400)
+- DB: `password_reset_otp.used_at` / `expires_at` columns; hash match on `otp_hash`
+- API: `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`
+
+## Last Reviewed
+2026-09-24, by <name/role>
+
+---
+
+# Business Rule: Forgot Password Does Not Reveal Account Existence
+
+## Rule ID
+`BR-AUTH-018`
+
+## Status
+Active
+
+## Statement
+`POST /api/auth/forgot-password` returns the same HTTP 200 and the same message whether or not the submitted email belongs to a registered account. No other response field distinguishes the two cases.
+
+## Rationale
+Prevents attackers from enumerating registered email addresses through the reset endpoint.
+
+## Scope & Exceptions
+Applies only to the forgot-password response shape. Validation failures (malformed email) still return 400 — they reveal nothing about registration. `POST /api/auth/reset-password` likewise returns the same invalid-code message for unknown emails and wrong codes.
+
+## Enforcement
+- `AuthService.forgotPassword()`: silent no-op path when `userRepository.findByEmail()` is empty; same `ApiResponse.success(...)` returned either way
+- API: constant message "If an account with that email exists, a password reset code has been sent"
+
+## Last Reviewed
+2026-09-24, by <name/role>
+
+---
+
+# Business Rule: Password Reset OTP Stored as SHA-256 Hash
+
+## Rule ID
+`BR-AUTH-019`
+
+## Status
+Active
+
+## Statement
+Only the SHA-256 hex hash of the 6-digit OTP is persisted (`password_reset_otp.otp_hash`, CHAR(64)). The raw code is never written to the database, API responses, or logs.
+
+## Rationale
+A database dump or log capture must not yield usable reset codes. Mirrors the refresh-token at-rest posture (BR-AUTH-011).
+
+## Scope & Exceptions
+Applies to all password-reset OTP persistence. The raw code exists only in process memory during generation/compare and in the outbound email.
+
+## Enforcement
+- `PasswordResetOtpService` / `AuthService.forgotPassword()`: SHA-256(raw otp) written to `otp_hash`
+- `AuthService.resetPassword()`: SHA-256(submitted otp) compared to the stored hash
+- Decision record: `docs/adrs/003-password-reset-otp-storage.md`
+
+## Last Reviewed
+2026-09-24, by <name/role>
+
+---
+
+# Business Rule: Password Reset Revokes Refresh Tokens
+
+## Rule ID
+`BR-AUTH-020`
+
+## Status
+Active
+
+## Statement
+On a successful password reset, every active refresh token belonging to that user is revoked (`revoked_at = NOW()`).
+
+## Rationale
+Changing a password is a credential-recovery event; sessions established before the reset (potentially by an attacker who triggered the recovery, or still held by the old password's owner) must be terminated. Users must log in again with the new password.
+
+## Scope & Exceptions
+Applies to successful `POST /api/auth/reset-password` only. Access tokens are not actively blacklisted on reset (same limitation as BR-AUTH-016: the blacklist is not user-scoped); they lapse within their 15-minute expiry or on the per-request status check.
+
+## Enforcement
+- `AuthService.resetPassword()`: calls `JwtTokenService.revokeAllUserRefreshTokens(userId)` (same mechanism as logout, BR-AUTH-013)
+- API: subsequent `POST /api/auth/refresh` with a pre-reset token → 400 "Refresh token has been revoked"
+
+## Last Reviewed
+2026-09-24, by <name/role>
