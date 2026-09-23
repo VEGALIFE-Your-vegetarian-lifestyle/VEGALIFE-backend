@@ -15,7 +15,6 @@ public interface AuthMapper {
   @Mapping(target = "status", constant = "created")
   @Mapping(target = "emailVerified", constant = "false")
   @Mapping(target = "lastLoginAt", ignore = true)
-  @Mapping(target = "avatarUrl", ignore = true)
   @Mapping(target = "createdAt", ignore = true)
   @Mapping(target = "updatedAt", ignore = true)
   @Mapping(target = "deletedAt", ignore = true)

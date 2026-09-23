@@ -43,9 +43,6 @@ public class User {
   @Column(name = "last_login_at")
   private Instant lastLoginAt;
 
-  @Column(name = "avatar_url")
-  private String avatarUrl;
-
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
