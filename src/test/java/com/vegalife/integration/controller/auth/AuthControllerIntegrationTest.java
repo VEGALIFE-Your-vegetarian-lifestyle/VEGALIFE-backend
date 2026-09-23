@@ -280,7 +280,6 @@ class AuthControllerIntegrationTest {
                 .build());
     com.vegalife.model.token.RefreshToken stored =
         com.vegalife.model.token.RefreshToken.builder()
-            .id(java.util.UUID.randomUUID())
             .user(suspendedUser)
             .tokenHash("hashed.value")
             .expiresAt(java.time.Instant.now().plusSeconds(604800))
