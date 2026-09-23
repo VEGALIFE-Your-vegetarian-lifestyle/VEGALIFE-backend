@@ -1,6 +1,8 @@
 package com.vegalife.integration.controller.admin;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -56,6 +58,10 @@ class AdminControllerIntegrationTest {
 
   private String adminToken;
   private String userToken;
+  private java.util.UUID adminId;
+  private java.util.UUID regularId;
+  private java.util.UUID suspendedId;
+  private java.util.UUID softDeletedId;
 
   @BeforeEach
   void setUp() {
@@ -71,6 +77,7 @@ class AdminControllerIntegrationTest {
                 .status(User.Status.activated)
                 .emailVerified(true)
                 .build());
+    adminId = admin.getId();
 
     User regular =
         userRepository.save(
@@ -82,28 +89,32 @@ class AdminControllerIntegrationTest {
                 .status(User.Status.activated)
                 .emailVerified(true)
                 .build());
+    regularId = regular.getId();
 
-    userRepository.save(
-        User.builder()
-            .username("suspendeduser")
-            .email("suspended@example.com")
-            .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.suspended)
-            .emailVerified(true)
-            .build());
+    User suspendedUser =
+        userRepository.save(
+            User.builder()
+                .username("suspendeduser")
+                .email("suspended@example.com")
+                .passwordHash("$2a$10$test")
+                .role(User.Role.USER)
+                .status(User.Status.suspended)
+                .emailVerified(true)
+                .build());
+    suspendedId = suspendedUser.getId();
 
     User softDeleted =
-        User.builder()
-            .username("deleteduser")
-            .email("deleted@example.com")
-            .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
-            .emailVerified(true)
-            .deletedAt(Instant.now())
-            .build();
-    userRepository.save(softDeleted);
+        userRepository.save(
+            User.builder()
+                .username("deleteduser")
+                .email("deleted@example.com")
+                .passwordHash("$2a$10$test")
+                .role(User.Role.USER)
+                .status(User.Status.activated)
+                .emailVerified(true)
+                .deletedAt(Instant.now())
+                .build());
+    softDeletedId = softDeleted.getId();
 
     adminToken = jwtTokenService.generateAccessToken(admin);
     userToken = jwtTokenService.generateAccessToken(regular);
@@ -192,5 +203,94 @@ class AdminControllerIntegrationTest {
         .andExpect(jsonPath("$.data.totalPages").value(3))
         .andExpect(jsonPath("$.data.content.length()").value(1))
         .andExpect(jsonPath("$.data.content[0].username").value("adminuser"));
+  }
+
+  @Test
+  void suspendUser_asAdmin_returns200AndSetsStatus() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/users/{userId}/suspend", regularId)
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("User suspended successfully"))
+        .andExpect(jsonPath("$.data.status").value("suspended"))
+        .andExpect(jsonPath("$.data.id").value(regularId.toString()));
+
+    User updated = userRepository.findById(regularId).orElseThrow();
+    org.assertj.core.api.Assertions.assertThat(updated.getStatus())
+        .isEqualTo(User.Status.suspended);
+  }
+
+  @Test
+  void suspendUser_alreadySuspended_returns409() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/users/{userId}/suspend", suspendedId)
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("User is already suspended"));
+  }
+
+  @Test
+  void suspendUser_missingUser_returns404() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/users/{userId}/suspend", java.util.UUID.randomUUID())
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("User not found"));
+  }
+
+  @Test
+  void suspendUser_softDeletedUser_returns404() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/users/{userId}/suspend", softDeletedId)
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("User not found"));
+  }
+
+  @Test
+  void suspendUser_asNonAdmin_returns403() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/users/{userId}/suspend", regularId)
+                .header("Authorization", "Bearer " + userToken))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void suspendUser_withoutJwt_returns401() throws Exception {
+    mockMvc
+        .perform(post("/api/admin/users/{userId}/suspend", regularId))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void listUsers_withSuspendedAdminToken_returns401() throws Exception {
+    User admin = userRepository.findById(adminId).orElseThrow();
+    admin.setStatus(User.Status.suspended);
+    userRepository.save(admin);
+
+    mockMvc
+        .perform(get("/api/admin/users").header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isUnauthorized())
+        .andExpect(content().string("Account is not active"));
+  }
+
+  @Test
+  void listUsers_withSoftDeletedAdminToken_returns401() throws Exception {
+    User admin = userRepository.findById(adminId).orElseThrow();
+    admin.setDeletedAt(Instant.now());
+    userRepository.save(admin);
+
+    mockMvc
+        .perform(get("/api/admin/users").header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isUnauthorized())
+        .andExpect(content().string("Account is not active"));
   }
 }

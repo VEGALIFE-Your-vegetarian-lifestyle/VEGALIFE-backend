@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,7 +14,10 @@ import com.vegalife.dto.response.admin.UserListResponse;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.AdminService;
+import com.vegalife.service.token.JwtTokenService;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.DuplicateResourceException;
+import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
 import java.util.List;
@@ -37,6 +41,8 @@ class AdminServiceTest {
   @Mock private UserRepository userRepository;
 
   @Mock private AdminUserMapper adminUserMapper;
+
+  @Mock private JwtTokenService jwtTokenService;
 
   @InjectMocks private AdminService adminService;
 
@@ -165,5 +171,57 @@ class AdminServiceTest {
     assertThat(result.getTotalElements()).isZero();
     assertThat(result.isFirst()).isTrue();
     assertThat(result.isLast()).isTrue();
+  }
+
+  @Test
+  void suspendUser_success_setsStatusAndRevokesRefreshTokens() {
+    when(userRepository.findById(user.getId())).thenReturn(java.util.Optional.of(user));
+    when(userRepository.save(user)).thenReturn(user);
+    when(adminUserMapper.toResponse(user)).thenReturn(userResponse);
+    when(jwtTokenService.revokeAllUserRefreshTokens(user.getId())).thenReturn(2);
+
+    UserListResponse result = adminService.suspendUser(user.getId());
+
+    assertThat(result).isEqualTo(userResponse);
+    assertThat(user.getStatus()).isEqualTo(User.Status.suspended);
+    verify(userRepository).save(user);
+    verify(jwtTokenService).revokeAllUserRefreshTokens(user.getId());
+  }
+
+  @Test
+  void suspendUser_missingUser_throwsResourceNotFound() {
+    UUID missingId = UUID.randomUUID();
+    when(userRepository.findById(missingId)).thenReturn(java.util.Optional.empty());
+
+    assertThatThrownBy(() -> adminService.suspendUser(missingId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("User not found");
+
+    verify(jwtTokenService, never()).revokeAllUserRefreshTokens(any());
+  }
+
+  @Test
+  void suspendUser_softDeletedUser_throwsResourceNotFound() {
+    user.setDeletedAt(Instant.now());
+    when(userRepository.findById(user.getId())).thenReturn(java.util.Optional.of(user));
+
+    assertThatThrownBy(() -> adminService.suspendUser(user.getId()))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("User not found");
+
+    verify(jwtTokenService, never()).revokeAllUserRefreshTokens(any());
+  }
+
+  @Test
+  void suspendUser_alreadySuspended_throwsDuplicateResource() {
+    user.setStatus(User.Status.suspended);
+    when(userRepository.findById(user.getId())).thenReturn(java.util.Optional.of(user));
+
+    assertThatThrownBy(() -> adminService.suspendUser(user.getId()))
+        .isInstanceOf(DuplicateResourceException.class)
+        .hasMessage("User is already suspended");
+
+    verify(userRepository, never()).save(any());
+    verify(jwtTokenService, never()).revokeAllUserRefreshTokens(any());
   }
 }
