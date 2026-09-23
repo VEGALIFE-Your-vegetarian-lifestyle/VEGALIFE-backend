@@ -13,11 +13,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.request.auth.RegisterRequest;
-import com.vegalife.model.token.PasswordResetOtp;
+import com.vegalife.model.token.OtpCode;
+import com.vegalife.model.token.OtpPurpose;
 import com.vegalife.model.token.RefreshToken;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.User.Status;
-import com.vegalife.repository.token.PasswordResetOtpRepository;
+import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.token.RefreshTokenRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.email.EmailService;
@@ -78,13 +79,13 @@ class AuthControllerIntegrationTest {
 
   @Autowired private RefreshTokenRepository refreshTokenRepository;
 
-  @Autowired private PasswordResetOtpRepository passwordResetOtpRepository;
+  @Autowired private OtpCodeRepository otpCodeRepository;
 
   @MockBean private EmailService emailService;
 
   @BeforeEach
   void setUp() {
-    passwordResetOtpRepository.deleteAll();
+    otpCodeRepository.deleteAll();
     userRepository.deleteAll();
     doNothing().when(emailService).sendVerificationEmail(anyString(), anyString(), anyString());
     doNothing().when(emailService).sendPasswordResetOtp(anyString(), anyString(), anyString());
@@ -375,8 +376,10 @@ class AuthControllerIntegrationTest {
     RefreshToken revoked = refreshTokenRepository.findById(activeToken.getId()).orElseThrow();
     assertThat(revoked.getRevokedAt()).isNotNull();
 
-    PasswordResetOtp otpRow =
-        passwordResetOtpRepository.findLatestUnusedByUserId(user.getId()).orElse(null);
+    OtpCode otpRow =
+        otpCodeRepository
+            .findLatestUnusedByUserIdAndPurpose(user.getId(), OtpPurpose.PASSWORD_RESET)
+            .orElse(null);
     assertThat(otpRow).isNull();
 
     String oldLogin = "{\"identifier\":\"forgotflow@test.com\",\"password\":\"oldPassword1\"}";
@@ -460,10 +463,12 @@ class AuthControllerIntegrationTest {
 
     String otp = captureOtp("expiredotp@test.com");
 
-    PasswordResetOtp row =
-        passwordResetOtpRepository.findLatestUnusedByUserId(user.getId()).orElseThrow();
+    OtpCode row =
+        otpCodeRepository
+            .findLatestUnusedByUserIdAndPurpose(user.getId(), OtpPurpose.PASSWORD_RESET)
+            .orElseThrow();
     row.setExpiresAt(Instant.now().minusSeconds(1));
-    passwordResetOtpRepository.save(row);
+    otpCodeRepository.save(row);
 
     String body =
         "{\"email\":\"expiredotp@test.com\",\"otp\":\""
@@ -527,7 +532,10 @@ class AuthControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.message").value("Password has been reset successfully"));
 
-    assertThat(passwordResetOtpRepository.findLatestUnusedByUserId(user.getId())).isEmpty();
+    assertThat(
+            otpCodeRepository.findLatestUnusedByUserIdAndPurpose(
+                user.getId(), OtpPurpose.PASSWORD_RESET))
+        .isEmpty();
   }
 
   @Test

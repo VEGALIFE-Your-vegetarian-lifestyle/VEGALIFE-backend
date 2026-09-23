@@ -8,9 +8,10 @@ import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.request.auth.ResetPasswordRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
-import com.vegalife.model.token.PasswordResetOtp;
+import com.vegalife.model.token.OtpCode;
+import com.vegalife.model.token.OtpPurpose;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.token.PasswordResetOtpRepository;
+import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.email.EmailService;
 import com.vegalife.service.token.JwtTokenService;
@@ -51,7 +52,7 @@ public class AuthService {
   private final VerificationTokenService tokenService;
   private final JwtTokenService jwtTokenService;
   private final EmailService emailService;
-  private final PasswordResetOtpRepository passwordResetOtpRepository;
+  private final OtpCodeRepository otpCodeRepository;
 
   @Value("${app.base-url:http://localhost:8080}")
   private String baseUrl;
@@ -202,13 +203,15 @@ public class AuthService {
 
     User user = userOpt.get();
 
-    passwordResetOtpRepository.markAllUnusedByUserId(user.getId(), Instant.now());
+    otpCodeRepository.markAllUnusedByUserIdAndPurpose(
+        user.getId(), OtpPurpose.PASSWORD_RESET, Instant.now());
 
     String otp = generateOtp();
-    passwordResetOtpRepository.save(
-        PasswordResetOtp.builder()
+    otpCodeRepository.save(
+        OtpCode.builder()
             .user(user)
             .otpHash(sha256(otp))
+            .purpose(OtpPurpose.PASSWORD_RESET)
             .expiresAt(Instant.now().plusSeconds(otpExpiryMinutes * 60L))
             .build());
 
@@ -224,9 +227,9 @@ public class AuthService {
             .findByEmail(request.getEmail())
             .orElseThrow(() -> new InvalidTokenException(INVALID_RESET_CODE_MESSAGE));
 
-    PasswordResetOtp otpRow =
-        passwordResetOtpRepository
-            .findLatestUnusedByUserId(user.getId())
+    OtpCode otpRow =
+        otpCodeRepository
+            .findLatestUnusedByUserIdAndPurpose(user.getId(), OtpPurpose.PASSWORD_RESET)
             .orElseThrow(() -> new InvalidTokenException(INVALID_RESET_CODE_MESSAGE));
 
     if (otpRow.isExpired()) {
@@ -241,7 +244,7 @@ public class AuthService {
     userRepository.save(user);
 
     otpRow.setUsedAt(Instant.now());
-    passwordResetOtpRepository.save(otpRow);
+    otpCodeRepository.save(otpRow);
 
     jwtTokenService.revokeAllUserRefreshTokens(user.getId());
 
