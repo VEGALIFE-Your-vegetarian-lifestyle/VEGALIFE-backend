@@ -56,6 +56,8 @@ class AdminControllerIntegrationTest {
 
   @Autowired private JwtTokenService jwtTokenService;
 
+  @Autowired private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
   private String adminToken;
   private String userToken;
   private java.util.UUID adminId;
@@ -268,6 +270,107 @@ class AdminControllerIntegrationTest {
     mockMvc
         .perform(post("/api/admin/users/{userId}/suspend", regularId))
         .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void restoreUser_asAdmin_returns200AndSetsStatus() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/users/{userId}/restore", suspendedId)
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("User restored successfully"))
+        .andExpect(jsonPath("$.data.status").value("activated"))
+        .andExpect(jsonPath("$.data.id").value(suspendedId.toString()));
+
+    User updated = userRepository.findById(suspendedId).orElseThrow();
+    org.assertj.core.api.Assertions.assertThat(updated.getStatus())
+        .isEqualTo(User.Status.activated);
+  }
+
+  @Test
+  void restoreUser_notSuspended_returns409() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/users/{userId}/restore", regularId)
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("User is not suspended"));
+  }
+
+  @Test
+  void restoreUser_missingUser_returns404() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/users/{userId}/restore", java.util.UUID.randomUUID())
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("User not found"));
+  }
+
+  @Test
+  void restoreUser_softDeletedUser_returns404() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/users/{userId}/restore", softDeletedId)
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("User not found"));
+  }
+
+  @Test
+  void restoreUser_asNonAdmin_returns403() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/users/{userId}/restore", suspendedId)
+                .header("Authorization", "Bearer " + userToken))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void restoreUser_withoutJwt_returns401() throws Exception {
+    mockMvc
+        .perform(post("/api/admin/users/{userId}/restore", suspendedId))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void restoreUser_thenRestoredUserCanLogin_returns200() throws Exception {
+    String password = "password123";
+    User suspendedUser = userRepository.findById(suspendedId).orElseThrow();
+    suspendedUser.setPasswordHash(passwordEncoder.encode(password));
+    userRepository.save(suspendedUser);
+
+    String suspendedBody =
+        "{\"identifier\":\"suspended@example.com\",\"password\":\"" + password + "\"}";
+    mockMvc
+        .perform(
+            post("/api/auth/login")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content(suspendedBody))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Account is suspended"));
+
+    mockMvc
+        .perform(
+            post("/api/admin/users/{userId}/restore", suspendedId)
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("activated"));
+
+    mockMvc
+        .perform(
+            post("/api/auth/login")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content(suspendedBody))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.accessToken").exists())
+        .andExpect(jsonPath("$.data.refreshToken").exists())
+        .andExpect(jsonPath("$.data.tokenType").value("Bearer"));
   }
 
   @Test
