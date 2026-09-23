@@ -1,7 +1,7 @@
 # Feature Spec: Suspend User Account API (Admin)
 
 ## Status
-In progress
+Implemented
 
 ## Author / owner
 Backend team; driving issue: https://github.com/VEGALIFE-Your-vegetarian-lifestyle/VEGALIFE-backend/issues/25
@@ -30,22 +30,22 @@ Admins currently cannot disable abusive or spam accounts without deleting data. 
 ## Requirements
 
 ### Functional Requirements
-- [ ] FR-001: `POST /api/admin/users/{userId}/suspend` requires role ADMIN.
-- [ ] FR-002: On success, the user's `status` is set to `suspended` and all outstanding refresh tokens for that user are revoked.
-- [ ] FR-003: Response is 200 with the same user summary shape as list (`id`, `email`, `username`, `role`, `status`, `createdAt`).
-- [ ] FR-004: Missing or soft-deleted user → 404.
-- [ ] FR-005: User already `suspended` → 409.
-- [ ] FR-006: Login for a suspended account fails with a clear inactive-account message (distinct from invalid credentials / unverified email).
-- [ ] FR-007: Refresh with a still-valid refresh token for a non-activated account fails (400).
-- [ ] FR-008: Every authenticated request loads current account state; missing, soft-deleted, or `status != activated` → 401 (plain-text body consistent with existing filter).
-- [ ] FR-009: Authorities for authorization come from the DB role at authentication time (not solely the JWT `role` claim).
-- [ ] FR-010: Non-admin authenticated → 403; no/invalid JWT → 401 (existing SecurityConfig `/api/admin/**`).
+- [x] FR-001: `POST /api/admin/users/{userId}/suspend` requires role ADMIN.
+- [x] FR-002: On success, the user's `status` is set to `suspended` and all outstanding refresh tokens for that user are revoked.
+- [x] FR-003: Response is 200 with the same user summary shape as list (`id`, `email`, `username`, `role`, `status`, `createdAt`).
+- [x] FR-004: Missing or soft-deleted user → 404.
+- [x] FR-005: User already `suspended` → 409.
+- [x] FR-006: Login for a suspended account fails with a clear inactive-account message (distinct from invalid credentials / unverified email).
+- [x] FR-007: Refresh with a still-valid refresh token for a non-activated account fails (400).
+- [x] FR-008: Every authenticated request loads current account state; missing, soft-deleted, or `status != activated` → 401 (plain-text body consistent with existing filter).
+- [x] FR-009: Authorities for authorization come from the DB role at authentication time (not solely the JWT `role` claim).
+- [x] FR-010: Non-admin authenticated → 403; no/invalid JWT → 401 (existing SecurityConfig `/api/admin/**`).
 
 ### Non-Functional Requirements
-- [ ] NFR-SEC-001: Suspension takes effect for subsequent API calls without waiting for access-token natural expiry (≤ one request after status change).
-- [ ] NFR-SEC-002: No secrets or password hashes appear in suspend responses.
-- [ ] NFR-MAINT-001: JWT filter stays a thin shell; account validation lives in a Spring `AuthenticationProvider` wired through `AuthenticationManager`.
-- [ ] NFR-MAINT-002: Response and error shapes use existing `ApiResponse<T>` and exception handlers; no new wrapper styles.
+- [x] NFR-SEC-001: Suspension takes effect for subsequent API calls without waiting for access-token natural expiry (≤ one request after status change).
+- [x] NFR-SEC-002: No secrets or password hashes appear in suspend responses.
+- [x] NFR-MAINT-001: JWT filter stays a thin shell; account validation lives in a Spring `AuthenticationProvider` wired through `AuthenticationManager`.
+- [x] NFR-MAINT-002: Response and error shapes use existing `ApiResponse<T>` and exception handlers; no new wrapper styles.
 
 ## Design overview
 Refactor auth so `JwtAuthenticationFilter` extracts the Bearer token and delegates to `AuthenticationManager`. A new `JwtAuthenticationProvider` parses/validates the token (reuse `JwtTokenService.parseAccessToken`), rejects blacklisted tokens, loads a lightweight account-state projection by id (indexed PK lookup; no cache), and builds an authenticated principal only when the account exists, is not soft-deleted, and has `status=activated`. Role authority is taken from the DB `role` column.
@@ -61,14 +61,14 @@ No Flyway migration: `User.Status.suspended` already exists (V1 check constraint
 ## Acceptance criteria
 **As an** admin, **I want to** suspend an abusive account, **so that** they cannot log in or use the API while their data remains intact for later restore.
 
-- [ ] Given an admin JWT, when suspending an active user, then 200 with `status=suspended` and refresh tokens revoked.
-- [ ] Given an admin JWT, when suspending an already-suspended user, then 409.
-- [ ] Given an admin JWT, when suspending a missing or soft-deleted user, then 404.
-- [ ] Given a non-admin JWT, when calling the endpoint, then 403.
-- [ ] Given no JWT, when calling the endpoint, then 401.
-- [ ] Given a suspended account, when logging in with correct password, then login fails with inactive-account message (no tokens issued).
-- [ ] Given a suspended account with a still-valid access token, when calling any authenticated endpoint, then 401 is returned.
-- [ ] Given a suspended account with an unrevoked refresh token from before suspension, when calling `/refresh`, then refresh fails.
+- [x] Given an admin JWT, when suspending an active user, then 200 with `status=suspended` and refresh tokens revoked.
+- [x] Given an admin JWT, when suspending an already-suspended user, then 409.
+- [x] Given an admin JWT, when suspending a missing or soft-deleted user, then 404.
+- [x] Given a non-admin JWT, when calling the endpoint, then 403.
+- [x] Given no JWT, when calling the endpoint, then 401.
+- [x] Given a suspended account, when logging in with correct password, then login fails with inactive-account message (no tokens issued).
+- [x] Given a suspended account with a still-valid access token, when calling any authenticated endpoint, then 401 is returned.
+- [x] Given a suspended account with an unrevoked refresh token from before suspension, when calling `/refresh`, then refresh fails.
 
 ## Risks / open questions
 - Suspension reason (issue AC) is intentionally not implemented — no schema/field; treat AC as partially deferred; note on PR when closing.
