@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
@@ -284,6 +285,90 @@ class AuthControllerIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(verifyEmailBody("reuseverify@test.com", otp)))
         .andExpect(status().isOk());
+  }
+
+  @Test
+  void resendEmail_unverifiedUser_supersedesPreviousOtp() throws Exception {
+    registerUser("resenduser", "resend@test.com");
+    String firstOtp = captureVerificationOtp("resend@test.com");
+
+    mockMvc
+        .perform(
+            post("/api/auth/resend-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"resend@test.com\"}"))
+        .andDo(print())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data").doesNotExist())
+        .andExpect(
+            jsonPath("$.message")
+                .value("If an account with that email exists, a verification code has been sent"));
+
+    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+    verify(emailService, times(2))
+        .sendVerificationOtp(eq("resend@test.com"), anyString(), captor.capture());
+    String secondOtp = captor.getAllValues().get(1);
+    assertThat(secondOtp).matches("\\d{6}");
+
+    mockMvc
+        .perform(
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyEmailBody("resend@test.com", firstOtp)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Invalid or already used verification code"));
+
+    mockMvc
+        .perform(
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyEmailBody("resend@test.com", secondOtp)))
+        .andExpect(status().isOk());
+
+    User user = userRepository.findByEmail("resend@test.com").orElseThrow();
+    assertThat(user.getEmailVerified()).isTrue();
+    assertThat(user.getStatus()).isEqualTo(Status.activated);
+  }
+
+  @Test
+  void resendEmail_unknownEmail_returns200_genericMessage() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/auth/resend-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"ghost@test.com\"}"))
+        .andDo(print())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data").doesNotExist())
+        .andExpect(
+            jsonPath("$.message")
+                .value("If an account with that email exists, a verification code has been sent"));
+
+    verify(emailService, never())
+        .sendVerificationOtp(eq("ghost@test.com"), anyString(), anyString());
+  }
+
+  @Test
+  void resendEmail_alreadyVerified_returns200_withoutSending() throws Exception {
+    createActivatedUser("verifieduser", "verified@test.com");
+
+    mockMvc
+        .perform(
+            post("/api/auth/resend-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"verified@test.com\"}"))
+        .andDo(print())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data").doesNotExist())
+        .andExpect(
+            jsonPath("$.message")
+                .value("If an account with that email exists, a verification code has been sent"));
+
+    verify(emailService, never())
+        .sendVerificationOtp(eq("verified@test.com"), anyString(), anyString());
   }
 
   @Test

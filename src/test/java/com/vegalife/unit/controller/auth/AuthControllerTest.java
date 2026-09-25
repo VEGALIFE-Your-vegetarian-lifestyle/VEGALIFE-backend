@@ -448,6 +448,45 @@ class AuthControllerTest {
   }
 
   @Test
+  void resendEmail_validEmail_returns200_genericMessage() throws Exception {
+    com.vegalife.dto.request.auth.ResendVerificationOtpRequest request =
+        new com.vegalife.dto.request.auth.ResendVerificationOtpRequest();
+    request.setEmail("test@example.com");
+
+    org.mockito.Mockito.doNothing()
+        .when(authService)
+        .resendVerificationOtp(
+            any(com.vegalife.dto.request.auth.ResendVerificationOtpRequest.class));
+
+    mockMvc
+        .perform(
+            post("/api/auth/resend-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data").doesNotExist())
+        .andExpect(
+            jsonPath("$.message")
+                .value("If an account with that email exists, a verification code has been sent"));
+  }
+
+  @Test
+  void resendEmail_invalidEmail_returns400() throws Exception {
+    com.vegalife.dto.request.auth.ResendVerificationOtpRequest request =
+        new com.vegalife.dto.request.auth.ResendVerificationOtpRequest();
+    request.setEmail("not-an-email");
+
+    mockMvc
+        .perform(
+            post("/api/auth/resend-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
   void resetPassword_validRequest_returns200() throws Exception {
     com.vegalife.dto.request.auth.ResetPasswordRequest request =
         new com.vegalife.dto.request.auth.ResetPasswordRequest();

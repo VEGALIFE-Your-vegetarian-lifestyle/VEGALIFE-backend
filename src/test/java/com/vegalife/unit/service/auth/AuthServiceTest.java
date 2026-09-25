@@ -15,6 +15,7 @@ import com.vegalife.dto.request.auth.ForgotPasswordRequest;
 import com.vegalife.dto.request.auth.LoginRequest;
 import com.vegalife.dto.request.auth.RefreshTokenRequest;
 import com.vegalife.dto.request.auth.RegisterRequest;
+import com.vegalife.dto.request.auth.ResendVerificationOtpRequest;
 import com.vegalife.dto.request.auth.ResetPasswordRequest;
 import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
@@ -585,6 +586,67 @@ class AuthServiceTest {
 
     verify(otpCodeRepository, never()).save(any());
     verify(emailService, never()).sendPasswordResetOtp(anyString(), anyString(), anyString());
+  }
+
+  @Test
+  void resendVerificationOtp_unverifiedUser_reissuesOtp() {
+    User unverified =
+        User.builder()
+            .id(userId)
+            .username("testuser")
+            .email("test@example.com")
+            .passwordHash("encoded")
+            .role(User.Role.USER)
+            .status(User.Status.created)
+            .emailVerified(false)
+            .build();
+
+    ResendVerificationOtpRequest request = new ResendVerificationOtpRequest();
+    request.setEmail("test@example.com");
+
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(unverified));
+
+    authService.resendVerificationOtp(request);
+
+    verify(otpCodeRepository)
+        .markAllUnusedByUserIdAndPurpose(
+            eq(userId), eq(OtpPurpose.EMAIL_VERIFICATION), any(Instant.class));
+    verify(otpCodeRepository).save(any(OtpCode.class));
+    verify(emailService)
+        .sendVerificationOtp(
+            eq("test@example.com"),
+            eq("testuser"),
+            org.mockito.ArgumentMatchers.argThat(otp -> otp != null && otp.matches("\\d{6}")));
+  }
+
+  @Test
+  void resendVerificationOtp_unknownEmail_doesNothing() {
+    ResendVerificationOtpRequest request = new ResendVerificationOtpRequest();
+    request.setEmail("missing@example.com");
+
+    when(userRepository.findByEmail("missing@example.com")).thenReturn(Optional.empty());
+
+    authService.resendVerificationOtp(request);
+
+    verify(otpCodeRepository, never())
+        .markAllUnusedByUserIdAndPurpose(any(), any(), any(Instant.class));
+    verify(otpCodeRepository, never()).save(any());
+    verify(emailService, never()).sendVerificationOtp(anyString(), anyString(), anyString());
+  }
+
+  @Test
+  void resendVerificationOtp_alreadyVerified_doesNothing() {
+    ResendVerificationOtpRequest request = new ResendVerificationOtpRequest();
+    request.setEmail("test@example.com");
+
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+
+    authService.resendVerificationOtp(request);
+
+    verify(otpCodeRepository, never())
+        .markAllUnusedByUserIdAndPurpose(any(), any(), any(Instant.class));
+    verify(otpCodeRepository, never()).save(any());
+    verify(emailService, never()).sendVerificationOtp(anyString(), anyString(), anyString());
   }
 
   @Test

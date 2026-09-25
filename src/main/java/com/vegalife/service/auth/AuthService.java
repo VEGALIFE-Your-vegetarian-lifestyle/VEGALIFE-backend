@@ -5,6 +5,7 @@ import com.vegalife.dto.mapper.auth.LoginMapper;
 import com.vegalife.dto.request.auth.ForgotPasswordRequest;
 import com.vegalife.dto.request.auth.LoginRequest;
 import com.vegalife.dto.request.auth.RegisterRequest;
+import com.vegalife.dto.request.auth.ResendVerificationOtpRequest;
 import com.vegalife.dto.request.auth.ResetPasswordRequest;
 import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
@@ -81,19 +82,7 @@ public class AuthService {
     User user = authMapper.toEntity(request, encodedPassword);
     user = userRepository.save(user);
 
-    otpCodeRepository.markAllUnusedByUserIdAndPurpose(
-        user.getId(), OtpPurpose.EMAIL_VERIFICATION, Instant.now());
-
-    String otp = generateOtp();
-    otpCodeRepository.save(
-        OtpCode.builder()
-            .user(user)
-            .otpHash(sha256(otp))
-            .purpose(OtpPurpose.EMAIL_VERIFICATION)
-            .expiresAt(Instant.now().plusSeconds(emailVerificationOtpExpiryMinutes * 60L))
-            .build());
-
-    emailService.sendVerificationOtp(user.getEmail(), user.getUsername(), otp);
+    issueVerificationOtp(user);
 
     log.info("User registered: {} ({})", user.getUsername(), user.getEmail());
 
@@ -135,6 +124,43 @@ public class AuthService {
     log.info("Email verified for user: {} ({})", user.getUsername(), user.getEmail());
 
     return authMapper.toRegisterResponse(user);
+  }
+
+  @Transactional
+  public void resendVerificationOtp(ResendVerificationOtpRequest request) {
+    Optional<User> userOpt = userRepository.findByEmail(request.getEmail());
+
+    if (userOpt.isEmpty()) {
+      log.debug("Verification resend requested for unknown email");
+      return;
+    }
+
+    User user = userOpt.get();
+
+    if (Boolean.TRUE.equals(user.getEmailVerified())) {
+      log.debug("Verification resend requested for already verified user: {}", user.getUsername());
+      return;
+    }
+
+    issueVerificationOtp(user);
+
+    log.info("Verification OTP reissued for user: {}", user.getUsername());
+  }
+
+  private void issueVerificationOtp(User user) {
+    otpCodeRepository.markAllUnusedByUserIdAndPurpose(
+        user.getId(), OtpPurpose.EMAIL_VERIFICATION, Instant.now());
+
+    String otp = generateOtp();
+    otpCodeRepository.save(
+        OtpCode.builder()
+            .user(user)
+            .otpHash(sha256(otp))
+            .purpose(OtpPurpose.EMAIL_VERIFICATION)
+            .expiresAt(Instant.now().plusSeconds(emailVerificationOtpExpiryMinutes * 60L))
+            .build());
+
+    emailService.sendVerificationOtp(user.getEmail(), user.getUsername(), otp);
   }
 
   @Transactional

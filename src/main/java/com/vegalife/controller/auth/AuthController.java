@@ -4,6 +4,7 @@ import com.vegalife.dto.request.auth.ForgotPasswordRequest;
 import com.vegalife.dto.request.auth.LoginRequest;
 import com.vegalife.dto.request.auth.RefreshTokenRequest;
 import com.vegalife.dto.request.auth.RegisterRequest;
+import com.vegalife.dto.request.auth.ResendVerificationOtpRequest;
 import com.vegalife.dto.request.auth.ResetPasswordRequest;
 import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
@@ -40,6 +41,15 @@ public class AuthController {
       @Valid @RequestBody VerifyEmailRequest request) {
     RegisterResponse response = authService.verifyEmail(request);
     return ResponseEntity.ok(ApiResponse.success(response, "Email verified successfully"));
+  }
+
+  @PostMapping("/resend-email")
+  public ResponseEntity<ApiResponse<Void>> resendEmail(
+      @Valid @RequestBody ResendVerificationOtpRequest request) {
+    authService.resendVerificationOtp(request);
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            null, "If an account with that email exists, a verification code has been sent"));
   }
 
   @PostMapping("/login")
