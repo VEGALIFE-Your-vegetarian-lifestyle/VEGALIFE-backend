@@ -31,27 +31,43 @@ class SmtpEmailServiceImplTest {
 
   @BeforeEach
   void setUp() {
-    // Use reflection to set the tokenExpiryMinutes field
     try {
-      var field = SmtpEmailServiceImpl.class.getDeclaredField("tokenExpiryMinutes");
-      field.setAccessible(true);
-      field.set(emailService, 30);
+      var otpField = SmtpEmailServiceImpl.class.getDeclaredField("otpExpiryMinutes");
+      otpField.setAccessible(true);
+      otpField.set(emailService, 10);
+
+      var verificationOtpField =
+          SmtpEmailServiceImpl.class.getDeclaredField("emailVerificationOtpExpiryMinutes");
+      verificationOtpField.setAccessible(true);
+      verificationOtpField.set(emailService, 10);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
 
   @Test
-  void sendVerificationEmail_callsMailSender() throws MessagingException {
+  void sendVerificationOtp_callsMailSender() throws MessagingException {
     when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
-    when(templateEngine.process(eq("email/verification"), any(Context.class)))
-        .thenReturn("<html>Verification email</html>");
+    when(templateEngine.process(eq("email/verification-otp"), any(Context.class)))
+        .thenReturn("<html>Verification OTP</html>");
 
-    emailService.sendVerificationEmail(
-        "test@example.com", "testuser", "http://localhost:8080/api/auth/verify-email?token=abc");
+    emailService.sendVerificationOtp("test@example.com", "testuser", "123456");
 
     verify(mailSender).createMimeMessage();
     verify(mailSender).send(mimeMessage);
-    verify(templateEngine).process(eq("email/verification"), any(Context.class));
+    verify(templateEngine).process(eq("email/verification-otp"), any(Context.class));
+  }
+
+  @Test
+  void sendPasswordResetOtp_callsMailSender() throws MessagingException {
+    when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+    when(templateEngine.process(eq("email/password-reset-otp"), any(Context.class)))
+        .thenReturn("<html>Password reset OTP</html>");
+
+    emailService.sendPasswordResetOtp("test@example.com", "testuser", "654321");
+
+    verify(mailSender).createMimeMessage();
+    verify(mailSender).send(mimeMessage);
+    verify(templateEngine).process(eq("email/password-reset-otp"), any(Context.class));
   }
 }

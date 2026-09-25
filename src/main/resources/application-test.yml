@@ -40,11 +40,6 @@ spring:
     enabled: false
 
 app:
-  verification:
-    token-expiry-minutes: 30
-    issuer: vegalife-backend-test
-    secret: test-verification-secret-key-at-least-32-chars
-
   auth:
     access-token-expiry-minutes: 15
     refresh-token-expiry-days: 7

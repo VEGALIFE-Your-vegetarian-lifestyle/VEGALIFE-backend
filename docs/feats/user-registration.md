@@ -31,21 +31,24 @@ Implement user registration for the Vegalife platform with email verification fl
 
 ### FR-02: Email Verification
 
-**Description**: After registration, a verification token is emailed to the user. Clicking the link verifies the email and activates the account.
+**Description**: After registration, a 6-digit OTP is emailed to the user. Submitting the OTP verifies the email and activates the account. (Replaces the former token-link flow — see `docs/feats/email-verification-otp.md`.)
 
 **Acceptance Criteria**:
-- Verification token generated and stored with expiration
-- Verification email sent with link containing token
-- GET `/api/auth/verify-email?token={token}` verifies and activates
+- 6-digit OTP generated, stored hashed, 10-minute expiry, single-use
+- Verification email sent with the OTP (no link)
+- POST `/api/auth/verify-email` with `{email, otp}` verifies and activates
 - Returns 200 OK with user data on success
-- Returns 400 Bad Request for invalid/expired tokens
-- Returns 404 Not Found if user doesn't exist
-- Already verified emails return 200 OK with appropriate message
+- Returns 400 Bad Request for invalid/expired OTPs
+- Unknown email and wrong OTP return the same 400 message (anti-enumeration)
+- Already verified emails return 200 OK idempotently (no OTP consumed)
+- POST `/api/auth/resend-email` with `{email}` always returns a generic 200; a new code is sent only for existing unverified accounts
 
 **API Contract**:
-- Method: `GET /api/auth/verify-email`
-- Query Param: `token` (string)
-- Response: `ApiResponse<AuthResponse>` with 200 OK
+- Method: `POST /api/auth/verify-email`
+- Body: `{ email, otp }`
+- Method: `POST /api/auth/resend-email`
+- Body: `{ email }`
+- Response: `ApiResponse<AuthResponse>` with 200 OK (verify); generic 200 (resend)
 
 ### FR-03: Password Confirmation Validation
 
@@ -59,7 +62,7 @@ Implement user registration for the Vegalife platform with email verification fl
 
 ### NFR-01: Security
 - Passwords hashed with BCrypt (via Spring Security PasswordEncoder)
-- Verification tokens use JWT with expiration
+- Verification OTPs stored as SHA-256 hashes only; raw codes never logged
 - No sensitive data in logs
 
 ### NFR-02: API Consistency
@@ -96,9 +99,8 @@ Implement user registration for the Vegalife platform with email verification fl
 | Password mismatch | 400 | VALIDATION_ERROR | "Fields must be equal" |
 | Duplicate email | 409 | DUPLICATE_RESOURCE | "Email already registered" |
 | Duplicate username | 409 | DUPLICATE_RESOURCE | "Username already taken" |
-| Invalid token | 400 | INVALID_TOKEN | "Invalid verification link" |
-| Expired token | 400 | EXPIRED_TOKEN | "Verification link has expired" |
-| User not found | 404 | NOT_FOUND | "User not found" |
+| Invalid OTP | 400 | INVALID_TOKEN | "Invalid or already used verification code" |
+| Expired OTP | 400 | EXPIRED_TOKEN | "Verification code has expired. Please request a new one." |
 
 ## Success Metrics
 
@@ -113,9 +115,9 @@ Implement user registration for the Vegalife platform with email verification fl
 - Spring Data JPA / Hibernate
 - PostgreSQL (prod), H2 (test)
 - Spring Security (password encoding)
-- JWT (verification tokens)
 - JavaMailSender (email)
 - Testcontainers (integration tests)
+- See also: `docs/feats/email-verification-otp.md`
 
 ## Test Coverage
 

@@ -20,14 +20,14 @@ public class SmtpEmailServiceImpl implements EmailService {
   private final JavaMailSender mailSender;
   private final TemplateEngine templateEngine;
 
-  @Value("${app.verification.token-expiry-minutes:30}")
-  private int tokenExpiryMinutes;
-
   @Value("${app.password-reset.otp-expiry-minutes:10}")
   private int otpExpiryMinutes;
 
+  @Value("${app.email-verification.otp-expiry-minutes:10}")
+  private int emailVerificationOtpExpiryMinutes;
+
   @Override
-  public void sendVerificationEmail(String to, String username, String verificationLink) {
+  public void sendVerificationOtp(String to, String username, String otp) {
     try {
       MimeMessage message = mailSender.createMimeMessage();
       MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -37,17 +37,17 @@ public class SmtpEmailServiceImpl implements EmailService {
 
       Context context = new Context();
       context.setVariable("username", username);
-      context.setVariable("verificationLink", verificationLink);
-      context.setVariable("tokenExpiryMinutes", tokenExpiryMinutes);
+      context.setVariable("otp", otp);
+      context.setVariable("otpExpiryMinutes", emailVerificationOtpExpiryMinutes);
 
-      String htmlContent = templateEngine.process("email/verification", context);
+      String htmlContent = templateEngine.process("email/verification-otp", context);
       helper.setText(htmlContent, true);
 
       mailSender.send(message);
-      log.info("Verification email sent to: {}", to);
+      log.info("Verification OTP email sent to: {}", to);
     } catch (MessagingException e) {
-      log.error("Failed to send verification email to: {}", to, e);
-      throw new RuntimeException("Failed to send verification email", e);
+      log.error("Failed to send verification OTP email to: {}", to, e);
+      throw new RuntimeException("Failed to send verification OTP email", e);
     }
   }
 

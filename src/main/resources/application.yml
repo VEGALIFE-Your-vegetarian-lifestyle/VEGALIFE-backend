@@ -52,11 +52,6 @@ spring:
     cache: false
 
 app:
-  verification:
-    token-expiry-minutes: 30
-    issuer: vegalife-backend
-    secret: ${VERIFICATION_SECRET:dev-verification-secret-change-in-production}
-
   auth:
     access-token-expiry-minutes: 15
     refresh-token-expiry-days: 7
@@ -66,6 +61,9 @@ app:
       audience: vegalife-api
 
   password-reset:
+    otp-expiry-minutes: 10
+
+  email-verification:
     otp-expiry-minutes: 10
 
   scheduling:

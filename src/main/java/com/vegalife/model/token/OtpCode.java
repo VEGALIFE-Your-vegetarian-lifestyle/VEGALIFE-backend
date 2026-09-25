@@ -8,12 +8,12 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
 @Entity
-@Table(name = "password_reset_otp")
+@Table(name = "otp_code")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class PasswordResetOtp {
+public class OtpCode {
 
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
@@ -26,6 +26,11 @@ public class PasswordResetOtp {
 
   @Column(name = "otp_hash", length = 64, nullable = false)
   private String otpHash;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "purpose", length = 32, nullable = false)
+  @Builder.Default
+  private OtpPurpose purpose = OtpPurpose.PASSWORD_RESET;
 
   @Column(name = "expires_at", nullable = false)
   private Instant expiresAt;
