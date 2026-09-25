@@ -559,6 +559,36 @@ _Description: Stores SHA-256 hashes of 6-digit auth codes for password reset and
 
 ---
 
+## Table 24: Outbound Message
+
+_Description: Persistent outbound message queue (transactional outbox) for email delivery (V15 / ADR-005, issue #49). Business transactions enqueue a row in the same commit; a background drainer delivers it with retries. The payload holds the message JSON (including a plaintext OTP) until the row reaches a terminal status, then it is cleared._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| id | UUID | PK | No | Unique identifier for each outbound message |
+| channel | VARCHAR(16) | - | No | Delivery channel: EMAIL |
+| recipient | VARCHAR(255) | - | No | Destination address (email) |
+| payload | JSONB | - | Yes | Message body JSON (type, username, otp, expiryMinutes); cleared when the row reaches a terminal status |
+| status | VARCHAR(32) | - | No | PENDING, PROCESSING, COMPLETED, DEFERRED, FAILED or EXPIRED (default PENDING) |
+| attempts | INT | - | No | Monotonic attempt counter, incremented when a worker claims the row (default 0) |
+| next_attempt_at | TIMESTAMPTZ | - | No | Earliest time the row may be claimed (default NOW()) |
+| expires_at | TIMESTAMPTZ | - | Yes | Business deadline (OTP expiry); past it the row is EXPIRED without sending |
+| locked_at | TIMESTAMPTZ | - | Yes | When the current worker claimed the row (visibility timeout) |
+| locked_by | VARCHAR(64) | - | Yes | Worker id owning the PROCESSING row |
+| completed_at | TIMESTAMPTZ | - | Yes | When the message was handed to SMTP successfully |
+| created_at | TIMESTAMPTZ | - | No | Insertion time; cutoff for the 7-day retention purge |
+
+**Constraints:**
+- CHECK: status IN ('PENDING','PROCESSING','COMPLETED','DEFERRED','FAILED','EXPIRED')
+- CHECK: channel IN ('EMAIL')
+- CHECK: attempts >= 0
+
+**Indexes:**
+- `idx_outbound_message_due` ON (status, next_attempt_at)
+- `idx_outbound_message_created_at` ON (created_at)
+
+---
+
 ## Relationship Summary
 
 - **User** 1:N **UserProfile** (1:1 via unique FK)
