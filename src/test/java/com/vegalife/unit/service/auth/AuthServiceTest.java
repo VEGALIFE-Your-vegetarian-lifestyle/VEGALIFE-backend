@@ -29,7 +29,6 @@ import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.auth.AuthService;
 import com.vegalife.service.email.EmailService;
 import com.vegalife.service.token.JwtTokenService;
-import com.vegalife.service.token.VerificationTokenService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ExpiredTokenException;
 import com.vegalife.shared.exception.InvalidTokenException;
@@ -55,7 +54,6 @@ class AuthServiceTest {
   @Mock private AuthMapper authMapper;
   @Mock private LoginMapper loginMapper;
   @Mock private PasswordEncoder passwordEncoder;
-  @Mock private VerificationTokenService tokenService;
 
   @Mock(lenient = true)
   private JwtTokenService jwtTokenService;
@@ -107,7 +105,6 @@ class AuthServiceTest {
     refreshToken = "refresh.token.here";
 
     // Set private fields using ReflectionTestUtils
-    ReflectionTestUtils.setField(authService, "baseUrl", "http://localhost:8080");
     ReflectionTestUtils.setField(authService, "otpExpiryMinutes", 10);
     ReflectionTestUtils.setField(authService, "emailVerificationOtpExpiryMinutes", 10);
     ReflectionTestUtils.setField(jwtTokenService, "accessTokenExpiryMinutes", 15L);
@@ -153,7 +150,6 @@ class AuthServiceTest {
             eq("test@example.com"),
             eq("testuser"),
             org.mockito.ArgumentMatchers.argThat(otp -> otp != null && otp.matches("\\d{6}")));
-    verify(tokenService, never()).generateToken(any());
   }
 
   @Test

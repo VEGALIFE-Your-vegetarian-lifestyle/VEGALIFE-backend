@@ -32,10 +32,6 @@ class SmtpEmailServiceImplTest {
   @BeforeEach
   void setUp() {
     try {
-      var tokenField = SmtpEmailServiceImpl.class.getDeclaredField("tokenExpiryMinutes");
-      tokenField.setAccessible(true);
-      tokenField.set(emailService, 30);
-
       var otpField = SmtpEmailServiceImpl.class.getDeclaredField("otpExpiryMinutes");
       otpField.setAccessible(true);
       otpField.set(emailService, 10);
@@ -47,20 +43,6 @@ class SmtpEmailServiceImplTest {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
-  }
-
-  @Test
-  void sendVerificationEmail_callsMailSender() throws MessagingException {
-    when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
-    when(templateEngine.process(eq("email/verification"), any(Context.class)))
-        .thenReturn("<html>Verification email</html>");
-
-    emailService.sendVerificationEmail(
-        "test@example.com", "testuser", "http://localhost:8080/api/auth/verify-email?token=abc");
-
-    verify(mailSender).createMimeMessage();
-    verify(mailSender).send(mimeMessage);
-    verify(templateEngine).process(eq("email/verification"), any(Context.class));
   }
 
   @Test

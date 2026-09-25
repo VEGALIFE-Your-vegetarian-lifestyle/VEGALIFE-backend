@@ -17,7 +17,6 @@ import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.email.EmailService;
 import com.vegalife.service.token.JwtTokenService;
-import com.vegalife.service.token.VerificationTokenService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ExpiredTokenException;
 import com.vegalife.shared.exception.InvalidTokenException;
@@ -53,13 +52,9 @@ public class AuthService {
   private final AuthMapper authMapper;
   private final LoginMapper loginMapper;
   private final PasswordEncoder passwordEncoder;
-  private final VerificationTokenService tokenService;
   private final JwtTokenService jwtTokenService;
   private final EmailService emailService;
   private final OtpCodeRepository otpCodeRepository;
-
-  @Value("${app.base-url:http://localhost:8080}")
-  private String baseUrl;
 
   @Value("${app.password-reset.otp-expiry-minutes:10}")
   private int otpExpiryMinutes;

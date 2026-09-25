@@ -23,9 +23,6 @@ spring:
         debug: "false"
 
 app:
-  verification:
-    token-expiry-minutes: 30
-
   auth:
     access-token-expiry-minutes: 15
     refresh-token-expiry-days: 7
