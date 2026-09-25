@@ -3,7 +3,6 @@ package com.vegalife.unit.controller.auth;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -12,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.request.auth.LoginRequest;
 import com.vegalife.dto.request.auth.RefreshTokenRequest;
 import com.vegalife.dto.request.auth.RegisterRequest;
+import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.service.auth.AuthService;
@@ -158,7 +158,11 @@ class AuthControllerTest {
   }
 
   @Test
-  void verifyEmail_validToken_returns200() throws Exception {
+  void verifyEmail_validOtp_returns200() throws Exception {
+    VerifyEmailRequest request = new VerifyEmailRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("123456");
+
     UUID userId = UUID.randomUUID();
     RegisterResponse response =
         RegisterResponse.builder()
@@ -167,10 +171,13 @@ class AuthControllerTest {
             .email("test@example.com")
             .build();
 
-    when(authService.verifyEmail(anyString())).thenReturn(response);
+    when(authService.verifyEmail(any(VerifyEmailRequest.class))).thenReturn(response);
 
     mockMvc
-        .perform(get("/api/auth/verify-email").param("token", "valid.token"))
+        .perform(
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Email verified successfully"))
@@ -180,27 +187,61 @@ class AuthControllerTest {
   }
 
   @Test
-  void verifyEmail_invalidToken_returns400() throws Exception {
-    when(authService.verifyEmail(anyString()))
-        .thenThrow(new com.vegalife.shared.exception.InvalidTokenException("Invalid token"));
+  void verifyEmail_invalidOtp_returns400() throws Exception {
+    VerifyEmailRequest request = new VerifyEmailRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("000000");
+
+    when(authService.verifyEmail(any(VerifyEmailRequest.class)))
+        .thenThrow(
+            new com.vegalife.shared.exception.InvalidTokenException(
+                "Invalid or already used verification code"));
 
     mockMvc
-        .perform(get("/api/auth/verify-email").param("token", "invalid"))
+        .perform(
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Invalid token"));
+        .andExpect(jsonPath("$.message").value("Invalid or already used verification code"));
   }
 
   @Test
-  void verifyEmail_expiredToken_returns400() throws Exception {
-    when(authService.verifyEmail(anyString()))
-        .thenThrow(new com.vegalife.shared.exception.ExpiredTokenException("Token expired"));
+  void verifyEmail_expiredOtp_returns400() throws Exception {
+    VerifyEmailRequest request = new VerifyEmailRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("123456");
+
+    when(authService.verifyEmail(any(VerifyEmailRequest.class)))
+        .thenThrow(
+            new com.vegalife.shared.exception.ExpiredTokenException(
+                "Verification code has expired. Please request a new one."));
 
     mockMvc
-        .perform(get("/api/auth/verify-email").param("token", "expired"))
+        .perform(
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Token expired"));
+        .andExpect(
+            jsonPath("$.message")
+                .value("Verification code has expired. Please request a new one."));
+  }
+
+  @Test
+  void verifyEmail_missingOtp_returns400() throws Exception {
+    VerifyEmailRequest request = new VerifyEmailRequest();
+    request.setEmail("test@example.com");
+
+    mockMvc
+        .perform(
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
   }
 
   @Test

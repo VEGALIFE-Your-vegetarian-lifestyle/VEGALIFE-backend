@@ -6,6 +6,7 @@ import com.vegalife.dto.request.auth.ForgotPasswordRequest;
 import com.vegalife.dto.request.auth.LoginRequest;
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.request.auth.ResetPasswordRequest;
+import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.model.token.OtpCode;
@@ -19,14 +20,12 @@ import com.vegalife.service.token.VerificationTokenService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ExpiredTokenException;
 import com.vegalife.shared.exception.InvalidTokenException;
-import com.vegalife.shared.exception.ResourceNotFoundException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Optional;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,6 +42,10 @@ public class AuthService {
       "Invalid or already used password reset code";
   private static final String EXPIRED_RESET_CODE_MESSAGE =
       "Password reset code has expired. Please request a new one.";
+  private static final String INVALID_VERIFICATION_CODE_MESSAGE =
+      "Invalid or already used verification code";
+  private static final String EXPIRED_VERIFICATION_CODE_MESSAGE =
+      "Verification code has expired. Please request a new one.";
   private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
   private final UserRepository userRepository;
@@ -60,6 +63,9 @@ public class AuthService {
   @Value("${app.password-reset.otp-expiry-minutes:10}")
   private int otpExpiryMinutes;
 
+  @Value("${app.email-verification.otp-expiry-minutes:10}")
+  private int emailVerificationOtpExpiryMinutes;
+
   @Transactional
   public RegisterResponse register(RegisterRequest request) {
     if (userRepository.existsByEmail(request.getEmail())) {
@@ -75,10 +81,19 @@ public class AuthService {
     User user = authMapper.toEntity(request, encodedPassword);
     user = userRepository.save(user);
 
-    String token = tokenService.generateToken(user);
-    String verificationLink = baseUrl + "/api/auth/verify-email?token=" + token;
+    otpCodeRepository.markAllUnusedByUserIdAndPurpose(
+        user.getId(), OtpPurpose.EMAIL_VERIFICATION, Instant.now());
 
-    emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), verificationLink);
+    String otp = generateOtp();
+    otpCodeRepository.save(
+        OtpCode.builder()
+            .user(user)
+            .otpHash(sha256(otp))
+            .purpose(OtpPurpose.EMAIL_VERIFICATION)
+            .expiresAt(Instant.now().plusSeconds(emailVerificationOtpExpiryMinutes * 60L))
+            .build());
+
+    emailService.sendVerificationOtp(user.getEmail(), user.getUsername(), otp);
 
     log.info("User registered: {} ({})", user.getUsername(), user.getEmail());
 
@@ -86,29 +101,36 @@ public class AuthService {
   }
 
   @Transactional
-  public RegisterResponse verifyEmail(String token) {
-    UUID userId;
-    try {
-      userId = tokenService.getUserIdFromToken(token);
-    } catch (ExpiredTokenException e) {
-      throw new ExpiredTokenException("Verification link has expired. Please register again.");
-    } catch (InvalidTokenException e) {
-      throw new InvalidTokenException("Invalid verification link.");
-    }
-
+  public RegisterResponse verifyEmail(VerifyEmailRequest request) {
     User user =
         userRepository
-            .findById(userId)
-            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+            .findByEmail(request.getEmail())
+            .orElseThrow(() -> new InvalidTokenException(INVALID_VERIFICATION_CODE_MESSAGE));
 
     if (user.getEmailVerified()) {
       log.info("Email already verified for user: {}", user.getUsername());
       return authMapper.toRegisterResponse(user);
     }
 
+    OtpCode otpRow =
+        otpCodeRepository
+            .findLatestUnusedByUserIdAndPurpose(user.getId(), OtpPurpose.EMAIL_VERIFICATION)
+            .orElseThrow(() -> new InvalidTokenException(INVALID_VERIFICATION_CODE_MESSAGE));
+
+    if (otpRow.isExpired()) {
+      throw new ExpiredTokenException(EXPIRED_VERIFICATION_CODE_MESSAGE);
+    }
+
+    if (!otpRow.getOtpHash().equals(sha256(request.getOtp()))) {
+      throw new InvalidTokenException(INVALID_VERIFICATION_CODE_MESSAGE);
+    }
+
     user.setEmailVerified(true);
     user.setStatus(User.Status.activated);
     userRepository.save(user);
+
+    otpRow.setUsedAt(Instant.now());
+    otpCodeRepository.save(otpRow);
 
     log.info("Email verified for user: {} ({})", user.getUsername(), user.getEmail());
 

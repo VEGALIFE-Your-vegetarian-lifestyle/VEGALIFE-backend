@@ -5,6 +5,7 @@ import com.vegalife.dto.request.auth.LoginRequest;
 import com.vegalife.dto.request.auth.RefreshTokenRequest;
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.request.auth.ResetPasswordRequest;
+import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.service.auth.AuthService;
@@ -14,11 +15,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -36,9 +35,10 @@ public class AuthController {
         .body(ApiResponse.success(response, "User registered successfully"));
   }
 
-  @GetMapping("/verify-email")
-  public ResponseEntity<ApiResponse<RegisterResponse>> verifyEmail(@RequestParam String token) {
-    RegisterResponse response = authService.verifyEmail(token);
+  @PostMapping("/verify-email")
+  public ResponseEntity<ApiResponse<RegisterResponse>> verifyEmail(
+      @Valid @RequestBody VerifyEmailRequest request) {
+    RegisterResponse response = authService.verifyEmail(request);
     return ResponseEntity.ok(ApiResponse.success(response, "Email verified successfully"));
   }
 

@@ -40,13 +40,9 @@ None
   "success": true,
   "message": "Email verified successfully",
   "data": {
-    "id": "uuid",
-    "email": "string",
+    "userId": "uuid",
     "username": "string",
-    "emailVerified": true,
-    "status": "activated",
-    "createdAt": "timestamp",
-    "updatedAt": "timestamp"
+    "email": "string"
   }
 }
 ```

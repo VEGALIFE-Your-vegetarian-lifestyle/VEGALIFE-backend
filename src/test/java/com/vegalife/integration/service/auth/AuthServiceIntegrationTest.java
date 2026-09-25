@@ -3,9 +3,12 @@ package com.vegalife.integration.service.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.verify;
 
 import com.vegalife.dto.request.auth.RegisterRequest;
+import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.User.Role;
@@ -13,10 +16,10 @@ import com.vegalife.model.user.User.Status;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.auth.AuthService;
 import com.vegalife.service.email.EmailService;
-import com.vegalife.service.token.VerificationTokenService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -55,14 +58,34 @@ class AuthServiceIntegrationTest {
 
   @Autowired private UserRepository userRepository;
 
-  @Autowired private VerificationTokenService tokenService;
-
   @MockBean private EmailService emailService;
 
   @BeforeEach
   void setUp() {
     userRepository.deleteAll();
-    doNothing().when(emailService).sendVerificationEmail(anyString(), anyString(), anyString());
+    doNothing().when(emailService).sendVerificationOtp(anyString(), anyString(), anyString());
+  }
+
+  private String captureVerificationOtp(String email) {
+    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+    verify(emailService).sendVerificationOtp(eq(email), anyString(), captor.capture());
+    return captor.getValue();
+  }
+
+  private VerifyEmailRequest verifyRequest(String email, String otp) {
+    VerifyEmailRequest request = new VerifyEmailRequest();
+    request.setEmail(email);
+    request.setOtp(otp);
+    return request;
+  }
+
+  private RegisterRequest registerRequest(String username, String email) {
+    RegisterRequest request = new RegisterRequest();
+    request.setUsername(username);
+    request.setEmail(email);
+    request.setPassword("password123");
+    request.setConfirmPassword("password123");
+    return request;
   }
 
   @Test
@@ -130,17 +153,12 @@ class AuthServiceIntegrationTest {
 
   @Test
   void verifyEmail_activatesUser() {
-    RegisterRequest request = new RegisterRequest();
-    request.setUsername("verifyuser");
-    request.setEmail("verify@test.com");
-    request.setPassword("password123");
-    request.setConfirmPassword("password123");
-    RegisterResponse registerResponse = authService.register(request);
-
+    authService.register(registerRequest("verifyuser", "verify@test.com"));
+    String otp = captureVerificationOtp("verify@test.com");
     User user = userRepository.findByEmail("verify@test.com").orElseThrow();
-    String token = tokenService.generateToken(user);
 
-    RegisterResponse verifyResponse = authService.verifyEmail(token);
+    RegisterResponse verifyResponse =
+        authService.verifyEmail(verifyRequest("verify@test.com", otp));
 
     assertThat(verifyResponse).isNotNull();
 
@@ -151,23 +169,28 @@ class AuthServiceIntegrationTest {
 
   @Test
   void verifyEmail_alreadyVerified_returnsSuccess() {
-    RegisterRequest request = new RegisterRequest();
-    request.setUsername("verifyuser2");
-    request.setEmail("verify2@test.com");
-    request.setPassword("password123");
-    request.setConfirmPassword("password123");
-    RegisterResponse registerResponse = authService.register(request);
-
+    authService.register(registerRequest("verifyuser2", "verify2@test.com"));
+    String otp = captureVerificationOtp("verify2@test.com");
     User user = userRepository.findByEmail("verify2@test.com").orElseThrow();
-    String token = tokenService.generateToken(user);
 
-    authService.verifyEmail(token);
+    authService.verifyEmail(verifyRequest("verify2@test.com", otp));
 
-    RegisterResponse verifyResponse = authService.verifyEmail(token);
+    RegisterResponse verifyResponse =
+        authService.verifyEmail(verifyRequest("verify2@test.com", otp));
     assertThat(verifyResponse).isNotNull();
 
     User verifiedUser = userRepository.findById(user.getId()).orElseThrow();
     assertThat(verifiedUser.getEmailVerified()).isTrue();
     assertThat(verifiedUser.getStatus()).isEqualTo(Status.activated);
+  }
+
+  @Test
+  void verifyEmail_wrongOtp_throwsInvalidTokenException() {
+    authService.register(registerRequest("wrongotpuser", "wrongotp@test.com"));
+    captureVerificationOtp("wrongotp@test.com");
+
+    assertThatThrownBy(() -> authService.verifyEmail(verifyRequest("wrongotp@test.com", "000000")))
+        .isInstanceOf(com.vegalife.shared.exception.InvalidTokenException.class)
+        .hasMessage("Invalid or already used verification code");
   }
 }

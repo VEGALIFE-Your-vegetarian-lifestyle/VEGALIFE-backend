@@ -6,7 +6,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -22,7 +21,6 @@ import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.token.RefreshTokenRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.email.EmailService;
-import com.vegalife.service.token.VerificationTokenService;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -73,8 +71,6 @@ class AuthControllerIntegrationTest {
 
   @Autowired private UserRepository userRepository;
 
-  @Autowired private VerificationTokenService tokenService;
-
   @Autowired private PasswordEncoder passwordEncoder;
 
   @Autowired private RefreshTokenRepository refreshTokenRepository;
@@ -87,7 +83,7 @@ class AuthControllerIntegrationTest {
   void setUp() {
     otpCodeRepository.deleteAll();
     userRepository.deleteAll();
-    doNothing().when(emailService).sendVerificationEmail(anyString(), anyString(), anyString());
+    doNothing().when(emailService).sendVerificationOtp(anyString(), anyString(), anyString());
     doNothing().when(emailService).sendPasswordResetOtp(anyString(), anyString(), anyString());
   }
 
@@ -109,51 +105,47 @@ class AuthControllerIntegrationTest {
     return captor.getValue();
   }
 
-  private String generateExpiredToken() {
-    User user = new User();
-    user.setId(java.util.UUID.randomUUID());
-    user.setEmail("test@test.com");
-    user.setUsername("testuser");
-    user.setPasswordHash("password");
-    user.setStatus(Status.created);
-    user.setCreatedAt(Instant.now());
-    user.setUpdatedAt(Instant.now());
-
-    String token = tokenService.generateToken(user);
-    // Manually create an expired token by parsing and modifying expiry
-    // This is a simple approach - just use a token that's already expired
-    return token; // In real scenario, we'd manipulate the token, but for testing we just use the
-    // service
+  private String captureVerificationOtp(String email) {
+    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+    verify(emailService).sendVerificationOtp(eq(email), anyString(), captor.capture());
+    return captor.getValue();
   }
 
-  @Test
-  void register_thenVerifyEmail_thenLogin_fullFlow() throws Exception {
-    RegisterRequest registerRequest = new RegisterRequest();
-    registerRequest.setUsername("integrationuser");
-    registerRequest.setEmail("integration@test.com");
-    registerRequest.setPassword("password123");
-    registerRequest.setConfirmPassword("password123");
+  private void registerUser(String username, String email) throws Exception {
+    RegisterRequest request = new RegisterRequest();
+    request.setUsername(username);
+    request.setEmail(email);
+    request.setPassword("password123");
+    request.setConfirmPassword("password123");
 
     mockMvc
         .perform(
             post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(registerRequest)))
-        .andDo(print())
-        .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.message").value("User registered successfully"))
-        .andExpect(jsonPath("$.data.username").value("integrationuser"))
-        .andExpect(jsonPath("$.data.email").value("integration@test.com"));
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isCreated());
+  }
+
+  private String verifyEmailBody(String email, String otp) {
+    return "{\"email\":\"" + email + "\",\"otp\":\"" + otp + "\"}";
+  }
+
+  @Test
+  void register_thenVerifyEmail_thenLogin_fullFlow() throws Exception {
+    registerUser("integrationuser", "integration@test.com");
 
     User user = userRepository.findByEmail("integration@test.com").orElseThrow();
     assertThat(user.getEmailVerified()).isFalse();
     assertThat(user.getStatus()).isEqualTo(Status.created);
 
-    String token = tokenService.generateToken(user);
+    String otp = captureVerificationOtp("integration@test.com");
+    assertThat(otp).matches("\\d{6}");
 
     mockMvc
-        .perform(get("/api/auth/verify-email").param("token", token))
+        .perform(
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyEmailBody("integration@test.com", otp)))
         .andDo(print())
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
@@ -162,22 +154,23 @@ class AuthControllerIntegrationTest {
     User verifiedUser = userRepository.findById(user.getId()).orElseThrow();
     assertThat(verifiedUser.getEmailVerified()).isTrue();
     assertThat(verifiedUser.getStatus()).isEqualTo(Status.activated);
+
+    OtpCode consumed =
+        otpCodeRepository
+            .findLatestUnusedByUserIdAndPurpose(user.getId(), OtpPurpose.EMAIL_VERIFICATION)
+            .orElse(null);
+    assertThat(consumed).isNull();
+
+    String loginBody = "{\"identifier\":\"integration@test.com\",\"password\":\"password123\"}";
+    mockMvc
+        .perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(loginBody))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Login successful"));
   }
 
   @Test
   void register_duplicateEmail_returnsConflict() throws Exception {
-    RegisterRequest firstRequest = new RegisterRequest();
-    firstRequest.setUsername("user1");
-    firstRequest.setEmail("duplicate@test.com");
-    firstRequest.setPassword("password123");
-    firstRequest.setConfirmPassword("password123");
-
-    mockMvc
-        .perform(
-            post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(firstRequest)))
-        .andExpect(status().isCreated());
+    registerUser("user1", "duplicate@test.com");
 
     RegisterRequest secondRequest = new RegisterRequest();
     secondRequest.setUsername("user2");
@@ -197,18 +190,7 @@ class AuthControllerIntegrationTest {
 
   @Test
   void register_duplicateUsername_returnsConflict() throws Exception {
-    RegisterRequest firstRequest = new RegisterRequest();
-    firstRequest.setUsername("sameuser");
-    firstRequest.setEmail("user1@test.com");
-    firstRequest.setPassword("password123");
-    firstRequest.setConfirmPassword("password123");
-
-    mockMvc
-        .perform(
-            post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(firstRequest)))
-        .andExpect(status().isCreated());
+    registerUser("sameuser", "user1@test.com");
 
     RegisterRequest secondRequest = new RegisterRequest();
     secondRequest.setUsername("sameuser");
@@ -227,28 +209,81 @@ class AuthControllerIntegrationTest {
   }
 
   @Test
-  void verifyEmail_invalidToken_returnsBadRequest() throws Exception {
+  void verifyEmail_unknownEmail_returns400_genericMessage() throws Exception {
     mockMvc
-        .perform(get("/api/auth/verify-email").param("token", "invalid.token.here"))
+        .perform(
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyEmailBody("nobody@test.com", "123456")))
         .andDo(print())
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Invalid verification link."));
+        .andExpect(jsonPath("$.message").value("Invalid or already used verification code"));
   }
 
   @Test
-  void verifyEmail_expiredToken_returnsBadRequest() throws Exception {
-    // Testing expired token is difficult without waiting for actual expiry
-    // The service handles ExpiredTokenException, but generating a valid expired token
-    // requires token manipulation. This test verifies the error handling path works.
+  void verifyEmail_wrongOtp_returns400() throws Exception {
+    registerUser("wrongverify", "wrongverify@test.com");
+    captureVerificationOtp("wrongverify@test.com");
+
     mockMvc
         .perform(
-            get("/api/auth/verify-email")
-                .param("token", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0IiwiZXhwIjoxfQ.dummy"))
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyEmailBody("wrongverify@test.com", "000000")))
         .andDo(print())
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Invalid verification link."));
+        .andExpect(jsonPath("$.message").value("Invalid or already used verification code"));
+
+    User user = userRepository.findByEmail("wrongverify@test.com").orElseThrow();
+    assertThat(user.getEmailVerified()).isFalse();
+  }
+
+  @Test
+  void verifyEmail_expiredOtp_returns400() throws Exception {
+    registerUser("expiredverify", "expiredverify@test.com");
+    User user = userRepository.findByEmail("expiredverify@test.com").orElseThrow();
+    String otp = captureVerificationOtp("expiredverify@test.com");
+
+    OtpCode row =
+        otpCodeRepository
+            .findLatestUnusedByUserIdAndPurpose(user.getId(), OtpPurpose.EMAIL_VERIFICATION)
+            .orElseThrow();
+    row.setExpiresAt(Instant.now().minusSeconds(1));
+    otpCodeRepository.save(row);
+
+    mockMvc
+        .perform(
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyEmailBody("expiredverify@test.com", otp)))
+        .andDo(print())
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(
+            jsonPath("$.message")
+                .value("Verification code has expired. Please request a new one."));
+  }
+
+  @Test
+  void verifyEmail_reusedOtp_returns400() throws Exception {
+    registerUser("reuseverify", "reuseverify@test.com");
+    String otp = captureVerificationOtp("reuseverify@test.com");
+
+    mockMvc
+        .perform(
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyEmailBody("reuseverify@test.com", otp)))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(
+            post("/api/auth/verify-email")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyEmailBody("reuseverify@test.com", otp)))
+        .andExpect(status().isOk());
   }
 
   @Test
