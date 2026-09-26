@@ -5,12 +5,17 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.outbound.OutboundStatus;
@@ -28,6 +33,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class OutboundMessageDrainerTest {
@@ -173,6 +180,76 @@ class OutboundMessageDrainerTest {
 
     verifyNoInteractions(queueDao);
     verify(adapter, never()).deliver(any(OutboundMessage.class));
+  }
+
+  @Test
+  void shouldRedeliverClaimedRowWhenCompletionGuardRejectsIt() {
+    OutboundMessage message = message(1, Instant.now(), null);
+    when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
+        .thenReturn(List.of(message));
+    when(queueDao.markCompleted(eq(message.getId()), anyString(), any(Instant.class)))
+        .thenReturn(false);
+
+    drainer.drainOnce();
+    drainer.drainOnce();
+
+    verify(adapter, times(2)).deliver(message);
+    verify(queueDao, times(2)).markCompleted(eq(message.getId()), anyString(), any(Instant.class));
+  }
+
+  @Test
+  void shouldExpireMessageThatIsPastBothDeadlineAndMaxAge() {
+    OutboundMessage message =
+        message(2, Instant.now().minus(Duration.ofHours(25)), Instant.now().minusSeconds(5));
+    when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
+        .thenReturn(List.of(message));
+    when(queueDao.markTerminal(eq(message.getId()), eq(OutboundStatus.EXPIRED), anyString()))
+        .thenReturn(true);
+
+    drainer.drainOnce();
+
+    verify(adapter, never()).deliver(any(OutboundMessage.class));
+    verify(queueDao).markTerminal(eq(message.getId()), eq(OutboundStatus.EXPIRED), anyString());
+    verify(queueDao, never())
+        .markTerminal(eq(message.getId()), eq(OutboundStatus.FAILED), anyString());
+  }
+
+  @Test
+  void shouldLogDeliverySummaryCountersSinceLastReport() {
+    OutboundMessage delivered = message(1, Instant.now(), null);
+    OutboundMessage failing = message(1, Instant.now(), null);
+    when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
+        .thenReturn(List.of(delivered, failing));
+    when(queueDao.markCompleted(eq(delivered.getId()), anyString(), any(Instant.class)))
+        .thenReturn(true);
+    when(queueDao.scheduleRetry(
+            eq(failing.getId()), eq(OutboundStatus.PENDING), any(Instant.class), anyString()))
+        .thenReturn(true);
+    doNothing().when(adapter).deliver(delivered);
+    doThrow(new RuntimeException("smtp down")).when(adapter).deliver(failing);
+
+    Logger logger = (Logger) LoggerFactory.getLogger(OutboundMessageDrainer.class);
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    logger.addAppender(appender);
+    try {
+      ReflectionTestUtils.setField(drainer, "lastSummaryAtMs", 0L);
+
+      drainer.drainOnce();
+
+      List<String> summaries =
+          appender.list.stream()
+              .map(ILoggingEvent::getFormattedMessage)
+              .filter(line -> line.startsWith("Outbound queue summary"))
+              .toList();
+      assertThat(summaries)
+          .singleElement()
+          .isEqualTo(
+              "Outbound queue summary since last report: sent=1, retried=1, deferred=0,"
+                  + " expired=0, failed=0, reclaimed=0");
+    } finally {
+      logger.detachAppender(appender);
+    }
   }
 
   private static OutboundMessage message(int attempts, Instant createdAt, Instant expiresAt) {

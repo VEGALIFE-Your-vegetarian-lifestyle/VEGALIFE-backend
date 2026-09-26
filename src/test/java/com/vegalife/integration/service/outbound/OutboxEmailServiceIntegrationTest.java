@@ -1,21 +1,25 @@
 package com.vegalife.integration.service.outbound;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.request.auth.ForgotPasswordRequest;
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.request.auth.ResendVerificationOtpRequest;
+import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.infrastructure.email.SmtpEmailServiceImpl;
 import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.outbound.OutboundStatus;
+import com.vegalife.model.user.User;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.auth.AuthService;
 import com.vegalife.service.outbound.OutboundEmailPayload;
+import com.vegalife.shared.exception.InvalidTokenException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -167,5 +171,45 @@ class OutboxEmailServiceIntegrationTest {
     assertThat(payload.type()).isEqualTo(OutboundEmailPayload.Type.EMAIL_VERIFICATION);
 
     verifyNoInteractions(smtpEmailService);
+  }
+
+  @Test
+  void resendVerificationOtp_supersedesFirstOtp_andOnlyNewOtpVerifies() throws Exception {
+    authService.register(registerRequest());
+    OutboundMessage first = singleRow();
+    String firstOtp = parsePayload(first).otp();
+
+    ResendVerificationOtpRequest request = new ResendVerificationOtpRequest();
+    request.setEmail(email);
+    authService.resendVerificationOtp(request);
+
+    List<OutboundMessage> rows = outboundMessageRepository.findAll();
+    assertThat(rows).hasSize(2);
+    OutboundMessage second =
+        rows.stream().filter(row -> !row.getId().equals(first.getId())).findFirst().orElseThrow();
+    String secondOtp = parsePayload(second).otp();
+
+    assertThatThrownBy(() -> authService.verifyEmail(verifyRequest(email, firstOtp)))
+        .isInstanceOf(InvalidTokenException.class);
+
+    User user = userRepository.findByEmail(email).orElseThrow();
+    assertThat(user.getEmailVerified()).isFalse();
+
+    authService.verifyEmail(verifyRequest(email, secondOtp));
+
+    User verified = userRepository.findById(user.getId()).orElseThrow();
+    assertThat(verified.getEmailVerified()).isTrue();
+    assertThat(verified.getStatus()).isEqualTo(User.Status.activated);
+  }
+
+  private OutboundEmailPayload parsePayload(OutboundMessage row) throws Exception {
+    return objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
+  }
+
+  private VerifyEmailRequest verifyRequest(String target, String otp) {
+    VerifyEmailRequest request = new VerifyEmailRequest();
+    request.setEmail(target);
+    request.setOtp(otp);
+    return request;
   }
 }

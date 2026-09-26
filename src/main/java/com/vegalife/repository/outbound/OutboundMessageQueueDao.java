@@ -6,6 +6,8 @@ import com.vegalife.model.outbound.OutboundStatus;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -70,13 +72,14 @@ public class OutboundMessageQueueDao {
    */
   @Transactional
   public List<OutboundMessage> claimDue(Instant now, String workerId, int batchSize) {
-    return jdbcTemplate.query(CLAIM_SQL, ROW_MAPPER, now, workerId, now, batchSize);
+    OffsetDateTime due = dbTime(now);
+    return jdbcTemplate.query(CLAIM_SQL, ROW_MAPPER, due, workerId, due, batchSize);
   }
 
   /** Marks a claimed row delivered; fails (returns false) if the caller no longer owns it. */
   @Transactional
   public boolean markCompleted(UUID id, String workerId, Instant now) {
-    return jdbcTemplate.update(COMPLETE_SQL, now, id, workerId) == 1;
+    return jdbcTemplate.update(COMPLETE_SQL, dbTime(now), id, workerId) == 1;
   }
 
   /**
@@ -97,7 +100,8 @@ public class OutboundMessageQueueDao {
   public boolean scheduleRetry(
       UUID id, OutboundStatus retryStatus, Instant nextAttemptAt, String workerId) {
     requireRetryStatus(retryStatus);
-    return jdbcTemplate.update(SCHEDULE_RETRY_SQL, retryStatus.name(), nextAttemptAt, id, workerId)
+    return jdbcTemplate.update(
+            SCHEDULE_RETRY_SQL, retryStatus.name(), dbTime(nextAttemptAt), id, workerId)
         == 1;
   }
 
@@ -109,7 +113,16 @@ public class OutboundMessageQueueDao {
   @Transactional
   public int reclaimStale(Instant cutoff, int fastAttemptLimit, Instant deferredAt) {
     return jdbcTemplate.update(
-        RECLAIM_STALE_SQL, fastAttemptLimit, fastAttemptLimit, deferredAt, cutoff);
+        RECLAIM_STALE_SQL, fastAttemptLimit, fastAttemptLimit, dbTime(deferredAt), dbTime(cutoff));
+  }
+
+  private static OffsetDateTime dbTime(Instant instant) {
+    return instant == null ? null : OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
+  }
+
+  private static Instant readTime(ResultSet rs, String column) throws SQLException {
+    OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
+    return value == null ? null : value.toInstant();
   }
 
   private static void requireTerminal(OutboundStatus status) {
@@ -132,12 +145,12 @@ public class OutboundMessageQueueDao {
         .payload(rs.getString("payload"))
         .status(OutboundStatus.valueOf(rs.getString("status")))
         .attempts(rs.getInt("attempts"))
-        .nextAttemptAt(rs.getObject("next_attempt_at", Instant.class))
-        .expiresAt(rs.getObject("expires_at", Instant.class))
-        .lockedAt(rs.getObject("locked_at", Instant.class))
+        .nextAttemptAt(readTime(rs, "next_attempt_at"))
+        .expiresAt(readTime(rs, "expires_at"))
+        .lockedAt(readTime(rs, "locked_at"))
         .lockedBy(rs.getString("locked_by"))
-        .completedAt(rs.getObject("completed_at", Instant.class))
-        .createdAt(rs.getObject("created_at", Instant.class))
+        .completedAt(readTime(rs, "completed_at"))
+        .createdAt(readTime(rs, "created_at"))
         .build();
   }
 }
