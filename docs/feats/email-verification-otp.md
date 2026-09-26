@@ -97,7 +97,9 @@ returns 200 with a generic message
 (`If an account with that email exists, a verification code has been sent`) —
 regardless of whether the email is unknown or already verified (no code is sent
 in those cases). For an unverified, existing user: supersede prior
-`EMAIL_VERIFICATION` OTPs, issue a fresh 10-minute OTP, and send the email.
+`EMAIL_VERIFICATION` OTPs, issue a fresh 10-minute OTP, and enqueue the
+verification email — delivered asynchronously by the outbound message
+queue with retries (ADR-005); SMTP failure never fails the request.
 
 ### FR-008 — OTP secrecy at rest
 
@@ -117,7 +119,7 @@ Only SHA-256 hex digests are persisted. Raw OTPs are never logged.
 
 | Method | Path | Request | Success | Notes |
 |--------|------|---------|---------|-------|
-| POST | `/api/auth/register` | `RegisterRequest` | 201 `RegisterResponse` | now sends OTP email, no link |
+| POST | `/api/auth/register` | `RegisterRequest` | 201 `RegisterResponse` | now queues OTP email (async, no link) |
 | POST | `/api/auth/verify-email` | `{email, otp}` | 200 `RegisterResponse` | replaces `GET ...?token=` |
 | POST | `/api/auth/resend-email` | `{email}` | 200 generic | new; anti-enumeration |
 | POST | `/api/auth/forgot-password` | `ForgotPasswordRequest` | 200 generic | unchanged (purpose `PASSWORD_RESET`) |

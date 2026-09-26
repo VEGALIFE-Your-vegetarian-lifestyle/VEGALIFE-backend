@@ -35,7 +35,7 @@ Implement user registration for the Vegalife platform with email verification fl
 
 **Acceptance Criteria**:
 - 6-digit OTP generated, stored hashed, 10-minute expiry, single-use
-- Verification email sent with the OTP (no link)
+- Verification email queued with the OTP (no link) and delivered asynchronously (ADR-005) — registration succeeds even during an SMTP outage
 - POST `/api/auth/verify-email` with `{email, otp}` verifies and activates
 - Returns 200 OK with user data on success
 - Returns 400 Bad Request for invalid/expired OTPs

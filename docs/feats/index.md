@@ -11,3 +11,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `restore-user-account-admin-api.md` | Restore User Account API (Admin) | Implemented | 2026-09-24 |
 | `forgot-password-reset.md` | Forgot Password with Email OTP | In progress | 2026-09-24 |
 | `email-verification-otp.md` | Email Verification via Generalized OTP | In progress | 2026-09-24 |
+| `outbound-message-queue.md` | Persistent Outbound Message Queue (Email) | In progress | 2026-09-26 |

@@ -69,6 +69,17 @@ app:
   scheduling:
     enabled: true
 
+  outbound:
+    polling:
+      interval: 5s
+    retry:
+      delays: [10s, 30s, 2m]
+      deferred-delay: 5m
+    visibility-timeout: 60s
+    max-age: 24h
+    retention: 7d
+    batch-size: 10
+
 logging:
   level:
     com.vegalife: DEBUG

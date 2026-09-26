@@ -73,7 +73,7 @@ Two new public endpoints on `AuthController`, logic in `AuthService`, OTP storag
 ## Risks / open questions
 
 - **No rate limiting** on forgot-password or reset-password: a 6-digit OTP has 10^6 combinations and could be guessed online within its 10-minute window by a determined attacker. Accepted for Sprint 1 scope; rate limiting should be a follow-up issue.
-- Email deliverability depends on SMTP config (`spring.mail.*`); failure surfaces as 500 and (thanks to `@Transactional`) rolls back OTP creation.
+- Email deliverability depends on SMTP config (`spring.mail.*`); the request only enqueues the email (ADR-005), so an SMTP outage no longer surfaces as 500 or rolls back OTP creation — the background drainer retries delivery.
 - Suspended/deactivated users can still receive a reset code; login remains blocked by status checks (BR-AUTH-008/016), so this is deliberate.
 
 ## Related

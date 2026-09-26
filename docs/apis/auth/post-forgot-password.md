@@ -1,7 +1,7 @@
 # API Reference: POST /api/auth/forgot-password
 
 ## Overview
-Request a password-reset OTP for a registered email. Always returns the same success response whether or not the account exists (prevents account enumeration); when the account exists, a 6-digit code valid for 10 minutes is emailed.
+Request a password-reset OTP for a registered email. Always returns the same success response whether or not the account exists (prevents account enumeration); when the account exists, a 6-digit code valid for 10 minutes is queued for asynchronous delivery (ADR-005).
 
 ## Endpoint
 ```
@@ -47,13 +47,13 @@ None
 | message | string | Generic anti-enumeration message — identical for known and unknown emails |
 | data | object | Always null |
 
-> The identical 200 is returned for unregistered emails and for emails whose send path completed. Calling this endpoint again supersedes any previous unused OTP for the account.
+> The identical 200 is returned for unregistered emails and for emails whose OTP was queued for delivery. Calling this endpoint again supersedes any previous unused OTP for the account.
 
 ### Error Responses
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
 | 400 | Validation failed (missing/malformed email) | "Validation failed" |
-| 500 | Email delivery failure (OTP row rolled back with the transaction) | "Internal server error" |
+| 500 | Server error | "Internal server error" |
 
 ## Business Rules
 - BR-AUTH-007: Email Format and Length (valid, max 100 chars)
@@ -66,7 +66,7 @@ None
 2. Look up user by email; if not found → still return the generic 200 (no email sent)
 3. If found: mark any existing unused OTP rows for the user as used (supersede)
 4. Generate a 6-digit numeric OTP (SecureRandom), store SHA-256(otp) with `expires_at = now + 10 minutes` (`app.password-reset.otp-expiry-minutes`)
-5. Send the OTP via the password-reset email template (same transaction — send failure rolls back the row)
+5. Enqueue the OTP email on the outbound message queue (same transaction — delivered asynchronously with retries; SMTP failure never fails the request, ADR-005)
 6. Return 200 with the generic message
 
 ## Example

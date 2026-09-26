@@ -47,13 +47,13 @@ None
 | message | string | Generic anti-enumeration message — identical for unknown, already-verified, and newly-issued cases |
 | data | object | Always null |
 
-> The identical 200 is returned for unregistered emails, already-verified accounts, and emails whose send path completed. No code is sent for unknown or already-verified accounts. Calling this endpoint again supersedes any previous unused verification OTP for the account (purpose `EMAIL_VERIFICATION` only — pending password-reset OTPs are unaffected).
+> The identical 200 is returned for unregistered emails, already-verified accounts, and emails whose code was queued for delivery. No code is sent for unknown or already-verified accounts. Calling this endpoint again supersedes any previous unused verification OTP for the account (purpose `EMAIL_VERIFICATION` only — pending password-reset OTPs are unaffected).
 
 ### Error Responses
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
 | 400 | Validation failed (missing/malformed email) | "Validation failed" |
-| 500 | Email delivery failure (OTP row rolled back with the transaction) | "Internal server error" |
+| 500 | Server error | "Internal server error" |
 
 ## Business Rules
 - BR-AUTH-007: Email Format and Length (valid, max 100 chars)

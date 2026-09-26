@@ -38,9 +38,11 @@ USER appuser
 # Expose port
 EXPOSE 8080
 
-# Health check
+# Health check against a live, unauthenticated endpoint (springdoc OpenAPI).
+# Switch to /actuator/health once spring-boot-starter-actuator is added
+# (Planned, see docs/arch/dependencies.md).
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/v3/api-docs || exit 1
 
 # Run with dumb-init for proper signal handling
 ENTRYPOINT ["dumb-init", "--"]

@@ -31,7 +31,7 @@ Vegalife is a social platform for the vegan community. Users can share experienc
 - **Testing**: JUnit 5, Mockito, MockMvc, H2 (unit tests), Testcontainers PostgreSQL (integration tests)
 - **API docs**: SpringDoc OpenAPI (Swagger UI)
 - **Utilities**: Lombok, MapStruct
-- **Observability**: Spring Boot Actuator
+- **Observability**: SLF4J logs (Spring Boot Actuator planned, see `docs/arch/dependencies.md`)
 - **Schema management**: Flyway
 - **Runtime**: Docker Compose (dev/test), Cloud (prod) — see `docs/arch/dependencies.md` for full dependency matrix
 
