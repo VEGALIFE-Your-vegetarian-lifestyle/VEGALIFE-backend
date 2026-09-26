@@ -1,7 +1,9 @@
 package com.vegalife.integration.controller.post;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -68,6 +71,56 @@ class PostControllerIntegrationTest {
     user = createUser("postowner", "postowner@example.com");
     otherUser = createUser("otherowner", "otherowner@example.com");
     accessToken = jwtTokenService.generateAccessToken(user);
+  }
+
+  @Test
+  void createPost_createsPostForAuthenticatedUser() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/posts")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "title": "Vegan tofu bowl",
+                      "content": "A simple plant-based lunch.",
+                      "featuredImageUrl": "https://example.com/tofu-bowl.jpg"
+                    }
+                    """))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Post created successfully"))
+        .andExpect(jsonPath("$.data.title").value("Vegan tofu bowl"))
+        .andExpect(jsonPath("$.data.status").value("created"))
+        .andExpect(jsonPath("$.data.viewCount").value(0));
+
+    Post createdPost = postRepository.findAll().getFirst();
+    assertThat(createdPost.getUser().getId()).isEqualTo(user.getId());
+    assertThat(createdPost.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(createdPost.getPublishedAt()).isNull();
+  }
+
+  @Test
+  void createPost_withoutJwt_returns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/posts")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Test\",\"content\":\"Test content\"}"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void createPost_withBlankTitle_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/posts")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\" \",\"content\":\"Test content\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Validation failed"));
   }
 
   @Test

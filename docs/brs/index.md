@@ -29,3 +29,8 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-AUTH-018 | Forgot Password Does Not Reveal Account Existence | Active | 2026-09-24 |
 | BR-AUTH-019 | Password Reset OTP Stored as SHA-256 Hash | Active | 2026-09-24 |
 | BR-AUTH-020 | Password Reset Revokes Refresh Tokens | Active | 2026-09-24 |
+| BR-POST-001 | Post Ownership Comes from Authentication | Active | 2026-09-26 |
+| BR-POST-002 | Users List Only Their Non-Deleted Posts | Active | 2026-09-26 |
+| BR-POST-003 | User Post Lists Use Bounded Newest-First Pagination | Active | 2026-09-26 |
+| BR-POST-004 | New Posts Start in the Created State | Active | 2026-09-26 |
+| BR-POST-005 | Post Title and Content Are Required | Active | 2026-09-26 |
