@@ -14,14 +14,22 @@ These are part of the current tech stack. Use freely.
 | `postgresql` | PostgreSQL JDBC driver | In pom.xml |
 | `spring-boot-starter-validation` | `@Valid`, `@Email`, `@Size` | In pom.xml |
 | `spring-boot-starter-security` | Auth, authorization | In pom.xml |
+| `spring-boot-starter-mail` | SMTP email sending (auth emails via outbound queue) | In pom.xml |
+| `spring-boot-starter-thymeleaf` | HTML email template rendering | In pom.xml |
 | `io.jsonwebtoken:jjwt` | JWT signing/verification (login) | In pom.xml |
 | `springdoc-openapi-starter-webmvc-ui` | Swagger UI / OpenAPI docs | In pom.xml |
 | `org.projectlombok:lombok` | Boilerplate reduction | In pom.xml |
 | `org.mapstruct:mapstruct` | Entity ↔ DTO mapping | In pom.xml |
+| `org.mapstruct:mapstruct-processor` | MapStruct annotation processor | In pom.xml |
+| `org.projectlombok:lombok-mapstruct-binding` | Lombok/MapStruct interop | In pom.xml |
 | `com.h2database:h2` | In-memory unit test DB | In pom.xml |
 | `flyway-core` | DB schema migrations | In pom.xml |
+| `org.flywaydb:flyway-database-postgresql` | Flyway PostgreSQL support | In pom.xml |
 | `org.testcontainers:postgresql` | Real PostgreSQL for integration tests | In pom.xml |
 | `org.testcontainers:junit-jupiter` | Testcontainers JUnit 5 integration | In pom.xml |
+| `com.github.docker-java:docker-java` | Docker access for Testcontainers (+ httpclient5 transport) | In pom.xml |
+| `com.icegreen:greenmail` | In-memory SMTP server for integration tests | In pom.xml |
+| `org.hibernate:hibernate-jpamodelgen` | JPA static metamodel generation (test scope) | In pom.xml |
 
 ## Planned (approved, add when a feature needs it)
 
