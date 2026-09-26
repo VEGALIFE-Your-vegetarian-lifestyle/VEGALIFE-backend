@@ -13,10 +13,11 @@ These are part of the current tech stack. Use freely.
 | `spring-boot-starter-data-jpa` | JPA / Hibernate ORM | In pom.xml |
 | `postgresql` | PostgreSQL JDBC driver | In pom.xml |
 | `spring-boot-starter-validation` | `@Valid`, `@Email`, `@Size` | In pom.xml |
+| `spring-boot-starter-security` | Auth, authorization | In pom.xml |
+| `io.jsonwebtoken:jjwt` | JWT signing/verification (login) | In pom.xml |
 | `springdoc-openapi-starter-webmvc-ui` | Swagger UI / OpenAPI docs | In pom.xml |
 | `org.projectlombok:lombok` | Boilerplate reduction | In pom.xml |
 | `org.mapstruct:mapstruct` | Entity ↔ DTO mapping | In pom.xml |
-| `spring-boot-starter-actuator` | Health checks, metrics | In pom.xml |
 | `com.h2database:h2` | In-memory unit test DB | In pom.xml |
 | `flyway-core` | DB schema migrations | In pom.xml |
 | `org.testcontainers:postgresql` | Real PostgreSQL for integration tests | In pom.xml |
@@ -28,13 +29,13 @@ These are approved in principle. Add them to pom.xml when a feature requires the
 
 | Dependency | Purpose | Add when |
 |---|---|---|
-| `spring-boot-starter-security` | Auth, authorization | First feature requiring login/permissions |
 | `spring-boot-starter-oauth2-resource-server` | JWT validation | When using JWT-based auth |
 | `spring-boot-starter-websocket` | Real-time chat / notifications | Chat feature implementation |
 | `com.github.ben-manes.caffeine:caffeine` | Local caching | When hot data needs caching (recipes, feeds) |
 | `io.rest-assured:rest-assured` | Fluent API testing | When API tests become complex |
 | `net.logstash.logback:logstash-logback-encoder` | Structured JSON logging | When deploying to cloud with log aggregation |
 | `io.micrometer:micrometer-registry-prometheus` | Prometheus metrics | When monitoring is set up |
+| `spring-boot-starter-actuator` | Health checks, metrics | When monitoring/health endpoints are set up (not yet in pom.xml — see ADR-005: queue metrics are log-based) |
 
 ## Not approved (do not add without asking)
 
@@ -46,7 +47,6 @@ These are common but not needed for this project. Do not add without explicit co
 | `spring-boot-starter-data-redis` | Add only when caching/performance requires it |
 | `spring-boot-starter-amqp` | Add only when async messaging is needed |
 | `spring-boot-starter-quartz` | Add only when scheduled jobs are needed |
-| `io.jsonwebtoken:jjwt` | Prefer Spring Security's built-in JWT support |
 | `com.google.guava:guava` | Prefer standard Java / Apache Commons for now |
 | `io.github.resilience4j` | Add only when calling unreliable external APIs |
 

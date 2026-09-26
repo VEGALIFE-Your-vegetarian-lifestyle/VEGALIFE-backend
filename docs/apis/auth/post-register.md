@@ -1,7 +1,7 @@
 # API Reference: POST /api/auth/register
 
 ## Overview
-Register a new user account with username, email, and password. Sends a 6-digit email-verification OTP (no link).
+Register a new user account with username, email, and password. Queues a 6-digit email-verification OTP (no link) for asynchronous delivery (ADR-005) — registration succeeds even while the mail server is unreachable.
 
 ## Endpoint
 ```
@@ -81,7 +81,7 @@ None
 4. Hash password with BCrypt
 5. Create user with status=CREATED, emailVerified=false (BR-AUTH-003)
 6. Issue 6-digit `EMAIL_VERIFICATION` OTP (10-min expiry, supersede prior unused verification OTPs for this user) (BR-AUTH-004, BR-AUTH-017, BR-AUTH-021)
-7. Send verification email containing the OTP (no link)
+7. Enqueue the verification email containing the OTP (no link) on the outbound message queue — delivered asynchronously by the background drainer with retries; SMTP failure never fails registration (ADR-005)
 8. Return 201 with user data
 
 ## Example
