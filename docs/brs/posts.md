@@ -9,6 +9,10 @@
 | BR-POST-003 | User Post Lists Use Bounded Newest-First Pagination | Active | 2026-09-26 |
 | BR-POST-004 | New Posts Start in the Created State | Active | 2026-09-26 |
 | BR-POST-005 | Post Title and Content Are Required | Active | 2026-09-26 |
+| BR-POST-006 | Users Edit Only Their Own Non-Deleted Posts | Active | 2026-09-27 |
+| BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-09-27 |
+
+---
 
 ---
 
@@ -32,13 +36,13 @@ Deriving ownership from the authenticated identity prevents users from creating 
 
 ## Scope & Exceptions
 
-Applies to `POST /api/posts` and `GET /api/posts`. Administrative moderation APIs are outside this rule and require their own authorization contract.
+Applies to `POST /api/posts`, `GET /api/posts`, and `PATCH /api/posts/{postId}`. Administrative moderation APIs are outside this rule and require their own authorization contract.
 
 ## Enforcement
 
-- Controller: `PostController` receives `@AuthenticationPrincipal UUID userId` for both endpoints.
-- Service: `PostService.createPost()` assigns the loaded user; `PostService.listUserPosts()` queries by that user ID.
-- API references: `docs/apis/post/post-posts.md` and `docs/apis/post/get-posts.md`.
+- Controller: `PostController` receives `@AuthenticationPrincipal UUID userId` for these endpoints.
+- Service: `PostService.createPost()` assigns the loaded user; list/edit operations use that user ID when querying posts.
+- API references: `docs/apis/post/post-posts.md`, `docs/apis/post/get-posts.md`, and `docs/apis/post/patch-posts-postid.md`.
 
 ## Last Reviewed
 
@@ -79,6 +83,8 @@ Applies to `GET /api/posts`. It does not define visibility for a public feed or 
 
 ---
 
+---
+
 # Business Rule: User Post Lists Use Bounded Newest-First Pagination
 
 ## Rule ID
@@ -110,6 +116,8 @@ Applies to the authenticated user's post-list endpoint. Clients cannot request a
 ## Last Reviewed
 
 2026-09-26, by Vegalife backend team
+
+---
 
 ---
 
@@ -147,6 +155,8 @@ Applies to `POST /api/posts`. Later semantic filtering or review workflows may t
 
 ---
 
+---
+
 # Business Rule: Post Title and Content Are Required
 
 ## Rule ID
@@ -178,3 +188,75 @@ Applies to requests to create a post through `POST /api/posts`. The existing dat
 ## Last Reviewed
 
 2026-09-26, by Vegalife backend team
+
+---
+
+# Business Rule: Users Edit Only Their Own Non-Deleted Posts
+
+## Rule ID
+
+`BR-POST-006`
+
+## Status
+
+Active
+
+## Statement
+
+An authenticated user may edit a post only when the post is owned by that user and `deleted_at` is null. A missing post, soft-deleted post, or post owned by another user is reported as not found.
+
+## Rationale
+
+Post ownership is private user content. Applying the same owner boundary to edits prevents cross-account changes and avoids disclosing whether another user's post exists.
+
+## Scope & Exceptions
+
+Applies to `PATCH /api/posts/{postId}`. Administrative moderation edits are outside this rule.
+
+## Enforcement
+
+- Controller: `PostController` supplies the authenticated user ID from the JWT principal.
+- Repository/service: the post is looked up by post ID, owner ID, and non-deleted state.
+- API reference: `docs/apis/post/patch-posts-postid.md`.
+
+## Last Reviewed
+
+2026-09-27, by Vegalife backend team
+
+---
+
+---
+
+# Business Rule: Post Edits Change Only Supplied Fields
+
+## Rule ID
+
+`BR-POST-007`
+
+## Status
+
+Active
+
+## Statement
+
+Post edits accept a non-empty subset of `title`, `content`, and `featuredImageUrl`. Only supplied, non-null values are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters, and supplied content must not be blank. Post lifecycle and ownership fields are system-controlled and are not editable through this endpoint.
+
+## Rationale
+
+Partial updates let clients change one field without resending the full post and prevent omitted fields from being overwritten with empty values.
+
+## Scope & Exceptions
+
+Applies to `PATCH /api/posts/{postId}`. Removing a featured image by sending null is not supported by this endpoint.
+
+## Enforcement
+
+- Request DTO: `PostUpdateRequest` validates supplied text and rejects an empty update.
+- Service: `PostService.updatePost()` applies only non-null request values.
+- API reference: `docs/apis/post/patch-posts-postid.md`.
+
+## Last Reviewed
+
+2026-09-27, by Vegalife backend team
+
+---

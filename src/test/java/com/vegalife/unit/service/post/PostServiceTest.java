@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.mapper.post.PostMapper;
 import com.vegalife.dto.request.post.PostCreateRequest;
+import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
@@ -85,6 +86,52 @@ class PostServiceTest {
         .hasMessage("User not found");
 
     verify(postMapper, never()).toEntity(request);
+    verify(postRepository, never()).saveAndFlush(post);
+  }
+
+  @Test
+  void updatePost_updatesOnlySuppliedFieldsAndPreservesSystemFields() {
+    UUID postId = UUID.randomUUID();
+    Post existingPost =
+        Post.builder()
+            .id(postId)
+            .user(user)
+            .title("Old title")
+            .content("Keep this content")
+            .featuredImageUrl("https://example.com/old.jpg")
+            .status(Post.Status.published)
+            .viewCount(12)
+            .build();
+    PostUpdateRequest updateRequest = PostUpdateRequest.builder().title("New title").build();
+    PostListResponse expectedResponse = PostListResponse.builder().title("New title").build();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existingPost));
+    when(postRepository.saveAndFlush(existingPost)).thenReturn(existingPost);
+    when(postMapper.toListResponse(existingPost)).thenReturn(expectedResponse);
+
+    PostListResponse response = postService.updatePost(userId, postId, updateRequest);
+
+    assertThat(response).isSameAs(expectedResponse);
+    assertThat(existingPost.getTitle()).isEqualTo("New title");
+    assertThat(existingPost.getContent()).isEqualTo("Keep this content");
+    assertThat(existingPost.getFeaturedImageUrl()).isEqualTo("https://example.com/old.jpg");
+    assertThat(existingPost.getUser()).isSameAs(user);
+    assertThat(existingPost.getStatus()).isEqualTo(Post.Status.published);
+    assertThat(existingPost.getViewCount()).isEqualTo(12);
+    verify(postRepository).saveAndFlush(existingPost);
+  }
+
+  @Test
+  void updatePost_throwsWhenPostDoesNotBelongToAuthenticatedUserOrIsDeleted() {
+    UUID postId = UUID.randomUUID();
+    PostUpdateRequest updateRequest = PostUpdateRequest.builder().title("New title").build();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> postService.updatePost(userId, postId, updateRequest))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Post not found");
+
     verify(postRepository, never()).saveAndFlush(post);
   }
 }

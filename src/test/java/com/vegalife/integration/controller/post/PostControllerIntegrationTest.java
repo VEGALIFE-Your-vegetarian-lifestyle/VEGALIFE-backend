@@ -3,6 +3,7 @@ package com.vegalife.integration.controller.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -13,6 +14,7 @@ import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
 import java.time.Instant;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -124,6 +126,137 @@ class PostControllerIntegrationTest {
   }
 
   @Test
+  void updatePost_withOneField_updatesOnlyThatField() throws Exception {
+    Post existingPost = createPost(user, "Old title", Post.Status.published, null);
+    existingPost.setContent("Keep this content");
+    existingPost.setFeaturedImageUrl("https://example.com/old.jpg");
+    existingPost.setViewCount(12);
+    existingPost = postRepository.saveAndFlush(existingPost);
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}", existingPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"New title\",\"content\":null,\"featuredImageUrl\":null}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Post updated successfully"))
+        .andExpect(jsonPath("$.data.title").value("New title"))
+        .andExpect(jsonPath("$.data.content").value("Keep this content"))
+        .andExpect(jsonPath("$.data.featuredImageUrl").value("https://example.com/old.jpg"))
+        .andExpect(jsonPath("$.data.status").value("published"))
+        .andExpect(jsonPath("$.data.viewCount").value(12));
+
+    Post updatedPost = postRepository.findById(existingPost.getId()).orElseThrow();
+    assertThat(updatedPost.getUser().getId()).isEqualTo(user.getId());
+    assertThat(updatedPost.getStatus()).isEqualTo(Post.Status.published);
+    assertThat(updatedPost.getViewCount()).isEqualTo(12);
+  }
+
+  @Test
+  void updatePost_canChangeContentAndFeaturedImage() throws Exception {
+    Post existingPost = createPost(user, "Post title", Post.Status.created, null);
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}", existingPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"content\":\"Updated content\",\"featuredImageUrl\":\"https://example.com/new.jpg\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.title").value("Post title"))
+        .andExpect(jsonPath("$.data.content").value("Updated content"))
+        .andExpect(jsonPath("$.data.featuredImageUrl").value("https://example.com/new.jpg"));
+  }
+
+  @Test
+  void updatePost_withoutJwt_returns401() throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}", UUID.randomUUID())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"New title\"}"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void updatePost_withInvalidFields_returns400() throws Exception {
+    Post existingPost = createPost(user, "Old title", Post.Status.created, null);
+    String path = "/api/posts/" + existingPost.getId();
+
+    mockMvc
+        .perform(
+            patch(path)
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\" \"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+
+    mockMvc
+        .perform(
+            patch(path)
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+
+    mockMvc
+        .perform(
+            patch(path)
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\" \"}"))
+        .andExpect(status().isBadRequest());
+
+    mockMvc
+        .perform(
+            patch(path)
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"" + "x".repeat(256) + "\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void updatePost_whenPostIsMissingDeletedOrOwnedByAnotherUser_returns404() throws Exception {
+    Post deletedPost = createPost(user, "Deleted post", Post.Status.created, Instant.now());
+    Post otherUsersPost = createPost(otherUser, "Other user's post", Post.Status.created, null);
+    String body = "{\"title\":\"New title\"}";
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}", UUID.randomUUID())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Post not found"));
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}", deletedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isNotFound());
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}", otherUsersPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isNotFound());
+
+    assertThat(postRepository.findById(otherUsersPost.getId()).orElseThrow().getTitle())
+        .isEqualTo("Other user's post");
+  }
+
+  @Test
   void listUserPosts_returnsOnlyOwnNonDeletedPostsWithAnyStatus() throws Exception {
     createPost(user, "Published post", Post.Status.published, null);
     createPost(user, "Hidden post", Post.Status.hidden, null);
@@ -189,8 +322,8 @@ class PostControllerIntegrationTest {
             .build());
   }
 
-  private void createPost(User owner, String title, Post.Status status, Instant deletedAt) {
-    postRepository.save(
+  private Post createPost(User owner, String title, Post.Status status, Instant deletedAt) {
+    return postRepository.save(
         Post.builder()
             .user(owner)
             .title(title)

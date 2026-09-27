@@ -2,6 +2,7 @@ package com.vegalife.controller.post;
 
 import com.vegalife.dto.request.post.PostCreateRequest;
 import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.service.post.PostService;
 import com.vegalife.shared.dto.ApiResponse;
@@ -14,6 +15,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,6 +35,15 @@ public class PostController {
     PostListResponse post = postService.createPost(userId, request);
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(ApiResponse.success(post, "Post created successfully"));
+  }
+
+  @PatchMapping("/{postId}")
+  public ResponseEntity<ApiResponse<PostListResponse>> updatePost(
+      @AuthenticationPrincipal UUID userId,
+      @PathVariable UUID postId,
+      @Valid @RequestBody PostUpdateRequest request) {
+    PostListResponse post = postService.updatePost(userId, postId, request);
+    return ResponseEntity.ok(ApiResponse.success(post, "Post updated successfully"));
   }
 
   @GetMapping

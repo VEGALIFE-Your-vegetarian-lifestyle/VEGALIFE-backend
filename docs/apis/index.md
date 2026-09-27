@@ -17,6 +17,7 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `profile/put-profile.md` | `PUT /api/profile` | Update user profile |
 | `post/post-posts.md` | `POST /api/posts` | Create a post for the authenticated user |
 | `post/get-posts.md` | `GET /api/posts` | List the authenticated user's posts |
+| `post/patch-posts-postid.md` | `PATCH /api/posts/{postId}` | Edit a post owned by the authenticated user |
 | `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
 | `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |
 | `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |

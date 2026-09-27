@@ -14,3 +14,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `outbound-message-queue.md` | Persistent Outbound Message Queue (Email) | In progress | 2026-09-26 |
 | `list-user-posts.md` | List the Authenticated User's Posts | Implemented | 2026-09-26 |
 | `create-user-post.md` | Create a User Post | In progress | 2026-09-26 |
+| `edit-user-post.md` | Edit a User Post | In progress | 2026-09-27 |
