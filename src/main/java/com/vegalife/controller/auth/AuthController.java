@@ -7,6 +7,7 @@ import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.request.auth.ResendVerificationOtpRequest;
 import com.vegalife.dto.request.auth.ResetPasswordRequest;
 import com.vegalife.dto.request.auth.VerifyEmailRequest;
+import com.vegalife.dto.request.auth.VerifyPasswordResetRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.service.auth.AuthService;
@@ -83,6 +84,14 @@ public class AuthController {
     return ResponseEntity.ok(
         ApiResponse.success(
             null, "If an account with that email exists, a password reset code has been sent"));
+  }
+
+  @PostMapping("/verify-password-reset")
+  public ResponseEntity<ApiResponse<Void>> verifyPasswordReset(
+      @Valid @RequestBody VerifyPasswordResetRequest request) {
+    authService.verifyPasswordReset(request);
+    return ResponseEntity.ok(
+        ApiResponse.success(null, "Password reset code verified successfully"));
   }
 
   @PostMapping("/reset-password")

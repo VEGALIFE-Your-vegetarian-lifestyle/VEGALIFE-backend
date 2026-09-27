@@ -31,6 +31,13 @@ public interface OtpCodeRepository extends JpaRepository<OtpCode, UUID> {
 
   @Modifying
   @Transactional
+  @Query(
+      "UPDATE OtpCode o SET o.usedAt = :now WHERE o.id = :id"
+          + " AND o.usedAt IS NULL AND o.verifiedAt IS NOT NULL")
+  int consumeVerifiedOtp(@Param("id") UUID id, @Param("now") Instant now);
+
+  @Modifying
+  @Transactional
   @Query("DELETE FROM OtpCode o WHERE o.expiresAt < :now")
   int deleteExpired(@Param("now") Instant now);
 }
