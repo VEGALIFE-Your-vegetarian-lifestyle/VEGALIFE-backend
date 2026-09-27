@@ -18,6 +18,7 @@ import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.request.auth.ResendVerificationOtpRequest;
 import com.vegalife.dto.request.auth.ResetPasswordRequest;
 import com.vegalife.dto.request.auth.VerifyEmailRequest;
+import com.vegalife.dto.request.auth.VerifyPasswordResetRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.model.token.OtpCode;
@@ -646,7 +647,7 @@ class AuthServiceTest {
   }
 
   @Test
-  void resetPassword_success_updatesPasswordConsumesOtpAndRevokesTokens() {
+  void verifyPasswordReset_validOtp_marksVerifiedWithoutConsuming() {
     String otp = "482913";
     OtpCode otpRow =
         OtpCode.builder()
@@ -657,40 +658,237 @@ class AuthServiceTest {
             .expiresAt(Instant.now().plusSeconds(600))
             .build();
 
-    ResetPasswordRequest request = new ResetPasswordRequest();
+    VerifyPasswordResetRequest request = new VerifyPasswordResetRequest();
     request.setEmail("test@example.com");
     request.setOtp(otp);
-    request.setNewPassword("newPassword123");
 
     when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
     when(otpCodeRepository.findLatestUnusedByUserIdAndPurpose(userId, OtpPurpose.PASSWORD_RESET))
         .thenReturn(Optional.of(otpRow));
-    when(passwordEncoder.encode("newPassword123")).thenReturn("newEncodedHash");
-    when(userRepository.save(any(User.class))).thenReturn(user);
 
-    authService.resetPassword(request);
+    authService.verifyPasswordReset(request);
 
-    assertThat(user.getPasswordHash()).isEqualTo("newEncodedHash");
-    assertThat(otpRow.getUsedAt()).isNotNull();
+    assertThat(otpRow.getVerifiedAt()).isNotNull();
+    assertThat(otpRow.getUsedAt()).isNull();
     verify(otpCodeRepository).save(otpRow);
-    verify(jwtTokenService).revokeAllUserRefreshTokens(userId);
+    verify(userRepository, never()).save(any());
+    verify(jwtTokenService, never()).revokeAllUserRefreshTokens(any(UUID.class));
+    verify(otpCodeRepository, never()).consumeVerifiedOtp(any(), any(Instant.class));
   }
 
   @Test
-  void resetPassword_expiredOtp_throwsExpiredTokenException() {
+  void verifyPasswordReset_alreadyVerified_isIdempotent() {
     String otp = "482913";
+    Instant verifiedAt = Instant.now().minusSeconds(30);
     OtpCode otpRow =
         OtpCode.builder()
             .id(UUID.randomUUID())
             .user(user)
             .otpHash(sha256(otp))
             .purpose(OtpPurpose.PASSWORD_RESET)
+            .expiresAt(Instant.now().plusSeconds(600))
+            .verifiedAt(verifiedAt)
+            .build();
+
+    VerifyPasswordResetRequest request = new VerifyPasswordResetRequest();
+    request.setEmail("test@example.com");
+    request.setOtp(otp);
+
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(otpCodeRepository.findLatestUnusedByUserIdAndPurpose(userId, OtpPurpose.PASSWORD_RESET))
+        .thenReturn(Optional.of(otpRow));
+
+    authService.verifyPasswordReset(request);
+
+    assertThat(otpRow.getVerifiedAt()).isEqualTo(verifiedAt);
+    verify(otpCodeRepository, never()).save(any(OtpCode.class));
+  }
+
+  @Test
+  void verifyPasswordReset_wrongOtp_throwsInvalidTokenException() {
+    OtpCode otpRow =
+        OtpCode.builder()
+            .id(UUID.randomUUID())
+            .user(user)
+            .otpHash(sha256("482913"))
+            .purpose(OtpPurpose.PASSWORD_RESET)
+            .expiresAt(Instant.now().plusSeconds(600))
+            .build();
+
+    VerifyPasswordResetRequest request = new VerifyPasswordResetRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("000000");
+
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(otpCodeRepository.findLatestUnusedByUserIdAndPurpose(userId, OtpPurpose.PASSWORD_RESET))
+        .thenReturn(Optional.of(otpRow));
+
+    assertThatThrownBy(() -> authService.verifyPasswordReset(request))
+        .isInstanceOf(InvalidTokenException.class)
+        .hasMessage("Invalid or already used password reset code");
+
+    assertThat(otpRow.getVerifiedAt()).isNull();
+    verify(otpCodeRepository, never()).save(any(OtpCode.class));
+  }
+
+  @Test
+  void verifyPasswordReset_expiredOtp_throwsExpiredTokenException() {
+    OtpCode otpRow =
+        OtpCode.builder()
+            .id(UUID.randomUUID())
+            .user(user)
+            .otpHash(sha256("482913"))
+            .purpose(OtpPurpose.PASSWORD_RESET)
             .expiresAt(Instant.now().minusSeconds(1))
+            .build();
+
+    VerifyPasswordResetRequest request = new VerifyPasswordResetRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("482913");
+
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(otpCodeRepository.findLatestUnusedByUserIdAndPurpose(userId, OtpPurpose.PASSWORD_RESET))
+        .thenReturn(Optional.of(otpRow));
+
+    assertThatThrownBy(() -> authService.verifyPasswordReset(request))
+        .isInstanceOf(ExpiredTokenException.class)
+        .hasMessage("Password reset code has expired. Please request a new one.");
+  }
+
+  @Test
+  void verifyPasswordReset_noActiveOtp_throwsInvalidTokenException() {
+    VerifyPasswordResetRequest request = new VerifyPasswordResetRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("482913");
+
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(otpCodeRepository.findLatestUnusedByUserIdAndPurpose(userId, OtpPurpose.PASSWORD_RESET))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> authService.verifyPasswordReset(request))
+        .isInstanceOf(InvalidTokenException.class)
+        .hasMessage("Invalid or already used password reset code");
+  }
+
+  @Test
+  void verifyPasswordReset_unknownEmail_throwsInvalidTokenException() {
+    VerifyPasswordResetRequest request = new VerifyPasswordResetRequest();
+    request.setEmail("missing@example.com");
+    request.setOtp("482913");
+
+    when(userRepository.findByEmail("missing@example.com")).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> authService.verifyPasswordReset(request))
+        .isInstanceOf(InvalidTokenException.class)
+        .hasMessage("Invalid or already used password reset code");
+
+    verify(otpCodeRepository, never())
+        .findLatestUnusedByUserIdAndPurpose(any(UUID.class), any(OtpPurpose.class));
+  }
+
+  @Test
+  void resetPassword_verifiedOtp_consumesCasUpdatesPasswordAndRevokesTokens() {
+    OtpCode otpRow =
+        OtpCode.builder()
+            .id(UUID.randomUUID())
+            .user(user)
+            .otpHash(sha256("482913"))
+            .purpose(OtpPurpose.PASSWORD_RESET)
+            .expiresAt(Instant.now().plusSeconds(600))
+            .verifiedAt(Instant.now().minusSeconds(30))
             .build();
 
     ResetPasswordRequest request = new ResetPasswordRequest();
     request.setEmail("test@example.com");
-    request.setOtp(otp);
+    request.setNewPassword("newPassword123");
+
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(otpCodeRepository.findLatestUnusedByUserIdAndPurpose(userId, OtpPurpose.PASSWORD_RESET))
+        .thenReturn(Optional.of(otpRow));
+    when(otpCodeRepository.consumeVerifiedOtp(otpRow.getId(), Instant.now())).thenReturn(1);
+    when(passwordEncoder.encode("newPassword123")).thenReturn("newEncodedHash");
+    when(userRepository.save(any(User.class))).thenReturn(user);
+
+    authService.resetPassword(request);
+
+    assertThat(user.getPasswordHash()).isEqualTo("newEncodedHash");
+    verify(otpCodeRepository).consumeVerifiedOtp(eq(otpRow.getId()), any(Instant.class));
+    verify(otpCodeRepository, never()).save(any(OtpCode.class));
+    verify(jwtTokenService).revokeAllUserRefreshTokens(userId);
+  }
+
+  @Test
+  void resetPassword_notVerifiedOtp_throwsInvalidTokenException() {
+    OtpCode otpRow =
+        OtpCode.builder()
+            .id(UUID.randomUUID())
+            .user(user)
+            .otpHash(sha256("482913"))
+            .purpose(OtpPurpose.PASSWORD_RESET)
+            .expiresAt(Instant.now().plusSeconds(600))
+            .build();
+
+    ResetPasswordRequest request = new ResetPasswordRequest();
+    request.setEmail("test@example.com");
+    request.setNewPassword("newPassword123");
+
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(otpCodeRepository.findLatestUnusedByUserIdAndPurpose(userId, OtpPurpose.PASSWORD_RESET))
+        .thenReturn(Optional.of(otpRow));
+
+    assertThatThrownBy(() -> authService.resetPassword(request))
+        .isInstanceOf(InvalidTokenException.class)
+        .hasMessage("Invalid or already used password reset code");
+
+    verify(otpCodeRepository, never()).consumeVerifiedOtp(any(), any(Instant.class));
+    verify(userRepository, never()).save(any());
+    verify(jwtTokenService, never()).revokeAllUserRefreshTokens(any(UUID.class));
+  }
+
+  @Test
+  void resetPassword_casConsumeFails_throwsInvalidTokenException() {
+    OtpCode otpRow =
+        OtpCode.builder()
+            .id(UUID.randomUUID())
+            .user(user)
+            .otpHash(sha256("482913"))
+            .purpose(OtpPurpose.PASSWORD_RESET)
+            .expiresAt(Instant.now().plusSeconds(600))
+            .verifiedAt(Instant.now().minusSeconds(30))
+            .build();
+
+    ResetPasswordRequest request = new ResetPasswordRequest();
+    request.setEmail("test@example.com");
+    request.setNewPassword("newPassword123");
+
+    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+    when(otpCodeRepository.findLatestUnusedByUserIdAndPurpose(userId, OtpPurpose.PASSWORD_RESET))
+        .thenReturn(Optional.of(otpRow));
+    when(otpCodeRepository.consumeVerifiedOtp(eq(otpRow.getId()), any(Instant.class)))
+        .thenReturn(0);
+
+    assertThatThrownBy(() -> authService.resetPassword(request))
+        .isInstanceOf(InvalidTokenException.class)
+        .hasMessage("Invalid or already used password reset code");
+
+    verify(userRepository, never()).save(any());
+    verify(jwtTokenService, never()).revokeAllUserRefreshTokens(any(UUID.class));
+  }
+
+  @Test
+  void resetPassword_expiredOtp_throwsExpiredTokenException() {
+    OtpCode otpRow =
+        OtpCode.builder()
+            .id(UUID.randomUUID())
+            .user(user)
+            .otpHash(sha256("482913"))
+            .purpose(OtpPurpose.PASSWORD_RESET)
+            .expiresAt(Instant.now().minusSeconds(1))
+            .verifiedAt(Instant.now().minusSeconds(60))
+            .build();
+
+    ResetPasswordRequest request = new ResetPasswordRequest();
+    request.setEmail("test@example.com");
     request.setNewPassword("newPassword123");
 
     when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
@@ -706,35 +904,9 @@ class AuthServiceTest {
   }
 
   @Test
-  void resetPassword_wrongOtp_throwsInvalidTokenException() {
-    OtpCode otpRow =
-        OtpCode.builder()
-            .id(UUID.randomUUID())
-            .user(user)
-            .otpHash(sha256("482913"))
-            .purpose(OtpPurpose.PASSWORD_RESET)
-            .expiresAt(Instant.now().plusSeconds(600))
-            .build();
-
-    ResetPasswordRequest request = new ResetPasswordRequest();
-    request.setEmail("test@example.com");
-    request.setOtp("000000");
-    request.setNewPassword("newPassword123");
-
-    when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
-    when(otpCodeRepository.findLatestUnusedByUserIdAndPurpose(userId, OtpPurpose.PASSWORD_RESET))
-        .thenReturn(Optional.of(otpRow));
-
-    assertThatThrownBy(() -> authService.resetPassword(request))
-        .isInstanceOf(InvalidTokenException.class)
-        .hasMessage("Invalid or already used password reset code");
-  }
-
-  @Test
   void resetPassword_noActiveOtp_throwsInvalidTokenException() {
     ResetPasswordRequest request = new ResetPasswordRequest();
     request.setEmail("test@example.com");
-    request.setOtp("482913");
     request.setNewPassword("newPassword123");
 
     when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
@@ -750,7 +922,6 @@ class AuthServiceTest {
   void resetPassword_unknownEmail_throwsInvalidTokenException() {
     ResetPasswordRequest request = new ResetPasswordRequest();
     request.setEmail("missing@example.com");
-    request.setOtp("482913");
     request.setNewPassword("newPassword123");
 
     when(userRepository.findByEmail("missing@example.com")).thenReturn(Optional.empty());
