@@ -98,6 +98,6 @@ curl -X POST http://localhost:8080/api/auth/forgot-password \
 
 ## Related
 - Feature Spec: `docs/feats/forgot-password-reset.md`
-- ADR: `docs/adrs/003-password-reset-otp-storage.md`
-- Counterpart endpoint: `docs/apis/auth/post-reset-password.md`
+- ADR: `docs/adrs/003-password-reset-otp-storage.md`, `docs/adrs/006-optional-otp-verified-stage.md`
+- Counterpart endpoints: `docs/apis/auth/post-verify-password-reset.md` (step 1), `docs/apis/auth/post-reset-password.md` (step 2)
 - Business Rules: `docs/brs/auth.md`
