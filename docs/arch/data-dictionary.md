@@ -538,7 +538,7 @@ _Description: Access token denylist for immediate revocation. Stores JWT ID (jti
 
 ## Table 23: OTP Code
 
-_Description: Stores SHA-256 hashes of 6-digit auth codes for password reset and email verification (purpose column, V14 / ADR-004). One row per issued code; at most one unused, unexpired row is active per (user, purpose)._
+_Description: Stores SHA-256 hashes of 6-digit auth codes for password reset and email verification (purpose column, V14 / ADR-004). One row per issued code; at most one unused, unexpired row is active per (user, purpose). Optional verified stage (verified_at, V16 / ADR-006) records a code that has been proven correct but not yet consumed._
 
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
@@ -548,6 +548,7 @@ _Description: Stores SHA-256 hashes of 6-digit auth codes for password reset and
 | purpose | VARCHAR(32) | - | No | PASSWORD_RESET or EMAIL_VERIFICATION (default PASSWORD_RESET for rows migrated from V13) |
 | expires_at | TIMESTAMPTZ | - | No | Code expiration timestamp (issued_at + 10 minutes) |
 | used_at | TIMESTAMPTZ | - | Yes | When the code was consumed or superseded (NULL = active) |
+| verified_at | TIMESTAMPTZ | - | Yes | Optional verified stage (V16 / ADR-006): when the code was proven correct but not yet consumed. Set only by PASSWORD_RESET codes between the verify and reset steps; EMAIL_VERIFICATION rows keep NULL. NULL = not yet verified |
 | created_at | TIMESTAMPTZ | - | No | Timestamp when the code was issued |
 
 **Constraints:**
