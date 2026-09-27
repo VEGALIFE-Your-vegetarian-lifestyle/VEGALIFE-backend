@@ -805,7 +805,8 @@ class AuthServiceTest {
     when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
     when(otpCodeRepository.findLatestUnusedByUserIdAndPurpose(userId, OtpPurpose.PASSWORD_RESET))
         .thenReturn(Optional.of(otpRow));
-    when(otpCodeRepository.consumeVerifiedOtp(otpRow.getId(), Instant.now())).thenReturn(1);
+    when(otpCodeRepository.consumeVerifiedOtp(eq(otpRow.getId()), any(Instant.class)))
+        .thenReturn(1);
     when(passwordEncoder.encode("newPassword123")).thenReturn("newEncodedHash");
     when(userRepository.save(any(User.class))).thenReturn(user);
 
