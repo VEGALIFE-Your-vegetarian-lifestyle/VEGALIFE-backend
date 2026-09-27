@@ -51,7 +51,19 @@ spring:
     encoding: UTF-8
     cache: false
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
 app:
+  mail:
+    from: ${MAIL_FROM:noreply@vegalife.local}
+
   auth:
     access-token-expiry-minutes: 15
     refresh-token-expiry-days: 7

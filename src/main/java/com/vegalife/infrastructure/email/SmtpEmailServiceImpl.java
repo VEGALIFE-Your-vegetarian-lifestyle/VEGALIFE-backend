@@ -26,11 +26,15 @@ public class SmtpEmailServiceImpl implements EmailService {
   @Value("${app.email-verification.otp-expiry-minutes:10}")
   private int emailVerificationOtpExpiryMinutes;
 
+  @Value("${app.mail.from:}")
+  private String fromAddress;
+
   @Override
   public void sendVerificationOtp(String to, String username, String otp) {
     try {
       MimeMessage message = mailSender.createMimeMessage();
       MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+      applyFrom(helper);
 
       helper.setTo(to);
       helper.setSubject("Verify your email - Vegalife");
@@ -56,6 +60,7 @@ public class SmtpEmailServiceImpl implements EmailService {
     try {
       MimeMessage message = mailSender.createMimeMessage();
       MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+      applyFrom(helper);
 
       helper.setTo(to);
       helper.setSubject("Reset your password - Vegalife");
@@ -73,6 +78,12 @@ public class SmtpEmailServiceImpl implements EmailService {
     } catch (MessagingException e) {
       log.error("Failed to send password reset email to: {}", to, e);
       throw new RuntimeException("Failed to send password reset email", e);
+    }
+  }
+
+  private void applyFrom(MimeMessageHelper helper) throws MessagingException {
+    if (fromAddress != null && !fromAddress.isBlank()) {
+      helper.setFrom(fromAddress);
     }
   }
 }
