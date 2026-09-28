@@ -133,7 +133,7 @@ Active
 
 ## Statement
 
-When a user creates a post, the system sets its status to `created`, its view count to `0`, and its publication timestamp to null. The client cannot set these fields.
+When a user creates a post, the system sets its view count to `0`. The post starts as a private draft (`created`) unless the client asks to publish (`publish: true`), which is accepted only when the post has all information required for its type and at least one active category (BR-CONTENT-002/003/004); it is then `published` with `publishedAt` set. Status and view count cannot otherwise be set by the client.
 
 ## Rationale
 
@@ -203,7 +203,7 @@ Active
 
 ## Statement
 
-An authenticated user may edit a post only when the post is owned by that user and `deleted_at` is null. A missing post, soft-deleted post, or post owned by another user is reported as not found.
+An authenticated user may edit a post only when the post is owned by that user and `deleted_at` is null; an Administrator may edit any non-deleted post (BR-CONTENT-001). For a non-admin, a missing post, soft-deleted post, or post owned by another user is reported as not found. Every edit an Administrator makes to another user's post is recorded in `moderation_log` (actor, action, target, time) per BR-ADMIN-002.
 
 ## Rationale
 
@@ -211,7 +211,7 @@ Post ownership is private user content. Applying the same owner boundary to edit
 
 ## Scope & Exceptions
 
-Applies to `PATCH /api/posts/{postId}`. Administrative moderation edits are outside this rule.
+Applies to `PATCH /api/posts/{postId}`.
 
 ## Enforcement
 
@@ -239,7 +239,7 @@ Active
 
 ## Statement
 
-Post edits accept a non-empty subset of `title`, `content`, and `featuredImageUrl`. Only supplied, non-null values are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters, and supplied content must not be blank. Post lifecycle and ownership fields are system-controlled and are not editable through this endpoint.
+Post edits accept a non-empty subset of `title`, `content`, `featuredImageUrl`, `videoUrl`, `mediaId`, `categoryIds`, and `publish`. Only supplied, non-null values are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters, and supplied content must not be blank. The post `type` is fixed at creation and any different `type` is rejected (BR-CONTENT-002); video fields are rejected for blog posts. `categoryIds` replaces the category set and may only reference active categories (BR-CONTENT-004). `publish: true` publishes and `publish: false` returns the post to a private draft; a post that is or becomes published must keep at least one category and, for video, a video file or link (BR-CONTENT-003). Only an Administrator may change the state of a `hidden` post. Ownership and view count are not editable.
 
 ## Rationale
 
@@ -251,8 +251,8 @@ Applies to `PATCH /api/posts/{postId}`. Removing a featured image by sending nul
 
 ## Enforcement
 
-- Request DTO: `PostUpdateRequest` validates supplied text and rejects an empty update.
-- Service: `PostService.updatePost()` applies only non-null request values.
+- Request DTO: `PostUpdateRequest` validates supplied text (null allowed, blank rejected) and rejects an empty update.
+- Service: `PostService.updatePost()` applies only non-null request values and enforces the type, category and publish rules.
 - API reference: `docs/apis/post/patch-posts-postid.md`.
 
 ## Last Reviewed

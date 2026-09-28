@@ -14,6 +14,7 @@ import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
@@ -42,6 +43,8 @@ class PostServiceTest {
   @Mock private CategoryRepository categoryRepository;
 
   @Mock private MediaRepository mediaRepository;
+
+  @Mock private ModerationLogRepository moderationLogRepository;
 
   @Mock private PostMapper postMapper;
 
@@ -210,6 +213,7 @@ class PostServiceTest {
             .title("Old title")
             .content("Keep this content")
             .featuredImageUrl("https://example.com/old.jpg")
+            .categories(new java.util.HashSet<>(Set.of(category)))
             .status(Post.Status.published)
             .viewCount(12)
             .build();
@@ -220,7 +224,7 @@ class PostServiceTest {
     when(postRepository.saveAndFlush(existingPost)).thenReturn(existingPost);
     when(postMapper.toListResponse(existingPost)).thenReturn(expectedResponse);
 
-    PostListResponse response = postService.updatePost(userId, postId, updateRequest);
+    PostListResponse response = postService.updatePost(userId, false, postId, updateRequest);
 
     assertThat(response).isSameAs(expectedResponse);
     assertThat(existingPost.getTitle()).isEqualTo("New title");
@@ -239,10 +243,172 @@ class PostServiceTest {
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> postService.updatePost(userId, postId, updateRequest))
+    assertThatThrownBy(() -> postService.updatePost(userId, false, postId, updateRequest))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
 
     verify(postRepository, never()).saveAndFlush(post);
+  }
+
+  private Post ownedPost(UUID postId, Post.Type type, Post.Status status) {
+    return Post.builder()
+        .id(postId)
+        .user(user)
+        .type(type)
+        .title("Title")
+        .content("Body")
+        .status(status)
+        .viewCount(0)
+        .categories(new java.util.HashSet<>(Set.of(category)))
+        .build();
+  }
+
+  @Test
+  void updatePost_rejectsTypeChange() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.created);
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+
+    assertThatThrownBy(
+            () ->
+                postService.updatePost(
+                    userId,
+                    false,
+                    postId,
+                    PostUpdateRequest.builder().type(Post.Type.video).build()))
+        .isInstanceOf(ValidationException.class)
+        .hasMessage("Post type cannot be changed");
+    verify(postRepository, never()).saveAndFlush(existing);
+  }
+
+  @Test
+  void updatePost_rejectsVideoFieldsOnBlog() {
+    UUID postId = UUID.randomUUID();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(ownedPost(postId, Post.Type.blog, Post.Status.created)));
+
+    assertThatThrownBy(
+            () ->
+                postService.updatePost(
+                    userId,
+                    false,
+                    postId,
+                    PostUpdateRequest.builder().videoUrl("https://example.com/v.mp4").build()))
+        .isInstanceOf(ValidationException.class)
+        .hasMessage("A blog post cannot have a video");
+  }
+
+  @Test
+  void updatePost_publishesDraftWithCategory() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.created);
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.updatePost(
+        userId, false, postId, PostUpdateRequest.builder().publish(true).build());
+
+    assertThat(existing.getStatus()).isEqualTo(Post.Status.published);
+    assertThat(existing.getPublishedAt()).isNotNull();
+  }
+
+  @Test
+  void updatePost_rejectsPublishWithoutCategory() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.created);
+    existing.setCategories(new java.util.HashSet<>());
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+
+    assertThatThrownBy(
+            () ->
+                postService.updatePost(
+                    userId, false, postId, PostUpdateRequest.builder().publish(true).build()))
+        .isInstanceOf(ValidationException.class)
+        .hasMessage("At least one category is required to publish a post");
+  }
+
+  @Test
+  void updatePost_rejectsRemovingLastCategoryFromPublishedPost() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.published);
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+
+    assertThatThrownBy(
+            () ->
+                postService.updatePost(
+                    userId,
+                    false,
+                    postId,
+                    PostUpdateRequest.builder().categoryIds(Set.of()).build()))
+        .isInstanceOf(ValidationException.class);
+    verify(postRepository, never()).saveAndFlush(existing);
+  }
+
+  @Test
+  void updatePost_unpublishReturnsPostToDraft() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.published);
+    existing.setPublishedAt(java.time.Instant.now());
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.updatePost(
+        userId, false, postId, PostUpdateRequest.builder().publish(false).build());
+
+    assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(existing.getPublishedAt()).isNull();
+  }
+
+  @Test
+  void updatePost_ownerCannotRepublishHiddenPost() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.hidden);
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+
+    assertThatThrownBy(
+            () ->
+                postService.updatePost(
+                    userId, false, postId, PostUpdateRequest.builder().publish(true).build()))
+        .isInstanceOf(ValidationException.class)
+        .hasMessage("A hidden post can only be changed by an administrator");
+  }
+
+  @Test
+  void updatePost_adminEditingAnotherUsersPostIsRecorded() {
+    UUID postId = UUID.randomUUID();
+    UUID adminId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.created);
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.updatePost(
+        adminId, true, postId, PostUpdateRequest.builder().title("Moderated").build());
+
+    assertThat(existing.getTitle()).isEqualTo("Moderated");
+    verify(moderationLogRepository)
+        .save(
+            org.mockito.ArgumentMatchers.argThat(
+                log ->
+                    adminId.equals(log.getActorId())
+                        && postId.equals(log.getTargetId())
+                        && "EDIT_POST".equals(log.getAction())));
+  }
+
+  @Test
+  void updatePost_adminEditingOwnPostIsNotLogged() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.created);
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.updatePost(userId, true, postId, PostUpdateRequest.builder().title("Mine").build());
+
+    verify(moderationLogRepository, never()).save(org.mockito.ArgumentMatchers.any());
   }
 }

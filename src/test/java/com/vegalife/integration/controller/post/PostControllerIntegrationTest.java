@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -65,6 +66,8 @@ class PostControllerIntegrationTest {
   @Autowired private PostRepository postRepository;
 
   @Autowired private CategoryRepository categoryRepository;
+
+  @Autowired private ModerationLogRepository moderationLogRepository;
 
   @Autowired private JwtTokenService jwtTokenService;
 
@@ -183,6 +186,10 @@ class PostControllerIntegrationTest {
   @Test
   void updatePost_withOneField_updatesOnlyThatField() throws Exception {
     Post existingPost = createPost(user, "Old title", Post.Status.published, null);
+    existingPost.setCategories(
+        new java.util.HashSet<>(
+            java.util.Set.of(
+                categoryRepository.saveAndFlush(Category.builder().name("Recipes").build()))));
     existingPost.setContent("Keep this content");
     existingPost.setFeaturedImageUrl("https://example.com/old.jpg");
     existingPost.setViewCount(12);
@@ -312,6 +319,73 @@ class PostControllerIntegrationTest {
   }
 
   @Test
+  void updatePost_changingTypeReturns400() throws Exception {
+    Post existingPost = createPost(user, "Post title", Post.Status.created, null);
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}", existingPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"video\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Post type cannot be changed"));
+  }
+
+  @Test
+  void updatePost_publishesDraftWhenCategoryAssigned() throws Exception {
+    Post existingPost = createPost(user, "Post title", Post.Status.created, null);
+    Category category = categoryRepository.saveAndFlush(Category.builder().name("Recipes").build());
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}", existingPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"categoryIds\":[\"%s\"],\"publish\":true}".formatted(category.getId())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("published"))
+        .andExpect(jsonPath("$.data.categoryIds[0]").value(category.getId().toString()));
+  }
+
+  @Test
+  void updatePost_publishWithoutCategoryReturns400() throws Exception {
+    Post existingPost = createPost(user, "Post title", Post.Status.created, null);
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}", existingPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"publish\":true}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void updatePost_adminCanEditAnotherUsersPostAndActionIsLogged() throws Exception {
+    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
+    Post otherUsersPost = createPost(otherUser, "Other title", Post.Status.created, null);
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}", otherUsersPost.getId())
+                .header("Authorization", "Bearer " + jwtTokenService.generateAccessToken(admin))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Moderated title\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.title").value("Moderated title"));
+
+    assertThat(moderationLogRepository.findAll())
+        .singleElement()
+        .satisfies(
+            log -> {
+              assertThat(log.getActorId()).isEqualTo(admin.getId());
+              assertThat(log.getTargetId()).isEqualTo(otherUsersPost.getId());
+              assertThat(log.getAction()).isEqualTo("EDIT_POST");
+            });
+  }
+
+  @Test
   void listUserPosts_returnsOnlyOwnNonDeletedPostsWithAnyStatus() throws Exception {
     createPost(user, "Published post", Post.Status.published, null);
     createPost(user, "Hidden post", Post.Status.hidden, null);
@@ -366,12 +440,16 @@ class PostControllerIntegrationTest {
   }
 
   private User createUser(String username, String email) {
+    return createUser(username, email, User.Role.USER);
+  }
+
+  private User createUser(String username, String email, User.Role role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
+            .role(role)
             .status(User.Status.activated)
             .emailVerified(true)
             .build());

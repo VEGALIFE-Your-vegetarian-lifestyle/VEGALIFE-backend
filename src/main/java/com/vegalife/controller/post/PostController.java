@@ -12,6 +12,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -40,9 +41,11 @@ public class PostController {
   @PatchMapping("/{postId}")
   public ResponseEntity<ApiResponse<PostListResponse>> updatePost(
       @AuthenticationPrincipal UUID userId,
+      Authentication authentication,
       @PathVariable UUID postId,
       @Valid @RequestBody PostUpdateRequest request) {
-    PostListResponse post = postService.updatePost(userId, postId, request);
+    PostListResponse post =
+        postService.updatePost(userId, isAdmin(authentication), postId, request);
     return ResponseEntity.ok(ApiResponse.success(post, "Post updated successfully"));
   }
 
@@ -51,5 +54,10 @@ public class PostController {
       @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute PostListRequest request) {
     PageResponse<PostListResponse> posts = postService.listUserPosts(userId, request);
     return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
+  }
+
+  private boolean isAdmin(Authentication authentication) {
+    return authentication.getAuthorities().stream()
+        .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
   }
 }

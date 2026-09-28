@@ -5,9 +5,11 @@ import com.vegalife.dto.request.post.PostCreateRequest;
 import com.vegalife.dto.request.post.PostListRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.response.post.PostListResponse;
+import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
@@ -31,10 +33,14 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class PostService {
 
+  private static final String CATEGORY_REQUIRED_TO_PUBLISH =
+      "At least one category is required to publish a post";
+
   private final PostRepository postRepository;
   private final UserRepository userRepository;
   private final CategoryRepository categoryRepository;
   private final MediaRepository mediaRepository;
+  private final ModerationLogRepository moderationLogRepository;
   private final PostMapper postMapper;
 
   @Transactional
@@ -45,8 +51,11 @@ public class PostService {
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
     validateTypeSpecificFields(request);
-    Set<Category> categories = resolveCategories(request);
-    Media media = resolveMedia(request);
+    Set<Category> categories = resolveCategories(request.getCategoryIds());
+    if (request.isPublish() && categories.isEmpty()) {
+      throw new ValidationException(CATEGORY_REQUIRED_TO_PUBLISH);
+    }
+    Media media = resolveMedia(request.getMediaId());
 
     Post post = postMapper.toEntity(request);
     post.setUser(user);
@@ -71,12 +80,28 @@ public class PostService {
     return postMapper.toListResponse(postRepository.saveAndFlush(post));
   }
 
+  /**
+   * BR-CONTENT-001: only the owner or an administrator may edit a post. A non-admin sees other
+   * users' posts as not found. BR-ADMIN-002: an administrator's edit of someone else's post is
+   * recorded in the moderation log.
+   */
   @Transactional
-  public PostListResponse updatePost(UUID userId, UUID postId, PostUpdateRequest request) {
+  public PostListResponse updatePost(
+      UUID actorId, boolean isAdmin, UUID postId, PostUpdateRequest request) {
     Post post =
-        postRepository
-            .findByIdAndUser_IdAndDeletedAtIsNull(postId, userId)
+        (isAdmin
+                ? postRepository.findByIdAndDeletedAtIsNull(postId)
+                : postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, actorId))
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+    // BR-CONTENT-002: the type is fixed at creation.
+    if (request.getType() != null && request.getType() != post.getType()) {
+      throw new ValidationException("Post type cannot be changed");
+    }
+    boolean isVideo = post.getType() == Post.Type.video;
+    if (!isVideo && (request.getVideoUrl() != null || request.getMediaId() != null)) {
+      throw new ValidationException("A blog post cannot have a video");
+    }
 
     if (request.getTitle() != null) {
       post.setTitle(request.getTitle());
@@ -87,8 +112,65 @@ public class PostService {
     if (request.getFeaturedImageUrl() != null) {
       post.setFeaturedImageUrl(request.getFeaturedImageUrl());
     }
+    if (request.getVideoUrl() != null) {
+      if (request.getVideoUrl().isBlank()) {
+        throw new ValidationException("Video link must not be blank");
+      }
+      post.setVideoUrl(request.getVideoUrl());
+    }
+    if (request.getMediaId() != null) {
+      post.setMedia(new HashSet<>(Set.of(resolveMedia(request.getMediaId()))));
+    }
+    if (request.getCategoryIds() != null) {
+      post.setCategories(resolveCategories(request.getCategoryIds()));
+    }
 
-    return postMapper.toListResponse(postRepository.saveAndFlush(post));
+    applyPublishState(post, request.getPublish(), isAdmin);
+
+    Post saved = postRepository.saveAndFlush(post);
+    if (isAdmin && !saved.getUser().getId().equals(actorId)) {
+      moderationLogRepository.save(
+          ModerationLog.builder()
+              .actorId(actorId)
+              .action("EDIT_POST")
+              .targetType("POST")
+              .targetId(saved.getId())
+              .build());
+    }
+    return postMapper.toListResponse(saved);
+  }
+
+  /**
+   * BR-CONTENT-003: a post may be published only when it has the information its type requires and
+   * at least one active category; unpublishing returns it to a private draft. A post that is (or
+   * stays) published is re-checked so an edit cannot leave it without a category.
+   */
+  private void applyPublishState(Post post, Boolean publish, boolean isAdmin) {
+    boolean published = post.getStatus() == Post.Status.published;
+    boolean willBePublished = publish != null ? publish : published;
+    if (willBePublished) {
+      if (post.getCategories().isEmpty()) {
+        throw new ValidationException(CATEGORY_REQUIRED_TO_PUBLISH);
+      }
+      if (post.getType() == Post.Type.video
+          && isBlank(post.getVideoUrl())
+          && post.getMedia().isEmpty()) {
+        throw new ValidationException("A video post requires a video file or link");
+      }
+    }
+    if (publish == null) {
+      return;
+    }
+    if (post.getStatus() == Post.Status.hidden && !isAdmin) {
+      throw new ValidationException("A hidden post can only be changed by an administrator");
+    }
+    if (publish && !published) {
+      post.setStatus(Post.Status.published);
+      post.setPublishedAt(Instant.now());
+    } else if (!publish && published) {
+      post.setStatus(Post.Status.created);
+      post.setPublishedAt(null);
+    }
   }
 
   @Transactional(readOnly = true)
@@ -114,13 +196,9 @@ public class PostService {
     }
   }
 
-  /** BR-CONTENT-003 / BR-CONTENT-004: publishing needs at least one active category. */
-  private Set<Category> resolveCategories(PostCreateRequest request) {
-    Set<UUID> ids = request.getCategoryIds() == null ? Set.of() : request.getCategoryIds();
-    if (request.isPublish() && ids.isEmpty()) {
-      throw new ValidationException("At least one category is required to publish a post");
-    }
-    if (ids.isEmpty()) {
+  /** BR-CONTENT-004: only existing, active categories may be assigned. */
+  private Set<Category> resolveCategories(Set<UUID> ids) {
+    if (ids == null || ids.isEmpty()) {
       return new HashSet<>();
     }
     List<Category> found = categoryRepository.findByIdInAndDeletedAtIsNull(ids);
@@ -130,12 +208,12 @@ public class PostService {
     return new HashSet<>(found);
   }
 
-  private Media resolveMedia(PostCreateRequest request) {
-    if (request.getMediaId() == null) {
+  private Media resolveMedia(UUID mediaId) {
+    if (mediaId == null) {
       return null;
     }
     Media media =
-        mediaRepository.findByIdInAndDeletedAtIsNull(Set.of(request.getMediaId())).stream()
+        mediaRepository.findByIdInAndDeletedAtIsNull(Set.of(mediaId)).stream()
             .findFirst()
             .orElseThrow(() -> new ResourceNotFoundException("Media not found"));
     if (media.getStatus() != Media.Status.succeed) {

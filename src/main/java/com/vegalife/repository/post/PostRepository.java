@@ -11,6 +11,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface PostRepository extends JpaRepository<Post, UUID> {
 
+  Optional<Post> findByIdAndDeletedAtIsNull(UUID id);
+
   Optional<Post> findByIdAndUser_IdAndDeletedAtIsNull(UUID id, UUID userId);
 
   Page<Post> findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID userId, Pageable pageable);

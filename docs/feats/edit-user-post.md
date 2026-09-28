@@ -10,7 +10,7 @@ Vegalife backend team
 
 ## Summary
 
-Allow an authenticated user to partially edit a post they own, updating only the supplied title, content, or featured image URL.
+Allow the owner (or an Administrator) to partially edit a post: title, content, image, video, categories, and draft/published state, following BR-CONTENT-001 to 004 and BR-ADMIN-002.
 
 ## Problem / motivation
 
@@ -24,8 +24,8 @@ Users can create and list their posts, but currently cannot correct or update co
 
 ## Non-goals
 
-- Semantic filtering, automatic publishing, or moderation status changes.
-- Editing posts owned by another user, including by an administrator through this endpoint.
+- Semantic filtering (deferred until its requirements are described).
+- Editing posts owned by another user, except by an Administrator (BR-CONTENT-001, logged per BR-ADMIN-002).
 - Deleting posts, restoring soft-deleted posts, or changing ownership.
 - Clearing an image by sending `null`; an omitted or null field leaves the current value unchanged.
 
