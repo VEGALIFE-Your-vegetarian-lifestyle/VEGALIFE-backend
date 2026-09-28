@@ -8,8 +8,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
@@ -62,6 +64,8 @@ class PostControllerIntegrationTest {
 
   @Autowired private PostRepository postRepository;
 
+  @Autowired private CategoryRepository categoryRepository;
+
   @Autowired private JwtTokenService jwtTokenService;
 
   private User user;
@@ -86,6 +90,7 @@ class PostControllerIntegrationTest {
                     """
                     {
                       "title": "Vegan tofu bowl",
+                      "type": "blog",
                       "content": "A simple plant-based lunch.",
                       "featuredImageUrl": "https://example.com/tofu-bowl.jpg"
                     }
@@ -101,6 +106,56 @@ class PostControllerIntegrationTest {
     assertThat(createdPost.getUser().getId()).isEqualTo(user.getId());
     assertThat(createdPost.getStatus()).isEqualTo(Post.Status.created);
     assertThat(createdPost.getPublishedAt()).isNull();
+  }
+
+  @Test
+  void createPost_publishWithActiveCategory_publishesPost() throws Exception {
+    Category category = categoryRepository.saveAndFlush(Category.builder().name("Recipes").build());
+
+    mockMvc
+        .perform(
+            post("/api/posts")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "title": "Vegan tofu bowl",
+                      "type": "blog",
+                      "content": "A simple plant-based lunch.",
+                      "categoryIds": ["%s"],
+                      "publish": true
+                    }
+                    """
+                        .formatted(category.getId())))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.data.status").value("published"))
+        .andExpect(jsonPath("$.data.type").value("blog"))
+        .andExpect(jsonPath("$.data.categoryIds[0]").value(category.getId().toString()));
+
+    assertThat(postRepository.findAll().getFirst().getPublishedAt()).isNotNull();
+  }
+
+  @Test
+  void createPost_publishWithoutCategory_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/posts")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"T\",\"type\":\"blog\",\"content\":\"C\",\"publish\":true}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void createPost_videoWithoutFileOrLink_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/posts")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"T\",\"type\":\"video\"}"))
+        .andExpect(status().isBadRequest());
   }
 
   @Test
@@ -120,7 +175,7 @@ class PostControllerIntegrationTest {
             post("/api/posts")
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"title\":\" \",\"content\":\"Test content\"}"))
+                .content("{\"title\":\" \",\"type\":\"blog\",\"content\":\"Test content\"}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.message").value("Validation failed"));
   }

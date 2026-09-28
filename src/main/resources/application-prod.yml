@@ -1,0 +1,60 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    # Neon connection string (pooled endpoint, sslmode=require — Neon rejects
+    # non-TLS connections). Required; the app fails fast if unset.
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      # Render free instances are small and Neon pooled connections are limited.
+      maximum-pool-size: 5
+      minimum-idle: 1
+      idle-timeout: 300000
+      connection-timeout: 20000
+      leak-detection-threshold: 60000
+
+  jpa:
+    hibernate:
+      # Flyway owns the schema — never Hibernate auto-DDL in production
+      # (validated mismatch: otp_hash is CHAR(64), entity maps VARCHAR(64)).
+      ddl-auto: none
+
+  mail:
+    # Brevo SMTP relay. Render blocks outbound 25/465/587 on free instances,
+    # so port 2525 (STARTTLS) is the default here — verified supported by Brevo;
+    # see docs/arch/deployment.md for the on-Render verification step and the
+    # HTTPS API fallback if 2525 turns out to be blocked as well.
+    host: ${MAIL_HOST:smtp-relay.brevo.com}
+    port: ${MAIL_PORT:2525}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+server:
+  # Render exposes the container on $PORT (dockerPort 8080 in render.yaml);
+  # fall back to SERVER_PORT, then 8080 for local runs.
+  port: ${PORT:${SERVER_PORT:8080}}
+  shutdown: graceful
+
+app:
+  auth:
+    jwt:
+      # Required — no dev default in prod.
+      secret: ${AUTH_JWT_SECRET}
+  mail:
+    # Required — real Brevo-verified sender address.
+    from: ${MAIL_FROM}
+
+logging:
+  level:
+    root: INFO
+    com.vegalife: INFO
+    org.springframework.web: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN

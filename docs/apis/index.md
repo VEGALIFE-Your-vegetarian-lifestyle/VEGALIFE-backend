@@ -13,7 +13,8 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `auth/post-refresh.md` | `POST /api/auth/refresh` | Refresh access token |
 | `auth/post-logout.md` | `POST /api/auth/logout` | User logout |
 | `auth/post-forgot-password.md` | `POST /api/auth/forgot-password` | Request password-reset OTP by email |
-| `auth/post-reset-password.md` | `POST /api/auth/reset-password` | Reset password with OTP |
+| `auth/post-verify-password-reset.md` | `POST /api/auth/verify-password-reset` | Verify password-reset OTP (step 1 of 2) |
+| `auth/post-reset-password.md` | `POST /api/auth/reset-password` | Set new password after verification (step 2 of 2) |
 | `profile/put-profile.md` | `PUT /api/profile` | Update user profile |
 | `post/post-posts.md` | `POST /api/posts` | Create a post for the authenticated user |
 | `post/get-posts.md` | `GET /api/posts` | List the authenticated user's posts |

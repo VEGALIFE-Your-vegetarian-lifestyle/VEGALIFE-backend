@@ -8,6 +8,7 @@ import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.request.auth.ResendVerificationOtpRequest;
 import com.vegalife.dto.request.auth.ResetPasswordRequest;
 import com.vegalife.dto.request.auth.VerifyEmailRequest;
+import com.vegalife.dto.request.auth.VerifyPasswordResetRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.model.token.OtpCode;
@@ -264,7 +265,7 @@ public class AuthService {
   }
 
   @Transactional
-  public void resetPassword(ResetPasswordRequest request) {
+  public void verifyPasswordReset(VerifyPasswordResetRequest request) {
     User user =
         userRepository
             .findByEmail(request.getEmail())
@@ -283,11 +284,44 @@ public class AuthService {
       throw new InvalidTokenException(INVALID_RESET_CODE_MESSAGE);
     }
 
+    if (otpRow.isVerified()) {
+      log.debug("Password reset OTP already verified for user: {}", user.getUsername());
+      return;
+    }
+
+    otpRow.setVerifiedAt(Instant.now());
+    otpCodeRepository.save(otpRow);
+
+    log.info("Password reset OTP verified for user: {}", user.getUsername());
+  }
+
+  @Transactional
+  public void resetPassword(ResetPasswordRequest request) {
+    User user =
+        userRepository
+            .findByEmail(request.getEmail())
+            .orElseThrow(() -> new InvalidTokenException(INVALID_RESET_CODE_MESSAGE));
+
+    OtpCode otpRow =
+        otpCodeRepository
+            .findLatestUnusedByUserIdAndPurpose(user.getId(), OtpPurpose.PASSWORD_RESET)
+            .orElseThrow(() -> new InvalidTokenException(INVALID_RESET_CODE_MESSAGE));
+
+    if (otpRow.isExpired()) {
+      throw new ExpiredTokenException(EXPIRED_RESET_CODE_MESSAGE);
+    }
+
+    if (!otpRow.isVerified()) {
+      throw new InvalidTokenException(INVALID_RESET_CODE_MESSAGE);
+    }
+
+    int consumed = otpCodeRepository.consumeVerifiedOtp(otpRow.getId(), Instant.now());
+    if (consumed != 1) {
+      throw new InvalidTokenException(INVALID_RESET_CODE_MESSAGE);
+    }
+
     user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
     userRepository.save(user);
-
-    otpRow.setUsedAt(Instant.now());
-    otpCodeRepository.save(otpRow);
 
     jwtTokenService.revokeAllUserRefreshTokens(user.getId());
 

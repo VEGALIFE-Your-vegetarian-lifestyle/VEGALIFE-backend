@@ -20,10 +20,10 @@
 | BR-AUTH-014 | Access Token Blacklist on Demand | Active | 2026-09-22 |
 | BR-AUTH-015 | Expired Token Cleanup Daily | Active | 2026-09-22 |
 | BR-AUTH-016 | Account State Checked on Every Authenticated Request | Active | 2026-09-23 |
-| BR-AUTH-017 | OTP Lifecycle (6-digit, 10 min, single-use, per user per purpose) | Active | 2026-09-24 |
-| BR-AUTH-018 | Forgot Password Does Not Reveal Account Existence | Active | 2026-09-24 |
+| BR-AUTH-017 | OTP Lifecycle (6-digit, 10 min, single-use, per user per purpose) | Active | 2026-09-27 |
+| BR-AUTH-018 | Forgot Password Does Not Reveal Account Existence | Active | 2026-09-27 |
 | BR-AUTH-019 | OTP Stored as SHA-256 Hash | Active | 2026-09-24 |
-| BR-AUTH-020 | Password Reset Revokes Refresh Tokens | Active | 2026-09-24 |
+| BR-AUTH-020 | Password Reset Revokes Refresh Tokens | Active | 2026-09-27 |
 | BR-AUTH-021 | Email Verification OTP Lifecycle and Resend | Active | 2026-09-24 |
 
 ---
@@ -471,6 +471,8 @@ Active
 ## Statement
 An OTP is a 6-digit numeric code valid for 10 minutes from issuance, usable exactly once. At most one unused OTP exists **per user per purpose** at any time: issuing a new code supersedes (marks used) every previous unused code for that user **of the same purpose only** — a password-reset code never invalidates a pending email-verification code, and vice versa. Expiry is configurable per purpose (`app.password-reset.otp-expiry-minutes`, `app.email-verification.otp-expiry-minutes`, both default 10).
 
+For the `PASSWORD_RESET` purpose the lifecycle has two stages: a correct code first sets `otp_code.verified_at` (via `POST /api/auth/verify-password-reset`, repeatable/idempotent until expiry — verification is not consumption), and the code is consumed exactly once (`used_at`, CAS-guarded) only when the new password is set (`POST /api/auth/reset-password`). Email-verification codes have no verification stage: `verified_at` stays null and they are consumed directly by `POST /api/auth/verify-email`.
+
 ## Rationale
 A short, single-use window limits how long a leaked code is useful and ensures a user who never received (or lost) an email can always obtain a fresh code by requesting again. Purpose scoping keeps independent recovery flows from interfering with each other.
 
@@ -479,12 +481,13 @@ Applies to all OTPs in the `otp_code` table (both purposes). No exceptions. The 
 
 ## Enforcement
 - `AuthService`: issuing any OTP calls `OtpCodeRepository.markAllUnusedByUserIdAndPurpose(userId, purpose, now)` first, then inserts the new row
-- Consumption lookups are `findLatestUnusedByUserIdAndPurpose`; expired codes → `ExpiredTokenException`, wrong/used/missing → `InvalidTokenException` (both HTTP 400)
-- DB: `otp_code.purpose` / `used_at` / `expires_at` columns; hash match on `otp_hash`
-- API: `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`, `POST /api/auth/register`, `POST /api/auth/verify-email`, `POST /api/auth/resend-email`
+- Verification (`AuthService.verifyPasswordReset`): user lookup → row lookup → expired check → hash match → already-verified idempotent return → set `verified_at` + save
+- Consumption lookups are `findLatestUnusedByUserIdAndPurpose`; expired codes → `ExpiredTokenException`, wrong/used/missing → `InvalidTokenException` (both HTTP 400); password-reset consumption additionally requires `verified_at IS NOT NULL` and uses the CAS query `consumeVerifiedOtp` (`WHERE used_at IS NULL AND verified_at IS NOT NULL`, affected-rows != 1 → `InvalidTokenException`)
+- DB: `otp_code.purpose` / `verified_at` / `used_at` / `expires_at` columns; hash match on `otp_hash`
+- API: `POST /api/auth/forgot-password`, `POST /api/auth/verify-password-reset`, `POST /api/auth/reset-password`, `POST /api/auth/register`, `POST /api/auth/verify-email`, `POST /api/auth/resend-email`
 
 ## Last Reviewed
-2026-09-24, by <name/role>
+2026-09-27, by <name/role>
 
 ---
 
@@ -503,14 +506,14 @@ Active
 Prevents attackers from enumerating registered email addresses through the reset endpoint.
 
 ## Scope & Exceptions
-Applies only to the forgot-password response shape. Validation failures (malformed email) still return 400 — they reveal nothing about registration. `POST /api/auth/reset-password` likewise returns the same invalid-code message for unknown emails and wrong codes.
+Applies only to the forgot-password response shape. Validation failures (malformed email) still return 400 — they reveal nothing about registration. `POST /api/auth/verify-password-reset` and `POST /api/auth/reset-password` likewise return the same invalid-code message for unknown emails and wrong codes.
 
 ## Enforcement
 - `AuthService.forgotPassword()`: silent no-op path when `userRepository.findByEmail()` is empty; same `ApiResponse.success(...)` returned either way
 - API: constant message "If an account with that email exists, a password reset code has been sent"
 
 ## Last Reviewed
-2026-09-24, by <name/role>
+2026-09-27, by <name/role>
 
 ---
 
@@ -550,20 +553,20 @@ Applies to all OTP persistence (both purposes). The raw code exists only in proc
 Active
 
 ## Statement
-On a successful password reset, every active refresh token belonging to that user is revoked (`revoked_at = NOW()`).
+On a successful password reset, every active refresh token belonging to that user is revoked (`revoked_at = NOW()`). The revocation happens in the same transaction as password update and OTP consumption, at the final step of the flow (`POST /api/auth/reset-password` after `POST /api/auth/verify-password-reset`) — verifying the code alone does not revoke anything.
 
 ## Rationale
-Changing a password is a credential-recovery event; sessions established before the reset (potentially by an attacker who triggered the recovery, or still held by the old password's owner) must be terminated. Users must log in again with the new password.
+Changing a password is a credential-recovery event; sessions established before the reset (potentially by an attacker who triggered the recovery, or still held by the old password's owner) must be terminated. Users must log in again with the new password. Deferring revocation to the final step keeps the verify step a harmless, repeatable precondition check.
 
 ## Scope & Exceptions
 Applies to successful `POST /api/auth/reset-password` only. Access tokens are not actively blacklisted on reset (same limitation as BR-AUTH-016: the blacklist is not user-scoped); they lapse within their 15-minute expiry or on the per-request status check.
 
 ## Enforcement
-- `AuthService.resetPassword()`: calls `JwtTokenService.revokeAllUserRefreshTokens(userId)` (same mechanism as logout, BR-AUTH-013)
+- `AuthService.resetPassword()`: calls `JwtTokenService.revokeAllUserRefreshTokens(userId)` after the CAS consume succeeds (same mechanism as logout, BR-AUTH-013); `AuthService.verifyPasswordReset()` never revokes tokens
 - API: subsequent `POST /api/auth/refresh` with a pre-reset token → 400 "Refresh token has been revoked"
 
 ## Last Reviewed
-2026-09-24, by <name/role>
+2026-09-27, by <name/role>
 
 ---
 

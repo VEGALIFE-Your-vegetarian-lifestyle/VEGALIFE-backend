@@ -487,11 +487,85 @@ class AuthControllerTest {
   }
 
   @Test
+  void verifyPasswordReset_validRequest_returns200() throws Exception {
+    com.vegalife.dto.request.auth.VerifyPasswordResetRequest request =
+        new com.vegalife.dto.request.auth.VerifyPasswordResetRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("482913");
+
+    org.mockito.Mockito.doNothing()
+        .when(authService)
+        .verifyPasswordReset(any(com.vegalife.dto.request.auth.VerifyPasswordResetRequest.class));
+
+    mockMvc
+        .perform(
+            post("/api/auth/verify-password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Password reset code verified successfully"));
+  }
+
+  @Test
+  void verifyPasswordReset_invalidOtp_returns400() throws Exception {
+    com.vegalife.dto.request.auth.VerifyPasswordResetRequest request =
+        new com.vegalife.dto.request.auth.VerifyPasswordResetRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("000000");
+
+    org.mockito.Mockito.doThrow(
+            new com.vegalife.shared.exception.InvalidTokenException(
+                "Invalid or already used password reset code"))
+        .when(authService)
+        .verifyPasswordReset(any(com.vegalife.dto.request.auth.VerifyPasswordResetRequest.class));
+
+    mockMvc
+        .perform(
+            post("/api/auth/verify-password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Invalid or already used password reset code"));
+  }
+
+  @Test
+  void verifyPasswordReset_nonDigitOtp_returns400() throws Exception {
+    com.vegalife.dto.request.auth.VerifyPasswordResetRequest request =
+        new com.vegalife.dto.request.auth.VerifyPasswordResetRequest();
+    request.setEmail("test@example.com");
+    request.setOtp("abcdef");
+
+    mockMvc
+        .perform(
+            post("/api/auth/verify-password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void verifyPasswordReset_missingOtp_returns400() throws Exception {
+    com.vegalife.dto.request.auth.VerifyPasswordResetRequest request =
+        new com.vegalife.dto.request.auth.VerifyPasswordResetRequest();
+    request.setEmail("test@example.com");
+
+    mockMvc
+        .perform(
+            post("/api/auth/verify-password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
   void resetPassword_validRequest_returns200() throws Exception {
     com.vegalife.dto.request.auth.ResetPasswordRequest request =
         new com.vegalife.dto.request.auth.ResetPasswordRequest();
     request.setEmail("test@example.com");
-    request.setOtp("482913");
     request.setNewPassword("newPassword123");
 
     org.mockito.Mockito.doNothing()
@@ -509,11 +583,10 @@ class AuthControllerTest {
   }
 
   @Test
-  void resetPassword_invalidOtp_returns400() throws Exception {
+  void resetPassword_notVerifiedOtp_returns400() throws Exception {
     com.vegalife.dto.request.auth.ResetPasswordRequest request =
         new com.vegalife.dto.request.auth.ResetPasswordRequest();
     request.setEmail("test@example.com");
-    request.setOtp("000000");
     request.setNewPassword("newPassword123");
 
     org.mockito.Mockito.doThrow(
@@ -537,7 +610,6 @@ class AuthControllerTest {
     com.vegalife.dto.request.auth.ResetPasswordRequest request =
         new com.vegalife.dto.request.auth.ResetPasswordRequest();
     request.setEmail("test@example.com");
-    request.setOtp("482913");
     request.setNewPassword("newPassword123");
 
     org.mockito.Mockito.doThrow(
@@ -563,7 +635,6 @@ class AuthControllerTest {
     com.vegalife.dto.request.auth.ResetPasswordRequest request =
         new com.vegalife.dto.request.auth.ResetPasswordRequest();
     request.setEmail("test@example.com");
-    request.setOtp("482913");
     request.setNewPassword("short");
 
     mockMvc
@@ -576,19 +647,21 @@ class AuthControllerTest {
   }
 
   @Test
-  void resetPassword_nonDigitOtp_returns400() throws Exception {
-    com.vegalife.dto.request.auth.ResetPasswordRequest request =
-        new com.vegalife.dto.request.auth.ResetPasswordRequest();
-    request.setEmail("test@example.com");
-    request.setOtp("abcdef");
-    request.setNewPassword("newPassword123");
+  void resetPassword_legacyThreeFieldBody_stillPassesValidation_unknownOtpIgnored()
+      throws Exception {
+    String legacyBody =
+        "{\"email\":\"test@example.com\",\"otp\":\"482913\",\"newPassword\":\"newPassword123\"}";
+
+    org.mockito.Mockito.doNothing()
+        .when(authService)
+        .resetPassword(any(com.vegalife.dto.request.auth.ResetPasswordRequest.class));
 
     mockMvc
         .perform(
             post("/api/auth/reset-password")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.success").value(false));
+                .content(legacyBody))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true));
   }
 }
