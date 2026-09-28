@@ -88,11 +88,7 @@ public class PostService {
   @Transactional
   public PostListResponse updatePost(
       UUID actorId, boolean isAdmin, UUID postId, PostUpdateRequest request) {
-    Post post =
-        (isAdmin
-                ? postRepository.findByIdAndDeletedAtIsNull(postId)
-                : postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, actorId))
-            .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+    Post post = findManageablePost(actorId, isAdmin, postId);
 
     // BR-CONTENT-002: the type is fixed at creation.
     if (request.getType() != null && request.getType() != post.getType()) {
@@ -128,16 +124,42 @@ public class PostService {
     applyPublishState(post, request.getPublish(), isAdmin);
 
     Post saved = postRepository.saveAndFlush(post);
-    if (isAdmin && !saved.getUser().getId().equals(actorId)) {
+    recordModerationIfAdminOverride(actorId, isAdmin, saved, "EDIT_POST");
+    return postMapper.toListResponse(saved);
+  }
+
+  /**
+   * BR-CONTENT-001: only the owner or an Administrator may delete a post. Deletion is soft ({@code
+   * deletedAt}) so the row is kept. BR-ADMIN-002: an Administrator removing someone else's post is
+   * recorded in the moderation log.
+   */
+  @Transactional
+  public void deletePost(UUID actorId, boolean isAdmin, UUID postId) {
+    Post post = findManageablePost(actorId, isAdmin, postId);
+    post.setDeletedAt(Instant.now());
+    Post saved = postRepository.saveAndFlush(post);
+    recordModerationIfAdminOverride(actorId, isAdmin, saved, "DELETE_POST");
+  }
+
+  /** Owner sees own posts; an Administrator sees every non-deleted post. */
+  private Post findManageablePost(UUID actorId, boolean isAdmin, UUID postId) {
+    return (isAdmin
+            ? postRepository.findByIdAndDeletedAtIsNull(postId)
+            : postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, actorId))
+        .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+  }
+
+  private void recordModerationIfAdminOverride(
+      UUID actorId, boolean isAdmin, Post post, String action) {
+    if (isAdmin && !post.getUser().getId().equals(actorId)) {
       moderationLogRepository.save(
           ModerationLog.builder()
               .actorId(actorId)
-              .action("EDIT_POST")
+              .action(action)
               .targetType("POST")
-              .targetId(saved.getId())
+              .targetId(post.getId())
               .build());
     }
-    return postMapper.toListResponse(saved);
   }
 
   /**

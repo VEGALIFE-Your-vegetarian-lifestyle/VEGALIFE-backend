@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -47,6 +48,15 @@ public class PostController {
     PostListResponse post =
         postService.updatePost(userId, isAdmin(authentication), postId, request);
     return ResponseEntity.ok(ApiResponse.success(post, "Post updated successfully"));
+  }
+
+  @DeleteMapping("/{postId}")
+  public ResponseEntity<ApiResponse<Void>> deletePost(
+      @AuthenticationPrincipal UUID userId,
+      Authentication authentication,
+      @PathVariable UUID postId) {
+    postService.deletePost(userId, isAdmin(authentication), postId);
+    return ResponseEntity.ok(ApiResponse.success(null, "Post deleted successfully"));
   }
 
   @GetMapping

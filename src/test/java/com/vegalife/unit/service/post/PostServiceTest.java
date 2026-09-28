@@ -411,4 +411,50 @@ class PostServiceTest {
 
     verify(moderationLogRepository, never()).save(org.mockito.ArgumentMatchers.any());
   }
+
+  @Test
+  void deletePost_softDeletesOwnPost() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.published);
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.deletePost(userId, false, postId);
+
+    assertThat(existing.getDeletedAt()).isNotNull();
+    verify(moderationLogRepository, never()).save(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void deletePost_throwsWhenNotOwnerOrAlreadyDeleted() {
+    UUID postId = UUID.randomUUID();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> postService.deletePost(userId, false, postId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Post not found");
+    verify(postRepository, never()).saveAndFlush(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void deletePost_adminDeletingAnotherUsersPostIsRecorded() {
+    UUID postId = UUID.randomUUID();
+    UUID adminId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.published);
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.deletePost(adminId, true, postId);
+
+    assertThat(existing.getDeletedAt()).isNotNull();
+    verify(moderationLogRepository)
+        .save(
+            org.mockito.ArgumentMatchers.argThat(
+                log ->
+                    adminId.equals(log.getActorId())
+                        && postId.equals(log.getTargetId())
+                        && "DELETE_POST".equals(log.getAction())));
+  }
 }

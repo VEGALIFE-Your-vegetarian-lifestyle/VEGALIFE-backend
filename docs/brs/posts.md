@@ -11,6 +11,7 @@
 | BR-POST-005 | Post Title and Content Are Required | Active | 2026-09-26 |
 | BR-POST-006 | Users Edit Only Their Own Non-Deleted Posts | Active | 2026-09-27 |
 | BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-09-27 |
+| BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
 
 ---
 
@@ -258,5 +259,39 @@ Applies to `PATCH /api/posts/{postId}`. Removing a featured image by sending nul
 ## Last Reviewed
 
 2026-09-27, by Vegalife backend team
+
+---
+
+# Business Rule: Posts Are Soft-Deleted by Owner or Administrator
+
+## Rule ID
+
+`BR-POST-008`
+
+## Status
+
+Active
+
+## Statement
+
+A post may be deleted only by its owner or an Administrator (BR-CONTENT-001). Deletion is soft: `deleted_at` is set and the row is kept, so the post disappears from user lists and can no longer be edited or deleted. For a non-admin, a missing, already-deleted, or other user's post is reported as not found. Every deletion an Administrator makes to another user's post is recorded in `moderation_log` (BR-ADMIN-002).
+
+## Rationale
+
+Ownership boundaries protect user content, soft deletion preserves data for moderation and recovery, and the moderation log keeps administrator actions reviewable.
+
+## Scope & Exceptions
+
+Applies to `DELETE /api/posts/{postId}`. Restoring deleted posts is not supported.
+
+## Enforcement
+
+- Controller: `PostController.deletePost()` supplies the JWT principal and admin flag.
+- Service: `PostService.deletePost()` uses `findManageablePost()` and records the moderation entry.
+- API reference: `docs/apis/post/delete-posts-postid.md`.
+
+## Last Reviewed
+
+2026-09-29, by Vegalife backend team
 
 ---

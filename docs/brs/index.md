@@ -36,3 +36,4 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-005 | Post Title and Content Are Required | Active | 2026-09-26 |
 | BR-POST-006 | Users Edit Only Their Own Non-Deleted Posts | Active | 2026-09-27 |
 | BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-09-27 |
+| BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |

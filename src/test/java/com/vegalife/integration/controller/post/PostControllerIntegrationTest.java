@@ -2,6 +2,7 @@ package com.vegalife.integration.controller.post;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -382,6 +383,78 @@ class PostControllerIntegrationTest {
               assertThat(log.getActorId()).isEqualTo(admin.getId());
               assertThat(log.getTargetId()).isEqualTo(otherUsersPost.getId());
               assertThat(log.getAction()).isEqualTo("EDIT_POST");
+            });
+  }
+
+  @Test
+  void deletePost_ownerSoftDeletesPost() throws Exception {
+    Post existingPost = createPost(user, "Post title", Post.Status.created, null);
+
+    mockMvc
+        .perform(
+            delete("/api/posts/{postId}", existingPost.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Post deleted successfully"));
+
+    assertThat(postRepository.findById(existingPost.getId()).orElseThrow().getDeletedAt())
+        .isNotNull();
+    mockMvc
+        .perform(get("/api/posts").header("Authorization", "Bearer " + accessToken))
+        .andExpect(jsonPath("$.data.totalElements").value(0));
+    mockMvc
+        .perform(
+            delete("/api/posts/{postId}", existingPost.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void deletePost_withoutJwt_returns401() throws Exception {
+    mockMvc
+        .perform(delete("/api/posts/{postId}", UUID.randomUUID()))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void deletePost_ofAnotherUserOrMissing_returns404AndKeepsPost() throws Exception {
+    Post otherUsersPost = createPost(otherUser, "Other title", Post.Status.created, null);
+
+    mockMvc
+        .perform(
+            delete("/api/posts/{postId}", otherUsersPost.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound());
+    mockMvc
+        .perform(
+            delete("/api/posts/{postId}", UUID.randomUUID())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound());
+
+    assertThat(postRepository.findById(otherUsersPost.getId()).orElseThrow().getDeletedAt())
+        .isNull();
+  }
+
+  @Test
+  void deletePost_adminCanDeleteAnotherUsersPostAndActionIsLogged() throws Exception {
+    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
+    Post otherUsersPost = createPost(otherUser, "Other title", Post.Status.published, null);
+
+    mockMvc
+        .perform(
+            delete("/api/posts/{postId}", otherUsersPost.getId())
+                .header("Authorization", "Bearer " + jwtTokenService.generateAccessToken(admin)))
+        .andExpect(status().isOk());
+
+    assertThat(postRepository.findById(otherUsersPost.getId()).orElseThrow().getDeletedAt())
+        .isNotNull();
+    assertThat(moderationLogRepository.findAll())
+        .singleElement()
+        .satisfies(
+            log -> {
+              assertThat(log.getActorId()).isEqualTo(admin.getId());
+              assertThat(log.getAction()).isEqualTo("DELETE_POST");
+              assertThat(log.getTargetId()).isEqualTo(otherUsersPost.getId());
             });
   }
 
