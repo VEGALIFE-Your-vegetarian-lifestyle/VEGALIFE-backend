@@ -65,8 +65,9 @@ Never commit secrets. Values are pasted by hand into:
 
 ## Environment variables
 
-Base defaults live in `application.yml`; prod-only overrides and fail-fast
-requireds in `application-prod.yml`.
+Base defaults live in `application.yml`; dev-profile overrides in
+`application-dev.yml`; prod-only overrides and fail-fast requireds in
+`application-prod.yml`.
 
 | Variable | Local (`.env.example`) | Prod default | Notes |
 |---|---|---|---|
@@ -74,10 +75,9 @@ requireds in `application-prod.yml`.
 | `SERVER_PORT` / `PORT` | `SERVER_PORT=8080` | `${PORT:${SERVER_PORT:8080}}` | Render injects `PORT` |
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | Docker Compose defaults | **required, no default** | Neon pooled URL, `sslmode=require` |
 | `AUTH_JWT_SECRET` | dev placeholder | **required, no default** | ≥ 32 chars |
-| `DEV_MAIL_HOST` / `DEV_MAIL_PORT` | `localhost` / `1025` | n/a (dev only) | MailHog/mailpit |
-| `MAIL_HOST` / `MAIL_PORT` | — | `smtp-relay.brevo.com` / `2525` | Brevo; **port 2525** because Render blocks 25/465/587 |
+| `MAIL_HOST` / `MAIL_PORT` | `localhost` / `1025` (dev profile) | `smtp-relay.brevo.com` / `2525` | Same keys in every profile; dev default is localhost:1025 (MailHog/mailpit); **port 2525** in prod because Render blocks 25/465/587 |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | empty | **required, no default** | Brevo SMTP key |
-| `MAIL_FROM` | `noreply@vegalife.local` | **required, no default** | Must be a Brevo-verified sender |
+| `MAIL_FROM` | `your-verified-sender@example.com` | **required, no default** | Must be a sender your SMTP relay accepts (e.g. Brevo-verified) |
 | `app.mail.from` → `MAIL_FROM` | default in `application.yml` | required in prod | Used by `SmtpEmailServiceImpl` `setFrom` |
 
 Missing required prod vars make the app **fail fast at startup** (unresolvable

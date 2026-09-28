@@ -62,7 +62,11 @@ management:
 
 app:
   mail:
-    from: ${MAIL_FROM:noreply@vegalife.local}
+    # No default on purpose: a placeholder address (e.g. noreply@vegalife.local)
+    # would be rejected/dropped by real SMTP relays. Prod fail-fasts on
+    # MAIL_FROM (application-prod.yml); local runs get no explicit From and
+    # JavaMail falls back to the session default.
+    from: ${MAIL_FROM:}
 
   auth:
     access-token-expiry-minutes: 15
