@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.mapper.post.PostMapper;
 import com.vegalife.dto.request.post.PostCreateRequest;
+import com.vegalife.dto.request.post.PostListRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.model.post.Category;
@@ -32,6 +33,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 @ExtendWith(MockitoExtension.class)
 class PostServiceTest {
@@ -525,5 +530,52 @@ class PostServiceTest {
     assertThatThrownBy(() -> postService.updateVisibility(UUID.randomUUID(), postId, true))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
+  }
+
+  @Test
+  void listPostsOfUser_guestSeesOnlyPublishedPosts() {
+    Pageable pageable = PageRequest.of(0, 20);
+    Page<Post> page = new PageImpl<>(List.of(), pageable, 0);
+    when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+    when(postRepository.findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
+            userId, Post.Status.published, pageable))
+        .thenReturn(page);
+
+    postService.listPostsOfUser(null, false, userId, new PostListRequest());
+
+    verify(postRepository, never())
+        .findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void listPostsOfUser_ownerAndAdminSeeAllStatuses() {
+    Pageable pageable = PageRequest.of(0, 20);
+    Page<Post> page = new PageImpl<>(List.of(), pageable, 0);
+    when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+    when(postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(userId, pageable))
+        .thenReturn(page);
+
+    postService.listPostsOfUser(userId, false, userId, new PostListRequest());
+    postService.listPostsOfUser(UUID.randomUUID(), true, userId, new PostListRequest());
+
+    verify(postRepository, org.mockito.Mockito.times(2))
+        .findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(userId, pageable);
+  }
+
+  @Test
+  void listPostsOfUser_throwsWhenUserMissingOrDeleted() {
+    when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () -> postService.listPostsOfUser(null, false, userId, new PostListRequest()))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("User not found");
+
+    user.setDeletedAt(java.time.Instant.now());
+    when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+    assertThatThrownBy(
+            () -> postService.listPostsOfUser(null, false, userId, new PostListRequest()))
+        .isInstanceOf(ResourceNotFoundException.class);
   }
 }

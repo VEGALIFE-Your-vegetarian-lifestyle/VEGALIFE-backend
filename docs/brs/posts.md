@@ -13,6 +13,7 @@
 | BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-09-27 |
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
 | BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
+| BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-29 |
 
 ---
 
@@ -324,6 +325,40 @@ Applies to `PATCH /api/posts/{postId}/visibility`. Owners withdraw their own pos
 - Security: `SecurityConfig` requires `ROLE_ADMIN` for the route.
 - Service: `PostService.updateVisibility()` changes status and writes the log; `applyPublishState()` blocks non-admins on hidden posts.
 - API reference: `docs/apis/post/patch-posts-postid-visibility.md`.
+
+## Last Reviewed
+
+2026-09-29, by Vegalife backend team
+
+---
+
+# Business Rule: Only Published Posts Are Public
+
+## Rule ID
+
+`BR-POST-010`
+
+## Status
+
+Active
+
+## Statement
+
+When a member's posts are listed, guests and other members see only `published`, non-deleted posts. Drafts and other non-public states (`created`, `processed`, `unpublished`, `hidden`) are visible only to the post's creator and Administrators (BR-CONTENT-003).
+
+## Rationale
+
+Published content is open to everyone (BR-PUBLIC-001, BR-SEARCH-002), while unpublished or moderated content must stay private to its owner and administrators.
+
+## Scope & Exceptions
+
+Applies to `GET /api/users/{userId}/posts`. `GET /api/posts` is the caller's own list and already includes all non-deleted statuses.
+
+## Enforcement
+
+- Security: `SecurityConfig` permits unauthenticated `GET /api/users/*/posts`.
+- Service: `PostService.listPostsOfUser()` selects the published-only query unless the viewer is the owner or an Administrator.
+- API reference: `docs/apis/post/get-users-userid-posts.md`.
 
 ## Last Reviewed
 

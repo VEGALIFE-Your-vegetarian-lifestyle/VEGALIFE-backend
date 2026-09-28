@@ -553,6 +553,55 @@ class PostControllerIntegrationTest {
   }
 
   @Test
+  void listPostsOfUser_guestSeesOnlyPublishedPostsOfThatUser() throws Exception {
+    createPost(user, "Draft", Post.Status.created, null);
+    createPost(user, "Hidden", Post.Status.hidden, null);
+    createPost(user, "Deleted", Post.Status.published, Instant.now());
+    createPost(user, "Published", Post.Status.published, null);
+    createPost(otherUser, "Someone else", Post.Status.published, null);
+
+    mockMvc
+        .perform(get("/api/users/{userId}/posts", user.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].title").value("Published"));
+  }
+
+  @Test
+  void listPostsOfUser_otherMemberSeesOnlyPublished_ownerAndAdminSeeAll() throws Exception {
+    createPost(user, "Draft", Post.Status.created, null);
+    createPost(user, "Published", Post.Status.published, null);
+    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
+
+    mockMvc
+        .perform(
+            get("/api/users/{userId}/posts", user.getId())
+                .header(
+                    "Authorization", "Bearer " + jwtTokenService.generateAccessToken(otherUser)))
+        .andExpect(jsonPath("$.data.totalElements").value(1));
+    mockMvc
+        .perform(
+            get("/api/users/{userId}/posts", user.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(jsonPath("$.data.totalElements").value(2));
+    mockMvc
+        .perform(
+            get("/api/users/{userId}/posts", user.getId())
+                .header("Authorization", "Bearer " + jwtTokenService.generateAccessToken(admin)))
+        .andExpect(jsonPath("$.data.totalElements").value(2));
+  }
+
+  @Test
+  void listPostsOfUser_unknownUserReturns404_invalidPageReturns400() throws Exception {
+    mockMvc
+        .perform(get("/api/users/{userId}/posts", UUID.randomUUID()))
+        .andExpect(status().isNotFound());
+    mockMvc
+        .perform(get("/api/users/{userId}/posts", user.getId()).param("size", "0"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void listUserPosts_returnsOnlyOwnNonDeletedPostsWithAnyStatus() throws Exception {
     createPost(user, "Published post", Post.Status.published, null);
     createPost(user, "Hidden post", Post.Status.hidden, null);

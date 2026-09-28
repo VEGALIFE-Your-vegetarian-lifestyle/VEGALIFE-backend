@@ -46,8 +46,12 @@ No request body.
       {
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "title": "Easy tofu bowl",
+        "type": "blog",
         "content": "A simple plant-based lunch.",
         "featuredImageUrl": "https://example.com/tofu-bowl.jpg",
+        "videoUrl": null,
+        "categoryIds": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
+        "mediaIds": [],
         "status": "published",
         "viewCount": 12,
         "publishedAt": "2026-09-26T10:00:00Z",
@@ -73,6 +77,10 @@ No request body.
 | data.content[].title | string | Post title. |
 | data.content[].content | string | Post text. |
 | data.content[].featuredImageUrl | string or null | Featured image URL, if present. |
+| data.content[].type | string | `blog` or `video`. |
+| data.content[].videoUrl | string or null | Video link, video posts only. |
+| data.content[].categoryIds | array of UUID | Assigned categories. |
+| data.content[].mediaIds | array of UUID | Attached uploaded media. |
 | data.content[].status | string | Post status: `created`, `processed`, `published`, `unpublished`, or `hidden`. |
 | data.content[].viewCount | integer | Number of recorded views. |
 | data.content[].publishedAt | string | ISO-8601 publication timestamp. |

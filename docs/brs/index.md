@@ -38,3 +38,4 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-09-27 |
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
 | BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
+| BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-29 |

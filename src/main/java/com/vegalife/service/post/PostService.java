@@ -241,6 +241,29 @@ public class PostService {
     return PageResponse.from(posts.map(postMapper::toListResponse));
   }
 
+  /**
+   * BR-CONTENT-003 / BR-PUBLIC-001: everyone, including guests, sees a member's published posts;
+   * drafts and other non-public states are visible only to the creator and Administrators.
+   */
+  @Transactional(readOnly = true)
+  public PageResponse<PostListResponse> listPostsOfUser(
+      UUID viewerId, boolean isAdmin, UUID ownerId, PostListRequest request) {
+    userRepository
+        .findById(ownerId)
+        .filter(owner -> owner.getDeletedAt() == null)
+        .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+    Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
+    Page<Post> posts =
+        isAdmin || ownerId.equals(viewerId)
+            ? postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(ownerId, pageable)
+            : postRepository
+                .findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
+                    ownerId, Post.Status.published, pageable);
+
+    return PageResponse.from(posts.map(postMapper::toListResponse));
+  }
+
   /** BR-CONTENT-002: a blog needs written content, a video needs a file or a link. */
   private void validateTypeSpecificFields(PostCreateRequest request) {
     if (request.getType() == Post.Type.blog) {

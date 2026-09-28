@@ -35,6 +35,8 @@ public class SecurityConfig {
                     .hasRole("ADMIN")
                     .requestMatchers(HttpMethod.PATCH, "/api/posts/*/visibility")
                     .hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/api/users/*/posts")
+                    .permitAll()
                     .requestMatchers("/actuator/**")
                     .permitAll()
                     .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
