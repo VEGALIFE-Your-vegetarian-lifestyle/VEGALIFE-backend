@@ -141,6 +141,43 @@ public class PostService {
     recordModerationIfAdminOverride(actorId, isAdmin, saved, "DELETE_POST");
   }
 
+  /**
+   * BR-ADMIN-002: an Administrator may hide any post from the platform and lift the hide. Hiding
+   * removes the publication timestamp; lifting returns the post to a private draft so it must be
+   * published again under BR-CONTENT-003. Both actions are always recorded in the moderation log.
+   */
+  @Transactional
+  public PostListResponse updateVisibility(UUID adminId, UUID postId, boolean hidden) {
+    Post post =
+        postRepository
+            .findByIdAndDeletedAtIsNull(postId)
+            .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+    boolean currentlyHidden = post.getStatus() == Post.Status.hidden;
+    if (hidden == currentlyHidden) {
+      if (hidden) {
+        return postMapper.toListResponse(post);
+      }
+      throw new ValidationException("Post is not hidden");
+    }
+
+    if (hidden) {
+      post.setStatus(Post.Status.hidden);
+      post.setPublishedAt(null);
+    } else {
+      post.setStatus(Post.Status.created);
+    }
+    Post saved = postRepository.saveAndFlush(post);
+    moderationLogRepository.save(
+        ModerationLog.builder()
+            .actorId(adminId)
+            .action(hidden ? "HIDE_POST" : "UNHIDE_POST")
+            .targetType("POST")
+            .targetId(saved.getId())
+            .build());
+    return postMapper.toListResponse(saved);
+  }
+
   /** Owner sees own posts; an Administrator sees every non-deleted post. */
   private Post findManageablePost(UUID actorId, boolean isAdmin, UUID postId) {
     return (isAdmin

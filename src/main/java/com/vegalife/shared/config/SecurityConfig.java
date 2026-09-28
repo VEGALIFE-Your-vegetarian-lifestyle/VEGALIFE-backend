@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -31,6 +32,8 @@ public class SecurityConfig {
                 auth.requestMatchers("/api/auth/**")
                     .permitAll()
                     .requestMatchers("/api/admin/**")
+                    .hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.PATCH, "/api/posts/*/visibility")
                     .hasRole("ADMIN")
                     .requestMatchers("/actuator/**")
                     .permitAll()

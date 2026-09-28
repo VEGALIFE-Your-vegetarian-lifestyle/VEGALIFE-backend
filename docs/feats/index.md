@@ -16,3 +16,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `create-user-post.md` | Create a User Post | In progress | 2026-09-26 |
 | `edit-user-post.md` | Edit a User Post | In progress | 2026-09-27 |
 | `delete-user-post.md` | Delete a User Post | Implemented | 2026-09-29 |
+| `hide-user-post.md` | Hide a Post (Moderation) | Implemented | 2026-09-29 |

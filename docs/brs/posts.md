@@ -12,6 +12,7 @@
 | BR-POST-006 | Users Edit Only Their Own Non-Deleted Posts | Active | 2026-09-27 |
 | BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-09-27 |
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
+| BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
 
 ---
 
@@ -289,6 +290,40 @@ Applies to `DELETE /api/posts/{postId}`. Restoring deleted posts is not supporte
 - Controller: `PostController.deletePost()` supplies the JWT principal and admin flag.
 - Service: `PostService.deletePost()` uses `findManageablePost()` and records the moderation entry.
 - API reference: `docs/apis/post/delete-posts-postid.md`.
+
+## Last Reviewed
+
+2026-09-29, by Vegalife backend team
+
+---
+
+# Business Rule: Only Administrators Hide Posts, and It Is Logged
+
+## Rule ID
+
+`BR-POST-009`
+
+## Status
+
+Active
+
+## Statement
+
+Only an Administrator may hide a post or lift a hide (BR-ADMIN-002, BR-ADMIN-004). Hiding sets status `hidden` and clears the publication timestamp; lifting returns the post to a private draft. While a post is hidden, only an Administrator may change its publish state. Every hide and unhide is recorded in `moderation_log`.
+
+## Rationale
+
+Moderation is an administrator power; recording each action keeps decisions reviewable, and returning to draft forces the normal publish checks before content becomes public again.
+
+## Scope & Exceptions
+
+Applies to `PATCH /api/posts/{postId}/visibility`. Owners withdraw their own posts with `publish: false`.
+
+## Enforcement
+
+- Security: `SecurityConfig` requires `ROLE_ADMIN` for the route.
+- Service: `PostService.updateVisibility()` changes status and writes the log; `applyPublishState()` blocks non-admins on hidden posts.
+- API reference: `docs/apis/post/patch-posts-postid-visibility.md`.
 
 ## Last Reviewed
 

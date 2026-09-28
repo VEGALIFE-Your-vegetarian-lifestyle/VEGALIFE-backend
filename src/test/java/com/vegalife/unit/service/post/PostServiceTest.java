@@ -457,4 +457,73 @@ class PostServiceTest {
                         && postId.equals(log.getTargetId())
                         && "DELETE_POST".equals(log.getAction())));
   }
+
+  @Test
+  void updateVisibility_hidesPostClearsPublishedAtAndLogs() {
+    UUID postId = UUID.randomUUID();
+    UUID adminId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.published);
+    existing.setPublishedAt(java.time.Instant.now());
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.updateVisibility(adminId, postId, true);
+
+    assertThat(existing.getStatus()).isEqualTo(Post.Status.hidden);
+    assertThat(existing.getPublishedAt()).isNull();
+    verify(moderationLogRepository)
+        .save(
+            org.mockito.ArgumentMatchers.argThat(
+                log ->
+                    adminId.equals(log.getActorId())
+                        && postId.equals(log.getTargetId())
+                        && "HIDE_POST".equals(log.getAction())));
+  }
+
+  @Test
+  void updateVisibility_hidingAlreadyHiddenPostIsNoOp() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.hidden);
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
+
+    postService.updateVisibility(UUID.randomUUID(), postId, true);
+
+    verify(postRepository, never()).saveAndFlush(existing);
+    verify(moderationLogRepository, never()).save(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void updateVisibility_unhideReturnsPostToDraftAndLogs() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.hidden);
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.updateVisibility(UUID.randomUUID(), postId, false);
+
+    assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
+    verify(moderationLogRepository)
+        .save(org.mockito.ArgumentMatchers.argThat(log -> "UNHIDE_POST".equals(log.getAction())));
+  }
+
+  @Test
+  void updateVisibility_rejectsUnhidingPostThatIsNotHidden() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.published);
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
+
+    assertThatThrownBy(() -> postService.updateVisibility(UUID.randomUUID(), postId, false))
+        .isInstanceOf(ValidationException.class)
+        .hasMessage("Post is not hidden");
+  }
+
+  @Test
+  void updateVisibility_throwsWhenPostMissingOrDeleted() {
+    UUID postId = UUID.randomUUID();
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> postService.updateVisibility(UUID.randomUUID(), postId, true))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Post not found");
+  }
 }

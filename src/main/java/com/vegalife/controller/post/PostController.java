@@ -3,6 +3,7 @@ package com.vegalife.controller.post;
 import com.vegalife.dto.request.post.PostCreateRequest;
 import com.vegalife.dto.request.post.PostListRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
+import com.vegalife.dto.request.post.PostVisibilityRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.service.post.PostService;
 import com.vegalife.shared.dto.ApiResponse;
@@ -48,6 +49,16 @@ public class PostController {
     PostListResponse post =
         postService.updatePost(userId, isAdmin(authentication), postId, request);
     return ResponseEntity.ok(ApiResponse.success(post, "Post updated successfully"));
+  }
+
+  @PatchMapping("/{postId}/visibility")
+  public ResponseEntity<ApiResponse<PostListResponse>> updateVisibility(
+      @AuthenticationPrincipal UUID adminId,
+      @PathVariable UUID postId,
+      @Valid @RequestBody PostVisibilityRequest request) {
+    PostListResponse post = postService.updateVisibility(adminId, postId, request.getHidden());
+    String message = request.getHidden() ? "Post hidden successfully" : "Post is visible again";
+    return ResponseEntity.ok(ApiResponse.success(post, message));
   }
 
   @DeleteMapping("/{postId}")

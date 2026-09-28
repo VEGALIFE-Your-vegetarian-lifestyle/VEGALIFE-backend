@@ -459,6 +459,100 @@ class PostControllerIntegrationTest {
   }
 
   @Test
+  void updateVisibility_adminHidesAndUnhidesPostAndActionsAreLogged() throws Exception {
+    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
+    String adminToken = jwtTokenService.generateAccessToken(admin);
+    Post published = createPost(user, "Published", Post.Status.published, null);
+    published.setPublishedAt(Instant.now());
+    postRepository.saveAndFlush(published);
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/visibility", published.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"hidden\":true}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Post hidden successfully"))
+        .andExpect(jsonPath("$.data.status").value("hidden"))
+        .andExpect(jsonPath("$.data.publishedAt").doesNotExist());
+
+    // the owner cannot bring a hidden post back
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}", published.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"publish\":true}"))
+        .andExpect(status().isBadRequest());
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/visibility", published.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"hidden\":false}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("created"));
+
+    assertThat(moderationLogRepository.findAll())
+        .extracting(log -> log.getAction())
+        .containsExactlyInAnyOrder("HIDE_POST", "UNHIDE_POST");
+  }
+
+  @Test
+  void updateVisibility_nonAdminReturns403AndWithoutJwtReturns401() throws Exception {
+    Post existingPost = createPost(user, "Mine", Post.Status.published, null);
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/visibility", existingPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"hidden\":true}"))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/visibility", existingPost.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"hidden\":true}"))
+        .andExpect(status().isUnauthorized());
+
+    assertThat(postRepository.findById(existingPost.getId()).orElseThrow().getStatus())
+        .isEqualTo(Post.Status.published);
+  }
+
+  @Test
+  void updateVisibility_invalidBodyMissingPostAndNotHiddenPost() throws Exception {
+    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
+    String adminToken = jwtTokenService.generateAccessToken(admin);
+    Post existingPost = createPost(user, "Mine", Post.Status.published, null);
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/visibility", existingPost.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isBadRequest());
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/visibility", existingPost.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"hidden\":false}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Post is not hidden"));
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/visibility", UUID.randomUUID())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"hidden\":true}"))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
   void listUserPosts_returnsOnlyOwnNonDeletedPostsWithAnyStatus() throws Exception {
     createPost(user, "Published post", Post.Status.published, null);
     createPost(user, "Hidden post", Post.Status.hidden, null);
