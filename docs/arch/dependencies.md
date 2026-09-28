@@ -30,6 +30,7 @@ These are part of the current tech stack. Use freely.
 | `com.github.docker-java:docker-java` | Docker access for Testcontainers (+ httpclient5 transport) | In pom.xml |
 | `com.icegreen:greenmail` | In-memory SMTP server for integration tests | In pom.xml |
 | `org.hibernate:hibernate-jpamodelgen` | JPA static metamodel generation (test scope) | In pom.xml |
+| `spring-boot-starter-actuator` | Health endpoint `/actuator/health` (CD + Render health checks; status only, see `deployment.md`) | In pom.xml |
 
 ## Planned (approved, add when a feature needs it)
 
@@ -43,7 +44,6 @@ These are approved in principle. Add them to pom.xml when a feature requires the
 | `io.rest-assured:rest-assured` | Fluent API testing | When API tests become complex |
 | `net.logstash.logback:logstash-logback-encoder` | Structured JSON logging | When deploying to cloud with log aggregation |
 | `io.micrometer:micrometer-registry-prometheus` | Prometheus metrics | When monitoring is set up |
-| `spring-boot-starter-actuator` | Health checks, metrics | When monitoring/health endpoints are set up (not yet in pom.xml — see ADR-005: queue metrics are log-based) |
 
 ## Not approved (do not add without asking)
 

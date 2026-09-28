@@ -1,0 +1,75 @@
+# Render blueprint for Vegalife — see docs/arch/deployment.md.
+#
+# Both services run on the free plan: instances sleep after ~15 min idle
+# (cold start up to ~1 min). Render free allows 750 instance-hours/month
+# per workspace with both services, so no keep-alive pings are used.
+#
+# Render builds each service from this repo's Dockerfile (no GHCR creds
+# needed here); the CD workflow triggers deploys via Render deploy hooks
+# with a ?ref=<sha> query parameter. Secrets are synced manually from the
+# Render dashboard (sync: false) — never commit their values.
+
+services:
+  - type: web
+    name: staging-vegalife
+    runtime: docker
+    plan: free
+    branch: main
+    autoDeploy: false
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerPort: 8080
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: MAIL_HOST
+        value: smtp-relay.brevo.com
+      - key: MAIL_PORT
+        value: "2525"
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: AUTH_JWT_SECRET
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+
+  - type: web
+    name: api-vegalife
+    runtime: docker
+    plan: free
+    branch: main
+    autoDeploy: false
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerPort: 8080
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: MAIL_HOST
+        value: smtp-relay.brevo.com
+      - key: MAIL_PORT
+        value: "2525"
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: AUTH_JWT_SECRET
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false

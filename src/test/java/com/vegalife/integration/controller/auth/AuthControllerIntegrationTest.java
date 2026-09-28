@@ -131,6 +131,10 @@ class AuthControllerIntegrationTest {
     return "{\"email\":\"" + email + "\",\"otp\":\"" + otp + "\"}";
   }
 
+  private String verifyResetBody(String email, String otp) {
+    return "{\"email\":\"" + email + "\",\"otp\":\"" + otp + "\"}";
+  }
+
   @Test
   void register_thenVerifyEmail_thenLogin_fullFlow() throws Exception {
     registerUser("integrationuser", "integration@test.com");
@@ -446,7 +450,7 @@ class AuthControllerIntegrationTest {
   }
 
   @Test
-  void forgotPassword_thenReset_fullFlow() throws Exception {
+  void forgotPassword_thenVerify_thenReset_fullFlow() throws Exception {
     User user = createActivatedUser("forgotflow", "forgotflow@test.com");
     RefreshToken activeToken =
         RefreshToken.builder()
@@ -475,10 +479,32 @@ class AuthControllerIntegrationTest {
     String otp = captureOtp("forgotflow@test.com");
     assertThat(otp).matches("\\d{6}");
 
-    String resetBody =
-        "{\"email\":\"forgotflow@test.com\",\"otp\":\""
-            + otp
-            + "\",\"newPassword\":\"newPassword123\"}";
+    mockMvc
+        .perform(
+            post("/api/auth/verify-password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyResetBody("forgotflow@test.com", otp)))
+        .andDo(print())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Password reset code verified successfully"));
+
+    OtpCode verifiedRow =
+        otpCodeRepository
+            .findLatestUnusedByUserIdAndPurpose(user.getId(), OtpPurpose.PASSWORD_RESET)
+            .orElseThrow();
+    assertThat(verifiedRow.getVerifiedAt()).isNotNull();
+    assertThat(verifiedRow.getUsedAt()).isNull();
+
+    mockMvc
+        .perform(
+            post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"identifier\":\"forgotflow@test.com\",\"password\":\"oldPassword1\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Login successful"));
+
+    String resetBody = "{\"email\":\"forgotflow@test.com\",\"newPassword\":\"newPassword123\"}";
     mockMvc
         .perform(
             post("/api/auth/reset-password")
@@ -534,7 +560,7 @@ class AuthControllerIntegrationTest {
   }
 
   @Test
-  void resetPassword_wrongOtp_returns400() throws Exception {
+  void verifyPasswordReset_wrongOtp_returns400_thenCorrectRetry_succeeds() throws Exception {
     createActivatedUser("wrongotp", "wrongotp@test.com");
 
     mockMvc
@@ -544,34 +570,41 @@ class AuthControllerIntegrationTest {
                 .content("{\"email\":\"wrongotp@test.com\"}"))
         .andExpect(status().isOk());
 
-    captureOtp("wrongotp@test.com");
+    String otp = captureOtp("wrongotp@test.com");
 
-    String body =
-        "{\"email\":\"wrongotp@test.com\",\"otp\":\"000000\",\"newPassword\":\"newPassword123\"}";
     mockMvc
         .perform(
-            post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON).content(body))
+            post("/api/auth/verify-password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyResetBody("wrongotp@test.com", "000000")))
         .andDo(print())
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(jsonPath("$.message").value("Invalid or already used password reset code"));
-  }
-
-  @Test
-  void resetPassword_unknownEmail_returns400() throws Exception {
-    String body =
-        "{\"email\":\"nobody@test.com\",\"otp\":\"482913\",\"newPassword\":\"newPassword123\"}";
 
     mockMvc
         .perform(
-            post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON).content(body))
+            post("/api/auth/verify-password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyResetBody("wrongotp@test.com", otp)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Password reset code verified successfully"));
+  }
+
+  @Test
+  void verifyPasswordReset_unknownEmail_returns400_sameInvalidMessage() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/auth/verify-password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyResetBody("nobody@test.com", "482913")))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(jsonPath("$.message").value("Invalid or already used password reset code"));
   }
 
   @Test
-  void resetPassword_expiredOtp_returns400() throws Exception {
+  void verifyPasswordReset_expiredOtp_returns400() throws Exception {
     User user = createActivatedUser("expiredotp", "expiredotp@test.com");
 
     mockMvc
@@ -590,13 +623,11 @@ class AuthControllerIntegrationTest {
     row.setExpiresAt(Instant.now().minusSeconds(1));
     otpCodeRepository.save(row);
 
-    String body =
-        "{\"email\":\"expiredotp@test.com\",\"otp\":\""
-            + otp
-            + "\",\"newPassword\":\"newPassword123\"}";
     mockMvc
         .perform(
-            post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON).content(body))
+            post("/api/auth/verify-password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyResetBody("expiredotp@test.com", otp)))
         .andDo(print())
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
@@ -606,7 +637,71 @@ class AuthControllerIntegrationTest {
   }
 
   @Test
-  void forgotPassword_resend_supersedesPreviousOtp() throws Exception {
+  void resetPassword_beforeVerification_returns400() throws Exception {
+    createActivatedUser("noverify", "noverify@test.com");
+
+    mockMvc
+        .perform(
+            post("/api/auth/forgot-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"noverify@test.com\"}"))
+        .andExpect(status().isOk());
+
+    captureOtp("noverify@test.com");
+
+    mockMvc
+        .perform(
+            post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"noverify@test.com\",\"newPassword\":\"newPassword123\"}"))
+        .andDo(print())
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Invalid or already used password reset code"));
+  }
+
+  @Test
+  void resetPassword_legacyThreeFieldBody_returns400_hardBreak() throws Exception {
+    createActivatedUser("legacybody", "legacybody@test.com");
+
+    mockMvc
+        .perform(
+            post("/api/auth/forgot-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"legacybody@test.com\"}"))
+        .andExpect(status().isOk());
+
+    String otp = captureOtp("legacybody@test.com");
+
+    String legacyBody =
+        "{\"email\":\"legacybody@test.com\",\"otp\":\""
+            + otp
+            + "\",\"newPassword\":\"newPassword123\"}";
+    mockMvc
+        .perform(
+            post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(legacyBody))
+        .andDo(print())
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Invalid or already used password reset code"));
+  }
+
+  @Test
+  void resetPassword_unknownEmail_returns400() throws Exception {
+    String body = "{\"email\":\"nobody@test.com\",\"newPassword\":\"newPassword123\"}";
+
+    mockMvc
+        .perform(
+            post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Invalid or already used password reset code"));
+  }
+
+  @Test
+  void forgotPassword_resend_supersededOtp_cannotBeVerified() throws Exception {
     User user = createActivatedUser("resendotp", "resendotp@test.com");
 
     mockMvc
@@ -632,23 +727,25 @@ class AuthControllerIntegrationTest {
 
     mockMvc
         .perform(
-            post("/api/auth/reset-password")
+            post("/api/auth/verify-password-reset")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    "{\"email\":\"resendotp@test.com\",\"otp\":\""
-                        + firstOtp
-                        + "\",\"newPassword\":\"newPassword123\"}"))
+                .content(verifyResetBody("resendotp@test.com", firstOtp)))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.message").value("Invalid or already used password reset code"));
 
     mockMvc
         .perform(
+            post("/api/auth/verify-password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyResetBody("resendotp@test.com", secondOtp)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Password reset code verified successfully"));
+
+    mockMvc
+        .perform(
             post("/api/auth/reset-password")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    "{\"email\":\"resendotp@test.com\",\"otp\":\""
-                        + secondOtp
-                        + "\",\"newPassword\":\"newPassword123\"}"))
+                .content("{\"email\":\"resendotp@test.com\",\"newPassword\":\"newPassword123\"}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.message").value("Password has been reset successfully"));
 
@@ -670,19 +767,29 @@ class AuthControllerIntegrationTest {
         .andExpect(status().isOk());
 
     String otp = captureOtp("reusedotp@test.com");
-    String body =
-        "{\"email\":\"reusedotp@test.com\",\"otp\":\""
-            + otp
-            + "\",\"newPassword\":\"newPassword123\"}";
 
     mockMvc
         .perform(
-            post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON).content(body))
+            post("/api/auth/verify-password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(verifyResetBody("reusedotp@test.com", otp)))
         .andExpect(status().isOk());
 
+    String resetBody = "{\"email\":\"reusedotp@test.com\",\"newPassword\":\"newPassword123\"}";
+
     mockMvc
         .perform(
-            post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON).content(body))
+            post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(resetBody))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Password has been reset successfully"));
+
+    mockMvc
+        .perform(
+            post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(resetBody))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.message").value("Invalid or already used password reset code"));
 
@@ -695,7 +802,7 @@ class AuthControllerIntegrationTest {
         .perform(
             post("/api/auth/reset-password")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"bad\",\"otp\":\"12\",\"newPassword\":\"short\"}"))
+                .content("{\"email\":\"bad\",\"newPassword\":\"short\"}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(jsonPath("$.message").value("Validation failed"));

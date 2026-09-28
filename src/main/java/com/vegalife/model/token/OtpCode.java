@@ -38,12 +38,19 @@ public class OtpCode {
   @Column(name = "used_at")
   private Instant usedAt;
 
+  @Column(name = "verified_at")
+  private Instant verifiedAt;
+
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
   public boolean isUsed() {
     return usedAt != null;
+  }
+
+  public boolean isVerified() {
+    return verifiedAt != null;
   }
 
   public boolean isExpired() {
