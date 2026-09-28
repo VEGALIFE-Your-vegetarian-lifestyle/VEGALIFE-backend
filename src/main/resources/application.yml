@@ -51,7 +51,23 @@ spring:
     encoding: UTF-8
     cache: false
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
 app:
+  mail:
+    # No default on purpose: a placeholder address (e.g. noreply@vegalife.local)
+    # would be rejected/dropped by real SMTP relays. Prod fail-fasts on
+    # MAIL_FROM (application-prod.yml); local runs get no explicit From and
+    # JavaMail falls back to the session default.
+    from: ${MAIL_FROM:}
+
   auth:
     access-token-expiry-minutes: 15
     refresh-token-expiry-days: 7
