@@ -4,8 +4,8 @@ server:
 spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/vegalife}
-    username: ${DB_USER:vegalife}
-    password: ${DB_PASSWORD:vegalife}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:12345}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10

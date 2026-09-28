@@ -10,9 +10,13 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -48,6 +52,30 @@ public class Post {
   private String featuredImageUrl;
 
   @Enumerated(EnumType.STRING)
+  @Column(name = "type", length = 10, nullable = false, updatable = false)
+  @Builder.Default
+  private Type type = Type.blog;
+
+  @Column(name = "video_url", columnDefinition = "TEXT")
+  private String videoUrl;
+
+  @ManyToMany
+  @JoinTable(
+      name = "post_category",
+      joinColumns = @JoinColumn(name = "post_id"),
+      inverseJoinColumns = @JoinColumn(name = "category_id"))
+  @Builder.Default
+  private Set<Category> categories = new HashSet<>();
+
+  @ManyToMany
+  @JoinTable(
+      name = "post_media",
+      joinColumns = @JoinColumn(name = "post_id"),
+      inverseJoinColumns = @JoinColumn(name = "media_id"))
+  @Builder.Default
+  private Set<Media> media = new HashSet<>();
+
+  @Enumerated(EnumType.STRING)
   @Column(name = "status", length = 20, nullable = false)
   private Status status;
 
@@ -67,6 +95,11 @@ public class Post {
 
   @Column(name = "deleted_at")
   private Instant deletedAt;
+
+  public enum Type {
+    blog,
+    video
+  }
 
   public enum Status {
     created,
