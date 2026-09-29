@@ -18,3 +18,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `delete-user-post.md` | Delete a User Post | Implemented | 2026-09-29 |
 | `hide-user-post.md` | Hide a Post (Moderation) | Implemented | 2026-09-29 |
 | `list-posts-of-user.md` | List a Member's Posts | Implemented | 2026-09-29 |
+| `post-content-filtering.md` | Post Content Filtering (Semantic) | In progress | 2026-09-30 |
