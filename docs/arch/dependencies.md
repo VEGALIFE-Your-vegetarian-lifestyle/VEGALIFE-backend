@@ -38,6 +38,7 @@ These are approved in principle. Add them to pom.xml when a feature requires the
 
 | Dependency | Purpose | Add when |
 |---|---|---|
+| `org.springframework.ai:spring-ai-bom` + `spring-ai-starter-model-openai` (1.1.8) | Embedding / AI abstraction for post content filtering (ADR-007); chat later | Post content filtering — this feature (Phase 5) |
 | `spring-boot-starter-oauth2-resource-server` | JWT validation | When using JWT-based auth |
 | `spring-boot-starter-websocket` | Real-time chat / notifications | Chat feature implementation |
 | `com.github.ben-manes.caffeine:caffeine` | Local caching | When hot data needs caching (recipes, feeds) |
