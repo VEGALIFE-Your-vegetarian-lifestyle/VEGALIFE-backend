@@ -14,12 +14,14 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.springframework.stereotype.Component;
 
 /**
  * Deterministic hard-reject gate for post content: minimum length (BR-FILTER-001), link-spam ratio
  * (BR-FILTER-002) and Vietnamese/English profanity wordlists (BR-FILTER-003). Runs before any
  * embedding call; a violation short-circuits the filter run.
  */
+@Component
 public class StaticRulesScorer {
 
   public static final String REASON_TOO_SHORT = "TOO_SHORT";
