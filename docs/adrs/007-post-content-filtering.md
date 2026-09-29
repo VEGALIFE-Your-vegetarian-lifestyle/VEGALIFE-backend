@@ -188,10 +188,16 @@ Concretely:
   endpoints exist to re-run or override a verdict, so affected posts sit
   in `flagged` until their owner edits them or a later sprint adds
   review tooling. Explicitly out of scope for issues #33/#34.
-- **New external credential.** `HF_TOKEN` must exist in production;
-  without it every run fails and hits the 24-hour sweep. The context
-  must still start with an empty token (a dummy key in test/dev
-  profiles documents this).
+- **New external credential.** `HF_TOKEN` must exist in production.
+  Spring AI's OpenAI autoconfiguration refuses to start with an empty
+  `spring.ai.openai.api-key`, so production without `HF_TOKEN` now
+  fails fast at startup instead of booting and failing every run; that
+  is deliberate (a filter that can never run should not come up), but it
+  turns a missing credential into a deployment blocker. Test, dev, and
+  integration profiles therefore override the key with a committed dummy
+  value (`${HF_TOKEN:<profile>-dummy-key-not-a-secret}`) so the context
+  loads with no credential present — the dummies are never a secret and
+  never grant anything.
 - **Profanity wordlists become a maintained asset.** VN/EN lists are
   committed resources; misses are a product risk that no scoring band
   compensates for.
