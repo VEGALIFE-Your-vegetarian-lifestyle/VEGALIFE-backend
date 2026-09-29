@@ -79,6 +79,17 @@ public class Post {
   @Column(name = "status", length = 20, nullable = false)
   private Status status;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "flag", length = 16)
+  private Flag flag;
+
+  @Column(name = "publish_intent", nullable = false)
+  @Builder.Default
+  private Boolean publishIntent = false;
+
+  @Column(name = "filter_queued_at")
+  private Instant filterQueuedAt;
+
   @Column(name = "view_count", nullable = false)
   private Integer viewCount;
 
@@ -106,6 +117,14 @@ public class Post {
     processed,
     published,
     unpublished,
-    hidden
+    hidden,
+    flagged
+  }
+
+  public enum Flag {
+    PENDING,
+    PASSED,
+    REJECTED,
+    NEEDS_REVIEW
   }
 }
