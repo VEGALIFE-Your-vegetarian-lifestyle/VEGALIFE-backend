@@ -20,3 +20,8 @@ buildNumber.properties
 
 # Agent ephemeral plans (never committed)
 .agents/plans/
+
+# Local secrets (HF_TOKEN, DB creds — never committed)
+.env
+.env.*
+!.env.example
