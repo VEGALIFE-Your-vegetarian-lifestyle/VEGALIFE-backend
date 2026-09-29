@@ -51,7 +51,7 @@ Supply at least one non-null field. Omitted and null fields are left unchanged.
 
 ### Success Response (200 OK)
 
-Returns the updated post using `PostListResponse` (`id`, `title`, `type`, `content`, `featuredImageUrl`, `videoUrl`, `categoryIds`, `mediaIds`, `status`, `viewCount`, `publishedAt`, `createdAt`).
+Returns the updated post using `PostListResponse` (`id`, `title`, `type`, `content`, `featuredImageUrl`, `videoUrl`, `categoryIds`, `mediaIds`, `status`, `flag`, `viewCount`, `publishedAt`, `createdAt`). `flag` is the content filter state: `null` (never filtered), `PENDING`, `PASSED`, `REJECTED`, or `NEEDS_REVIEW`.
 
 ### Error Responses
 
@@ -67,9 +67,11 @@ Returns the updated post using `PostListResponse` (`id`, `title`, `type`, `conte
 - Only the owner or an Administrator can edit a post; a non-admin gets `404` for others' posts.
 - Every edit an Administrator makes to another user's post is written to `moderation_log` (BR-ADMIN-002).
 - Publishing requires at least one active category and the information required for the post type; a published post cannot lose its last category.
-- Unpublishing sets status `created` and clears `publishedAt`.
-- The endpoint does not trigger semantic filtering (deferred).
-- Schema: migration `V18__create_moderation_log.sql` adds `moderation_log`.
+- `publish: true` on a post that is not yet `PASSED` is publish intent, not publication: the post goes to `flag: PENDING` and waits for filtering (BR-POST-004). Unpublishing (`publish: false`) withdraws the intent immediately, sets status `created`, clears `publishedAt`, and returns the post to a private draft (BR-POST-007).
+- A title or content change to a published or flagged post re-queues semantic filtering and returns the post to `flag: PENDING` (BR-POST-007).
+- A `REJECTED` or `NEEDS_REVIEW` post is returned to the owner as status `flagged`, not `published` (BR-POST-010, BR-FILTER-008).
+- Filtering itself is never triggered synchronously by this endpoint; it runs through the async outbox (BR-FILTER-006).
+- Schema: migration `V18__create_moderation_log.sql` adds `moderation_log`; migration `V19__add_post_filtering.sql` adds the `flag` column exposed in the response.
 
 ## Example
 
