@@ -89,6 +89,12 @@ app:
     accept-threshold: 0.75
     reject-threshold: 0.45
     sweep-max-age: 24h
+    embedding:
+      # Raw HF feature-extraction route, verified live (ADR-007); not the OpenAI-compat /v1 path.
+      base-url: ${HF_EMBEDDING_BASE_URL:https://router.huggingface.co/hf-inference/models}
+      model: ${HF_EMBEDDING_MODEL:intfloat/multilingual-e5-large-instruct}
+      api-key: ${HF_TOKEN:}
+      timeout: 30s
 
 logging:
   level:
