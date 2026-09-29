@@ -12,3 +12,9 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `forgot-password-reset.md` | Forgot Password with Email OTP | In progress | 2026-09-24 |
 | `email-verification-otp.md` | Email Verification via Generalized OTP | In progress | 2026-09-24 |
 | `outbound-message-queue.md` | Persistent Outbound Message Queue (Email) | In progress | 2026-09-26 |
+| `list-user-posts.md` | List the Authenticated User's Posts | Implemented | 2026-09-26 |
+| `create-user-post.md` | Create a User Post | In progress | 2026-09-26 |
+| `edit-user-post.md` | Edit a User Post | In progress | 2026-09-27 |
+| `delete-user-post.md` | Delete a User Post | Implemented | 2026-09-29 |
+| `hide-user-post.md` | Hide a Post (Moderation) | Implemented | 2026-09-29 |
+| `list-posts-of-user.md` | List a Member's Posts | Implemented | 2026-09-29 |

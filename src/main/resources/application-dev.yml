@@ -19,6 +19,14 @@ spring:
     port: ${MAIL_PORT:1025}
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          # Local catcher (Mailpit/MailHog) has no auth or TLS; JavaMail refuses to
+          # send when auth=true but no username is set. Override for a real relay.
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:false}
 
 logging:
   level:

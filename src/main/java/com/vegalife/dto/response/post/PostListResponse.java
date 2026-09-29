@@ -1,0 +1,29 @@
+package com.vegalife.dto.response.post;
+
+import java.time.Instant;
+import java.util.Set;
+import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class PostListResponse {
+
+  private UUID id;
+  private String title;
+  private String type;
+  private String content;
+  private String featuredImageUrl;
+  private String videoUrl;
+  private Set<UUID> categoryIds;
+  private Set<UUID> mediaIds;
+  private String status;
+  private Integer viewCount;
+  private Instant publishedAt;
+  private Instant createdAt;
+}

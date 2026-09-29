@@ -16,6 +16,12 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `auth/post-verify-password-reset.md` | `POST /api/auth/verify-password-reset` | Verify password-reset OTP (step 1 of 2) |
 | `auth/post-reset-password.md` | `POST /api/auth/reset-password` | Set new password after verification (step 2 of 2) |
 | `profile/put-profile.md` | `PUT /api/profile` | Update user profile |
+| `post/post-posts.md` | `POST /api/posts` | Create a post for the authenticated user |
+| `post/get-posts.md` | `GET /api/posts` | List the authenticated user's posts |
+| `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts (public: published only; owner/Admin: all) |
+| `post/patch-posts-postid.md` | `PATCH /api/posts/{postId}` | Edit a post (owner or Admin) |
+| `post/delete-posts-postid.md` | `DELETE /api/posts/{postId}` | Soft-delete a post (owner or Admin) |
+| `post/patch-posts-postid-visibility.md` | `PATCH /api/posts/{postId}/visibility` | Hide or unhide a post (Admin) |
 | `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
 | `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |
 | `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |
