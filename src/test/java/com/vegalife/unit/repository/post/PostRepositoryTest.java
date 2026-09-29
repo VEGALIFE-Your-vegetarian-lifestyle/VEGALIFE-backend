@@ -7,6 +7,7 @@ import com.vegalife.model.user.User;
 import com.vegalife.repository.post.PostRepository;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -54,6 +55,26 @@ class PostRepositoryTest {
     assertThat(result.getTotalElements()).isZero();
   }
 
+  @Test
+  void findByFlagAndFilterQueuedAtBefore_returnsOnlyStalePendingPosts() {
+    User owner = createUser("sweepowner", "sweepowner@example.com");
+    Instant cutoff = Instant.now().minusSeconds(24 * 3600);
+    Instant stale = cutoff.minusSeconds(3600);
+    persistFilterPost(owner, "Stale pending", Post.Flag.PENDING, stale, null);
+    persistFilterPost(owner, "Fresh pending", Post.Flag.PENDING, cutoff.plusSeconds(3600), null);
+    persistFilterPost(owner, "Never filtered", null, null, null);
+    persistFilterPost(owner, "Stale passed", Post.Flag.PASSED, stale, null);
+    persistFilterPost(owner, "Deleted stale pending", Post.Flag.PENDING, stale, Instant.now());
+    entityManager.flush();
+    entityManager.clear();
+
+    List<Post> result =
+        postRepository.findByFlagAndFilterQueuedAtBeforeAndDeletedAtIsNull(
+            Post.Flag.PENDING, cutoff);
+
+    assertThat(result).extracting(Post::getTitle).containsExactly("Stale pending");
+  }
+
   private User createUser(String username, String email) {
     User user =
         User.builder()
@@ -76,6 +97,21 @@ class PostRepositoryTest {
             .content("Post content")
             .status(status)
             .viewCount(0)
+            .deletedAt(deletedAt)
+            .build());
+  }
+
+  private void persistFilterPost(
+      User owner, String title, Post.Flag flag, Instant filterQueuedAt, Instant deletedAt) {
+    entityManager.persist(
+        Post.builder()
+            .user(owner)
+            .title(title)
+            .content("Post content")
+            .status(Post.Status.created)
+            .viewCount(0)
+            .flag(flag)
+            .filterQueuedAt(filterQueuedAt)
             .deletedAt(deletedAt)
             .build());
   }
