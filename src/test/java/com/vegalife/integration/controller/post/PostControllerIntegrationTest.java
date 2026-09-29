@@ -9,10 +9,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.model.outbound.OutboundChannel;
+import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.admin.ModerationLogRepository;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -70,6 +73,8 @@ class PostControllerIntegrationTest {
 
   @Autowired private ModerationLogRepository moderationLogRepository;
 
+  @Autowired private OutboundMessageRepository outboundMessageRepository;
+
   @Autowired private JwtTokenService jwtTokenService;
 
   private User user;
@@ -113,7 +118,7 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  void createPost_publishWithActiveCategory_publishesPost() throws Exception {
+  void createPost_publishWithActiveCategoryQueuesPostForFiltering() throws Exception {
     Category category = categoryRepository.saveAndFlush(Category.builder().name("Recipes").build());
 
     mockMvc
@@ -133,11 +138,24 @@ class PostControllerIntegrationTest {
                     """
                         .formatted(category.getId())))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.data.status").value("published"))
+        .andExpect(jsonPath("$.data.status").value("created"))
+        .andExpect(jsonPath("$.data.flag").value("PENDING"))
         .andExpect(jsonPath("$.data.type").value("blog"))
         .andExpect(jsonPath("$.data.categoryIds[0]").value(category.getId().toString()));
 
-    assertThat(postRepository.findAll().getFirst().getPublishedAt()).isNotNull();
+    Post queuedPost = postRepository.findAll().getFirst();
+    assertThat(queuedPost.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(queuedPost.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(queuedPost.getPublishIntent()).isTrue();
+    assertThat(queuedPost.getFilterQueuedAt()).isNotNull();
+    assertThat(queuedPost.getPublishedAt()).isNull();
+    assertThat(outboundMessageRepository.findAll())
+        .anySatisfy(
+            message -> {
+              assertThat(message.getChannel()).isEqualTo(OutboundChannel.CONTENT_FILTER);
+              assertThat(message.getRecipient()).isEqualTo(queuedPost.getId().toString());
+              assertThat(message.getStatus()).isEqualTo(OutboundStatus.PENDING);
+            });
   }
 
   @Test
@@ -214,6 +232,7 @@ class PostControllerIntegrationTest {
     Post updatedPost = postRepository.findById(existingPost.getId()).orElseThrow();
     assertThat(updatedPost.getUser().getId()).isEqualTo(user.getId());
     assertThat(updatedPost.getStatus()).isEqualTo(Post.Status.published);
+    assertThat(updatedPost.getFlag()).isNull();
     assertThat(updatedPost.getViewCount()).isEqualTo(12);
   }
 
@@ -334,7 +353,7 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  void updatePost_publishesDraftWhenCategoryAssigned() throws Exception {
+  void updatePost_publishQueuesDraftForFilteringWhenCategoryAssigned() throws Exception {
     Post existingPost = createPost(user, "Post title", Post.Status.created, null);
     Category category = categoryRepository.saveAndFlush(Category.builder().name("Recipes").build());
 
@@ -345,8 +364,15 @@ class PostControllerIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"categoryIds\":[\"%s\"],\"publish\":true}".formatted(category.getId())))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("published"))
+        .andExpect(jsonPath("$.data.status").value("created"))
+        .andExpect(jsonPath("$.data.flag").value("PENDING"))
         .andExpect(jsonPath("$.data.categoryIds[0]").value(category.getId().toString()));
+
+    Post queuedPost = postRepository.findById(existingPost.getId()).orElseThrow();
+    assertThat(queuedPost.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(queuedPost.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(queuedPost.getPublishIntent()).isTrue();
+    assertThat(queuedPost.getPublishedAt()).isNull();
   }
 
   @Test
