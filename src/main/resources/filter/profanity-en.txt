@@ -1,0 +1,29 @@
+# English profanity wordlist for static content filtering (BR-FILTER-003).
+# One entry per line. Entries of 4+ characters also prefix-match content words,
+# so "fuck" covers "fucking"/"fucked" while short entries match exactly only.
+fuck
+motherfucker
+shit
+bullshit
+bitch
+bastard
+asshole
+ass
+dick
+cock
+cunt
+pussy
+whore
+slut
+wanker
+twat
+prick
+bollocks
+piss
+dumbass
+dipshit
+jackass
+nigger
+nigga
+faggot
+fag
