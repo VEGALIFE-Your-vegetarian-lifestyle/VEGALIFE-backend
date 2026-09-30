@@ -2,17 +2,25 @@ package com.vegalife.service.category;
 
 import com.vegalife.dto.mapper.category.CategoryMapper;
 import com.vegalife.dto.request.category.CategoryCreateRequest;
+import com.vegalife.dto.request.category.CategoryListRequest;
 import com.vegalife.dto.request.category.CategoryUpdateRequest;
 import com.vegalife.dto.response.category.CategoryResponse;
 import com.vegalife.model.post.Category;
 import com.vegalife.repository.post.CategoryRepository;
+import com.vegalife.repository.post.CategorySpecifications;
+import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
+import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,9 +35,13 @@ public class CategoryService {
 
   /** Every user (including anonymous callers) may browse active categories. */
   @Transactional(readOnly = true)
-  public List<CategoryResponse> listCategories() {
-    List<Category> categories = categoryRepository.findByDeletedAtIsNullOrderByNameAsc();
-    return categoryMapper.toResponseList(categories);
+  public PageResponse<CategoryResponse> listCategories(CategoryListRequest request) {
+    Pageable pageable =
+        PageRequest.of(request.getPage(), request.getSize(), parseSort(request.getSort()));
+    Specification<Category> spec = CategorySpecifications.activeWithNameFilter(request.getName());
+    Page<Category> page = categoryRepository.findAll(spec, pageable);
+
+    return PageResponse.from(page.map(categoryMapper::toResponse));
   }
 
   @Transactional
@@ -101,5 +113,21 @@ public class CategoryService {
 
   private String normalizeDescription(String description) {
     return description == null || description.isBlank() ? null : description.trim();
+  }
+
+  private Sort parseSort(String sort) {
+    String[] parts = sort.split(",");
+    if (parts.length == 0 || parts.length > 2) {
+      throw new ValidationException("Sort must be in the form property,asc|desc");
+    }
+    String property = parts[0].trim();
+    if (property.isBlank()) {
+      throw new ValidationException("Sort property must not be blank");
+    }
+    Sort.Direction direction =
+        parts.length == 2 && parts[1].trim().equalsIgnoreCase("desc")
+            ? Sort.Direction.DESC
+            : Sort.Direction.ASC;
+    return Sort.by(direction, property);
   }
 }
