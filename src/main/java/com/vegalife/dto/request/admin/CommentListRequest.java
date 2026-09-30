@@ -2,7 +2,6 @@ package com.vegalife.dto.request.admin;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.Pattern;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
@@ -26,7 +25,6 @@ public class CommentListRequest {
 
   private String sort;
 
-  @Pattern(regexp = "^(active|removed)$", message = "Status must be one of: active, removed")
   private String status;
 
   private UUID userId;
