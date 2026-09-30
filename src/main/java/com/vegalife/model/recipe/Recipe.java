@@ -1,5 +1,6 @@
 package com.vegalife.model.recipe;
 
+import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -10,9 +11,16 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -63,6 +71,18 @@ public class Recipe {
   @Enumerated(EnumType.STRING)
   @Column(name = "difficulty", length = 20)
   private Difficulty difficulty;
+
+  @ManyToMany
+  @JoinTable(
+      name = "post_recipe",
+      joinColumns = @JoinColumn(name = "recipe_id"),
+      inverseJoinColumns = @JoinColumn(name = "post_id"))
+  @Builder.Default
+  private Set<Post> posts = new HashSet<>();
+
+  @OneToMany(mappedBy = "recipe")
+  @Builder.Default
+  private List<RecipeIngredient> recipeIngredients = new ArrayList<>();
 
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
