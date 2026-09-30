@@ -23,6 +23,10 @@ public class PostListResponse {
   private Set<UUID> categoryIds;
   private Set<UUID> mediaIds;
   private String status;
+
+  /** Content filter verdict: PENDING, PASSED, REJECTED, NEEDS_REVIEW; null when never filtered. */
+  private String flag;
+
   private Integer viewCount;
   private Instant publishedAt;
   private Instant createdAt;

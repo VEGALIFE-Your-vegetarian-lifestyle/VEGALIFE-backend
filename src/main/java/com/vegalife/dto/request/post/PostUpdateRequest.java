@@ -36,7 +36,11 @@ public class PostUpdateRequest {
   /** Replaces the whole category set when supplied (BR-CONTENT-004). */
   private Set<UUID> categoryIds;
 
-  /** true publishes, false returns the post to a private draft (BR-CONTENT-003). */
+  /**
+   * true queues the post for content filtering and it becomes visible only once the filter passes
+   * (BR-FILTER-005 / FR-007); false withdraws it immediately to a private draft and never re-queues
+   * (BR-CONTENT-003).
+   */
   private Boolean publish;
 
   /** Only accepted when equal to the current type (BR-CONTENT-002: type is immutable). */

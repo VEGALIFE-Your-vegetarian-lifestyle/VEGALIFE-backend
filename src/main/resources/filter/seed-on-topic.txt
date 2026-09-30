@@ -1,0 +1,25 @@
+# On-topic seed corpus for content filtering centroids (vegan food, recipes,
+# plant-based lifestyle; Vietnamese + English mixed). One seed per line;
+# blank lines and lines starting with # are ignored.
+# Regenerate centroids.json after editing: set HF_TOKEN and CENTROIDS_WRITE=true,
+# then run `mvn test -Dtest=CentroidRegenerationTest`.
+# Công thức nấu chay từ đậu hũ và rau củ tươi ngon cho cả gia đình
+Bữa sáng thuần chay giàu đạm với yến mạch và trái cây
+Cách làm phở chay tại nhà đơn giản và thơm ngon
+Trải nghiệm ăn chay 30 ngày của mình và cảm nhận
+Chia sẻ kinh nghiệm trồng rau sạch tại nhà cho người mới
+Món chay giản dị ngày rằm được nhiều người yêu thích
+Cách thay thế thịt bằng nấm và đậu trong món kho
+Tổng hợp các quán ăn chay ngon và rẻ ởTpHCM
+Lợi ích của chế độ ăn thuần chay đối với sức khỏe
+Hướng dẫn đọc nhãn thực phẩm chay khi đi siêu thị
+How to make a delicious vegan tofu bowl at home
+Plant-based meal prep ideas for the busy work week
+Best vegan recipes for beginners on a budget
+Community potluck menu full of plant-based dishes
+Benefits of a vegetarian lifestyle for the planet
+Easy dairy-free milk and cheese alternatives to try
+Why more people are switching to plant-based eating
+Tips for balanced vegan nutrition and protein intake
+Seasonal vegetables guide for home cooking this month
+Healthy breakfast ideas with oatmeal and fresh fruit

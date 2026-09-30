@@ -53,6 +53,7 @@ No request body.
         "categoryIds": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
         "mediaIds": [],
         "status": "published",
+        "flag": "PASSED",
         "viewCount": 12,
         "publishedAt": "2026-09-26T10:00:00Z",
         "createdAt": "2026-09-26T09:50:00Z"
@@ -81,7 +82,8 @@ No request body.
 | data.content[].videoUrl | string or null | Video link, video posts only. |
 | data.content[].categoryIds | array of UUID | Assigned categories. |
 | data.content[].mediaIds | array of UUID | Attached uploaded media. |
-| data.content[].status | string | Post status: `created`, `processed`, `published`, `unpublished`, or `hidden`. |
+| data.content[].status | string | Post status: `created`, `processed`, `published`, `unpublished`, `hidden`, or `flagged` (rejected or held for review after content filtering, BR-POST-010). |
+| data.content[].flag | string or null | Content filter state: `null` (never filtered — drafts are not queued), `PENDING`, `PASSED`, `REJECTED`, or `NEEDS_REVIEW` (BR-FILTER-007). |
 | data.content[].viewCount | integer | Number of recorded views. |
 | data.content[].publishedAt | string | ISO-8601 publication timestamp. |
 | data.content[].createdAt | string | ISO-8601 creation timestamp. |
@@ -103,7 +105,8 @@ No request body.
 ## Business Rules
 
 - Only posts owned by the authenticated user are included. The owner ID comes from the JWT; there is no user ID query parameter.
-- All post statuses are included so the owner can manage drafts and hidden or unpublished posts. Soft-deleted posts are excluded.
+- All post statuses are included so the owner can manage drafts, flagged, and hidden or unpublished posts. Soft-deleted posts are excluded.
+- `flag` is returned for every post; `null` means the post has never been queued for content filtering (BR-FILTER-007).
 - A valid JWT is required by the existing security configuration.
 - Results use zero-based pagination and are ordered by creation time, newest first.
 

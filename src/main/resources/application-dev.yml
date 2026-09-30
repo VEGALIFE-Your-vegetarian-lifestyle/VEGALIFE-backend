@@ -3,6 +3,12 @@ spring:
     activate:
       on-profile: dev
 
+  ai:
+    openai:
+      # Spring AI refuses to start with an empty key; fall back to a dummy so
+      # local dev works without HF_TOKEN. Real calls then fail at request time.
+      api-key: ${HF_TOKEN:dev-dummy-key-not-a-secret}
+
   datasource:
     url: jdbc:postgresql://localhost:5432/vegalife
     username: vegalife
