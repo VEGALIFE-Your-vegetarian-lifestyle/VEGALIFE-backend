@@ -29,18 +29,26 @@ No query parameters.
 ```json
 {
   "title": "Vegan tofu bowl",
+  "type": "blog",
   "content": "A simple plant-based lunch.",
-  "featuredImageUrl": "https://example.com/tofu-bowl.jpg"
+  "featuredImageUrl": "https://example.com/tofu-bowl.jpg",
+  "categoryIds": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
+  "publish": true
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | title | string | Yes | Post title. Must not be blank and must be at most 255 characters. |
-| content | string | Yes | Post text. Must not be blank. |
+| type | string | Yes | `blog` or `video` (BR-CONTENT-002). |
+| content | string | Yes for `blog` | Post text; required for blog posts, an optional description for video posts. |
 | featuredImageUrl | string or null | No | URL of the featured image. |
+| videoUrl | string | Video posts | Either `videoUrl` or `mediaId` is required for video posts (BR-CONTENT-002). |
+| mediaId | UUID | Video posts | Uploaded video that must already be in state `succeed`. |
+| categoryIds | array of UUID | No | Active categories; required when `publish` is `true` (BR-CONTENT-004). |
+| publish | boolean | No | `false` (default) keeps the post as a private draft; `true` requests publication and is subject to content filtering (BR-POST-004). |
 
-The client must not send `userId`, `status`, `viewCount`, or timestamps. The server sets these values.
+The client must not send `userId`, `status`, `flag`, `viewCount`, or timestamps. The server sets these values.
 
 ## Responses
 
@@ -56,6 +64,7 @@ The client must not send `userId`, `status`, `viewCount`, or timestamps. The ser
     "content": "A simple plant-based lunch.",
     "featuredImageUrl": "https://example.com/tofu-bowl.jpg",
     "status": "created",
+    "flag": "PENDING",
     "viewCount": 0,
     "publishedAt": null,
     "createdAt": "2026-09-26T10:00:00Z"
@@ -71,7 +80,8 @@ The client must not send `userId`, `status`, `viewCount`, or timestamps. The ser
 | data.title | string | Post title. |
 | data.content | string | Post text. |
 | data.featuredImageUrl | string or null | Featured image URL, if supplied. |
-| data.status | string | Initial status is `created`. Semantic filtering is not part of this endpoint yet. |
+| data.status | string | Initial status is `created`. With `publish: true` the post still starts as `created` and is only set to `published` after filtering returns `PASSED` (BR-POST-004). |
+| data.flag | string or null | Content filter state: `null` (never filtered — the default for drafts), `PENDING`, `PASSED`, `REJECTED`, or `NEEDS_REVIEW` (BR-FILTER-007). |
 | data.viewCount | integer | Starts at `0`. |
 | data.publishedAt | string or null | `null` until the post is published. |
 | data.createdAt | string | Creation timestamp in ISO-8601 format. |
@@ -80,17 +90,18 @@ The client must not send `userId`, `status`, `viewCount`, or timestamps. The ser
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | Title or content is blank, or title exceeds 255 characters | `Validation failed` |
+| 400 | Title is blank/overlong, `type` missing or not `blog`/`video`, blog without content, video without a file or link, unknown/inactive category, `publish: true` without a category | `Validation failed` or the specific rule message |
 | 401 | JWT is missing, invalid, expired, or the account is inactive | `Unauthorized` |
-| 404 | The authenticated user record no longer exists | `User not found` |
+| 404 | The authenticated user record no longer exists, or `mediaId` does not reference existing media | `User not found` / `Media not found` |
 | 500 | Unexpected server error | `Internal server error` |
 
 ## Business Rules
 
 - The author is always the user identified by the authenticated JWT.
 - New posts are persisted with status `created`, view count `0`, and no publication timestamp.
-- Semantic filtering and automatic publishing are deferred to a later task.
-- The schema uses the existing `post` table; no migration is required for this API.
+- `publish: true` does not publish immediately: the post is stored with `flag: PENDING` and an entry on the outbound outbox (`CONTENT_FILTER` channel); it stays `created` until filtering returns `PASSED` (BR-POST-004, BR-FILTER-004, BR-FILTER-005).
+- Filtering runs asynchronously; this endpoint never blocks on the embedding service (BR-FILTER-006).
+- Schema: the `flag` column is added by migration `V19__add_post_filtering.sql`; no other new columns are used by this endpoint.
 
 ## Example
 
@@ -98,10 +109,11 @@ The client must not send `userId`, `status`, `viewCount`, or timestamps. The ser
 curl -X POST http://localhost:8080/api/posts \
   -H "Authorization: Bearer <access-token>" \
   -H "Content-Type: application/json" \
-  -d '{"title":"Vegan tofu bowl","content":"A simple plant-based lunch.","featuredImageUrl":"https://example.com/tofu-bowl.jpg"}'
+  -d '{"title":"Vegan tofu bowl","type":"blog","content":"A simple plant-based lunch.","featuredImageUrl":"https://example.com/tofu-bowl.jpg"}'
 ```
 
 ## Related
 
 - List the authenticated user's posts: `docs/apis/post/get-posts.md`
+- Content filtering feature: `docs/feats/post-content-filtering.md`
 - Database schema: `src/main/resources/db/migration/V7__create_post_tables.sql`
