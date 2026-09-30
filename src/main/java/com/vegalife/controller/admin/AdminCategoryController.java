@@ -10,6 +10,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,5 +38,11 @@ public class AdminCategoryController {
       @PathVariable UUID categoryId, @Valid @RequestBody CategoryUpdateRequest request) {
     CategoryResponse category = categoryService.updateCategory(categoryId, request);
     return ResponseEntity.ok(ApiResponse.success(category, "Category updated successfully"));
+  }
+
+  @DeleteMapping("/{categoryId}")
+  public ResponseEntity<ApiResponse<Void>> deleteCategory(@PathVariable UUID categoryId) {
+    categoryService.deleteCategory(categoryId);
+    return ResponseEntity.ok(ApiResponse.success(null, "Category deleted successfully"));
   }
 }

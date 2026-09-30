@@ -1,5 +1,7 @@
 package com.vegalife.integration.controller.admin;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -7,12 +9,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.model.post.Category;
+import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.CategoryRepository;
+import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,6 +65,8 @@ class AdminCategoryControllerIntegrationTest {
 
   @Autowired private CategoryRepository categoryRepository;
 
+  @Autowired private PostRepository postRepository;
+
   @Autowired private JwtTokenService jwtTokenService;
 
   @Autowired private ObjectMapper objectMapper;
@@ -69,6 +76,7 @@ class AdminCategoryControllerIntegrationTest {
 
   @BeforeEach
   void setUp() {
+    postRepository.deleteAll();
     userRepository.deleteAll();
     categoryRepository.deleteAll();
 
@@ -294,6 +302,102 @@ class AdminCategoryControllerIntegrationTest {
             patch("/api/admin/categories/" + category.getId())
                 .contentType("application/json")
                 .content(objectMapper.writeValueAsString(body)))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void deleteCategory_asAdmin_returns200AndSoftDeletes() throws Exception {
+    Category category = categoryRepository.save(Category.builder().name("Vegan").build());
+
+    mockMvc
+        .perform(
+            delete("/api/admin/categories/" + category.getId())
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Category deleted successfully"))
+        .andExpect(jsonPath("$.data").doesNotExist());
+
+    Category reloaded = categoryRepository.findById(category.getId()).orElseThrow();
+    assertThat(reloaded.getDeletedAt()).isNotNull();
+  }
+
+  @Test
+  void deleteCategory_stillReferencedByAnExistingPost_doesNotBreakThePost() throws Exception {
+    Category category = categoryRepository.save(Category.builder().name("Vegan").build());
+    User author =
+        userRepository.save(
+            User.builder()
+                .username("author")
+                .email("author@example.com")
+                .passwordHash("$2a$10$test")
+                .role(User.Role.USER)
+                .status(User.Status.activated)
+                .emailVerified(true)
+                .build());
+    Post post =
+        postRepository.save(
+            Post.builder()
+                .user(author)
+                .title("Post title")
+                .content("Post content")
+                .status(Post.Status.published)
+                .viewCount(0)
+                .categories(Set.of(category))
+                .build());
+
+    mockMvc
+        .perform(
+            delete("/api/admin/categories/" + category.getId())
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk());
+
+    Post reloadedPost = postRepository.findById(post.getId()).orElseThrow();
+    assertThat(reloadedPost.getCategories())
+        .extracting(Category::getId)
+        .containsExactly(category.getId());
+  }
+
+  @Test
+  void deleteCategory_missingCategory_returns404() throws Exception {
+    mockMvc
+        .perform(
+            delete("/api/admin/categories/" + UUID.randomUUID())
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Category not found"));
+  }
+
+  @Test
+  void deleteCategory_alreadyDeletedCategory_returns404() throws Exception {
+    Category deleted =
+        categoryRepository.save(
+            Category.builder().name("Retired").deletedAt(Instant.now()).build());
+
+    mockMvc
+        .perform(
+            delete("/api/admin/categories/" + deleted.getId())
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void deleteCategory_asNonAdmin_returns403() throws Exception {
+    Category category = categoryRepository.save(Category.builder().name("Vegan").build());
+
+    mockMvc
+        .perform(
+            delete("/api/admin/categories/" + category.getId())
+                .header("Authorization", "Bearer " + userToken))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void deleteCategory_noToken_returns401() throws Exception {
+    Category category = categoryRepository.save(Category.builder().name("Vegan").build());
+
+    mockMvc
+        .perform(delete("/api/admin/categories/" + category.getId()))
         .andExpect(status().isUnauthorized());
   }
 }
