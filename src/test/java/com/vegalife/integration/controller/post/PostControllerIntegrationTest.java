@@ -146,8 +146,6 @@ class PostControllerIntegrationTest {
     Post queuedPost = postRepository.findAll().getFirst();
     assertThat(queuedPost.getStatus()).isEqualTo(Post.Status.created);
     assertThat(queuedPost.getFlag()).isEqualTo(Post.Flag.PENDING);
-    assertThat(queuedPost.getPublishIntent()).isTrue();
-    assertThat(queuedPost.getFilterQueuedAt()).isNotNull();
     assertThat(queuedPost.getPublishedAt()).isNull();
     assertThat(outboundMessageRepository.findAll())
         .anySatisfy(
@@ -371,7 +369,6 @@ class PostControllerIntegrationTest {
     Post queuedPost = postRepository.findById(existingPost.getId()).orElseThrow();
     assertThat(queuedPost.getStatus()).isEqualTo(Post.Status.created);
     assertThat(queuedPost.getFlag()).isEqualTo(Post.Flag.PENDING);
-    assertThat(queuedPost.getPublishIntent()).isTrue();
     assertThat(queuedPost.getPublishedAt()).isNull();
   }
 

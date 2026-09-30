@@ -1,12 +1,10 @@
 package com.vegalife.unit.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.vegalife.filter.ContentFilterService;
 import com.vegalife.filter.EmbeddingRelevanceScorer;
 import com.vegalife.filter.FilterVerdict;
-import com.vegalife.filter.StaticRulesScorer;
 import com.vegalife.model.post.Post;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,9 +15,9 @@ import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
 
 /**
- * Unit tests for {@link ContentFilterService}: static-first short circuit without an embedding call
- * (FR-005), the three semantic verdict bands with their score and reason payloads, and the PASSED
- * empty-reason contract.
+ * Unit tests for {@link ContentFilterService}: every run embeds its content (FR-005), the three
+ * semantic verdict bands with their score and reason payloads, and the PASSED empty-reason
+ * contract.
  */
 class ContentFilterServiceTest {
 
@@ -34,18 +32,18 @@ class ContentFilterServiceTest {
     embeddingModel = new FakeEmbeddingModel();
     service =
         new ContentFilterService(
-            new StaticRulesScorer(),
             embeddingModel,
             new EmbeddingRelevanceScorer(new float[] {1f, 0f}, new float[] {0f, 1f}, 0.75, 0.45));
   }
 
   @Test
-  void staticRejectShortCircuitsWithoutEmbeddingCall() {
+  void shortContentStillEmbedsAndIsScored() {
+    embeddingModel.next = new float[] {0f, 1f};
     FilterVerdict verdict = service.filter("a");
     assertEquals(Post.Flag.REJECTED, verdict.flag());
-    assertNull(verdict.score());
-    assertEquals(List.of(StaticRulesScorer.REASON_TOO_SHORT), verdict.reasons());
-    assertEquals(0, embeddingModel.calls());
+    assertEquals(0.0, verdict.score(), 1e-9);
+    assertEquals(List.of("RELEVANCE_LOW: 0.000"), verdict.reasons());
+    assertEquals(1, embeddingModel.calls());
   }
 
   @Test

@@ -7,24 +7,18 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.stereotype.Service;
 
 /**
- * Runs the full filter pipeline for one post body: static hard rules first — an embedding call is
- * skipped entirely when a static rule fails (FR-005) — then semantic relevance scoring against the
- * committed centroids. Maps the resulting band to the post flag (FR-006): PASS → PASSED, REJECT →
+ * Runs the filter pipeline for one post body: semantic relevance scoring against the committed
+ * centroids (FR-005/FR-006). Maps the resulting band to the post flag: PASS → PASSED, REJECT →
  * REJECTED, REVIEW → NEEDS_REVIEW, carrying the score and reason codes. Never returns {@link
  * Post.Flag#PENDING}; embedding failures propagate so the queue layer can retry.
  */
 @Service
 public class ContentFilterService {
 
-  private final StaticRulesScorer staticRulesScorer;
   private final EmbeddingModel embeddingModel;
   private final RelevanceScorer relevanceScorer;
 
-  public ContentFilterService(
-      StaticRulesScorer staticRulesScorer,
-      EmbeddingModel embeddingModel,
-      RelevanceScorer relevanceScorer) {
-    this.staticRulesScorer = staticRulesScorer;
+  public ContentFilterService(EmbeddingModel embeddingModel, RelevanceScorer relevanceScorer) {
     this.embeddingModel = embeddingModel;
     this.relevanceScorer = relevanceScorer;
   }
@@ -36,11 +30,6 @@ public class ContentFilterService {
    * @return the verdict; never {@link Post.Flag#PENDING}
    */
   public FilterVerdict filter(String content) {
-    StaticRulesResult staticResult = staticRulesScorer.evaluate(content);
-    if (!staticResult.passed()) {
-      return new FilterVerdict(Post.Flag.REJECTED, null, staticResult.reasons());
-    }
-
     float[] embedding = embeddingModel.embed(content);
     RelevanceScore relevance = relevanceScorer.score(embedding);
     return switch (relevance.band()) {

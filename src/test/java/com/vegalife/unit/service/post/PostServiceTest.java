@@ -110,8 +110,6 @@ class PostServiceTest {
     assertThat(post.getViewCount()).isZero();
     assertThat(post.getPublishedAt()).isNull();
     assertThat(post.getFlag()).isNull();
-    assertThat(post.getPublishIntent()).isFalse();
-    assertThat(post.getFilterQueuedAt()).isNull();
     verify(postRepository).saveAndFlush(post);
     verifyContentFilterNotQueued();
   }
@@ -131,8 +129,6 @@ class PostServiceTest {
     assertThat(post.getStatus()).isEqualTo(Post.Status.created);
     assertThat(post.getPublishedAt()).isNull();
     assertThat(post.getFlag()).isEqualTo(Post.Flag.PENDING);
-    assertThat(post.getPublishIntent()).isTrue();
-    assertThat(post.getFilterQueuedAt()).isNotNull();
     assertThat(post.getCategories()).containsExactly(category);
     assertContentFilterQueued(post);
   }
@@ -257,9 +253,9 @@ class PostServiceTest {
     assertThat(existingPost.getUser()).isSameAs(user);
     assertThat(existingPost.getStatus()).isEqualTo(Post.Status.published);
     assertThat(existingPost.getViewCount()).isEqualTo(12);
-    assertThat(existingPost.getFlag()).isNull();
+    assertThat(existingPost.getFlag()).isEqualTo(Post.Flag.PENDING);
     verify(postRepository).saveAndFlush(existingPost);
-    verifyContentFilterNotQueued();
+    assertContentFilterQueued(existingPost);
   }
 
   @Test
@@ -357,8 +353,6 @@ class PostServiceTest {
     assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
     assertThat(existing.getPublishedAt()).isNull();
     assertThat(existing.getFlag()).isEqualTo(Post.Flag.PENDING);
-    assertThat(existing.getPublishIntent()).isTrue();
-    assertThat(existing.getFilterQueuedAt()).isNotNull();
     assertContentFilterQueued(existing);
   }
 
@@ -402,7 +396,6 @@ class PostServiceTest {
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, Post.Type.blog, Post.Status.published);
     existing.setPublishedAt(java.time.Instant.now());
-    existing.setPublishIntent(true);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -412,17 +405,15 @@ class PostServiceTest {
 
     assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
     assertThat(existing.getPublishedAt()).isNull();
-    assertThat(existing.getPublishIntent()).isFalse();
     assertThat(existing.getFlag()).isNull();
     verifyContentFilterNotQueued();
   }
 
   @Test
-  void updatePost_contentChangeOnPublishedPostWithIntentRequeuesForFiltering() {
+  void updatePost_contentChangeOnPublishedPostRequeuesForFiltering() {
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, Post.Type.blog, Post.Status.published);
     existing.setPublishedAt(java.time.Instant.now());
-    existing.setPublishIntent(true);
     existing.setFlag(Post.Flag.PASSED);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
@@ -433,15 +424,13 @@ class PostServiceTest {
 
     assertThat(existing.getStatus()).isEqualTo(Post.Status.published);
     assertThat(existing.getFlag()).isEqualTo(Post.Flag.PENDING);
-    assertThat(existing.getFilterQueuedAt()).isNotNull();
     assertContentFilterQueued(existing);
   }
 
   @Test
-  void updatePost_contentChangeOnFlaggedPostWithIntentRequeuesForFiltering() {
+  void updatePost_contentChangeOnFlaggedPostRequeuesForFiltering() {
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, Post.Type.blog, Post.Status.flagged);
-    existing.setPublishIntent(true);
     existing.setFlag(Post.Flag.REJECTED);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
@@ -452,7 +441,6 @@ class PostServiceTest {
 
     assertThat(existing.getStatus()).isEqualTo(Post.Status.flagged);
     assertThat(existing.getFlag()).isEqualTo(Post.Flag.PENDING);
-    assertThat(existing.getFilterQueuedAt()).isNotNull();
     assertContentFilterQueued(existing);
   }
 
@@ -460,9 +448,7 @@ class PostServiceTest {
   void updatePost_contentChangeOnPendingDraftIsNotRequeued() {
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, Post.Type.blog, Post.Status.created);
-    existing.setPublishIntent(true);
     existing.setFlag(Post.Flag.PENDING);
-    existing.setFilterQueuedAt(java.time.Instant.now());
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -480,7 +466,6 @@ class PostServiceTest {
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, Post.Type.blog, Post.Status.published);
     existing.setPublishedAt(java.time.Instant.now());
-    existing.setPublishIntent(true);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -493,8 +478,27 @@ class PostServiceTest {
 
     assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
     assertThat(existing.getPublishedAt()).isNull();
-    assertThat(existing.getPublishIntent()).isFalse();
     assertThat(existing.getFlag()).isNull();
+    verifyContentFilterNotQueued();
+  }
+
+  @Test
+  void updatePost_withdrawFlaggedPostReturnsToDraftKeepingFlagAndDoesNotRequeue() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Type.blog, Post.Status.flagged);
+    existing.setFlag(Post.Flag.NEEDS_REVIEW);
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.updatePost(
+        userId,
+        false,
+        postId,
+        PostUpdateRequest.builder().title("Withdrawn").publish(false).build());
+
+    assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(existing.getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
     verifyContentFilterNotQueued();
   }
 
@@ -503,7 +507,6 @@ class PostServiceTest {
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, Post.Type.blog, Post.Status.published);
     existing.setPublishedAt(java.time.Instant.now());
-    existing.setPublishIntent(true);
     existing.setFlag(Post.Flag.PASSED);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));

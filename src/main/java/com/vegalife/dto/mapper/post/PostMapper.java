@@ -20,8 +20,6 @@ public interface PostMapper {
   @Mapping(target = "media", ignore = true)
   @Mapping(target = "status", ignore = true)
   @Mapping(target = "flag", ignore = true)
-  @Mapping(target = "publishIntent", ignore = true)
-  @Mapping(target = "filterQueuedAt", ignore = true)
   @Mapping(target = "viewCount", ignore = true)
   @Mapping(target = "publishedAt", ignore = true)
   @Mapping(target = "createdAt", ignore = true)

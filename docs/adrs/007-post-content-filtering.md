@@ -62,13 +62,14 @@ Concretely:
 
 1. **Queue channel.** A new `CONTENT_FILTER` channel on
    `outbound_message`. Enqueue happens in the caller's transaction when
-   the post has publish intent (create with `publish: true`, edit with
+   publication is intended (create with `publish: true`, edit with
    `publish: true`, or a content change to a post that is `published` or
-   `flagged`); the same transaction sets `post.flag = PENDING` and
-   `post.filter_queued_at = now`. There is no synchronous or real-time
-   filtering path anywhere (BR-FILTER-006).
+   `flagged`); the same transaction sets `post.flag = PENDING`, and the
+   outbox row's `created_at` is the enqueue clock the sweep reasons
+   about. There is no synchronous or real-time filtering path anywhere
+   (BR-FILTER-006).
 2. **Single-stage verdict.** `ContentFilterService` embeds every
-   publish-intent content and scores it against the two centroids
+   queued post's content and scores it against the two centroids
    (BR-FILTER-004); there is no static-rule stage and the embedding
    service is called on every run.
 3. **Embedding client.** Spring AI 1.1.8 is added (BOM +
@@ -98,13 +99,16 @@ Concretely:
    no `prev_status` column. `post.status` gains one new value,
    `flagged`, used when a verdict is not `PASSED`; publishing happens
    only when a run returns `PASSED` (BR-FILTER-007, BR-FILTER-008).
-6. **Publish intent.** A boolean `post.publish_intent` records that the
-   user asked for publication, so a post created as a draft stays
-   unfiltered forever and a withdrawn post stops being filtered
-   (BR-FILTER-005).
-7. **Sweep.** A scheduled job moves any post still `PENDING` after
-   `app.filter.sweep-max-age` (default 24h) to `NEEDS_REVIEW` /
-   `flagged` with an ERROR log, bounding the damage of
+6. **Enqueue rule, no intent column.** Whether a request queues a run is
+   decided from the request itself: an explicit `publish: true` always
+   queues, and a content change queues only when the post is `published`
+   or `flagged`. No `publish_intent` column exists — a draft created
+   without publish intent is never queued, and withdrawing
+   (`publish: false`) never queues one (BR-FILTER-005).
+7. **Sweep.** A scheduled job finds `CONTENT_FILTER` recipients whose
+   newest outbound message is older than `app.filter.sweep-max-age`
+   (default 24h) and moves any such post still `PENDING` to
+   `NEEDS_REVIEW` / `flagged` with an ERROR log, bounding the damage of
    a lost or exhausted queue message (BR-FILTER-009).
 
 ## Considered options
@@ -139,8 +143,8 @@ Concretely:
   moderation, filtering) and is stored separately (decision 5).
 - **Option G — filter every post, drafts included** — catches content
   earlier, but burns embeddings on work in progress and contradicts the
-  requirement that drafts are never screened. Rejected; publish intent
-  decides (decision 6).
+   requirement that drafts are never screened. Rejected; the enqueue
+   rule decides (decision 6).
 - **Option H — track `prev_status` so a passing verdict can restore the
   exact prior status** — would make verdict application fully symmetric,
   but no restore path exists this sprint (a passing edit returns a
@@ -190,16 +194,16 @@ Concretely:
   value (`${HF_TOKEN:<profile>-dummy-key-not-a-secret}`) so the context
   loads with no credential present — the dummies are never a secret and
   never grant anything.
-- **New post columns to migrate and index** (`flag`, `publish_intent`,
-  `filter_queued_at`), plus the drainer's existing 5s polling now also
-  covers this channel.
+- **One new post column to migrate and index** (`flag`), plus the
+  drainer's existing 5s polling now also covers this channel. Enqueue
+  age is read from the outbox row instead of a post column.
 
 ## Verification
 
-- Issues #33 and #34 acceptance criteria are the primary check: publish
-  intent returns the post id with `flag: PENDING`, a passed run
-  publishes it, an off-topic score below the threshold rejects it, a
-  mid-band score flags it, drafts are never queued,
+- Issues #33 and #34 acceptance criteria are the primary check: an
+  explicit publish request returns the post id with `flag: PENDING`, a
+  passed run publishes it, an off-topic score below the threshold
+  rejects it, a mid-band score flags it, drafts are never queued,
   and a content edit of a published post re-enqueues.
 - Revisit if any of these happen: the `NEEDS_REVIEW` share of runs
   exceeds ~10% over a week (corpus or thresholds are wrong); queue

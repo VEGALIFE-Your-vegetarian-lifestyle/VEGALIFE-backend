@@ -142,7 +142,7 @@ Active
 
 ## Statement
 
-When a user creates a post, the system sets its view count to `0`. The post starts as a private draft (`created`) unless the client asks to publish (`publish: true`), which is accepted only when the post has all information required for its type and at least one active category (BR-CONTENT-002/003/004). Publishing is then gated by content filtering: the post is saved as `created` with `flag = PENDING`, `publish_intent = true`, and a `CONTENT_FILTER` message enqueued (BR-FILTER-005, BR-FILTER-006), and it becomes `published` with `publishedAt` set only once filtering returns `PASSED` (BR-FILTER-007). Status and view count cannot otherwise be set by the client.
+When a user creates a post, the system sets its view count to `0`. The post starts as a private draft (`created`) unless the client asks to publish (`publish: true`), which is accepted only when the post has all information required for its type and at least one active category (BR-CONTENT-002/003/004). Publishing is then gated by content filtering: the post is saved as `created` with `flag = PENDING` and a `CONTENT_FILTER` message enqueued (BR-FILTER-005, BR-FILTER-006), and it becomes `published` with `publishedAt` set only once filtering returns `PASSED` (BR-FILTER-007). Status and view count cannot otherwise be set by the client.
 
 ## Rationale
 
@@ -248,7 +248,7 @@ Active
 
 ## Statement
 
-Post edits accept a non-empty subset of `title`, `content`, `featuredImageUrl`, `videoUrl`, `mediaId`, `categoryIds`, and `publish`. Only supplied, non-null values are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters, and supplied content must not be blank. The post `type` is fixed at creation and any different `type` is rejected (BR-CONTENT-002); video fields are rejected for blog posts. `categoryIds` replaces the category set and may only reference active categories (BR-CONTENT-004). `publish: true` requests publication and re-queues the post for content filtering (BR-FILTER-005): the post only becomes `published` once the filter returns `PASSED` (BR-FILTER-007). `publish: false` withdraws the post to a private draft immediately, clears `publish_intent`, and never triggers filtering. A content change (title, content, or media) to a post whose status is `published` or `flagged` re-queues it for filtering (BR-FILTER-005). A post that is or becomes published must keep at least one category and, for video, a video file or link (BR-CONTENT-003). Only an Administrator may change the state of a `hidden` post. Ownership and view count are not editable.
+Post edits accept a non-empty subset of `title`, `content`, `featuredImageUrl`, `videoUrl`, `mediaId`, `categoryIds`, and `publish`. Only supplied, non-null values are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters, and supplied content must not be blank. The post `type` is fixed at creation and any different `type` is rejected (BR-CONTENT-002); video fields are rejected for blog posts. `categoryIds` replaces the category set and may only reference active categories (BR-CONTENT-004). `publish: true` requests publication and re-queues the post for content filtering (BR-FILTER-005): the post only becomes `published` once the filter returns `PASSED` (BR-FILTER-007). `publish: false` withdraws the post to a private draft immediately — a withdrawn `flagged` post returns to `created` but keeps its `flag` value — and never triggers filtering. A content change (title, content, or media) to a post whose status is `published` or `flagged` re-queues it for filtering (BR-FILTER-005). A post that is or becomes published must keep at least one category and, for video, a video file or link (BR-CONTENT-003). Only an Administrator may change the state of a `hidden` post. Ownership and view count are not editable.
 
 ## Rationale
 
@@ -420,7 +420,7 @@ Active
 
 ## Statement
 
-A post is filtered only while it has `publish_intent = true`. That flag is set by creating with `publish: true` or editing with `publish: true`, and cleared by withdrawing with `publish: false`. While `publish_intent` is true, a content change (title, content, or media) on a post whose status is `published` or `flagged` re-queues it for filtering. A draft — created or edited without publish intent, `flag` NULL — is never filtered, and unpublishing never triggers a filter run.
+A post is filtered only when it is submitted for publication or when already-visible content changes. An explicit `publish: true` on create or edit always queues a filter run. Without an explicit `publish` field, a content change (title, content, or media) on a post whose status is `published` or `flagged` re-queues it for filtering. A draft — created or edited without `publish: true`, `flag` NULL — is never filtered, and unpublishing with `publish: false` never triggers a filter run.
 
 ## Rationale
 
@@ -432,7 +432,7 @@ Applies to `POST /api/posts` and `PATCH /api/posts/{postId}`. Ownership, categor
 
 ## Enforcement
 
-- Service: `PostService.createPost()` / `updatePost()` decide whether to enqueue based on `publish_intent` and the content dirty check, and enqueue in the caller's transaction.
+- Service: `PostService.createPost()` / `updatePost()` decide whether to enqueue from an explicit `publish: true` or from the content dirty check on a `published`/`flagged` post, and enqueue in the caller's transaction.
 - API references: `docs/apis/post/post-posts.md`, `docs/apis/post/patch-posts-postid.md`.
 
 ## Last Reviewed
@@ -453,7 +453,7 @@ Active
 
 ## Statement
 
-Filtering never runs inside the HTTP request. Enqueueing writes an `outbound_message` row with channel `CONTENT_FILTER` in the same transaction that saves the post, sets `post.flag = PENDING` and `post.filter_queued_at = now`, and returns; a scheduled drainer later claims the message and runs the filter. There is no synchronous or real-time filtering path, and a failed filter run is retried by the queue's existing retry/deferred handling rather than failing the user's request.
+Filtering never runs inside the HTTP request. Enqueueing writes an `outbound_message` row with channel `CONTENT_FILTER` in the same transaction that saves the post, sets `post.flag = PENDING`, and returns; a scheduled drainer later claims the message and runs the filter. The message row's `created_at` is the enqueue clock the sweep reasons about (BR-FILTER-009). There is no synchronous or real-time filtering path, and a failed filter run is retried by the queue's existing retry/deferred handling rather than failing the user's request.
 
 ## Rationale
 
@@ -489,7 +489,7 @@ Active
 
 ## Statement
 
-When a filter run ends with `PASSED`, the post's `flag` becomes `PASSED` and its status becomes (or stays) `published` whenever publish intent was requested or the post is already published; `publishedAt` is set if it was null. A draft that was never submitted for publication keeps its existing status — a `PASSED` verdict can only arrive for a post with publish intent (BR-FILTER-005).
+When a filter run ends with `PASSED`, the post's `flag` becomes `PASSED`, its status becomes `published`, and `publishedAt` is set if it was null. Every queued run was enqueued by an explicit publish request or by a content change on a `published`/`flagged` post (BR-FILTER-005), so a `PASSED` verdict publishes the post unconditionally — the verdict, not the client's request, drives publication.
 
 ## Rationale
 
@@ -557,20 +557,20 @@ Active
 
 ## Statement
 
-A scheduled job finds every post whose `flag = PENDING` and whose `filter_queued_at` is older than `app.filter.sweep-max-age` (default 24 hours) and moves it to `flag = NEEDS_REVIEW`, `status = flagged`, logging at ERROR. Posts with a fresh `PENDING` or a NULL `flag` are never touched.
+A scheduled job finds every `CONTENT_FILTER` recipient whose newest outbound message is older than `app.filter.sweep-max-age` (default 24 hours) and, for each such post still at `flag = PENDING`, sets `flag = NEEDS_REVIEW`, `status = flagged`, logging at ERROR. Posts with a fresh outbound message or a NULL `flag` are never touched.
 
 ## Rationale
 
-The outbox retries and then defers, but a message can still be lost (deleted row, exhausted retries, prolonged provider outage). Without a bound, such a post would stay `PENDING` forever — invisible to the owner's publish intent and to any reviewer.
+The outbox retries and then defers, but a message can still be lost (deleted row, exhausted retries, prolonged provider outage). Without a bound, such a post would stay `PENDING` forever — invisible to its owner and to any reviewer.
 
 ## Scope & Exceptions
 
-Applies only to `PENDING` posts; it never re-runs a completed verdict and never touches drafts (NULL flag). 24 hours is the default and is configuration, not a constant.
+Applies only to posts still at `PENDING`; it never re-runs a completed verdict and never touches drafts (NULL flag). 24 hours is the default and is configuration, not a constant. The outbox row is the enqueue clock: it is written in the same transaction as `flag = PENDING`, and terminal rows are deleted only by the 7-day retention job, so every lost message is always sweepable.
 
 ## Enforcement
 
-- `PendingFilterSweepJob` (scheduled, `OutboundRetentionJob` pattern) performs the transition.
-- Unit tests cover: stale PENDING swept, fresh PENDING untouched, NULL flag untouched.
+- `PendingFilterSweepJob` (scheduled, `OutboundRetentionJob` pattern) queries recipients of `CONTENT_FILTER` whose latest message is older than the max age, then performs the transition.
+- Unit tests cover: stale recipient with `PENDING` post swept, fresh recipient untouched, non-`PENDING` post untouched.
 
 ## Last Reviewed
 

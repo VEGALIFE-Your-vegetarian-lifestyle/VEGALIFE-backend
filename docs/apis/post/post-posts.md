@@ -46,7 +46,7 @@ No query parameters.
 | videoUrl | string | Video posts | Either `videoUrl` or `mediaId` is required for video posts (BR-CONTENT-002). |
 | mediaId | UUID | Video posts | Uploaded video that must already be in state `succeed`. |
 | categoryIds | array of UUID | No | Active categories; required when `publish` is `true` (BR-CONTENT-004). |
-| publish | boolean | No | `false` (default) keeps the post as a private draft; `true` expresses publish intent and is subject to content filtering (BR-POST-004). |
+| publish | boolean | No | `false` (default) keeps the post as a private draft; `true` requests publication and is subject to content filtering (BR-POST-004). |
 
 The client must not send `userId`, `status`, `flag`, `viewCount`, or timestamps. The server sets these values.
 
@@ -99,9 +99,9 @@ The client must not send `userId`, `status`, `flag`, `viewCount`, or timestamps.
 
 - The author is always the user identified by the authenticated JWT.
 - New posts are persisted with status `created`, view count `0`, and no publication timestamp.
-- `publish: true` does not publish immediately: the post is stored with `flag: PENDING`, `publish_intent` set, and an entry on the outbound outbox (`CONTENT_FILTER` channel); it stays `created` until filtering returns `PASSED` (BR-POST-004, BR-FILTER-004, BR-FILTER-005).
+- `publish: true` does not publish immediately: the post is stored with `flag: PENDING` and an entry on the outbound outbox (`CONTENT_FILTER` channel); it stays `created` until filtering returns `PASSED` (BR-POST-004, BR-FILTER-004, BR-FILTER-005).
 - Filtering runs asynchronously; this endpoint never blocks on the embedding service (BR-FILTER-006).
-- Schema: the `flag`, `filter_queued_at`, and `publish_intent` columns are added by migration `V19__add_post_filtering.sql`; no other new columns are used by this endpoint.
+- Schema: the `flag` column is added by migration `V19__add_post_filtering.sql`; no other new columns are used by this endpoint.
 
 ## Example
 

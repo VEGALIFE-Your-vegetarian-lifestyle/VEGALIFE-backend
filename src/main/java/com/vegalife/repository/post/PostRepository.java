@@ -1,8 +1,6 @@
 package com.vegalife.repository.post;
 
 import com.vegalife.model.post.Post;
-import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -21,6 +19,4 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
 
   Page<Post> findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
       UUID userId, Post.Status status, Pageable pageable);
-
-  List<Post> findByFlagAndFilterQueuedAtBeforeAndDeletedAtIsNull(Post.Flag flag, Instant cutoff);
 }

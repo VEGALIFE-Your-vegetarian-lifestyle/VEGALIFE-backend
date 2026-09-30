@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -20,11 +21,9 @@ import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
-import com.vegalife.model.post.PostFilterLog;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
-import com.vegalife.repository.post.PostFilterLogRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.scheduled.OutboundMessageDrainer;
@@ -52,12 +51,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * End-to-end acceptance coverage for post semantic content filtering (FR-007 to FR-012, BR-FILTER
- * series): the static-rule gate, the mocked semantic path, outbox delivery via {@code drainOnce},
- * flag exposure in API responses and the post-filter audit rows.
+ * series): the mocked semantic path, outbox delivery via {@code drainOnce}, flag transitions on the
+ * post itself and flag exposure in API responses. The verdict persists only in {@code post.flag} /
+ * {@code post.status}; score and reasons reach the logs.
  *
  * <p>Only the two AI-facing collaborators are replaced ({@link EmbeddingModel}, {@link
- * RelevanceScorer}); everything else — static rules, service, adapter, repositories, drainer — runs
- * for real against PostgreSQL.
+ * RelevanceScorer}); everything else — service, adapter, repositories, drainer — runs for real
+ * against PostgreSQL.
  */
 @Testcontainers
 @SpringBootTest
@@ -93,8 +93,6 @@ class PostContentFilterIntegrationTest {
   @Autowired private CategoryRepository categoryRepository;
 
   @Autowired private OutboundMessageRepository outboundMessageRepository;
-
-  @Autowired private PostFilterLogRepository postFilterLogRepository;
 
   @Autowired private JwtTokenService jwtTokenService;
 
@@ -144,17 +142,12 @@ class PostContentFilterIntegrationTest {
     OutboundMessage message = contentFilterQueue().getFirst();
     assertThat(message.getStatus()).isEqualTo(OutboundStatus.COMPLETED);
     assertThat(message.getPayload()).isNull();
-
-    List<PostFilterLog> logs = auditRows(postId);
-    assertThat(logs).hasSize(1);
-    assertThat(logs.getFirst().getFlag()).isEqualTo(Post.Flag.PASSED);
-    assertThat(logs.getFirst().getScore()).isEqualTo(0.9);
-    assertThat(logs.getFirst().getReasons()).isEmpty();
   }
 
   @Test
-  void createWithPublish_staticLinkSpam_rejectedWithoutCallingEmbedding() throws Exception {
+  void createWithPublish_linkHeavyStillEmbedsAndRejectsOnLowScore() throws Exception {
     clearInvocations(embeddingModel, relevanceScorer);
+    stubScore(0.3, Band.REJECT);
 
     UUID postId =
         createPostWithPublish(
@@ -168,13 +161,8 @@ class PostContentFilterIntegrationTest {
     assertThat(filtered.getFlag()).isEqualTo(Post.Flag.REJECTED);
     assertThat(filtered.getPublishedAt()).isNull();
 
-    List<PostFilterLog> logs = auditRows(postId);
-    assertThat(logs).hasSize(1);
-    assertThat(logs.getFirst().getFlag()).isEqualTo(Post.Flag.REJECTED);
-    assertThat(logs.getFirst().getScore()).isNull();
-    assertThat(logs.getFirst().getReasons()).isEqualTo("LINK_SPAM");
-
-    verifyNoInteractions(embeddingModel, relevanceScorer);
+    verify(embeddingModel).embed(anyString());
+    verify(relevanceScorer).score(any());
   }
 
   @Test
@@ -191,12 +179,6 @@ class PostContentFilterIntegrationTest {
     assertThat(filtered.getStatus()).isEqualTo(Post.Status.flagged);
     assertThat(filtered.getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
     assertThat(filtered.getPublishedAt()).isNull();
-
-    List<PostFilterLog> logs = auditRows(postId);
-    assertThat(logs).hasSize(1);
-    assertThat(logs.getFirst().getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
-    assertThat(logs.getFirst().getScore()).isEqualTo(0.6);
-    assertThat(logs.getFirst().getReasons()).isEqualTo("RELEVANCE_REVIEW: 0.600");
   }
 
   @Test
@@ -265,20 +247,6 @@ class PostContentFilterIntegrationTest {
     Post filtered = postById(postId);
     assertThat(filtered.getStatus()).isEqualTo(Post.Status.flagged);
     assertThat(filtered.getFlag()).isEqualTo(Post.Flag.REJECTED);
-
-    List<PostFilterLog> logs = auditRows(postId);
-    assertThat(logs).hasSize(2);
-    assertThat(logs)
-        .extracting(PostFilterLog::getFlag)
-        .containsExactlyInAnyOrder(Post.Flag.PASSED, Post.Flag.REJECTED);
-    assertThat(logs)
-        .extracting(PostFilterLog::getReasons)
-        .containsExactlyInAnyOrder("", "RELEVANCE_LOW: 0.300");
-    assertThat(logs)
-        .filteredOn(entry -> entry.getFlag() == Post.Flag.REJECTED)
-        .singleElement()
-        .extracting(PostFilterLog::getScore)
-        .isEqualTo(0.3);
   }
 
   @Test
@@ -316,7 +284,6 @@ class PostContentFilterIntegrationTest {
     assertThat(filtered.getStatus()).isEqualTo(Post.Status.published);
     assertThat(filtered.getFlag()).isEqualTo(Post.Flag.PASSED);
     assertThat(filtered.getPublishedAt()).isNotNull();
-    assertThat(auditRows(postId)).hasSize(2);
   }
 
   @Test
@@ -343,7 +310,6 @@ class PostContentFilterIntegrationTest {
     assertThat(unchanged.getContent()).isEqualTo("Original content owned by the author only.");
     assertThat(unchanged.getFlag()).isEqualTo(Post.Flag.PENDING);
     assertThat(unchanged.getStatus()).isEqualTo(Post.Status.created);
-    assertThat(auditRows(postId)).isEmpty();
   }
 
   @Test
@@ -460,12 +426,6 @@ class PostContentFilterIntegrationTest {
   private List<OutboundMessage> contentFilterQueue() {
     return outboundMessageRepository.findAll().stream()
         .filter(message -> message.getChannel() == OutboundChannel.CONTENT_FILTER)
-        .toList();
-  }
-
-  private List<PostFilterLog> auditRows(UUID postId) {
-    return postFilterLogRepository.findAll().stream()
-        .filter(log -> postId.equals(log.getPostId()))
         .toList();
   }
 }

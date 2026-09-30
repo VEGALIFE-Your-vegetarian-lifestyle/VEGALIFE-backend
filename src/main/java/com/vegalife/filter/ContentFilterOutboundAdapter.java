@@ -5,8 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Post;
-import com.vegalife.model.post.PostFilterLog;
-import com.vegalife.repository.post.PostFilterLogRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
 import java.time.Instant;
@@ -17,11 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * CONTENT_FILTER channel adapter (ADR-005): loads the queued post, runs the filter pipeline (FR-005
- * static-first, FR-006 bands) and applies the verdict together with exactly one audit row per run
- * (FR-010). {@code PASSED} publishes when publishing was requested or the post is already
- * published; {@code REJECTED} / {@code NEEDS_REVIEW} flag the post, move it to {@code flagged} and
- * WARN (FR-009). Any failure propagates so the queue retries; permanent failure is the existing
- * FAILED@24h handling of the outbound job. No {@code prev_status} tracking.
+ * embedding scoring, FR-006 bands) and applies the verdict. {@code PASSED} publishes the post —
+ * every queued message was enqueued by an explicit publish request (BR-FILTER-005); {@code
+ * REJECTED} / {@code NEEDS_REVIEW} flag the post, move it to {@code flagged} and WARN (FR-009). Any
+ * failure propagates so the queue retries; permanent failure is the existing FAILED@24h handling of
+ * the outbound job. No {@code prev_status} tracking.
  */
 @Service
 @RequiredArgsConstructor
@@ -30,7 +28,6 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
 
   private final PostRepository postRepository;
   private final ContentFilterService contentFilterService;
-  private final PostFilterLogRepository postFilterLogRepository;
   private final ObjectMapper objectMapper;
 
   @Override
@@ -53,20 +50,17 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
                             + " references missing post "
                             + payload.postId()));
     FilterVerdict verdict = contentFilterService.filter(filterBody(post));
-    apply(post, verdict, payload.requestedPublish());
+    apply(post, verdict);
     postRepository.save(post);
-    postFilterLogRepository.save(toLog(post, verdict));
   }
 
-  private static void apply(Post post, FilterVerdict verdict, boolean requestedPublish) {
+  private static void apply(Post post, FilterVerdict verdict) {
     post.setFlag(verdict.flag());
     switch (verdict.flag()) {
       case PASSED -> {
-        if (requestedPublish || post.getStatus() == Post.Status.published) {
-          post.setStatus(Post.Status.published);
-          if (post.getPublishedAt() == null) {
-            post.setPublishedAt(Instant.now());
-          }
+        post.setStatus(Post.Status.published);
+        if (post.getPublishedAt() == null) {
+          post.setPublishedAt(Instant.now());
         }
         log.info("Content filter passed post {} (score {})", post.getId(), verdict.score());
       }
@@ -106,14 +100,5 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
 
   private static String filterBody(Post post) {
     return post.getTitle() + "\n" + post.getContent();
-  }
-
-  private static PostFilterLog toLog(Post post, FilterVerdict verdict) {
-    return PostFilterLog.builder()
-        .postId(post.getId())
-        .flag(verdict.flag())
-        .score(verdict.score())
-        .reasons(String.join(", ", verdict.reasons()))
-        .build();
   }
 }

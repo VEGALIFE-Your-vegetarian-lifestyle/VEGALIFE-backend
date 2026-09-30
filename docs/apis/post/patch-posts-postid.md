@@ -67,7 +67,7 @@ Returns the updated post using `PostListResponse` (`id`, `title`, `type`, `conte
 - Only the owner or an Administrator can edit a post; a non-admin gets `404` for others' posts.
 - Every edit an Administrator makes to another user's post is written to `moderation_log` (BR-ADMIN-002).
 - Publishing requires at least one active category and the information required for the post type; a published post cannot lose its last category.
-- `publish: true` on a post that is not yet `PASSED` is publish intent, not publication: the post goes to `flag: PENDING` and waits for filtering (BR-POST-004). Unpublishing (`publish: false`) withdraws the intent immediately, sets status `created`, clears `publishedAt`, and returns the post to a private draft (BR-POST-007).
+- `publish: true` queues the post for filtering rather than publishing it directly: the post goes to `flag: PENDING` and waits for filtering (BR-POST-004). Unpublishing (`publish: false`) withdraws the post immediately, sets status `created`, clears `publishedAt`, and returns it to a private draft — a `flagged` post keeps its `flag` (BR-POST-007).
 - A title or content change to a published or flagged post re-queues semantic filtering and returns the post to `flag: PENDING` (BR-POST-007).
 - A `REJECTED` or `NEEDS_REVIEW` post is returned to the owner as status `flagged`, not `published` (BR-POST-010, BR-FILTER-008).
 - Filtering itself is never triggered synchronously by this endpoint; it runs through the async outbox (BR-FILTER-006).

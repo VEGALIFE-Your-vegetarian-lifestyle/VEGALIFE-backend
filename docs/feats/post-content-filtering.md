@@ -61,21 +61,20 @@ vegan food at all, or what it contains.
 ### Functional Requirements
 
 - [ ] FR-001: Creating a post with `publish: true` saves it with
-      `status = created`, `flag = PENDING`, `publish_intent = true`, a
-      `filter_queued_at` timestamp, and enqueues one `CONTENT_FILTER`
-      outbound message in the same transaction.
+      `status = created`, `flag = PENDING`, and enqueues one
+      `CONTENT_FILTER` outbound message in the same transaction.
 - [ ] FR-002: Creating a post with `publish: false` (a draft) leaves
-      `flag` NULL, sets no publish intent, and enqueues nothing; the
-      draft is never filtered.
+      `flag` NULL and enqueues nothing; the draft is never filtered.
 - [ ] FR-003: Editing the title, content, or media of a post whose
       status is `published` or `flagged` re-enqueues it for filtering
       with the same `PENDING` handshake.
 - [ ] FR-004: Editing a draft, or withdrawing a post with
       `publish: false`, does not trigger filtering; withdrawal stays
-      immediate and clears `publish_intent`.
+      immediate (a withdrawn `flagged` post returns to `created` but
+      keeps its `flag`).
 - [ ] FR-005: The filter runs no static-rule stage — length, links, and
       wordlists are never evaluated as separate rules — so every
-      publish-intent run embeds the content.
+      queued run embeds the content.
 - [ ] FR-006: The content is embedded and scored
       by cosine similarity against on-topic and off-topic centroids;
       the score maps to `PASSED` (≥ accept-threshold), `REJECTED`
@@ -84,14 +83,16 @@ vegan food at all, or what it contains.
       (`app.filter.accept-threshold` = 0.75, `reject-threshold` = 0.45,
       `sweep-max-age` = 24h), not constants in code.
 - [ ] FR-008: `PASSED` sets `flag = PASSED` and publishes the post
-      (`status = published`, `publishedAt` set) when publish intent was
-      requested or the post is already published.
+      (`status = published`, `publishedAt` set) — every queued run was
+      enqueued by an explicit publish request or a content change on a
+      `published`/`flagged` post.
 - [ ] FR-009: `REJECTED` and `NEEDS_REVIEW` set the flag accordingly and
       move the post to `status = flagged`, with a WARN log carrying the
       score band.
-- [ ] FR-011: A post still `PENDING` after `app.filter.sweep-max-age`
-      (24h) is moved to `NEEDS_REVIEW` / `flagged` with an ERROR log,
-      covering lost or exhausted queue messages.
+- [ ] FR-011: A `CONTENT_FILTER` recipient whose newest outbound message
+      is older than `app.filter.sweep-max-age` (24h) and whose post is
+      still `PENDING` is moved to `NEEDS_REVIEW` / `flagged` with an
+      ERROR log, covering lost or exhausted queue messages.
 - [ ] FR-012: The create and update responses, and the user's post list,
       expose `flag` (`null` = never filtered).
 
@@ -124,11 +125,13 @@ existing outbound queue:
    two precomputed centroids (on-topic vs off-topic, VN + EN seed
    corpora committed as resources). Thresholds come from `app.filter.*`.
 
-State lives in three new columns on `post` (`flag`, `publish_intent`,
-`filter_queued_at`) plus the `flagged` value added to `post.status`;
+State lives in one new column on `post` (`flag`) plus the `flagged`
+value added to `post.status`;
 `flag` is deliberately separate from `status`: `status` stays the
 lifecycle field, `flag` is the filter state, and NULL means "never
-filtered". The verdict persists only in `post.flag`; the score and
+filtered". Enqueue age is read from the outbox row's `created_at`
+(written in the same transaction as `flag = PENDING`), not from a post
+column. The verdict persists only in `post.flag`; the score and
 reasons are written to SLF4J WARN/ERROR logs — there is no audit
 table. Architecture decisions and the dependency
 choice are recorded in `docs/adrs/007-post-content-filtering.md`;
@@ -139,7 +142,7 @@ the queue reuse is ADR-005 with a new `CONTENT_FILTER` channel.
 - Both driving issues' filtering acceptance criteria are covered by
   automated tests that pass in `./mvnw clean verify` before the PR
   merges.
-- 100% of posts created with publish intent end in a non-NULL `flag`
+- 100% of posts submitted for publication end in a non-NULL `flag`
   within 24 hours (either a verdict or the sweep) — measured by the
   sweep job finding zero rows on a healthy system.
 - No `published` post exists with `flag` NULL after this feature ships
@@ -153,7 +156,7 @@ become publicly visible without review.
 
 Issue #33 (create):
 
-- [ ] Given an authenticated user creating a post with publish intent,
+- [ ] Given an authenticated user creating a post with `publish: true`,
       when it is saved, then the response carries the post ID with
       `flag = PENDING` while the post itself stays `status = created`.
 - [ ] Given a queued filter run, when the semantic score is in the accept

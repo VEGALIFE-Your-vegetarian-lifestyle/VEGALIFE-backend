@@ -81,14 +81,11 @@ public class PostService {
 
     // BR-CONTENT-003 / FR-007: a post never becomes visible directly. With publish=true it is
     // queued for content filtering (BR-FILTER-005) and the filter callback publishes it once it
-    // passes; without it the post stays a private draft that is never filtered.
+    // passes; without it the post stays a private draft that is never filtered. The queued
+    // outbound row's creation time is the enqueue clock (BR-FILTER-009).
+    post.setStatus(Post.Status.created);
     if (request.isPublish()) {
-      post.setStatus(Post.Status.created);
-      post.setPublishIntent(true);
       post.setFlag(Post.Flag.PENDING);
-      post.setFilterQueuedAt(Instant.now());
-    } else {
-      post.setStatus(Post.Status.created);
     }
 
     Post saved = postRepository.saveAndFlush(post);
@@ -145,9 +142,7 @@ public class PostService {
     boolean willEnqueue = shouldEnqueueFilter(post, request.getPublish(), contentChanged);
     applyPublishState(post, request.getPublish(), isAdmin, willEnqueue);
     if (willEnqueue) {
-      post.setPublishIntent(true);
       post.setFlag(Post.Flag.PENDING);
-      post.setFilterQueuedAt(Instant.now());
     }
 
     Post saved = postRepository.saveAndFlush(post);
@@ -231,16 +226,18 @@ public class PostService {
 
   /**
    * BR-CONTENT-003: a post may be published only when it has the information its type requires and
-   * at least one active category; unpublishing returns it to a private draft and clears the publish
-   * intent. A post that is (or becomes, via a content re-queue) published is re-checked so an edit
-   * cannot leave it without a category. Nothing is ever flipped to {@code published} here — that
-   * happens only when the content filter passes (FR-007 / Phase 9).
+   * at least one active category; unpublishing returns it to a private draft (also when it was
+   * {@code flagged}, so a withdrawn flagged post never re-queues implicitly). A post that is (or
+   * becomes, via a content re-queue) published is re-checked so an edit cannot leave it without a
+   * category. Nothing is ever flipped to {@code published} here — that happens only when the
+   * content filter passes (FR-007 / Phase 9).
    *
    * @param willRequeue whether this update also re-queues the post for content filtering, so a
    *     flagged post being re-checked is validated as if it were published
    */
   private void applyPublishState(Post post, Boolean publish, boolean isAdmin, boolean willRequeue) {
     boolean published = post.getStatus() == Post.Status.published;
+    boolean flagged = post.getStatus() == Post.Status.flagged;
     boolean willBePublished = publish != null ? publish : (published || willRequeue);
     if (willBePublished) {
       if (post.getCategories().isEmpty()) {
@@ -258,27 +255,22 @@ public class PostService {
     if (post.getStatus() == Post.Status.hidden && !isAdmin) {
       throw new ValidationException("A hidden post can only be changed by an administrator");
     }
-    if (!publish) {
-      if (published) {
-        post.setStatus(Post.Status.created);
-        post.setPublishedAt(null);
-      }
-      post.setPublishIntent(false);
+    if (!publish && (published || flagged)) {
+      post.setStatus(Post.Status.created);
+      post.setPublishedAt(null);
     }
   }
 
   /**
    * BR-FILTER-005: an explicit {@code publish: true} always queues (and re-queues) for content
-   * filtering; a content change re-queues only a post that still wants to be published ({@code
-   * publish_intent} set) and has already been through filtering (status {@code published} or {@code
-   * flagged}).
+   * filtering; a content change re-queues a post that is still meant to be visible — status {@code
+   * published} or {@code flagged}. A withdrawn post (draft) never re-queues implicitly.
    */
   private boolean shouldEnqueueFilter(Post post, Boolean publish, boolean contentChanged) {
     if (publish != null) {
       return publish;
     }
     return contentChanged
-        && Boolean.TRUE.equals(post.getPublishIntent())
         && (post.getStatus() == Post.Status.published || post.getStatus() == Post.Status.flagged);
   }
 
@@ -305,10 +297,7 @@ public class PostService {
           OutboundMessage.builder()
               .channel(OutboundChannel.CONTENT_FILTER)
               .recipient(post.getId().toString())
-              .payload(
-                  objectMapper.writeValueAsString(
-                      new ContentFilterPayload(
-                          post.getId(), Boolean.TRUE.equals(post.getPublishIntent()))))
+              .payload(objectMapper.writeValueAsString(new ContentFilterPayload(post.getId())))
               .status(OutboundStatus.PENDING)
               .attempts(0)
               .nextAttemptAt(Instant.now())

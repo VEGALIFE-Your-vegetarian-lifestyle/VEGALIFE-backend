@@ -6,15 +6,14 @@ import java.util.Objects;
 
 /**
  * Result of one filter run: the resulting post flag (never {@link Post.Flag#PENDING} — PENDING is
- * assigned at enqueue time), the relevance score ({@code null} when a static rule rejected before
- * any embedding was produced), and the reason codes for logging and the audit trail (FR-009,
- * FR-010).
+ * assigned at enqueue time), the relevance score in [0, 1], and the reason codes carried into the
+ * WARN/ERROR logs (FR-009).
  *
  * @param flag resulting flag: PASSED, REJECTED or NEEDS_REVIEW
- * @param score relevance score in [0, 1], {@code null} for static rejections
+ * @param score relevance score in [0, 1]
  * @param reasons reason codes, empty when the content passed
  */
-public record FilterVerdict(Post.Flag flag, Double score, List<String> reasons) {
+public record FilterVerdict(Post.Flag flag, double score, List<String> reasons) {
 
   public FilterVerdict {
     Objects.requireNonNull(flag, "flag must not be null");
