@@ -18,6 +18,7 @@ import com.vegalife.service.category.CategoryService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,23 @@ class CategoryServiceTest {
   @Mock private CategoryMapper categoryMapper;
 
   @InjectMocks private CategoryService categoryService;
+
+  @Test
+  void listCategoriesReturnsActiveCategoriesOrderedByName() {
+    Category dessert = Category.builder().id(UUID.randomUUID()).name("Dessert").build();
+    Category vegan = Category.builder().id(UUID.randomUUID()).name("Vegan").build();
+    when(categoryRepository.findByDeletedAtIsNullOrderByNameAsc())
+        .thenReturn(List.of(dessert, vegan));
+    List<CategoryResponse> expected =
+        List.of(
+            CategoryResponse.builder().id(dessert.getId()).name("Dessert").build(),
+            CategoryResponse.builder().id(vegan.getId()).name("Vegan").build());
+    when(categoryMapper.toResponseList(List.of(dessert, vegan))).thenReturn(expected);
+
+    List<CategoryResponse> result = categoryService.listCategories();
+
+    assertThat(result).isEqualTo(expected);
+  }
 
   @Test
   void createCategoryPersistsTrimmedNameAndDescription() {

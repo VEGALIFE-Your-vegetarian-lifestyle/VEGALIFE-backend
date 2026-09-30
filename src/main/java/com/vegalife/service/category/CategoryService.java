@@ -9,6 +9,7 @@ import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,13 @@ public class CategoryService {
 
   private final CategoryRepository categoryRepository;
   private final CategoryMapper categoryMapper;
+
+  /** Every user (including anonymous callers) may browse active categories. */
+  @Transactional(readOnly = true)
+  public List<CategoryResponse> listCategories() {
+    List<Category> categories = categoryRepository.findByDeletedAtIsNullOrderByNameAsc();
+    return categoryMapper.toResponseList(categories);
+  }
 
   @Transactional
   public CategoryResponse createCategory(CategoryCreateRequest request) {
