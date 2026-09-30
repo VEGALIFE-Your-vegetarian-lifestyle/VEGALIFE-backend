@@ -4,7 +4,9 @@ import com.vegalife.dto.request.media.MediaUploadRequest;
 import com.vegalife.dto.response.media.MediaResponse;
 import com.vegalife.dto.response.media.MediaUploadGrantResponse;
 import com.vegalife.service.media.MediaService;
+import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/media")
 @RequiredArgsConstructor
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class MediaController {
 
   private final MediaService mediaService;

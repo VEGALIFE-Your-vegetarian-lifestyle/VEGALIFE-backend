@@ -4,7 +4,9 @@ import com.vegalife.dto.request.category.CategoryCreateRequest;
 import com.vegalife.dto.request.category.CategoryUpdateRequest;
 import com.vegalife.dto.response.category.CategoryResponse;
 import com.vegalife.service.category.CategoryService;
+import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/admin/categories")
 @RequiredArgsConstructor
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class AdminCategoryController {
 
   private final CategoryService categoryService;

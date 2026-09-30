@@ -3,8 +3,10 @@ package com.vegalife.controller.admin;
 import com.vegalife.dto.request.admin.UserListRequest;
 import com.vegalife.dto.response.admin.UserListResponse;
 import com.vegalife.service.admin.AdminService;
+import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class AdminController {
 
   private final AdminService adminService;
