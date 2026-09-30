@@ -1,6 +1,8 @@
 package com.vegalife.controller.admin;
 
+import com.vegalife.dto.request.admin.CommentListRequest;
 import com.vegalife.dto.request.admin.UserListRequest;
+import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
 import com.vegalife.service.admin.AdminService;
 import com.vegalife.shared.config.OpenApiConfig;
@@ -31,6 +33,13 @@ public class AdminController {
       @Valid @ModelAttribute UserListRequest request) {
     PageResponse<UserListResponse> page = adminService.listUsers(request);
     return ResponseEntity.ok(ApiResponse.success(page, "Users retrieved successfully"));
+  }
+
+  @GetMapping("/comments")
+  public ResponseEntity<ApiResponse<PageResponse<CommentListResponse>>> listComments(
+      @Valid @ModelAttribute CommentListRequest request) {
+    PageResponse<CommentListResponse> page = adminService.listComments(request);
+    return ResponseEntity.ok(ApiResponse.success(page, "Comments retrieved successfully"));
   }
 
   @PostMapping("/users/{userId}/suspend")
