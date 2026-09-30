@@ -28,6 +28,7 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |
 | `admin/get-comments.md` | `GET /api/admin/comments` | List all comments (Admin) |
 | `admin/get-recipes.md` | `GET /api/admin/recipes` | List all recipes across users with ingredients and instructions (Admin) |
+| `admin/get-videos.md` | `GET /api/admin/videos` | List all uploaded videos across users and statuses (Admin) |
 | `media/post-upload.md` | `POST /api/media/upload` | Issue a signed upload grant and media ID |
 | `media/post-media-mediaid-confirm.md` | `POST /api/media/{mediaId}/confirm` | Verify a completed upload and finalize the media record |
 | `media/get-media-mediaid.md` | `GET /api/media/{mediaId}` | Read a stored media record |
@@ -35,3 +36,4 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `admin/patch-categories-categoryid.md` | `PATCH /api/admin/categories/{categoryId}` | Edit a content category (Admin) |
 | `admin/delete-categories-categoryid.md` | `DELETE /api/admin/categories/{categoryId}` | Retire a content category (Admin) |
 | `post/get-categories.md` | `GET /api/categories` | List active content categories (public) |
+| `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |

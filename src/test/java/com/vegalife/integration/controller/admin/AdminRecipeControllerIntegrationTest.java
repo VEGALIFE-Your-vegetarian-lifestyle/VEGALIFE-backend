@@ -14,6 +14,8 @@ import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.recipe.DishRepository;
+import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
@@ -71,6 +73,10 @@ class AdminRecipeControllerIntegrationTest {
   @Autowired private CategoryRepository categoryRepository;
 
   @Autowired private RecipeRepository recipeRepository;
+
+  @Autowired private DishRepository dishRepository;
+
+  @Autowired private IngredientRepository ingredientRepository;
 
   @Autowired private EntityManager entityManager;
 
@@ -379,8 +385,11 @@ class AdminRecipeControllerIntegrationTest {
 
   private Recipe createRecipe(
       User owner, String name, Instant deletedAt, Set<Post> posts, boolean withIngredient) {
-    Dish dish = Dish.builder().name("Test bowl").build();
-    entityManager.persist(dish);
+    // V22 enforces case-insensitive unique names on active dishes; reuse instead of insert.
+    Dish dish =
+        dishRepository
+            .findByNameIgnoreCaseAndDeletedAtIsNull("Test bowl")
+            .orElseGet(() -> dishRepository.save(Dish.builder().name("Test bowl").build()));
     Recipe recipe =
         recipeRepository.save(
             Recipe.builder()
@@ -397,8 +406,11 @@ class AdminRecipeControllerIntegrationTest {
                 .deletedAt(deletedAt)
                 .build());
     if (withIngredient) {
-      Ingredient tofu = Ingredient.builder().name("Tofu").build();
-      entityManager.persist(tofu);
+      Ingredient tofu =
+          ingredientRepository
+              .findByNameIgnoreCase("Tofu")
+              .orElseGet(
+                  () -> ingredientRepository.save(Ingredient.builder().name("Tofu").build()));
       RecipeIngredient link =
           RecipeIngredient.builder()
               .recipeId(recipe.getId())
