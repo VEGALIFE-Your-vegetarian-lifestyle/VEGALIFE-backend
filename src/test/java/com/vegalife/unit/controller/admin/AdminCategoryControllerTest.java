@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.controller.admin.AdminCategoryController;
 import com.vegalife.dto.request.category.CategoryCreateRequest;
+import com.vegalife.dto.request.category.CategoryUpdateRequest;
 import com.vegalife.dto.response.category.CategoryResponse;
 import com.vegalife.service.category.CategoryService;
 import com.vegalife.shared.dto.ApiResponse;
@@ -40,5 +41,22 @@ class AdminCategoryControllerTest {
     assertThat(result.getBody().getMessage()).isEqualTo("Category created successfully");
     assertThat(result.getBody().getData()).isEqualTo(response);
     verify(categoryService).createCategory(request);
+  }
+
+  @Test
+  void updateCategoryReturns200WithMappedBody() {
+    UUID categoryId = UUID.randomUUID();
+    CategoryUpdateRequest request = CategoryUpdateRequest.builder().name("Dessert").build();
+    CategoryResponse response = CategoryResponse.builder().id(categoryId).name("Dessert").build();
+    when(categoryService.updateCategory(categoryId, request)).thenReturn(response);
+
+    ResponseEntity<ApiResponse<CategoryResponse>> result =
+        adminCategoryController.updateCategory(categoryId, request);
+
+    assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(result.getBody().isSuccess()).isTrue();
+    assertThat(result.getBody().getMessage()).isEqualTo("Category updated successfully");
+    assertThat(result.getBody().getData()).isEqualTo(response);
+    verify(categoryService).updateCategory(categoryId, request);
   }
 }

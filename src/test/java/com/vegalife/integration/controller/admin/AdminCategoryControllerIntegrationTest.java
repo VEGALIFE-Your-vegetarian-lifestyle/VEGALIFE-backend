@@ -1,15 +1,19 @@
 package com.vegalife.integration.controller.admin;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.model.post.Category;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
+import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -167,6 +171,127 @@ class AdminCategoryControllerIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/categories")
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(body)))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void updateCategory_asAdmin_returns200WithUpdatedFields() throws Exception {
+    Category category =
+        categoryRepository.save(Category.builder().name("Vegan").description("Old").build());
+
+    Map<String, String> body = Map.of("name", "  Pure Vegan  ", "description", "  Updated  ");
+    mockMvc
+        .perform(
+            patch("/api/admin/categories/" + category.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(body)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Category updated successfully"))
+        .andExpect(jsonPath("$.data.name").value("Pure Vegan"))
+        .andExpect(jsonPath("$.data.description").value("Updated"));
+  }
+
+  @Test
+  void updateCategory_partialBody_leavesOmittedFieldUnchanged() throws Exception {
+    Category category =
+        categoryRepository.save(Category.builder().name("Vegan").description("Old").build());
+
+    Map<String, String> body = Map.of("description", "New description");
+    mockMvc
+        .perform(
+            patch("/api/admin/categories/" + category.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(body)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.name").value("Vegan"))
+        .andExpect(jsonPath("$.data.description").value("New description"));
+  }
+
+  @Test
+  void updateCategory_duplicateNameAmongOtherActiveCategory_returns409() throws Exception {
+    categoryRepository.save(Category.builder().name("Dessert").build());
+    Category category = categoryRepository.save(Category.builder().name("Vegan").build());
+
+    Map<String, String> body = Map.of("name", "dessert");
+    mockMvc
+        .perform(
+            patch("/api/admin/categories/" + category.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(body)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.message").value("Category name already exists"));
+  }
+
+  @Test
+  void updateCategory_missingCategory_returns404() throws Exception {
+    Map<String, String> body = Map.of("name", "Vegan");
+    mockMvc
+        .perform(
+            patch("/api/admin/categories/" + UUID.randomUUID())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(body)))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Category not found"));
+  }
+
+  @Test
+  void updateCategory_softDeletedCategory_returns404() throws Exception {
+    Category deleted =
+        categoryRepository.save(
+            Category.builder().name("Retired").deletedAt(Instant.now()).build());
+
+    Map<String, String> body = Map.of("name", "New Name");
+    mockMvc
+        .perform(
+            patch("/api/admin/categories/" + deleted.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(body)))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void updateCategory_emptyBody_returns400() throws Exception {
+    Category category = categoryRepository.save(Category.builder().name("Vegan").build());
+
+    mockMvc
+        .perform(
+            patch("/api/admin/categories/" + category.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType("application/json")
+                .content("{}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void updateCategory_asNonAdmin_returns403() throws Exception {
+    Category category = categoryRepository.save(Category.builder().name("Vegan").build());
+
+    Map<String, String> body = Map.of("name", "New Name");
+    mockMvc
+        .perform(
+            patch("/api/admin/categories/" + category.getId())
+                .header("Authorization", "Bearer " + userToken)
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(body)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void updateCategory_noToken_returns401() throws Exception {
+    Category category = categoryRepository.save(Category.builder().name("Vegan").build());
+
+    Map<String, String> body = Map.of("name", "New Name");
+    mockMvc
+        .perform(
+            patch("/api/admin/categories/" + category.getId())
                 .contentType("application/json")
                 .content(objectMapper.writeValueAsString(body)))
         .andExpect(status().isUnauthorized());
