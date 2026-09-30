@@ -11,4 +11,6 @@ import org.springframework.stereotype.Repository;
 public interface CategoryRepository extends JpaRepository<Category, UUID> {
 
   List<Category> findByIdInAndDeletedAtIsNull(Collection<UUID> ids);
+
+  boolean existsByNameIgnoreCaseAndDeletedAtIsNull(String name);
 }

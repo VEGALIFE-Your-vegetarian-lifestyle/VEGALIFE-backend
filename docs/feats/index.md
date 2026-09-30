@@ -19,3 +19,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `hide-user-post.md` | Hide a Post (Moderation) | Implemented | 2026-09-29 |
 | `list-posts-of-user.md` | List a Member's Posts | Implemented | 2026-09-29 |
 | `upload-media-api.md` | Upload Media API (Presigned URL) | In progress | 2026-09-30 |
+| `create-category-api.md` | Create Category API (Admin) | Implemented | 2026-09-30 |
