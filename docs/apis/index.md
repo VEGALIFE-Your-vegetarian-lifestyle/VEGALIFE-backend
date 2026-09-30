@@ -28,3 +28,4 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `media/post-upload.md` | `POST /api/media/upload` | Issue a signed upload grant and media ID |
 | `media/post-media-mediaid-confirm.md` | `POST /api/media/{mediaId}/confirm` | Verify a completed upload and finalize the media record |
 | `media/get-media-mediaid.md` | `GET /api/media/{mediaId}` | Read a stored media record |
+| `admin/post-categories.md` | `POST /api/admin/categories` | Create a content category (Admin) |
