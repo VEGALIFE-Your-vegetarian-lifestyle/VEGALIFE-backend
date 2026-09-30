@@ -16,6 +16,8 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `auth/post-verify-password-reset.md` | `POST /api/auth/verify-password-reset` | Verify password-reset OTP (step 1 of 2) |
 | `auth/post-reset-password.md` | `POST /api/auth/reset-password` | Set new password after verification (step 2 of 2) |
 | `profile/put-profile.md` | `PUT /api/profile` | Update user profile |
+| `profile/get-profile.md` | `GET /api/profile` | Get own profile (authenticated; auto-creates empty row) |
+| `profile/get-profile-userid.md` | `GET /api/profile/{userId}` | Get a member's profile (public) |
 | `post/post-posts.md` | `POST /api/posts` | Create a post for the authenticated user |
 | `post/get-posts.md` | `GET /api/posts` | List the authenticated user's posts |
 | `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts (public: published only; owner/Admin: all) |
