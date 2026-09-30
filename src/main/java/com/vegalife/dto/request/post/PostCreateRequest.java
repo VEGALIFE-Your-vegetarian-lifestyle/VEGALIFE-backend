@@ -36,6 +36,10 @@ public class PostCreateRequest {
 
   private Set<UUID> categoryIds;
 
-  /** false keeps the post as a private draft; true publishes it (BR-CONTENT-003). */
+  /**
+   * false keeps the post as a private draft that is never filtered; true requests publication: the
+   * post is queued for content filtering (BR-FILTER-005) and becomes visible only once the filter
+   * passes (FR-007).
+   */
   private boolean publish;
 }

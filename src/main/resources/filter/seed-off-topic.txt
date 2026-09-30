@@ -1,0 +1,25 @@
+# Off-topic seed corpus for content filtering centroids (spam, crypto, betting,
+# unrelated promotions; Vietnamese + English mixed). One seed per line;
+# blank lines and lines starting with # are ignored.
+# Regenerate centroids.json after editing: set HF_TOKEN and CENTROIDS_WRITE=true,
+# then run `mvn test -Dtest=CentroidRegenerationTest`.
+Buy cheap cryptocurrency now and double your money fast
+Giá cổ phiếu tăng mạnh hôm nay trên sàn giao dịch
+Mua bán bất động sản giá rẻ nhất quận một
+Download the latest casino app and win big prizes
+Cách kiếm tiền online nhanh nhất không cần vốn
+New sneakers drop this Friday limited edition only
+Đăng ký ngay khóa học forex miễn phí cho người mới
+Bitcoin mining rig sale fifty percent off today
+Xổ số miền Bắc hôm nay kết quả đặc biệt trúng lớn
+Cheap backlinks package for your website SEO ranking
+Ultimate weight loss tea that burns fat overnight
+Tuyển dụng nhân viên bán hàng lương cao không kinh nghiệm
+Flash sale electronics accessories online shop now
+Nhận ngay thẻ cào miễn phí khi tải ứng dụng về máy
+Football transfer rumors and gossip roundup this week
+Latest smartphone flagship compared with last year model
+Mở thẻ tín dụng ưu đãi hoàn tiền cực hấp dẫn
+Nhập mã giảm giá để được freeship đơn hàng đầu tiên
+Crypto trading signals group premium membership access
+Cập nhật kết quả bóng đá Ngoại Hạng Anh vòng mới nhất
