@@ -1,4 +1,4 @@
-# Feature Specifications
+﻿# Feature Specifications
 
 Product-level feature specs with design overview, success metrics, and acceptance criteria for the Vegalife backend.
 
@@ -25,3 +25,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `delete-category-api.md`            | Delete Category API (Admin)               | Implemented | 2026-09-30 |
 | `list-categories-api.md`            | List Categories API                       | Implemented | 2026-09-30 |
 | `list-all-posts-admin-api.md`       | List All Posts API (Admin)                | In progress | 2026-09-30 |
+| `list-comments-admin-api.md`        | List All Comments API (Admin)             | In progress | 2026-09-30 |

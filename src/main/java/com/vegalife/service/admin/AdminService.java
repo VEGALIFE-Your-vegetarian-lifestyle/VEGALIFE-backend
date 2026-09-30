@@ -1,9 +1,15 @@
 package com.vegalife.service.admin;
 
+import com.vegalife.dto.mapper.admin.AdminCommentMapper;
 import com.vegalife.dto.mapper.admin.AdminUserMapper;
+import com.vegalife.dto.request.admin.CommentListRequest;
 import com.vegalife.dto.request.admin.UserListRequest;
+import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
+import com.vegalife.model.post.Comment;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.post.CommentRepository;
+import com.vegalife.repository.post.CommentSpecifications;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.repository.user.UserSpecifications;
 import com.vegalife.service.token.JwtTokenService;
@@ -12,7 +18,10 @@ import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -31,6 +40,8 @@ public class AdminService {
   private final UserRepository userRepository;
   private final AdminUserMapper adminUserMapper;
   private final JwtTokenService jwtTokenService;
+  private final CommentRepository commentRepository;
+  private final AdminCommentMapper adminCommentMapper;
 
   @Transactional(readOnly = true)
   public PageResponse<UserListResponse> listUsers(UserListRequest request) {
@@ -56,6 +67,48 @@ public class AdminService {
         page.getTotalElements());
 
     Page<UserListResponse> mapped = page.map(adminUserMapper::toResponse);
+    return PageResponse.from(mapped);
+  }
+
+  @Transactional(readOnly = true)
+  public PageResponse<CommentListResponse> listComments(CommentListRequest request) {
+    String status = parseCommentStatus(request.getStatus());
+    UUID userId = request.getUserId();
+    UUID postId = request.getPostId();
+    Instant createdFrom = request.getCreatedFrom();
+    Instant createdTo = request.getCreatedTo();
+
+    if (createdFrom != null && createdTo != null && createdFrom.isAfter(createdTo)) {
+      throw new ValidationException("createdFrom must be before createdTo");
+    }
+
+    Pageable pageable =
+        PageRequest.of(request.getPage(), request.getSize(), parseCommentSort(request.getSort()));
+    Page<Comment> page =
+        commentRepository.findAll(
+            CommentSpecifications.withFilters(status, userId, postId, createdFrom, createdTo),
+            pageable);
+
+    Set<UUID> authorIds =
+        page.getContent().stream().map(Comment::getUserId).collect(Collectors.toSet());
+    Map<UUID, String> usernames =
+        userRepository.findAllById(authorIds).stream()
+            .collect(Collectors.toMap(User::getId, User::getUsername));
+
+    Page<CommentListResponse> mapped =
+        page.map(
+            comment -> {
+              CommentListResponse response = adminCommentMapper.toResponse(comment);
+              response.setUsername(usernames.get(comment.getUserId()));
+              return response;
+            });
+
+    log.debug(
+        "Listed comments page={} size={} total={}",
+        mapped.getNumber(),
+        mapped.getSize(),
+        mapped.getTotalElements());
+
     return PageResponse.from(mapped);
   }
 
@@ -121,6 +174,32 @@ public class AdminService {
     } catch (IllegalArgumentException ex) {
       throw new ValidationException("Role must be ADMIN or USER");
     }
+  }
+
+  private String parseCommentStatus(String status) {
+    if (status == null || status.isBlank()) {
+      return null;
+    }
+    if ("active".equals(status) || "removed".equals(status)) {
+      return status;
+    }
+    throw new ValidationException("Status must be one of: active, removed");
+  }
+
+  private Sort parseCommentSort(String sort) {
+    String[] parts = sort.split(",");
+    if (parts.length == 0 || parts.length > 2) {
+      throw new ValidationException("Sort must be in the form property,asc|desc");
+    }
+    String property = parts[0].trim();
+    if (!"createdAt".equals(property) && !"updatedAt".equals(property)) {
+      throw new ValidationException("Sort property must be one of: createdAt, updatedAt");
+    }
+    Sort.Direction direction =
+        parts.length == 2 && parts[1].trim().equalsIgnoreCase("asc")
+            ? Sort.Direction.ASC
+            : Sort.Direction.DESC;
+    return Sort.by(direction, property);
   }
 
   private Sort parseSort(String sort) {
