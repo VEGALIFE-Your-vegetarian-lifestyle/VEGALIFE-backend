@@ -38,7 +38,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-09-27 |
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
 | BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
-| BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-29 |
+| BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
 | BR-MEDIA-001 | Media Content-Type Allowlist | Active | 2026-09-30 |
 | BR-MEDIA-002 | Media Ownership Is Derived from Authentication | Active | 2026-09-30 |
 | BR-MEDIA-003 | Per-Class Upload Size Ceilings | Active | 2026-09-30 |
@@ -47,3 +47,9 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MEDIA-006 | Flyway Out-of-Order Enabled for Parallel Migration Branches | Active | 2026-09-30 |
 | BR-MEDIA-007 | Confirmation Is Exactly Once | Active | 2026-09-30 |
 | BR-MEDIA-008 | Confirmation Trusts Only Provider Read-Back | Active | 2026-09-30 |
+| BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-09-30 |
+| BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-09-30 |
+| BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-09-30 |
+| BR-FILTER-007 | A Passed Filter Publishes the Post | Active | 2026-09-30 |
+| BR-FILTER-008 | A Rejected or Uncertain Filter Flags the Post | Active | 2026-09-30 |
+| BR-FILTER-009 | Posts Stuck Pending Are Flagged After 24 Hours | Active | 2026-09-30 |

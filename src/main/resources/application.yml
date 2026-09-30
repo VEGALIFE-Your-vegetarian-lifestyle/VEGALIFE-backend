@@ -2,6 +2,11 @@ server:
   port: ${SERVER_PORT:8080}
 
 spring:
+  ai:
+    openai:
+      base-url: ${HF_BASE_URL:https://router.huggingface.co/v1}
+      api-key: ${HF_TOKEN:}
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/vegalife}
     username: ${DB_USER:vegalife}
@@ -92,6 +97,17 @@ app:
       max-video-bytes: 52428800
       allowed-image-types: [image/jpeg, image/png, image/webp]
       allowed-video-types: [video/mp4, video/webm]
+
+  filter:
+    accept-threshold: 0.75
+    reject-threshold: 0.45
+    sweep-max-age: 24h
+    embedding:
+      # Raw HF feature-extraction route, verified live (ADR-007); not the OpenAI-compat /v1 path.
+      base-url: ${HF_EMBEDDING_BASE_URL:https://router.huggingface.co/hf-inference/models}
+      model: ${HF_EMBEDDING_MODEL:intfloat/multilingual-e5-large-instruct}
+      api-key: ${HF_TOKEN:}
+      timeout: 30s
 
 logging:
   level:

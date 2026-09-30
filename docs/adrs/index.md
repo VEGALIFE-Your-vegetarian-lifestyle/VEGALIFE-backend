@@ -10,3 +10,4 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [004-generalized-otp-storage.md](004-generalized-otp-storage.md) | Generalize OTP Storage with a Purpose Discriminator | Accepted | 2026-09-24 |
 | [005-persistent-outbound-message-queue.md](005-persistent-outbound-message-queue.md) | Use a Persistent Outbound Message Queue for Email Delivery | Accepted | 2026-09-26 |
 | [006-optional-otp-verified-stage.md](006-optional-otp-verified-stage.md) | Optional OTP Verified Stage on `otp_code` | Accepted | 2026-09-27 |
+| [007-post-content-filtering.md](007-post-content-filtering.md) | Filter Post Content Before Publication | Accepted | 2026-09-30 |
