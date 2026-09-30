@@ -8,10 +8,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.vegalife.dto.mapper.admin.AdminCommentMapper;
 import com.vegalife.dto.mapper.admin.AdminUserMapper;
+import com.vegalife.dto.request.admin.CommentListRequest;
 import com.vegalife.dto.request.admin.UserListRequest;
+import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
+import com.vegalife.model.post.Comment;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.AdminService;
 import com.vegalife.service.token.JwtTokenService;
@@ -44,11 +49,16 @@ class AdminServiceTest {
 
   @Mock private JwtTokenService jwtTokenService;
 
+  @Mock private CommentRepository commentRepository;
+
+  @Mock private AdminCommentMapper adminCommentMapper;
+
   @InjectMocks private AdminService adminService;
 
   private User user;
   private UserListResponse userResponse;
   private Pageable expectedPageable;
+  private Comment comment;
 
   @BeforeEach
   void setUp() {
@@ -72,6 +82,15 @@ class AdminServiceTest {
             .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
             .build();
     expectedPageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+    comment =
+        Comment.builder()
+            .id(UUID.randomUUID())
+            .userId(user.getId())
+            .postId(UUID.randomUUID())
+            .content("Great recipe!")
+            .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
+            .updatedAt(Instant.parse("2026-09-21T10:00:00Z"))
+            .build();
   }
 
   @Test
@@ -171,6 +190,117 @@ class AdminServiceTest {
     assertThat(result.getTotalElements()).isZero();
     assertThat(result.isFirst()).isTrue();
     assertThat(result.isLast()).isTrue();
+  }
+
+  @Test
+  void listComments_withDefaults_usesDefaultPaginationAndResolvesUsername() {
+    Page<Comment> page = new PageImpl<>(List.of(comment), expectedPageable, 1);
+    CommentListResponse commentResponse =
+        CommentListResponse.builder()
+            .id(comment.getId())
+            .postId(comment.getPostId())
+            .userId(comment.getUserId())
+            .content(comment.getContent())
+            .status("active")
+            .createdAt(comment.getCreatedAt())
+            .updatedAt(comment.getUpdatedAt())
+            .build();
+    when(commentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+    when(userRepository.findAllById(any())).thenReturn(List.of(user));
+    when(adminCommentMapper.toResponse(comment)).thenReturn(commentResponse);
+
+    PageResponse<CommentListResponse> result = adminService.listComments(new CommentListRequest());
+
+    assertThat(result.getContent()).hasSize(1);
+    assertThat(result.getContent().getFirst().getUsername()).isEqualTo("jane");
+    assertThat(result.getPage()).isZero();
+    assertThat(result.getSize()).isEqualTo(20);
+    assertThat(result.getTotalElements()).isEqualTo(1);
+
+    verify(commentRepository).findAll(any(Specification.class), eq(expectedPageable));
+  }
+
+  @Test
+  void listComments_withFilters_parsesStatusAndAllowlistedSort() {
+    Instant from = Instant.parse("2026-01-01T00:00:00Z");
+    Instant to = Instant.parse("2026-12-31T23:59:59Z");
+    CommentListRequest request =
+        CommentListRequest.builder()
+            .page(1)
+            .size(10)
+            .sort("updatedAt,asc")
+            .status("removed")
+            .userId(UUID.randomUUID())
+            .postId(UUID.randomUUID())
+            .createdFrom(from)
+            .createdTo(to)
+            .build();
+    Pageable pageable = PageRequest.of(1, 10, Sort.by(Sort.Direction.ASC, "updatedAt"));
+    Page<Comment> page = new PageImpl<>(List.of(comment), pageable, 1);
+    when(commentRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
+    when(userRepository.findAllById(any())).thenReturn(List.of(user));
+    when(adminCommentMapper.toResponse(comment))
+        .thenReturn(CommentListResponse.builder().id(comment.getId()).build());
+
+    PageResponse<CommentListResponse> result = adminService.listComments(request);
+
+    assertThat(result.getPage()).isEqualTo(1);
+    assertThat(result.getSize()).isEqualTo(10);
+    verify(commentRepository).findAll(any(Specification.class), eq(pageable));
+  }
+
+  @Test
+  void listComments_whenCreatedFromAfterCreatedTo_throwsValidationException() {
+    CommentListRequest request =
+        CommentListRequest.builder()
+            .createdFrom(Instant.parse("2026-12-01T00:00:00Z"))
+            .createdTo(Instant.parse("2026-01-01T00:00:00Z"))
+            .build();
+
+    assertThatThrownBy(() -> adminService.listComments(request))
+        .isInstanceOf(ValidationException.class)
+        .hasMessage("createdFrom must be before createdTo");
+  }
+
+  @Test
+  void listComments_withInvalidStatus_throwsValidationException() {
+    CommentListRequest request = CommentListRequest.builder().status("bogus").build();
+
+    assertThatThrownBy(() -> adminService.listComments(request))
+        .isInstanceOf(ValidationException.class)
+        .hasMessage("Status must be one of: active, removed");
+  }
+
+  @Test
+  void listComments_withNonAllowlistedSortProperty_throwsValidationException() {
+    CommentListRequest request = CommentListRequest.builder().sort("content,desc").build();
+
+    assertThatThrownBy(() -> adminService.listComments(request))
+        .isInstanceOf(ValidationException.class)
+        .hasMessage("Sort property must be one of: createdAt, updatedAt");
+  }
+
+  @Test
+  void listComments_withMalformedSort_throwsValidationException() {
+    CommentListRequest request = CommentListRequest.builder().sort("createdAt,asc,extra").build();
+
+    assertThatThrownBy(() -> adminService.listComments(request))
+        .isInstanceOf(ValidationException.class)
+        .hasMessage("Sort must be in the form property,asc|desc");
+  }
+
+  @Test
+  void listComments_withEmptyPage_returnsEmptyContent() {
+    Page<Comment> page = Page.empty(expectedPageable);
+    when(commentRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+
+    PageResponse<CommentListResponse> result = adminService.listComments(new CommentListRequest());
+
+    assertThat(result.getContent()).isEmpty();
+    assertThat(result.getTotalElements()).isZero();
+    assertThat(result.isFirst()).isTrue();
+    assertThat(result.isLast()).isTrue();
+    verify(commentRepository).findAll(any(Specification.class), eq(expectedPageable));
   }
 
   @Test

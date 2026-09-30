@@ -5,7 +5,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.controller.admin.AdminController;
+import com.vegalife.dto.request.admin.CommentListRequest;
 import com.vegalife.dto.request.admin.UserListRequest;
+import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
 import com.vegalife.service.admin.AdminService;
 import com.vegalife.shared.dto.ApiResponse;
@@ -73,6 +75,46 @@ class AdminControllerTest {
     verify(adminService).listUsers(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo("activated");
     assertThat(captor.getValue().getRole()).isEqualTo("USER");
+  }
+
+  @Test
+  void listComments_shouldReturnSuccessEnvelope() {
+    CommentListRequest commentRequest = CommentListRequest.builder().status("active").build();
+    CommentListResponse item =
+        CommentListResponse.builder()
+            .id(UUID.randomUUID())
+            .postId(UUID.randomUUID())
+            .userId(UUID.randomUUID())
+            .username("jane")
+            .content("Great recipe!")
+            .status("active")
+            .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
+            .updatedAt(Instant.parse("2026-09-21T10:00:00Z"))
+            .build();
+    PageResponse<CommentListResponse> commentPage =
+        PageResponse.<CommentListResponse>builder()
+            .content(List.of(item))
+            .page(0)
+            .size(20)
+            .totalElements(1)
+            .totalPages(1)
+            .first(true)
+            .last(true)
+            .build();
+    when(adminService.listComments(commentRequest)).thenReturn(commentPage);
+
+    ResponseEntity<ApiResponse<PageResponse<CommentListResponse>>> response =
+        adminController.listComments(commentRequest);
+
+    assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().isSuccess()).isTrue();
+    assertThat(response.getBody().getMessage()).isEqualTo("Comments retrieved successfully");
+    assertThat(response.getBody().getData()).isEqualTo(commentPage);
+
+    ArgumentCaptor<CommentListRequest> captor = ArgumentCaptor.forClass(CommentListRequest.class);
+    verify(adminService).listComments(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo("active");
   }
 
   @Test
