@@ -3,7 +3,9 @@ package com.vegalife.controller.profile;
 import com.vegalife.dto.request.profile.UpdateProfileRequest;
 import com.vegalife.dto.response.profile.ProfileResponse;
 import com.vegalife.service.profile.UserProfileService;
+import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/profile")
 @RequiredArgsConstructor
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class ProfileController {
 
   private final UserProfileService profileService;

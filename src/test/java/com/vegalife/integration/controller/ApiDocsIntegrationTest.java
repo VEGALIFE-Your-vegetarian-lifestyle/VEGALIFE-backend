@@ -57,4 +57,35 @@ class ApiDocsIntegrationTest {
   void swaggerUiRedirectIsWhitelisted() throws Exception {
     mockMvc.perform(get("/swagger-ui.html")).andExpect(status().is3xxRedirection());
   }
+
+  @Test
+  void openApiDeclaresBearerSecurityScheme() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.components.securitySchemes.bearerAuth").exists())
+        .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
+        .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+        .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"));
+  }
+
+  @Test
+  void protectedOperationsDeclareBearerRequirement() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/api/posts'].get.security[0].bearerAuth").exists())
+        .andExpect(jsonPath("$.paths['/api/profile'].put.security[0].bearerAuth").exists())
+        .andExpect(jsonPath("$.paths['/api/admin/users'].get.security[0].bearerAuth").exists());
+  }
+
+  @Test
+  void publicOperationsDeclareNoSecurityRequirement() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.security").doesNotExist())
+        .andExpect(jsonPath("$.paths['/api/categories'].get.security").doesNotExist())
+        .andExpect(jsonPath("$.paths['/api/auth/login'].post.security").doesNotExist());
+  }
 }

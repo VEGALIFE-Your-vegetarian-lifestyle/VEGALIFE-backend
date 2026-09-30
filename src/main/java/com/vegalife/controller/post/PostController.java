@@ -6,8 +6,10 @@ import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.request.post.PostVisibilityRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.service.post.PostService;
+import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/posts")
 @RequiredArgsConstructor
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class PostController {
 
   private final PostService postService;
