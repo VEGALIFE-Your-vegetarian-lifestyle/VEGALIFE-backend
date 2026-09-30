@@ -39,3 +39,11 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
 | BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
 | BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-29 |
+| BR-MEDIA-001 | Media Content-Type Allowlist | Active | 2026-09-30 |
+| BR-MEDIA-002 | Media Ownership Is Derived from Authentication | Active | 2026-09-30 |
+| BR-MEDIA-003 | Per-Class Upload Size Ceilings | Active | 2026-09-30 |
+| BR-MEDIA-004 | Object Keys Are Server-Assigned | Active | 2026-09-30 |
+| BR-MEDIA-005 | Upload Grants Expire | Active | 2026-09-30 |
+| BR-MEDIA-006 | Flyway Out-of-Order Enabled for Parallel Migration Branches | Active | 2026-09-30 |
+| BR-MEDIA-007 | Confirmation Is Exactly Once | Active | 2026-09-30 |
+| BR-MEDIA-008 | Confirmation Trusts Only Provider Read-Back | Active | 2026-09-30 |
