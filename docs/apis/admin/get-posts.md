@@ -25,8 +25,8 @@ None.
 | status | string | No | One of: `created`, `processed`, `published`, `unpublished`, `hidden`, `flagged` |
 | userId | uuid | No | Only posts authored by this user |
 | categoryId | uuid | No | Only posts belonging to this category |
-| createdFrom | string | No | ISO-8601 date or datetime lower bound (inclusive) on `createdAt` |
-| createdTo | string | No | ISO-8601 date or datetime upper bound (inclusive) on `createdAt` |
+| createdFrom | string | No | ISO-8601 datetime lower bound (inclusive) on `createdAt`, e.g. `2026-01-01T00:00:00Z` |
+| createdTo | string | No | ISO-8601 datetime upper bound (inclusive) on `createdAt`, e.g. `2026-01-31T23:59:59Z` |
 
 ### Request Body
 No request body

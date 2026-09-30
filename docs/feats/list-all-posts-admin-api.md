@@ -1,7 +1,7 @@
 # Feature Spec: List All Posts API (Admin)
 
 ## Status
-In progress
+Implemented (pending PR review)
 
 ## Author / owner
 Backend team; driving issue: https://github.com/VEGALIFE-Your-vegetarian-lifestyle/VEGALIFE-backend/issues/1
@@ -28,21 +28,21 @@ Admins review reported and flagged content, but the post list endpoints that exi
 ## Requirements
 
 ### Functional Requirements
-- [ ] FR-001: `GET /api/admin/posts` returns a paginated list of posts to callers with role ADMIN.
-- [ ] FR-002: The result spans all authors and all `Post.Status` values (`created`, `processed`, `published`, `unpublished`, `hidden`, `flagged`).
-- [ ] FR-003: Each item includes `id`, `title`, `type`, `content`, `featuredImageUrl`, `videoUrl`, `categoryIds`, `mediaIds`, `status`, `flag`, `viewCount`, `publishedAt`, `createdAt`, plus author `userId`, `username`, `email`.
-- [ ] FR-004: Optional query filters: `status` (Post.Status), `userId` (UUID), `categoryId` (UUID), `createdFrom`, `createdTo` (ISO-8601 date or datetime on `createdAt`).
-- [ ] FR-005: Pagination via `page` (0-based, default 0), `size` (default 20, max 100), optional `sort` (default `createdAt,desc`); sort property must be one of `createdAt`, `publishedAt`, `updatedAt`, `viewCount`, `title`, otherwise 400.
-- [ ] FR-006: Soft-deleted posts (`deletedAt != null`) are never returned.
-- [ ] FR-007: Non-admin authenticated requests receive 403; missing/invalid JWT receives 401.
-- [ ] FR-008: `createdFrom` after `createdTo` is rejected with 400.
+- [x] FR-001: `GET /api/admin/posts` returns a paginated list of posts to callers with role ADMIN.
+- [x] FR-002: The result spans all authors and all `Post.Status` values (`created`, `processed`, `published`, `unpublished`, `hidden`, `flagged`).
+- [x] FR-003: Each item includes `id`, `title`, `type`, `content`, `featuredImageUrl`, `videoUrl`, `categoryIds`, `mediaIds`, `status`, `flag`, `viewCount`, `publishedAt`, `createdAt`, plus author `userId`, `username`, `email`.
+- [x] FR-004: Optional query filters: `status` (Post.Status), `userId` (UUID), `categoryId` (UUID), `createdFrom`, `createdTo` (ISO-8601 datetime on `createdAt`).
+- [x] FR-005: Pagination via `page` (0-based, default 0), `size` (default 20, max 100), optional `sort` (default `createdAt,desc`); sort property must be one of `createdAt`, `publishedAt`, `updatedAt`, `viewCount`, `title`, otherwise 400.
+- [x] FR-006: Soft-deleted posts (`deletedAt != null`) are never returned.
+- [x] FR-007: Non-admin authenticated requests receive 403; missing/invalid JWT receives 401.
+- [x] FR-008: `createdFrom` after `createdTo` is rejected with 400.
 
 ### Non-Functional Requirements
-- [ ] NFR-SEC-001: Endpoint path `/api/admin/**` is restricted to `ROLE_ADMIN` by the existing security filter chain rule.
-- [ ] NFR-SEC-002: The response DTO exposes no `passwordHash` or other account secrets; author fields are limited to `userId`, `username`, `email`.
-- [ ] NFR-MAINT-001: Response wrapped in `ApiResponse<T>` with pagination shape from `shared/dto/PageResponse`.
-- [ ] NFR-MAINT-002: Controller stays thin; filter parsing and page assembly live in a service; predicates live in a `PostSpecifications` class.
-- [ ] NFR-SCALE-001: The `categoryId` filter returns each matching post exactly once (join is de-duplicated).
+- [x] NFR-SEC-001: Endpoint path `/api/admin/**` is restricted to `ROLE_ADMIN` by the existing security filter chain rule.
+- [x] NFR-SEC-002: The response DTO exposes no `passwordHash` or other account secrets; author fields are limited to `userId`, `username`, `email`.
+- [x] NFR-MAINT-001: Response wrapped in `ApiResponse<T>` with pagination shape from `shared/dto/PageResponse`.
+- [x] NFR-MAINT-002: Controller stays thin; filter parsing and page assembly live in a service; predicates live in a `PostSpecifications` class.
+- [x] NFR-SCALE-001: The `categoryId` filter returns each matching post exactly once (join is de-duplicated).
 
 ## Design overview
 New `AdminPostController` (`controller/admin`) and `AdminPostService` (`service/admin`) alongside the existing user-admin pair, reached through the `GET /api/admin/posts` path already covered by `SecurityConfig`'s `/api/admin/**` → `hasRole("ADMIN")` matcher, so no security configuration changes. `PostRepository` gains `JpaSpecificationExecutor<Post>` and a new `PostSpecifications.allWithFilters` mirrors `UserSpecifications.activeWithFilters`: soft-delete exclusion plus optional status/author/date predicates, with `categories` joined and de-duplicated for `categoryId`. Filtering and mapping reuse the `AdminService` precedent, with one deliberate deviation — the `sort` property is validated against an allowlist so a bad value yields 400 rather than Spring Data's `PropertyReferenceException` (500). Author identity and the semantic `flag` verdict come from the post's lazy `user` association and the `flag` column added by the post content-filtering feature (issue #33/34, `docs/feats/post-content-filtering.md`).
@@ -54,12 +54,12 @@ New `AdminPostController` (`controller/admin`) and `AdminPostService` (`service/
 ## Acceptance criteria
 **As an** admin, **I want to** list and filter every post on the platform, **so that** I can review reported and flagged content without database access.
 
-- [ ] Given an admin JWT, when requesting `GET /api/admin/posts`, then 200 with a paginated list of posts is returned.
-- [ ] Given posts authored by several users in mixed statuses, when requesting the endpoint, then posts from all users and all statuses are returned.
-- [ ] Given an admin JWT, when filtering by `status`, `userId`, `createdFrom`/`createdTo`, or `categoryId`, then only matching posts are returned.
-- [ ] Given any list response, when inspecting items, then each item shows the semantic filtering result (`flag`: `PENDING`, `PASSED`, `REJECTED`, `NEEDS_REVIEW`, or null when never filtered).
-- [ ] Given a non-admin JWT, when requesting the endpoint, then 403 is returned.
-- [ ] Given no JWT, when requesting the endpoint, then 401 is returned.
+- [x] Given an admin JWT, when requesting `GET /api/admin/posts`, then 200 with a paginated list of posts is returned.
+- [x] Given posts authored by several users in mixed statuses, when requesting the endpoint, then posts from all users and all statuses are returned.
+- [x] Given an admin JWT, when filtering by `status`, `userId`, `createdFrom`/`createdTo`, or `categoryId`, then only matching posts are returned.
+- [x] Given any list response, when inspecting items, then each item shows the semantic filtering result (`flag`: `PENDING`, `PASSED`, `REJECTED`, `NEEDS_REVIEW`, or null when never filtered).
+- [x] Given a non-admin JWT, when requesting the endpoint, then 403 is returned.
+- [x] Given no JWT, when requesting the endpoint, then 401 is returned.
 
 ## Risks / open questions
 - Author mapping reads a lazy `user` per row, bounded by `size` (max 100) per page — at most 101 statements per request. Acceptable at current scale; an `@EntityGraph` is the fix if it shows up in profiling.
