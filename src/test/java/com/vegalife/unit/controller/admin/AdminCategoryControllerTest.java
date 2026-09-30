@@ -59,4 +59,17 @@ class AdminCategoryControllerTest {
     assertThat(result.getBody().getData()).isEqualTo(response);
     verify(categoryService).updateCategory(categoryId, request);
   }
+
+  @Test
+  void deleteCategoryReturns200WithNullData() {
+    UUID categoryId = UUID.randomUUID();
+
+    ResponseEntity<ApiResponse<Void>> result = adminCategoryController.deleteCategory(categoryId);
+
+    assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(result.getBody().isSuccess()).isTrue();
+    assertThat(result.getBody().getMessage()).isEqualTo("Category deleted successfully");
+    assertThat(result.getBody().getData()).isNull();
+    verify(categoryService).deleteCategory(categoryId);
+  }
 }

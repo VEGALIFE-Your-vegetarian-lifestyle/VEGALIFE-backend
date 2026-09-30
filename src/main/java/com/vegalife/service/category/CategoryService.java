@@ -8,6 +8,7 @@ import com.vegalife.model.post.Category;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
+import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -66,6 +67,21 @@ public class CategoryService {
     log.info("Category {} updated: {}", saved.getId(), saved.getName());
 
     return categoryMapper.toResponse(saved);
+  }
+
+  /**
+   * BR-ADMIN-003: a category is never hard-deleted, whether or not existing content still
+   * references it — retiring only sets {@code deletedAt} so existing posts keep their category
+   * links intact and the category simply stops being assignable to new/edited posts (BR-CONTENT-004
+   * filters on {@code deletedAt IS NULL} at assignment time).
+   */
+  @Transactional
+  public void deleteCategory(UUID categoryId) {
+    Category category = findActiveCategory(categoryId);
+    category.setDeletedAt(Instant.now());
+    categoryRepository.save(category);
+
+    log.info("Category {} retired", category.getId());
   }
 
   private Category findActiveCategory(UUID categoryId) {

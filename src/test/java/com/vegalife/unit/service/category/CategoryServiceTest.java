@@ -182,4 +182,44 @@ class CategoryServiceTest {
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Category not found");
   }
+
+  @Test
+  void deleteCategorySoftDeletesAnActiveCategory() {
+    UUID categoryId = UUID.randomUUID();
+    Category existing = Category.builder().id(categoryId).name("Vegan").build();
+    when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(existing));
+    when(categoryRepository.save(any(Category.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    categoryService.deleteCategory(categoryId);
+
+    ArgumentCaptor<Category> captor = ArgumentCaptor.forClass(Category.class);
+    verify(categoryRepository).save(captor.capture());
+    assertThat(captor.getValue().getDeletedAt()).isNotNull();
+  }
+
+  @Test
+  void deleteCategoryThrowsNotFoundWhenMissing() {
+    UUID categoryId = UUID.randomUUID();
+    when(categoryRepository.findById(categoryId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> categoryService.deleteCategory(categoryId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Category not found");
+
+    verify(categoryRepository, never()).save(any());
+  }
+
+  @Test
+  void deleteCategoryTreatsAlreadySoftDeletedCategoryAsNotFound() {
+    UUID categoryId = UUID.randomUUID();
+    Category deleted =
+        Category.builder().id(categoryId).name("Vegan").deletedAt(Instant.now()).build();
+    when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(deleted));
+
+    assertThatThrownBy(() -> categoryService.deleteCategory(categoryId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Category not found");
+
+    verify(categoryRepository, never()).save(any());
+  }
 }

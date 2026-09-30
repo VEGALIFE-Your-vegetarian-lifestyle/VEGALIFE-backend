@@ -30,3 +30,4 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `media/get-media-mediaid.md` | `GET /api/media/{mediaId}` | Read a stored media record |
 | `admin/post-categories.md` | `POST /api/admin/categories` | Create a content category (Admin) |
 | `admin/patch-categories-categoryid.md` | `PATCH /api/admin/categories/{categoryId}` | Edit a content category (Admin) |
+| `admin/delete-categories-categoryid.md` | `DELETE /api/admin/categories/{categoryId}` | Retire a content category (Admin) |
