@@ -23,6 +23,7 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `post/delete-posts-postid.md` | `DELETE /api/posts/{postId}` | Soft-delete a post (owner or Admin) |
 | `post/patch-posts-postid-visibility.md` | `PATCH /api/posts/{postId}/visibility` | Hide or unhide a post (Admin) |
 | `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
+| `admin/get-posts.md` | `GET /api/admin/posts` | List all posts across users and statuses (Admin) |
 | `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |
 | `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |
 | `media/post-upload.md` | `POST /api/media/upload` | Issue a signed upload grant and media ID |

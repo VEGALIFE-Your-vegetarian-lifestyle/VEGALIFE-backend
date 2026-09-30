@@ -20,3 +20,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `list-posts-of-user.md` | List a Member's Posts | Implemented | 2026-09-29 |
 | `upload-media-api.md` | Upload Media API (Presigned URL) | In progress | 2026-09-30 |
 | `post-content-filtering.md` | Post Content Filtering (Semantic) | In progress | 2026-09-30 |
+| `list-all-posts-admin-api.md` | List All Posts API (Admin) | In progress | 2026-09-30 |
