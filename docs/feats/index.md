@@ -24,3 +24,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `edit-category-api.md`              | Edit Category API (Admin)                 | Implemented | 2026-09-30 |
 | `delete-category-api.md`            | Delete Category API (Admin)               | Implemented | 2026-09-30 |
 | `list-categories-api.md`            | List Categories API                       | Implemented | 2026-09-30 |
+| `list-all-posts-admin-api.md`       | List All Posts API (Admin)                | In progress | 2026-09-30 |
