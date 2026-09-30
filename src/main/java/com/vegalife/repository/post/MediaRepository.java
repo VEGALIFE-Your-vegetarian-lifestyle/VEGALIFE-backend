@@ -3,6 +3,7 @@ package com.vegalife.repository.post;
 import com.vegalife.model.post.Media;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -11,4 +12,6 @@ import org.springframework.stereotype.Repository;
 public interface MediaRepository extends JpaRepository<Media, UUID> {
 
   List<Media> findByIdInAndDeletedAtIsNull(Collection<UUID> ids);
+
+  Optional<Media> findByIdAndDeletedAtIsNull(UUID id);
 }

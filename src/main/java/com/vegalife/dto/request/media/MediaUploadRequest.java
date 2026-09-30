@@ -1,6 +1,5 @@
 package com.vegalife.dto.request.media;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,7 +12,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class MediaUploadRequest {
 
-  @NotBlank(message = "Content type is required")
+  /**
+   * Required; an absent value is rejected by the allowlist with {@code Unsupported content type}.
+   */
   private String contentType;
 
   /** Advisory only — never used to derive the stored object key (BR-MEDIA-004). */
