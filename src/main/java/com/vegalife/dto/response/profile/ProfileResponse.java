@@ -14,8 +14,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ProfileResponse {
 
-  private UUID id;
   private UUID userId;
+  private String username;
+  private String email;
   private BigDecimal heightCm;
   private BigDecimal weightKg;
   private Integer age;

@@ -21,6 +21,8 @@ public interface ProfileMapper {
   UserProfile toEntity(UpdateProfileRequest request);
 
   @Mapping(target = "userId", source = "user.id")
+  @Mapping(target = "username", source = "user.username")
+  @Mapping(target = "email", source = "user.email")
   ProfileResponse toResponse(UserProfile profile);
 
   @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)

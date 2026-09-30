@@ -70,8 +70,9 @@ class UserProfileServiceTest {
 
     expectedResponse =
         ProfileResponse.builder()
-            .id(existingProfile.getId())
             .userId(userId)
+            .username("testuser")
+            .email("test@example.com")
             .heightCm(new BigDecimal("175.5"))
             .weightKg(new BigDecimal("70.2"))
             .age(26)
