@@ -14,16 +14,12 @@
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
 | BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
 | BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
-| BR-FILTER-001 | Filtered Content Meets a Minimum Length | Active | 2026-09-30 |
-| BR-FILTER-002 | Link Spam Ratio Is Rejected | Active | 2026-09-30 |
-| BR-FILTER-003 | Profanity Is Rejected Outright | Active | 2026-09-30 |
 | BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-09-30 |
 | BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-09-30 |
 | BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-09-30 |
 | BR-FILTER-007 | A Passed Filter Publishes the Post | Active | 2026-09-30 |
 | BR-FILTER-008 | A Rejected or Uncertain Filter Flags the Post | Active | 2026-09-30 |
 | BR-FILTER-009 | Posts Stuck Pending Are Flagged After 24 Hours | Active | 2026-09-30 |
-| BR-FILTER-010 | Every Filter Run Is Audited | Active | 2026-09-30 |
 
 ---
 
@@ -376,109 +372,6 @@ Applies to `GET /api/users/{userId}/posts`. `GET /api/posts` is the caller's own
 
 ---
 
----
-
-# Business Rule: Filtered Content Meets a Minimum Length
-
-## Rule ID
-
-`BR-FILTER-001`
-
-## Status
-
-Active
-
-## Statement
-
-Content submitted for publication must contain at least 20 non-whitespace characters after trimming. Empty, whitespace-only, or shorter content is rejected outright (`flag = REJECTED`) with a `TOO_SHORT` reason, without the semantic score ever being computed.
-
-## Rationale
-
-Extremely short content carries no signal for the relevance score and is never useful to readers; screening it costs nothing and keeps it out of the embedding service.
-
-## Scope & Exceptions
-
-Applies to every filter run, i.e. to any post with `publish_intent = true` (BR-FILTER-005). Drafts are never evaluated. The request-level non-blank validation of BR-POST-005 still applies first; this rule is the filter's own bound.
-
-## Enforcement
-
-- `StaticRulesScorer` checks the trimmed length before any other filter step; a violation short-circuits the run (`ContentFilterService` never calls the embedding model).
-- Threshold is a constant in the scorer, covered by boundary unit tests (19 vs 20 characters).
-
-## Last Reviewed
-
-2026-09-30, by Vegalife backend team
-
----
-
-# Business Rule: Link Spam Ratio Is Rejected
-
-## Rule ID
-
-`BR-FILTER-002`
-
-## Status
-
-Active
-
-## Statement
-
-A link is a whitespace-delimited token that starts with `http://`, `https://`, `www.`, or is a bare domain with a recognized top-level domain. Content is rejected outright (`flag = REJECTED`, reason `LINK_SPAM`) when it contains at least 3 links, or when it contains at least 1 link and links make up at least 25% of its tokens.
-
-## Rationale
-
-Link-dump posts are a spam vector that adds no value to a community feed and are cheap to detect deterministically, before any model call.
-
-## Scope & Exceptions
-
-Applies to every filter run. Links inside otherwise substantial posts (below the ratio) are legitimate and pass this rule — they are still subject to semantic scoring.
-
-## Enforcement
-
-- `StaticRulesScorer` tokenizes the content and applies both conditions; the violated condition is reported in the reasons list.
-- Unit tests cover the boundary: 2 links pass, 3 links fail; 1 link in 4 tokens fails, 1 link in 10 tokens passes.
-
-## Last Reviewed
-
-2026-09-30, by Vegalife backend team
-
----
-
----
-
-# Business Rule: Profanity Is Rejected Outright
-
-## Rule ID
-
-`BR-FILTER-003`
-
-## Status
-
-Active
-
-## Statement
-
-If the content matches any entry in the committed Vietnamese or English profanity wordlists, the post is rejected outright (`flag = REJECTED`, reason `PROFANITY`) without calling the embedding service. Matching is done on the content normalized to Unicode NFC form, lower-cased, and compared word by word against the wordlists — a word matches when it equals a list entry or has a list entry as a prefix of at least 4 characters.
-
-## Rationale
-
-Profanity is a clear, non-judgemental hard failure; asking a model to score it adds latency and cost without changing the outcome.
-
-## Scope & Exceptions
-
-Applies to every filter run. The wordlists are committed resources under `src/main/resources/filter/`, so the rule changes only with a code change, not with configuration. Reasons name the matched list entry, never the wordlists themselves.
-
-## Enforcement
-
-- `StaticRulesScorer` loads the VN and EN wordlists from resource files once at startup and reports the first matching entry in the reasons list.
-- Unit tests cover diacritics (VN), case variations, and near-misses that must not match.
-
-## Last Reviewed
-
-2026-09-30, by Vegalife backend team
-
----
-
 # Business Rule: Semantic Relevance Uses Three Bands and Configured Thresholds
 
 ## Rule ID
@@ -491,7 +384,7 @@ Active
 
 ## Statement
 
-When static rules pass, the content is embedded and compared by cosine similarity with two precomputed centroids — one built from on-topic seed texts and one from off-topic seed texts, both Vietnamese and English. The relevance score is the normalized margin between the two similarities, `score = (cos(text, onTopic) - cos(text, offTopic) + 1) / 2`, clamped to `[0, 1]`. The score maps to exactly one verdict: `score >= app.filter.accept-threshold` is `PASSED`; `score < app.filter.reject-threshold` is `REJECTED`; anything between the two is `NEEDS_REVIEW`. Defaults are `0.75` and `0.45`. The filter state is stored in `post.flag`, which is separate from `post.status`; `flag` is NULL only when the post has never been filtered.
+The content is embedded and compared by cosine similarity with two precomputed centroids — one built from on-topic seed texts and one from off-topic seed texts, both Vietnamese and English. The relevance score is the normalized margin between the two similarities, `score = (cos(text, onTopic) - cos(text, offTopic) + 1) / 2`, clamped to `[0, 1]`. The score maps to exactly one verdict: `score >= app.filter.accept-threshold` is `PASSED`; `score < app.filter.reject-threshold` is `REJECTED`; anything between the two is `NEEDS_REVIEW`. Defaults are `0.75` and `0.45`. The filter state is stored in `post.flag`, which is separate from `post.status`; `flag` is NULL only when the post has never been filtered.
 
 ## Rationale
 
@@ -499,7 +392,7 @@ A three-band outcome separates confident failures from content that is merely am
 
 ## Scope & Exceptions
 
-Applies to every filter run that passes static rules. There is no `NOT_FILTERED` value: NULL means never filtered (drafts and pre-existing rows), and every run ends in one of the three verdicts. The centroid model and regeneration procedure are recorded in `docs/adrs/007-post-content-filtering.md`.
+Applies to every filter run. There is no `NOT_FILTERED` value: NULL means never filtered (drafts and pre-existing rows), and every run ends in one of the three verdicts. The centroid model and regeneration procedure are recorded in `docs/adrs/007-post-content-filtering.md`.
 
 ## Enforcement
 
@@ -629,7 +522,7 @@ Active
 
 ## Statement
 
-When a filter run ends with `REJECTED` or `NEEDS_REVIEW`, the post's `flag` is set to that value and its status becomes `flagged`, which is not publicly visible (BR-POST-010). A `REJECTED` run logs a WARN carrying the violated static rules or the out-of-band score; a `NEEDS_REVIEW` run logs a WARN recording that the score fell between the two thresholds. `NEEDS_REVIEW` is a data state only this sprint — no admin endpoint changes it. There is no `prev_status` column: the previous status is not tracked.
+When a filter run ends with `REJECTED` or `NEEDS_REVIEW`, the post's `flag` is set to that value and its status becomes `flagged`, which is not publicly visible (BR-POST-010). A `REJECTED` run logs a WARN carrying the out-of-band score; a `NEEDS_REVIEW` run logs a WARN recording that the score fell between the two thresholds. `NEEDS_REVIEW` is a data state only this sprint — no admin endpoint changes it. There is no `prev_status` column: the previous status is not tracked.
 
 ## Rationale
 
@@ -641,7 +534,7 @@ Applies to every `REJECTED` / `NEEDS_REVIEW` verdict and to the stale-pending sw
 
 ## Enforcement
 
-- `ContentFilterOutboundAdapter` sets flag and status and writes the WARN log; `PostFilterLog` records the verdict (BR-FILTER-010).
+- `ContentFilterOutboundAdapter` sets flag and status and writes the WARN log.
 - `post.status` accepts `flagged` from migration V19 on.
 
 ## Last Reviewed
@@ -664,7 +557,7 @@ Active
 
 ## Statement
 
-A scheduled job finds every post whose `flag = PENDING` and whose `filter_queued_at` is older than `app.filter.sweep-max-age` (default 24 hours) and moves it to `flag = NEEDS_REVIEW`, `status = flagged`, logging at ERROR and writing an audit row. Posts with a fresh `PENDING` or a NULL `flag` are never touched.
+A scheduled job finds every post whose `flag = PENDING` and whose `filter_queued_at` is older than `app.filter.sweep-max-age` (default 24 hours) and moves it to `flag = NEEDS_REVIEW`, `status = flagged`, logging at ERROR. Posts with a fresh `PENDING` or a NULL `flag` are never touched.
 
 ## Rationale
 
@@ -676,40 +569,8 @@ Applies only to `PENDING` posts; it never re-runs a completed verdict and never 
 
 ## Enforcement
 
-- `PendingFilterSweepJob` (scheduled, `OutboundRetentionJob` pattern) performs the transition and writes the audit row.
+- `PendingFilterSweepJob` (scheduled, `OutboundRetentionJob` pattern) performs the transition.
 - Unit tests cover: stale PENDING swept, fresh PENDING untouched, NULL flag untouched.
-
-## Last Reviewed
-
-2026-09-30, by Vegalife backend team
-
----
-
-# Business Rule: Every Filter Run Is Audited
-
-## Rule ID
-
-`BR-FILTER-010`
-
-## Status
-
-Active
-
-## Statement
-
-Every completed filter outcome — `PASSED`, `REJECTED`, `NEEDS_REVIEW`, and the stale-pending sweep — writes exactly one row to `post_filter_log` containing the post ID, the resulting flag, the relevance score (null when a static rule rejected the run before scoring), the violated-rule or band reasons, and the creation timestamp. Enqueueing (`PENDING`) writes no audit row; it is visible on the post itself.
-
-## Rationale
-
-A verdict without a record cannot be reviewed, tuned, or disputed. One table with one shape means future review tooling reads a single source instead of reconstructing outcomes from logs.
-
-## Scope & Exceptions
-
-Applies to all filter runs for all users. Reasons are exposed to the post's owner through the normal post responses; the audit table itself is internal. Rows are retained with the post (no purge defined this sprint).
-
-## Enforcement
-
-- `PostFilterLog` entity + repository written by `ContentFilterOutboundAdapter` and `PendingFilterSweepJob` (migration V19 creates the table, following the V18 moderation-log pattern).
 
 ## Last Reviewed
 

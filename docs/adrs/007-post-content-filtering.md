@@ -19,10 +19,9 @@ Posts are published as soon as the client asks for it: `POST /api/posts`
 with `publish: true` returns a `published` post, and an edit with
 `publish: true` republishes immediately (BR-POST-004 as written before
 this decision). Nothing ever inspects what the post says. That is a
-liability for a public community feed — link dumps, profanity, and
-off-topic content would reach the public list endpoint
-(`docs/apis/post/get-users-userid-posts.md`, BR-POST-010) with no gate
-and no record of who/what let them through.
+liability for a public community feed — off-topic content would reach
+the public list endpoint
+(`docs/apis/post/get-users-userid-posts.md`, BR-POST-010) with no gate.
 
 Issues #33 and #34 ask for a semantic content filter: screen a post
 before it is public, score it for relevance to the vegan/vegetarian
@@ -68,11 +67,10 @@ Concretely:
    `flagged`); the same transaction sets `post.flag = PENDING` and
    `post.filter_queued_at = now`. There is no synchronous or real-time
    filtering path anywhere (BR-FILTER-006).
-2. **Two-stage verdict.** `ContentFilterService` runs static rules
-   first — minimum length, link-spam ratio, VN/EN profanity wordlists
-   (BR-FILTER-001…003). A violation rejects the post outright and the
-   embedding service is never called. Only content that passes is
-   embedded and scored (BR-FILTER-004).
+2. **Single-stage verdict.** `ContentFilterService` embeds every
+   publish-intent content and scores it against the two centroids
+   (BR-FILTER-004); there is no static-rule stage and the embedding
+   service is called on every run.
 3. **Embedding client.** Spring AI 1.1.8 is added (BOM +
    `spring-ai-starter-model-openai`, property-managed) for the
    abstraction and for later chat work, with
@@ -104,13 +102,9 @@ Concretely:
    user asked for publication, so a post created as a draft stays
    unfiltered forever and a withdrawn post stops being filtered
    (BR-FILTER-005).
-7. **Audit.** Every completed run writes one `post_filter_log` row
-   (post id, verdict, score, reasons, timestamp) in a table created in
-   the same migration, following the V18 moderation-log pattern
-   (BR-FILTER-010).
-8. **Sweep.** A scheduled job moves any post still `PENDING` after
+7. **Sweep.** A scheduled job moves any post still `PENDING` after
    `app.filter.sweep-max-age` (default 24h) to `NEEDS_REVIEW` /
-   `flagged` with an ERROR log and an audit row, bounding the damage of
+   `flagged` with an ERROR log, bounding the damage of
    a lost or exhausted queue message (BR-FILTER-009).
 
 ## Considered options
@@ -162,11 +156,9 @@ Concretely:
 - Reuse means retries, deferred delivery, retention, and observability
   come from code that already has integration coverage for EMAIL.
 - Publication is provably gated: a post cannot become `published`
-  without a `PASSED` verdict, and every verdict has an audit row.
+  without a `PASSED` verdict.
 - Thresholds, the sweep age, and the embedding endpoint/model are all
   configuration, so tuning does not require logic changes.
-- The scorer is static-rules-first, so obvious spam never reaches the
-  network and the provider bill tracks real ambiguity.
 
 **Negative / trade-offs:**
 
@@ -177,8 +169,8 @@ Concretely:
 - **At-least-once delivery can re-run a filter.** A crash after a
   successful verdict but before the `COMPLETED` commit re-runs the
   filter; the verdict is deterministic given the same inputs, so the
-  post ends in the same place, but `post_filter_log` gains a second
-  row. Accepted — identical to the email-queue trade-off in ADR-005.
+  post ends in the same place. Accepted — identical to the email-queue
+  trade-off in ADR-005.
 - **Quality is bounded by the seed corpus.** Centroids are computed
   from committed seed texts; a skewed corpus produces systematic
   misclassification that no threshold change fully fixes. Mitigated by
@@ -198,25 +190,21 @@ Concretely:
   value (`${HF_TOKEN:<profile>-dummy-key-not-a-secret}`) so the context
   loads with no credential present — the dummies are never a secret and
   never grant anything.
-- **Profanity wordlists become a maintained asset.** VN/EN lists are
-  committed resources; misses are a product risk that no scoring band
-  compensates for.
-- **Two more things to migrate and index** (`post` columns,
-  `post_filter_log`), plus the drainer's existing 5s polling now also
+- **New post columns to migrate and index** (`flag`, `publish_intent`,
+  `filter_queued_at`), plus the drainer's existing 5s polling now also
   covers this channel.
 
 ## Verification
 
 - Issues #33 and #34 acceptance criteria are the primary check: publish
   intent returns the post id with `flag: PENDING`, a passed run
-  publishes it, a static violation rejects without an embedding call, a
-  mid-band score flags it with an audit row, drafts are never queued,
+  publishes it, an off-topic score below the threshold rejects it, a
+  mid-band score flags it, drafts are never queued,
   and a content edit of a published post re-enqueues.
 - Revisit if any of these happen: the `NEEDS_REVIEW` share of runs
   exceeds ~10% over a week (corpus or thresholds are wrong); queue
   depth for `CONTENT_FILTER` grows persistently (provider latency or
-  availability); the static rules start rejecting content that
-  reviewers consider legitimate (wordlist too aggressive); or the
+  availability); or the
   project adopts a chat/multi-modal AI feature, at which point the
   relationship between the custom `HfEmbeddingModel` and the Spring AI
   starter configuration should be simplified to one path.

@@ -39,13 +39,9 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
 | BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
 | BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
-| BR-FILTER-001 | Filtered Content Meets a Minimum Length | Active | 2026-09-30 |
-| BR-FILTER-002 | Link Spam Ratio Is Rejected | Active | 2026-09-30 |
-| BR-FILTER-003 | Profanity Is Rejected Outright | Active | 2026-09-30 |
 | BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-09-30 |
 | BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-09-30 |
 | BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-09-30 |
 | BR-FILTER-007 | A Passed Filter Publishes the Post | Active | 2026-09-30 |
 | BR-FILTER-008 | A Rejected or Uncertain Filter Flags the Post | Active | 2026-09-30 |
 | BR-FILTER-009 | Posts Stuck Pending Are Flagged After 24 Hours | Active | 2026-09-30 |
-| BR-FILTER-010 | Every Filter Run Is Audited | Active | 2026-09-30 |

@@ -100,7 +100,6 @@ The client must not send `userId`, `status`, `flag`, `viewCount`, or timestamps.
 - The author is always the user identified by the authenticated JWT.
 - New posts are persisted with status `created`, view count `0`, and no publication timestamp.
 - `publish: true` does not publish immediately: the post is stored with `flag: PENDING`, `publish_intent` set, and an entry on the outbound outbox (`CONTENT_FILTER` channel); it stays `created` until filtering returns `PASSED` (BR-POST-004, BR-FILTER-004, BR-FILTER-005).
-- Static hard rejects (`TOO_SHORT`, `LINK_SPAM`) are applied on publish intent and can return `400` before the post is stored (BR-FILTER-003).
 - Filtering runs asynchronously; this endpoint never blocks on the embedding service (BR-FILTER-006).
 - Schema: the `flag`, `filter_queued_at`, and `publish_intent` columns are added by migration `V19__add_post_filtering.sql`; no other new columns are used by this endpoint.
 
