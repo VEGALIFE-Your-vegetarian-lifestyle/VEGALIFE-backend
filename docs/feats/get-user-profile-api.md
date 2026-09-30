@@ -128,7 +128,7 @@ the find-or-create read path: `userRepository.findById` → 404
 call it; PUT's existing `orElseGet` creation path remains (same rule,
 BR-PROFILE-003) and now succeeds because metrics are nullable.
 
-**Schema**: `V22__make_user_profile_fields_nullable.sql` issues four
+**Schema**: `V23__make_user_profile_fields_nullable.sql` issues four
 `ALTER TABLE user_profile ALTER COLUMN ... DROP NOT NULL` statements
 (`height_cm`, `weight_kg`, `age`, `gender`); the `UserProfile` entity's
 matching `nullable=false` annotations are flipped to `true`. `gender`'s

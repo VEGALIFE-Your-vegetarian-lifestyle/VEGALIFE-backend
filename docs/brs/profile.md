@@ -97,7 +97,7 @@ Applies when `UserProfileRepository.findByUserId()` returns empty on
 
 ## Enforcement
 - Service: `UserProfileService.updateProfile()` uses `orElseGet()` to create new `UserProfile` from `ProfileRequest`, sets `user` relationship, then saves; `UserProfileService.getProfile()` does the same find-or-create before mapping
-- Database: `user_profile.user_id` has UNIQUE constraint (1:1 relationship); metrics columns are nullable (migration `V22__make_user_profile_fields_nullable.sql`)
+- Database: `user_profile.user_id` has UNIQUE constraint (1:1 relationship); metrics columns are nullable (migration `V23__make_user_profile_fields_nullable.sql`)
 - Migration: `V12__move_avatar_to_user_profile.sql` moved `avatar_url` from `user` to `user_profile`
 
 ## Last Reviewed
