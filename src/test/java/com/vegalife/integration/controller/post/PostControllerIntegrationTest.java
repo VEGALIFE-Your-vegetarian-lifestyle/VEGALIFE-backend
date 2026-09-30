@@ -230,8 +230,14 @@ class PostControllerIntegrationTest {
     Post updatedPost = postRepository.findById(existingPost.getId()).orElseThrow();
     assertThat(updatedPost.getUser().getId()).isEqualTo(user.getId());
     assertThat(updatedPost.getStatus()).isEqualTo(Post.Status.published);
-    assertThat(updatedPost.getFlag()).isNull();
+    assertThat(updatedPost.getFlag()).isEqualTo(Post.Flag.PENDING);
     assertThat(updatedPost.getViewCount()).isEqualTo(12);
+    assertThat(outboundMessageRepository.findAll())
+        .anySatisfy(
+            message -> {
+              assertThat(message.getChannel()).isEqualTo(OutboundChannel.CONTENT_FILTER);
+              assertThat(message.getRecipient()).isEqualTo(updatedPost.getId().toString());
+            });
   }
 
   @Test
