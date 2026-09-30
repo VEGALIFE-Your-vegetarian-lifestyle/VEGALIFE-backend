@@ -10,14 +10,18 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.mapper.category.CategoryMapper;
 import com.vegalife.dto.request.category.CategoryCreateRequest;
+import com.vegalife.dto.request.category.CategoryListRequest;
 import com.vegalife.dto.request.category.CategoryUpdateRequest;
 import com.vegalife.dto.response.category.CategoryResponse;
 import com.vegalife.model.post.Category;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.service.category.CategoryService;
+import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
+import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -26,6 +30,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 @ExtendWith(MockitoExtension.class)
 class CategoryServiceTest {
@@ -35,6 +45,50 @@ class CategoryServiceTest {
   @Mock private CategoryMapper categoryMapper;
 
   @InjectMocks private CategoryService categoryService;
+
+  @Test
+  void listCategoriesWithDefaultsUsesDefaultPaginationAndNameAscSort() {
+    Category dessert = Category.builder().id(UUID.randomUUID()).name("Dessert").build();
+    Pageable expectedPageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "name"));
+    Page<Category> page = new PageImpl<>(List.of(dessert), expectedPageable, 1);
+    when(categoryRepository.findAll(any(Specification.class), any(Pageable.class)))
+        .thenReturn(page);
+    CategoryResponse response =
+        CategoryResponse.builder().id(dessert.getId()).name("Dessert").build();
+    when(categoryMapper.toResponse(dessert)).thenReturn(response);
+
+    PageResponse<CategoryResponse> result =
+        categoryService.listCategories(new CategoryListRequest());
+
+    assertThat(result.getContent()).containsExactly(response);
+    assertThat(result.getPage()).isZero();
+    assertThat(result.getSize()).isEqualTo(20);
+    assertThat(result.getTotalElements()).isEqualTo(1);
+    verify(categoryRepository).findAll(any(Specification.class), eq(expectedPageable));
+  }
+
+  @Test
+  void listCategoriesAppliesCustomPageSizeAndSort() {
+    CategoryListRequest request =
+        CategoryListRequest.builder().page(1).size(5).sort("createdAt,desc").name("veg").build();
+    Pageable expectedPageable = PageRequest.of(1, 5, Sort.by(Sort.Direction.DESC, "createdAt"));
+    Page<Category> page = new PageImpl<>(List.of(), expectedPageable, 0);
+    when(categoryRepository.findAll(any(Specification.class), any(Pageable.class)))
+        .thenReturn(page);
+
+    PageResponse<CategoryResponse> result = categoryService.listCategories(request);
+
+    assertThat(result.getContent()).isEmpty();
+    verify(categoryRepository).findAll(any(Specification.class), eq(expectedPageable));
+  }
+
+  @Test
+  void listCategoriesRejectsMalformedSort() {
+    CategoryListRequest request = CategoryListRequest.builder().sort("a,b,c").build();
+
+    assertThatThrownBy(() -> categoryService.listCategories(request))
+        .isInstanceOf(ValidationException.class);
+  }
 
   @Test
   void createCategoryPersistsTrimmedNameAndDescription() {
