@@ -1,10 +1,12 @@
 package com.vegalife.repository.user;
 
 import com.vegalife.model.user.User;
+import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -19,6 +21,10 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
   boolean existsByEmail(String email);
 
   boolean existsByUsername(String username);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select u from User u where u.id = :id")
+  Optional<User> findByIdForUpdate(@Param("id") UUID id);
 
   @Query(
       """
