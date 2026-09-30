@@ -31,6 +31,7 @@ These are part of the current tech stack. Use freely.
 | `com.icegreen:greenmail` | In-memory SMTP server for integration tests | In pom.xml |
 | `org.hibernate:hibernate-jpamodelgen` | JPA static metamodel generation (test scope) | In pom.xml |
 | `spring-boot-starter-actuator` | Health endpoint `/actuator/health` (CD + Render health checks; status only, see `deployment.md`) | In pom.xml |
+| `com.cloudinary:cloudinary-http5` | Signed direct-to-Cloudinary upload + Admin API verification (media upload, issue #38) | In pom.xml |
 
 ## Planned (approved, add when a feature needs it)
 

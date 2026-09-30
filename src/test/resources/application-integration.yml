@@ -31,6 +31,10 @@ app:
       issuer: vegalife-backend-integration
       audience: vegalife-api
 
+  media:
+    cloudinary:
+      cloud-name: integration-test-cloud
+
   scheduling:
     enabled: false
 

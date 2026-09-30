@@ -1,12 +1,16 @@
 package com.vegalife.model.post;
 
+import com.vegalife.model.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
@@ -30,7 +34,7 @@ public class Media {
   @Column(name = "id", updatable = false, nullable = false)
   private UUID id;
 
-  @Column(name = "media_url", columnDefinition = "TEXT", nullable = false)
+  @Column(name = "media_url", columnDefinition = "TEXT")
   private String mediaUrl;
 
   @Column(name = "thumbnail_url", columnDefinition = "TEXT")
@@ -57,6 +61,13 @@ public class Media {
 
   @Column(name = "height")
   private Integer height;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "uploaded_by")
+  private User uploadedBy;
+
+  @Column(name = "external_id", length = 255)
+  private String externalId;
 
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)

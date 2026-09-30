@@ -28,6 +28,7 @@ spring:
     enabled: true
     baseline-on-migrate: true
     locations: classpath:db/migration
+    out-of-order: true
 
   mail:
     host: ${MAIL_HOST:localhost}
@@ -79,6 +80,18 @@ app:
     max-age: 24h
     retention: 7d
     batch-size: 10
+
+  media:
+    cloudinary:
+      cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+      api-key: ${CLOUDINARY_API_KEY:}
+      api-secret: ${CLOUDINARY_API_SECRET:}
+    upload:
+      grant-ttl: 15m
+      max-image-bytes: 5242880
+      max-video-bytes: 52428800
+      allowed-image-types: [image/jpeg, image/png, image/webp]
+      allowed-video-types: [video/mp4, video/webm]
 
 logging:
   level:
