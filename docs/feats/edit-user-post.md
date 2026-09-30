@@ -24,7 +24,7 @@ Users can create and list their posts, but currently cannot correct or update co
 
 ## Non-goals
 
-- Semantic filtering (deferred until its requirements are described).
+- Running semantic filtering inside this endpoint: an edit that changes content only re-queues the async filter job (BR-POST-007); see `docs/feats/post-content-filtering.md`.
 - Editing posts owned by another user, except by an Administrator (BR-CONTENT-001, logged per BR-ADMIN-002).
 - Deleting posts, restoring soft-deleted posts, or changing ownership.
 - Clearing an image by sending `null`; an omitted or null field leaves the current value unchanged.
@@ -38,7 +38,8 @@ Users can create and list their posts, but currently cannot correct or update co
 - [ ] FR-003: The request may include any non-empty subset of `title`, `content`, and `featuredImageUrl`; omitted or null fields remain unchanged.
 - [ ] FR-004: A supplied title must not be blank and must be at most 255 characters; supplied content must not be blank.
 - [ ] FR-005: A request with no updatable non-null fields returns `400 Bad Request`.
-- [ ] FR-006: A successful edit returns `200 OK` with the updated post response; post ownership, status, view count, publication timestamp, and creation timestamp are not changed by the request.
+- [ ] FR-006: A successful edit returns `200 OK` with the updated post response; post ownership, view count, publication timestamp, and creation timestamp are not changed by the request.
+- [ ] FR-007: A title or content change to a published or flagged post re-queues semantic filtering: `flag` returns to `PENDING` (BR-POST-007); a failing verdict moves the post to status `flagged` (BR-FILTER-008) and a passing one returns it to `published` (BR-FILTER-007). `publish: true` always (re-)queues a filter run instead of publishing directly (BR-POST-004, BR-FILTER-005).
 
 ### Non-Functional Requirements
 
@@ -47,7 +48,7 @@ Users can create and list their posts, but currently cannot correct or update co
 
 ## Design overview
 
-`PostController` accepts the post UUID, authenticated UUID principal, and validated partial-update DTO. `PostService` loads the post by both post ID and owner ID while requiring `deletedAt` to be null, applies only supplied values, saves the entity, and maps it to `PostListResponse`. No database migration is required because all edited columns already exist.
+`PostController` accepts the post UUID, authenticated UUID principal, and validated partial-update DTO. `PostService` loads the post by both post ID and owner ID while requiring `deletedAt` to be null, applies only supplied values, saves the entity, and maps it to `PostListResponse`. `publish: true` and content changes to a `published`/`flagged` post (re-)queue filtering through the ADR-005 outbox instead of publishing directly (BR-POST-004, BR-POST-007). No column is written by this endpoint that migration `V19__add_post_filtering.sql` does not already provide (`flag` is read into the response and written by the filter job).
 
 ## Success metrics
 
@@ -62,7 +63,7 @@ All automated acceptance scenarios for partial updates, validation, authenticati
 - [ ] Given a blank supplied title/content, an overlong title, or no non-null editable fields, when the caller submits the request, then the API returns `400 Bad Request` and does not update the post.
 - [ ] Given a missing/invalid JWT, when the caller submits the request, then the API returns `401 Unauthorized`.
 - [ ] Given a post that does not exist, is soft-deleted, or belongs to another user, when the caller submits the request, then the API returns `404 Not Found` and no post is changed.
-- [ ] Given a valid edit, when the post is saved, then system-managed fields including status, view count, publishedAt, createdAt, and ownership retain their existing values.
+- [ ] Given a valid edit, when the post is saved, then ownership, view count, publishedAt, and createdAt retain their existing values; status and flag change only through the publish and filtering rules (BR-POST-004, BR-POST-007).
 
 ## Risks / open questions
 
