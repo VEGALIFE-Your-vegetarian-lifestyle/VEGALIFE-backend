@@ -27,6 +27,7 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |
 | `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |
 | `admin/get-comments.md` | `GET /api/admin/comments` | List all comments (Admin) |
+| `admin/get-recipes.md` | `GET /api/admin/recipes` | List all recipes across users with ingredients and instructions (Admin) |
 | `media/post-upload.md` | `POST /api/media/upload` | Issue a signed upload grant and media ID |
 | `media/post-media-mediaid-confirm.md` | `POST /api/media/{mediaId}/confirm` | Verify a completed upload and finalize the media record |
 | `media/get-media-mediaid.md` | `GET /api/media/{mediaId}` | Read a stored media record |
