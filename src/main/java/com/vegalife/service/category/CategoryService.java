@@ -2,16 +2,19 @@ package com.vegalife.service.category;
 
 import com.vegalife.dto.mapper.category.CategoryMapper;
 import com.vegalife.dto.request.category.CategoryCreateRequest;
+import com.vegalife.dto.request.category.CategoryUpdateRequest;
 import com.vegalife.dto.response.category.CategoryResponse;
 import com.vegalife.model.post.Category;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.shared.exception.DuplicateResourceException;
+import com.vegalife.shared.exception.ResourceNotFoundException;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** BR-ADMIN-003: only an Administrator may create content categories. */
+/** BR-ADMIN-003: only an Administrator may create, edit, retire, or remove content categories. */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -28,10 +31,7 @@ public class CategoryService {
       throw new DuplicateResourceException("Category name already exists");
     }
 
-    String description =
-        request.getDescription() == null || request.getDescription().isBlank()
-            ? null
-            : request.getDescription().trim();
+    String description = normalizeDescription(request.getDescription());
 
     Category category = Category.builder().name(name).description(description).build();
     Category saved = categoryRepository.save(category);
@@ -39,5 +39,43 @@ public class CategoryService {
     log.info("Category {} created: {}", saved.getId(), saved.getName());
 
     return categoryMapper.toResponse(saved);
+  }
+
+  /**
+   * Partial update: an omitted or null field keeps its current value; the description cannot be
+   * cleared by sending {@code null} (mirrors {@code PostService}'s edit semantics).
+   */
+  @Transactional
+  public CategoryResponse updateCategory(UUID categoryId, CategoryUpdateRequest request) {
+    Category category = findActiveCategory(categoryId);
+
+    if (request.getName() != null) {
+      String name = request.getName().trim();
+      if (categoryRepository.existsByNameIgnoreCaseAndDeletedAtIsNullAndIdNot(name, categoryId)) {
+        throw new DuplicateResourceException("Category name already exists");
+      }
+      category.setName(name);
+    }
+
+    if (request.getDescription() != null) {
+      category.setDescription(normalizeDescription(request.getDescription()));
+    }
+
+    Category saved = categoryRepository.save(category);
+
+    log.info("Category {} updated: {}", saved.getId(), saved.getName());
+
+    return categoryMapper.toResponse(saved);
+  }
+
+  private Category findActiveCategory(UUID categoryId) {
+    return categoryRepository
+        .findById(categoryId)
+        .filter(c -> c.getDeletedAt() == null)
+        .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+  }
+
+  private String normalizeDescription(String description) {
+    return description == null || description.isBlank() ? null : description.trim();
   }
 }

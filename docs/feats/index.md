@@ -21,3 +21,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `upload-media-api.md`               | Upload Media API (Presigned URL)          | In progress | 2026-09-30 |
 | `create-category-api.md`            | Create Category API (Admin)               | Implemented | 2026-09-30 |
 | `post-content-filtering.md`         | Post Content Filtering (Semantic)         | In progress | 2026-09-30 |
+| `edit-category-api.md`              | Edit Category API (Admin)                 | Implemented | 2026-09-30 |
