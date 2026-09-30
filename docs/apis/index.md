@@ -34,3 +34,4 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `admin/patch-categories-categoryid.md` | `PATCH /api/admin/categories/{categoryId}` | Edit a content category (Admin) |
 | `admin/delete-categories-categoryid.md` | `DELETE /api/admin/categories/{categoryId}` | Retire a content category (Admin) |
 | `post/get-categories.md` | `GET /api/categories` | List active content categories (public) |
+| `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |
