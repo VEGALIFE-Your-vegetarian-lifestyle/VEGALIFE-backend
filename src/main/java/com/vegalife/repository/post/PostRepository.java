@@ -25,6 +25,9 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
   Page<Post> findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
       UUID userId, Post.Status status, Pageable pageable);
 
+  Page<Post> findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
+      Post.Status status, Pageable pageable);
+
   /**
    * Non-deleted posts attached to any of the given media, paired with the media they belong to so a
    * page of admin videos resolves every association in one query.

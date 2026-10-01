@@ -341,6 +341,17 @@ public class PostService {
     return PageResponse.from(posts.map(postMapper::toListResponse));
   }
 
+  /** BR-POST-010: the public feed serves every published, non-deleted post, newest first. */
+  @Transactional(readOnly = true)
+  public PageResponse<PostListResponse> listFeed(PostListRequest request) {
+    Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
+    Page<Post> posts =
+        postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
+            Post.Status.published, pageable);
+
+    return PageResponse.from(posts.map(postMapper::toListResponse));
+  }
+
   /** BR-CONTENT-002: a blog needs written content, a video needs a file or a link. */
   private void validateTypeSpecificFields(PostCreateRequest request) {
     if (request.getType() == Post.Type.blog) {

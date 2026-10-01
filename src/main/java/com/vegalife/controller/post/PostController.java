@@ -80,6 +80,13 @@ public class PostController {
     return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
   }
 
+  @GetMapping("/feed")
+  public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listFeed(
+      @Valid @ModelAttribute PostListRequest request) {
+    PageResponse<PostListResponse> posts = postService.listFeed(request);
+    return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
+  }
+
   private boolean isAdmin(Authentication authentication) {
     return authentication.getAuthorities().stream()
         .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
