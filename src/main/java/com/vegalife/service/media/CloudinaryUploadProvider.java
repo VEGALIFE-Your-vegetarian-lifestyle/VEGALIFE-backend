@@ -57,7 +57,6 @@ public class CloudinaryUploadProvider implements PresignedUploadProvider {
     Map<String, Object> signed = new HashMap<>();
     signed.put("public_id", publicId);
     signed.put("timestamp", timestamp);
-    signed.put("max_file_size", maxFileSize);
     signed.put("allowed_formats", allowedFormats);
     cloudinary.signRequest(signed, Map.of());
 
