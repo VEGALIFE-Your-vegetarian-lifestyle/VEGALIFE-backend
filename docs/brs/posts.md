@@ -384,7 +384,7 @@ Active
 
 ## Statement
 
-The content is embedded and compared by cosine similarity with two precomputed centroids — one built from on-topic seed texts and one from off-topic seed texts, both Vietnamese and English. The relevance score is the normalized margin between the two similarities, `score = (cos(text, onTopic) - cos(text, offTopic) + 1) / 2`, clamped to `[0, 1]`. The score maps to exactly one verdict: `score >= app.filter.accept-threshold` is `PASSED`; `score < app.filter.reject-threshold` is `REJECTED`; anything between the two is `NEEDS_REVIEW`. Defaults are `0.75` and `0.45`. The filter state is stored in `post.flag`, which is separate from `post.status`; `flag` is NULL only when the post has never been filtered.
+The content is embedded and mean-centered — the text embedding and both centroids have the seed-corpus mean subtracted first (raw e5 embeddings are anisotropic, so an uncentered margin score collapses into a ~0.46–0.54 band no threshold can reach) — and compared by cosine similarity with two precomputed centroids, one built from on-topic seed texts and one from off-topic seed texts, both Vietnamese and English. The relevance score is the normalized margin between the two centered similarities, `score = (cos(text - mean, onTopic - mean) - cos(text - mean, offTopic - mean) + 1) / 2`, clamped to `[0, 1]`. The score maps to exactly one verdict: `score >= app.filter.accept-threshold` is `PASSED`; `score < app.filter.reject-threshold` is `REJECTED`; anything between the two is `NEEDS_REVIEW`. Defaults are `0.65` and `0.43`, chosen from the measured centered seed distribution (highest off-topic 0.4058, lowest on-topic 0.7279). The filter state is stored in `post.flag`, which is separate from `post.status`; `flag` is NULL only when the post has never been filtered.
 
 ## Rationale
 
@@ -398,7 +398,7 @@ Applies to every filter run. There is no `NOT_FILTERED` value: NULL means never 
 
 - `EmbeddingRelevanceScorer` reads both thresholds from `app.filter.*` and returns the band; `ContentFilterService` turns it into the verdict and reasons.
 - `post.flag VARCHAR(16)` is constrained to `PENDING`/`PASSED`/`REJECTED`/`NEEDS_REVIEW` or NULL (migration V19).
-- Unit tests cover both bands and the review band at the exact threshold boundaries.
+- Unit tests cover both bands and the review band at the exact threshold boundaries; a fixture-based regression test replays captured embeddings through the configured thresholds, and `CentroidRegenerationTest` refreshes those fixtures whenever the centroids are regenerated.
 
 ## Last Reviewed
 

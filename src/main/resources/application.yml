@@ -105,8 +105,8 @@ app:
       allowed-video-types: [video/mp4, video/webm]
 
   filter:
-    accept-threshold: 0.75
-    reject-threshold: 0.45
+    accept-threshold: 0.65
+    reject-threshold: 0.43
     sweep-max-age: 24h
     embedding:
       # Raw HF feature-extraction route, verified live (ADR-007); not the OpenAI-compat /v1 path.
