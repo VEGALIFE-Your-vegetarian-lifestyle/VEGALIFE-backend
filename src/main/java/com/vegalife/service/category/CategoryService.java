@@ -55,7 +55,7 @@ public class CategoryService {
     String description = normalizeDescription(request.getDescription());
 
     Category category = Category.builder().name(name).description(description).build();
-    Category saved = categoryRepository.save(category);
+    Category saved = categoryRepository.saveAndFlush(category);
 
     log.info("Category {} created: {}", saved.getId(), saved.getName());
 
