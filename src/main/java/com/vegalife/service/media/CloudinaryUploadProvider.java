@@ -16,10 +16,10 @@ import org.springframework.stereotype.Component;
  * read-backs through the Admin API; credentials come from {@code app.media.cloudinary.*} and no
  * allowlist entry or byte ceiling is hard-coded here (BR-MEDIA-001, BR-MEDIA-003).
  *
- * <p>The signature covers only {@code allowed_formats}, {@code public_id} and {@code timestamp} —
- * Cloudinary verifies nothing else, and rejects the whole request with 401 Invalid Signature for
- * any extra signed parameter. {@code max_file_size} is therefore returned un-signed and is not
- * enforced by the provider; size enforcement happens at confirmation.
+ * <p>The signature covers only {@code allowed_formats}, {@code public_id} and {@code timestamp}:
+ * signing without {@code max_file_size} is accepted, signing with it returns 401 Invalid Signature,
+ * so it is returned un-signed. Cloudinary does not enforce it either — size enforcement happens at
+ * confirmation (BR-MEDIA-003).
  */
 @Slf4j
 @Component
