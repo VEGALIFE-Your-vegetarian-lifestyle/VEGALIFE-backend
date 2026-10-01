@@ -76,11 +76,13 @@ vegan food at all, or what it contains.
       wordlists are never evaluated as separate rules — so every
       queued run embeds the content.
 - [ ] FR-006: The content is embedded and scored
-      by cosine similarity against on-topic and off-topic centroids;
-      the score maps to `PASSED` (≥ accept-threshold), `REJECTED`
-      (< reject-threshold), or `NEEDS_REVIEW` (between the two).
+      by cosine similarity against on-topic and off-topic centroids,
+      with the text embedding and both centroids mean-centered over the
+      seed corpus first; the score maps to `PASSED` (≥ accept-threshold),
+      `REJECTED` (< reject-threshold), or `NEEDS_REVIEW` (between the
+      two).
 - [ ] FR-007: Thresholds and the stale-pending age are configuration
-      (`app.filter.accept-threshold` = 0.75, `reject-threshold` = 0.45,
+      (`app.filter.accept-threshold` = 0.65, `reject-threshold` = 0.43,
       `sweep-max-age` = 24h), not constants in code.
 - [ ] FR-008: `PASSED` sets `flag = PASSED` and publishes the post
       (`status = published`, `publishedAt` set) — every queued run was
@@ -123,7 +125,8 @@ existing outbound queue:
    embedded through an `EmbeddingModel` (custom HuggingFace
    feature-extraction client) and compared by cosine similarity against
    two precomputed centroids (on-topic vs off-topic, VN + EN seed
-   corpora committed as resources). Thresholds come from `app.filter.*`.
+   corpora committed as resources), mean-centered over the seed corpus
+   before comparison. Thresholds come from `app.filter.*`.
 
 State lives in one new column on `post` (`flag`) plus the `flagged`
 value added to `post.status`;
@@ -191,9 +194,10 @@ Issue #34 (edit):
   external dependency. Failures do not lose posts (the outbox retries),
   but a prolonged outage delays publishing; the 24h sweep converts the
   worst case into `NEEDS_REVIEW` rather than a permanent `PENDING`.
-- **Threshold tuning**: 0.75 / 0.45 are initial values from the
-  centroid spread, not measured against production traffic. Expect one
-  tuning pass after real content flows through.
+- **Threshold tuning**: 0.65 / 0.43 are derived from the measured
+  centered seed distribution (highest off-topic 0.4058, lowest
+  on-topic 0.7279), not measured against production traffic. Expect
+  one tuning pass after real content flows through.
 - **False rejects are user-visible**: a rejected post is `flagged`, not
   deleted, and re-editing re-runs the filter — but there is no admin
   release path until review endpoints exist (accepted for this sprint).

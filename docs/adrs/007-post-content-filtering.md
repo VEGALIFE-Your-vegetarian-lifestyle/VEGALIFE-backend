@@ -88,11 +88,18 @@ Concretely:
    would use.
 4. **Three-band scoring.** Content is compared by cosine similarity
    with two precomputed centroids (on-topic and off-topic seed texts,
-   VN + EN, committed as resources). The normalized margin between the
-   two similarities is the relevance score; it maps to exactly one of
-   `PASSED` (`score >= app.filter.accept-threshold`, default `0.75`),
-   `REJECTED` (`score < app.filter.reject-threshold`, default `0.45`),
-   or `NEEDS_REVIEW` (in between). Thresholds are configuration.
+   VN + EN, committed as resources) after mean-centering: the text
+   embedding and both centroids have the seed-corpus mean (a third
+   committed vector) subtracted first, because raw e5 embeddings are
+   anisotropic and an uncentered margin score stays inside a
+   ~0.46–0.54 band where no threshold can ever fire. The normalized
+   margin between the two centered similarities is the relevance
+   score; it maps to exactly one of `PASSED`
+   (`score >= app.filter.accept-threshold`, default `0.65`),
+   `REJECTED` (`score < app.filter.reject-threshold`, default `0.43`),
+   or `NEEDS_REVIEW` (in between). The defaults sit inside the
+   measured centered seed window (highest off-topic 0.4058, lowest
+   on-topic 0.7279). Thresholds are configuration.
 5. **Separate filter state.** `post.flag VARCHAR(16)` holds
    `PENDING` / `PASSED` / `REJECTED` / `NEEDS_REVIEW`, or NULL for
    "never filtered". There is deliberately no `NOT_FILTERED` value and
@@ -110,6 +117,24 @@ Concretely:
    (default 24h) and moves any such post still `PENDING` to
    `NEEDS_REVIEW` / `flagged` with an ERROR log, bounding the damage of
    a lost or exhausted queue message (BR-FILTER-009).
+8. **Centroid regeneration is a guarded test, not a tool.**
+   `CentroidRegenerationTest` embeds both seed corpora with the
+   configured model and rewrites `filter/centroids.json` only when
+   `CENTROIDS_WRITE` is set alongside `HF_TOKEN`. The same write-mode
+   run re-embeds the captured fixture texts in
+   `src/test/resources/filter/fixtures.json` (labels, texts, bands and
+   capture date preserved) so the regression test never replays stale
+   vectors. Seed-band separation is checked in both modes: a mismatch
+   WARNs and proceeds while writing (so a deliberate threshold change
+   can still be committed, with the logged margins as evidence) and
+   fails the build in verify mode; the cosine drift between freshly
+   embedded centroids and the committed ones must stay ≥ 0.99 in
+   verify mode. Model swap procedure: change
+   `app.embedding.model`, run the test in write mode, review the
+   logged seed margins and fixture verdicts, then commit the rewritten
+   centroids and fixtures together with any threshold change —
+   thresholds live in both `FilterProperties.java` and
+   `application.yml` and must be edited together.
 
 ## Considered options
 
