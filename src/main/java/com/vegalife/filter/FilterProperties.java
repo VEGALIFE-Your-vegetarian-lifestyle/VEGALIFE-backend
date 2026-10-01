@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.filter")
 public class FilterProperties {
 
-  private double acceptThreshold = 0.75;
-  private double rejectThreshold = 0.45;
+  private double acceptThreshold = 0.65;
+  private double rejectThreshold = 0.43;
   private Duration sweepMaxAge = Duration.ofHours(24);
 }
