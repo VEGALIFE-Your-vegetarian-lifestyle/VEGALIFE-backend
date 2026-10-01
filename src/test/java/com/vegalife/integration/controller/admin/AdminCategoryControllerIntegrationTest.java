@@ -122,7 +122,8 @@ class AdminCategoryControllerIntegrationTest {
         .andExpect(jsonPath("$.message").value("Category created successfully"))
         .andExpect(jsonPath("$.data.name").value("Pure Vegan"))
         .andExpect(jsonPath("$.data.description").value("Strictly plant-based"))
-        .andExpect(jsonPath("$.data.id").exists());
+        .andExpect(jsonPath("$.data.id").exists())
+        .andExpect(jsonPath("$.data.createdAt").isNotEmpty());
   }
 
   @Test

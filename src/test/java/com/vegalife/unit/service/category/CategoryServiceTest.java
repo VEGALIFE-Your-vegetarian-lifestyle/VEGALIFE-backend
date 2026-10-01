@@ -106,7 +106,7 @@ class CategoryServiceTest {
             .description("Strictly plant-based")
             .createdAt(Instant.now())
             .build();
-    when(categoryRepository.save(any(Category.class))).thenReturn(saved);
+    when(categoryRepository.saveAndFlush(any(Category.class))).thenReturn(saved);
     CategoryResponse expectedResponse =
         CategoryResponse.builder().id(saved.getId()).name(saved.getName()).build();
     when(categoryMapper.toResponse(saved)).thenReturn(expectedResponse);
@@ -115,7 +115,7 @@ class CategoryServiceTest {
 
     assertThat(result).isEqualTo(expectedResponse);
     ArgumentCaptor<Category> captor = ArgumentCaptor.forClass(Category.class);
-    verify(categoryRepository).save(captor.capture());
+    verify(categoryRepository).saveAndFlush(captor.capture());
     assertThat(captor.getValue().getName()).isEqualTo("Pure Vegan");
     assertThat(captor.getValue().getDescription()).isEqualTo("Strictly plant-based");
   }
@@ -126,13 +126,13 @@ class CategoryServiceTest {
         CategoryCreateRequest.builder().name("Vegan").description("   ").build();
     when(categoryRepository.existsByNameIgnoreCaseAndDeletedAtIsNull("Vegan")).thenReturn(false);
     Category saved = Category.builder().id(UUID.randomUUID()).name("Vegan").build();
-    when(categoryRepository.save(any(Category.class))).thenReturn(saved);
+    when(categoryRepository.saveAndFlush(any(Category.class))).thenReturn(saved);
     when(categoryMapper.toResponse(saved)).thenReturn(CategoryResponse.builder().build());
 
     categoryService.createCategory(request);
 
     ArgumentCaptor<Category> captor = ArgumentCaptor.forClass(Category.class);
-    verify(categoryRepository).save(captor.capture());
+    verify(categoryRepository).saveAndFlush(captor.capture());
     assertThat(captor.getValue().getDescription()).isNull();
   }
 
