@@ -12,9 +12,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * Cloudinary-backed upload provider. Signs browser uploads against the unsigned-upload endpoint and
+ * Cloudinary-backed upload provider. Signs browser uploads against the signed upload endpoint and
  * read-backs through the Admin API; credentials come from {@code app.media.cloudinary.*} and no
  * allowlist entry or byte ceiling is hard-coded here (BR-MEDIA-001, BR-MEDIA-003).
+ *
+ * <p>The signature covers only {@code allowed_formats}, {@code public_id} and {@code timestamp}:
+ * signing without {@code max_file_size} is accepted, signing with it returns 401 Invalid Signature,
+ * so it is returned un-signed. Cloudinary does not enforce it either — size enforcement happens at
+ * confirmation (BR-MEDIA-003).
  */
 @Slf4j
 @Component
@@ -57,7 +62,6 @@ public class CloudinaryUploadProvider implements PresignedUploadProvider {
     Map<String, Object> signed = new HashMap<>();
     signed.put("public_id", publicId);
     signed.put("timestamp", timestamp);
-    signed.put("max_file_size", maxFileSize);
     signed.put("allowed_formats", allowedFormats);
     cloudinary.signRequest(signed, Map.of());
 

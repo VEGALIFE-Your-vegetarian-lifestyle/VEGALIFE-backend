@@ -40,7 +40,7 @@ The `media` table (migration `V4__create_media_table.sql`) and `PostService.reso
 - [ ] FR-003: A request whose declared `sizeBytes` already exceeds the ceiling for its media class returns `400` without creating a row or contacting the provider.
 - [ ] FR-004: The endpoint persists a `media` row in status `uploading` with `media_url` null, then returns `201 Created` with the media ID, the upload expiry, and a uniform upload instruction (`method`, `url`, `headers`, `fields`).
 - [ ] FR-005: The `public_id` returned in `fields` is derived server-side from the media ID and the owner's user ID; the client cannot choose it.
-- [ ] FR-006: `max_file_size` and `allowed_formats` are present in the signed `fields` so the provider rejects non-conforming files at upload time.
+- [ ] FR-006: `max_file_size` is present in `fields` as advisory metadata and `allowed_formats` is part of the signed parameters, so the provider rejects a non-conforming format at upload time. Cloudinary does not enforce `max_file_size`, so size enforcement rests on FR-003 and FR-010.
 - [ ] FR-007: `POST /api/media/{mediaId}/confirm` takes no body; the server derives the `public_id` from the stored row, asks the provider whether that object exists, and reads back its real size, format, dimensions and delivery URL.
 - [ ] FR-008: On a successful confirmation the row moves from `uploading` to `succeed` and stores `media_url`, `file_size_bytes`, `mime_type`, `width`, `height`, and `external_id`; the endpoint returns `200` with the media DTO.
 - [ ] FR-009: If the provider reports no such object, confirmation returns `400 Upload verification failed` and the row stays `uploading`.
@@ -93,7 +93,7 @@ Before merge: the build, unit tests, Checkstyle and Spotless gates all pass, and
 
 - **Media ownership is not enforced on attachment.** Per the product decision for this issue, attaching another user's media to one's own post is considered acceptable, so `PostService.resolveMedia()` still checks only `status == succeed`. The new `uploaded_by` column makes an ownership check a one-line addition if that stance changes.
 - **Orphan rows.** A client that requests a grant and never uploads leaves a permanent `uploading` row with a null URL. Harmless because nothing can reference it, but a sweeper is a candidate follow-up.
-- **`max_file_size` provider-side behaviour is unverified.** It is included in the signed fields per Cloudinary docs, but confirmation re-checks the reported `bytes` regardless (FR-010), so enforcement never depends on the provider honouring it.
+- **`max_file_size` provider-side behaviour is verified as unenforced.** Live probes on 2026-10-02 confirmed Cloudinary does not enforce it (a `max_file_size=1` grant accepted a 70-byte file) and excludes it from its signature verification string — signing it caused the 401s of issue #38. The field is still returned for client visibility; confirmation re-checks the reported `bytes` (FR-010), so enforcement never depended on the provider honouring it.
 - **Flyway `out-of-order` is enabled for this branch.** `spring.flyway.out-of-order` is turned on so that `V19__add_post_filtering.sql` (open PR) can land after `V20`. V19 and V20 touch disjoint tables (`post` vs `media`), so the late application is safe here. This weakens Flyway's "next number wins" guard for future parallel branches and is recorded in `docs/brs/media.md` (BR-MEDIA-006).
 
 ## Related
