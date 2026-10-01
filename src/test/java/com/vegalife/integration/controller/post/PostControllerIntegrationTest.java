@@ -684,6 +684,62 @@ class PostControllerIntegrationTest {
         .andExpect(status().isBadRequest());
   }
 
+  @Test
+  void listFeed_guestSeesOnlyPublishedPostsNewestFirst() throws Exception {
+    createPost(user, "Draft", Post.Status.created, null);
+    createPost(user, "Hidden", Post.Status.hidden, null);
+    createPost(user, "Deleted", Post.Status.published, Instant.now());
+    createPublished(user, "Older", Instant.parse("2026-01-01T00:00:00Z"));
+    createPublished(otherUser, "Newer", Instant.parse("2026-02-01T00:00:00Z"));
+
+    mockMvc
+        .perform(get("/api/posts/feed"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Posts retrieved successfully"))
+        .andExpect(jsonPath("$.data.totalElements").value(2))
+        .andExpect(jsonPath("$.data.content.length()").value(2))
+        .andExpect(jsonPath("$.data.content[0].title").value("Newer"))
+        .andExpect(jsonPath("$.data.content[1].title").value("Older"));
+  }
+
+  @Test
+  void listFeed_memberSeesSamePublishedPostsAsGuest() throws Exception {
+    createPost(user, "Draft", Post.Status.created, null);
+    createPost(user, "Published", Post.Status.published, null);
+
+    mockMvc
+        .perform(get("/api/posts/feed").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].title").value("Published"));
+  }
+
+  @Test
+  void listFeed_invalidTokenReturns401() throws Exception {
+    mockMvc
+        .perform(get("/api/posts/feed").header("Authorization", "Bearer not-a-jwt"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void listFeed_appliesPagination_invalidSizeReturns400() throws Exception {
+    createPublished(user, "First", Instant.parse("2026-01-01T00:00:00Z"));
+    createPublished(user, "Second", Instant.parse("2026-01-02T00:00:00Z"));
+    createPublished(user, "Third", Instant.parse("2026-01-03T00:00:00Z"));
+
+    mockMvc
+        .perform(get("/api/posts/feed").param("page", "0").param("size", "2"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.page").value(0))
+        .andExpect(jsonPath("$.data.size").value(2))
+        .andExpect(jsonPath("$.data.totalElements").value(3))
+        .andExpect(jsonPath("$.data.totalPages").value(2))
+        .andExpect(jsonPath("$.data.content[0].title").value("Third"));
+
+    mockMvc.perform(get("/api/posts/feed").param("size", "0")).andExpect(status().isBadRequest());
+  }
+
   private User createUser(String username, String email) {
     return createUser(username, email, User.Role.USER);
   }
@@ -710,5 +766,11 @@ class PostControllerIntegrationTest {
             .viewCount(0)
             .deletedAt(deletedAt)
             .build());
+  }
+
+  private Post createPublished(User owner, String title, Instant publishedAt) {
+    Post post = createPost(owner, title, Post.Status.published, null);
+    post.setPublishedAt(publishedAt);
+    return postRepository.save(post);
   }
 }
