@@ -42,7 +42,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
 | BR-MEDIA-001 | Media Content-Type Allowlist | Active | 2026-09-30 |
 | BR-MEDIA-002 | Media Ownership Is Derived from Authentication | Active | 2026-09-30 |
-| BR-MEDIA-003 | Per-Class Upload Size Ceilings | Active | 2026-09-30 |
+| BR-MEDIA-003 | Per-Class Upload Size Ceilings | Active | 2026-10-02 |
 | BR-MEDIA-004 | Object Keys Are Server-Assigned | Active | 2026-09-30 |
 | BR-MEDIA-005 | Upload Grants Expire | Active | 2026-09-30 |
 | BR-MEDIA-006 | Flyway Out-of-Order Enabled for Parallel Migration Branches | Active | 2026-09-30 |
