@@ -3,6 +3,7 @@ package com.vegalife.unit.service.profile;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 import com.vegalife.dto.mapper.profile.ProfileMapper;
@@ -70,8 +71,9 @@ class UserProfileServiceTest {
 
     expectedResponse =
         ProfileResponse.builder()
-            .id(existingProfile.getId())
             .userId(userId)
+            .username("testuser")
+            .email("test@example.com")
             .heightCm(new BigDecimal("175.5"))
             .weightKg(new BigDecimal("70.2"))
             .age(26)
@@ -154,5 +156,62 @@ class UserProfileServiceTest {
 
     assertThat(result).isEqualTo(expectedResponse);
     verify(profileMapper).updateEntityFromRequest(partialRequest, existingProfile);
+  }
+
+  @Test
+  void getProfile_whenProfileExists_shouldReturnResponseWithoutLocking() {
+    when(profileRepository.findByUserId(userId)).thenReturn(Optional.of(existingProfile));
+    when(profileMapper.toResponse(existingProfile)).thenReturn(expectedResponse);
+
+    ProfileResponse result = profileService.getProfile(userId);
+
+    assertThat(result).isEqualTo(expectedResponse);
+    verifyNoInteractions(userRepository);
+    verify(profileRepository, never()).save(any());
+  }
+
+  @Test
+  void getProfile_whenProfileMissing_shouldCreateEmptyProfile() {
+    ProfileResponse emptyProfileResponse =
+        ProfileResponse.builder().userId(userId).username("testuser").build();
+
+    when(profileRepository.findByUserId(userId)).thenReturn(Optional.empty());
+    when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
+    when(profileRepository.save(any(UserProfile.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(profileMapper.toResponse(any(UserProfile.class))).thenReturn(emptyProfileResponse);
+
+    ProfileResponse result = profileService.getProfile(userId);
+
+    assertThat(result).isEqualTo(emptyProfileResponse);
+    verify(profileRepository)
+        .save(
+            argThat(
+                profile -> profile.getUser() != null && profile.getUser().getId().equals(userId)));
+  }
+
+  @Test
+  void getProfile_whenRowCreatedByConcurrentRequest_shouldReturnExistingRow() {
+    when(profileRepository.findByUserId(userId))
+        .thenReturn(Optional.empty(), Optional.of(existingProfile));
+    when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));
+    when(profileMapper.toResponse(existingProfile)).thenReturn(expectedResponse);
+
+    ProfileResponse result = profileService.getProfile(userId);
+
+    assertThat(result).isEqualTo(expectedResponse);
+    verify(profileRepository, never()).save(any());
+  }
+
+  @Test
+  void getProfile_whenUserNotFound_shouldThrowResourceNotFoundException() {
+    when(profileRepository.findByUserId(userId)).thenReturn(Optional.empty());
+    when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> profileService.getProfile(userId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("User not found");
+
+    verify(profileRepository, never()).save(any());
   }
 }

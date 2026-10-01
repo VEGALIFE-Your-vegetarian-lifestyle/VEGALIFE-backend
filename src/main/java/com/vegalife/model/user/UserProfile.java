@@ -24,16 +24,16 @@ public class UserProfile {
   @JoinColumn(name = "user_id", nullable = false, unique = true, updatable = false)
   private User user;
 
-  @Column(name = "height_cm", precision = 5, scale = 2, nullable = false)
+  @Column(name = "height_cm", precision = 5, scale = 2)
   private BigDecimal heightCm;
 
-  @Column(name = "weight_kg", precision = 5, scale = 2, nullable = false)
+  @Column(name = "weight_kg", precision = 5, scale = 2)
   private BigDecimal weightKg;
 
-  @Column(name = "age", nullable = false)
+  @Column(name = "age")
   private Integer age;
 
-  @Column(name = "gender", length = 20, nullable = false)
+  @Column(name = "gender", length = 20)
   @Enumerated(EnumType.STRING)
   private Gender gender;
 

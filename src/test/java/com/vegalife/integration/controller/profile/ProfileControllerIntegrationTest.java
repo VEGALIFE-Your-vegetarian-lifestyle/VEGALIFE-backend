@@ -2,6 +2,7 @@ package com.vegalife.integration.controller.profile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -246,6 +247,78 @@ class ProfileControllerIntegrationTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(jsonPath("$.message").value("Validation failed"));
+  }
+
+  @Test
+  void getOwnProfile_withAuthentication_shouldReturn200AndProfile() throws Exception {
+    mockMvc
+        .perform(get("/api/profile").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Profile retrieved successfully"))
+        .andExpect(jsonPath("$.data.userId").value(testUser.getId().toString()))
+        .andExpect(jsonPath("$.data.username").value("profileuser"))
+        .andExpect(jsonPath("$.data.email").value("profile@example.com"));
+
+    // Reading a user without a profile row must have created an empty one
+    assertThat(profileRepository.findByUserId(testUser.getId())).isPresent();
+  }
+
+  @Test
+  void getOwnProfile_withoutAuthentication_shouldReturn401() throws Exception {
+    mockMvc.perform(get("/api/profile")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void getProfileByUserId_withoutAuthentication_shouldReturn200AndProfile() throws Exception {
+    mockMvc
+        .perform(get("/api/profile/{userId}", testUser.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.userId").value(testUser.getId().toString()))
+        .andExpect(jsonPath("$.data.username").value("profileuser"))
+        .andExpect(jsonPath("$.data.email").value("profile@example.com"));
+  }
+
+  @Test
+  void getProfileByUserId_whenProfileMissing_shouldCreateEmptyProfileAndReturn200()
+      throws Exception {
+    assertThat(profileRepository.findByUserId(testUser.getId())).isEmpty();
+
+    mockMvc
+        .perform(get("/api/profile/{userId}", testUser.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.userId").value(testUser.getId().toString()))
+        .andExpect(jsonPath("$.data.heightCm").doesNotExist())
+        .andExpect(jsonPath("$.data.description").doesNotExist());
+
+    assertThat(profileRepository.findByUserId(testUser.getId())).isPresent();
+  }
+
+  @Test
+  void getProfileByUserId_whenUserDoesNotExist_shouldReturn404() throws Exception {
+    mockMvc
+        .perform(get("/api/profile/{userId}", "11111111-2222-3333-4444-555555555555"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("User not found"));
+  }
+
+  @Test
+  void updateProfile_withAvatarUrlOnly_shouldReturn200WithIdentityFieldsAndNoId() throws Exception {
+    mockMvc
+        .perform(
+            put("/api/profile")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"avatarUrl\": \"https://example.com/new-avatar.jpg\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.userId").value(testUser.getId().toString()))
+        .andExpect(jsonPath("$.data.username").value("profileuser"))
+        .andExpect(jsonPath("$.data.email").value("profile@example.com"))
+        .andExpect(jsonPath("$.data.avatarUrl").value("https://example.com/new-avatar.jpg"))
+        .andExpect(jsonPath("$.data.id").doesNotExist());
   }
 
   @Test

@@ -9,6 +9,7 @@ import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -54,12 +55,29 @@ public class UserProfileService {
     return profileMapper.toResponse(profile);
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public ProfileResponse getProfile(UUID userId) {
+    Optional<UserProfile> existing = profileRepository.findByUserId(userId);
+    if (existing.isPresent()) {
+      return profileMapper.toResponse(existing.get());
+    }
+
+    // No profile yet: lock the user row so concurrent first reads serialize,
+    // then re-check under the lock before creating an empty row (user_id is
+    // unique, and a plain insert race would fail one request with a 500).
+    User user =
+        userRepository
+            .findByIdForUpdate(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
     UserProfile profile =
         profileRepository
             .findByUserId(userId)
-            .orElseThrow(() -> new ResourceNotFoundException("Profile not found"));
+            .orElseGet(
+                () -> {
+                  log.info("Creating empty profile for user: {}", userId);
+                  return profileRepository.save(UserProfile.builder().user(user).build());
+                });
 
     return profileMapper.toResponse(profile);
   }

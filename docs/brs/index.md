@@ -15,7 +15,8 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-AUTH-007 | Email Format and Length (valid, max 100 chars) | Active | 2026-09-22 |
 | BR-PROFILE-001 | Profile Fields Validation | Active | 2026-09-23 |
 | BR-PROFILE-002 | Profile Ownership | Active | 2026-09-23 |
-| BR-PROFILE-003 | Profile Auto-Creation | Active | 2026-09-23 |
+| BR-PROFILE-003 | Profile Auto-Creation | Active | 2026-10-01 |
+| BR-PROFILE-004 | Public Profile Read | Active | 2026-10-01 |
 | BR-AUTH-008 | Login Requires Valid Credentials and Activated Account | Active | 2026-09-22 |
 | BR-AUTH-009 | Access Token Short Lifetime (15 minutes) | Active | 2026-09-22 |
 | BR-AUTH-010 | Refresh Token Long Lifetime (7 days) | Active | 2026-09-22 |

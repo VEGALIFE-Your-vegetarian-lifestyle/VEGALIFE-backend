@@ -16,12 +16,12 @@ Required: Valid JWT access token in Authorization header (`Bearer <token>`)
 ### Request Body
 ```json
 {
-  "height_cm": "number — optional, positive decimal, max 300",
-  "weight_kg": "number — optional, positive decimal, max 500",
+  "heightCm": "number — optional, positive decimal, max 300",
+  "weightKg": "number — optional, positive decimal, max 500",
   "age": "integer — optional, between 1 and 150",
   "gender": "string — optional, one of: male, female, other",
   "description": "string — optional, max 2000 characters",
-  "avatar_url": "string — optional, valid URL format"
+  "avatarUrl": "string — optional, valid URL format"
 }
 ```
 At least one field must be provided.
@@ -34,15 +34,16 @@ At least one field must be provided.
   "success": true,
   "message": "Profile updated successfully",
   "data": {
-    "id": "uuid",
-    "user_id": "uuid",
-    "height_cm": 175.5,
-    "weight_kg": 70.2,
+    "userId": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "johndoe",
+    "email": "john@example.com",
+    "heightCm": 175.5,
+    "weightKg": 70.2,
     "age": 25,
     "gender": "male",
     "description": "Vegan enthusiast",
-    "avatar_url": "https://example.com/avatar.jpg",
-    "updated_at": "2026-09-23T10:00:00Z"
+    "avatarUrl": "https://example.com/avatar.jpg",
+    "updatedAt": "2026-09-23T10:00:00Z"
   }
 }
 ```
@@ -51,36 +52,39 @@ At least one field must be provided.
 |-------|------|-------------|
 | success | boolean | Always true for success |
 | message | string | "Profile updated successfully" |
-| data.id | uuid | Unique profile identifier |
-| data.user_id | uuid | Associated user identifier |
-| data.height_cm | number | Height in centimeters |
-| data.weight_kg | number | Weight in kilograms |
+| data | object | `ProfileResponse` — identical shape to both GET endpoints |
+| data.userId | uuid | Associated user identifier |
+| data.username | string | The user's username |
+| data.email | string | The user's email address |
+| data.heightCm | number | Height in centimeters |
+| data.weightKg | number | Weight in kilograms |
 | data.age | integer | User age |
 | data.gender | string | male, female, or other |
 | data.description | string | User description |
-| data.avatar_url | string | Profile avatar URL |
-| data.updated_at | string | ISO 8601 timestamp of last update |
+| data.avatarUrl | string | Profile avatar URL |
+| data.updatedAt | string | ISO 8601 timestamp of last update |
 
 ### Error Responses
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
 | 400 | No fields provided | "At least one profile field must be provided" |
-| 400 | Invalid height_cm | "Height must be between 0 and 300 cm" |
-| 400 | Invalid weight_kg | "Weight must be between 0 and 500 kg" |
+| 400 | Invalid heightCm | "Height must be between 0 and 300 cm" |
+| 400 | Invalid weightKg | "Weight must be between 0 and 500 kg" |
 | 400 | Invalid age | "Age must be between 1 and 150" |
 | 400 | Invalid gender | "Gender must be male, female, or other" |
 | 400 | Description too long | "Description must not exceed 2000 characters" |
-| 400 | Invalid avatar_url | "Avatar URL must be a valid URL" |
+| 400 | Invalid avatarUrl | "Avatar URL must be a valid URL" |
 | 401 | Missing/invalid JWT | "Invalid or missing access token" |
+| 404 | User not found | "User not found" |
 | 500 | Server error | "Internal server error" |
 
 ## Validation Rules
-- **height_cm**: Optional, positive decimal, maximum 300 (BR-PROFILE-001)
-- **weight_kg**: Optional, positive decimal, maximum 500 (BR-PROFILE-001)
+- **heightCm**: Optional, positive decimal, maximum 300 (BR-PROFILE-001)
+- **weightKg**: Optional, positive decimal, maximum 500 (BR-PROFILE-001)
 - **age**: Optional, integer between 1 and 150 (BR-PROFILE-001)
 - **gender**: Optional, must be one of: male, female, other (BR-PROFILE-001)
 - **description**: Optional, maximum 2000 characters
-- **avatar_url**: Optional, valid URL format (RFC 3986)
+- **avatarUrl**: Optional, valid URL format (RFC 3986)
 
 ## Business Rules
 - BR-PROFILE-001: Profile Fields Validation
@@ -103,12 +107,12 @@ curl -X PUT http://localhost:8080/api/profile \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <access_token>" \
   -d '{
-    "height_cm": 175.5,
-    "weight_kg": 70.2,
+    "heightCm": 175.5,
+    "weightKg": 70.2,
     "age": 25,
     "gender": "male",
     "description": "Vegan enthusiast",
-    "avatar_url": "https://example.com/avatar.jpg"
+    "avatarUrl": "https://example.com/avatar.jpg"
   }'
 ```
 
@@ -118,15 +122,16 @@ curl -X PUT http://localhost:8080/api/profile \
   "success": true,
   "message": "Profile updated successfully",
   "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440001",
-    "user_id": "550e8400-e29b-41d4-a716-446655440000",
-    "height_cm": 175.5,
-    "weight_kg": 70.2,
+    "userId": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "johndoe",
+    "email": "john@example.com",
+    "heightCm": 175.5,
+    "weightKg": 70.2,
     "age": 25,
     "gender": "male",
     "description": "Vegan enthusiast",
-    "avatar_url": "https://example.com/avatar.jpg",
-    "updated_at": "2026-09-23T10:00:00Z"
+    "avatarUrl": "https://example.com/avatar.jpg",
+    "updatedAt": "2026-09-23T10:00:00Z"
   }
 }
 ```
@@ -150,5 +155,5 @@ curl -X PUT http://localhost:8080/api/profile \
 ```
 
 ## Related
-- Feature Spec: `docs/feats/edit-user-profile-api.md`
-- Business Rules: `docs/brs/auth.md` (for JWT authentication rules)
+- Feature Spec: `docs/feats/edit-user-profile-api.md`, `docs/feats/get-user-profile-api.md`
+- Business Rules: `docs/brs/profile.md`; JWT rules in `docs/brs/auth.md`
