@@ -30,3 +30,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `list-all-recipes-admin-api.md`     | List All Recipes API (Admin)              | Draft       | 2026-10-01 |
 | `list-all-videos-admin-api.md`      | List All User Videos API (Admin)          | In progress | 2026-10-01 |
 | `create-recipe-api.md`              | Create Recipe API                         | Draft       | 2026-10-01 |
+| `list-dishes-api.md`                | List Dishes API                           | In progress | 2026-10-01 |
