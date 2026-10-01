@@ -33,7 +33,8 @@ class ContentFilterServiceTest {
     service =
         new ContentFilterService(
             embeddingModel,
-            new EmbeddingRelevanceScorer(new float[] {1f, 0f}, new float[] {0f, 1f}, 0.75, 0.45));
+            new EmbeddingRelevanceScorer(
+                new float[] {1f, 0f}, new float[] {0f, 1f}, new float[] {0f, 0f}, 0.75, 0.45));
   }
 
   @Test

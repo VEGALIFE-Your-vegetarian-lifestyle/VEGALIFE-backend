@@ -19,9 +19,10 @@ class EmbeddingRelevanceScorerTest {
 
   private static final float[] ON_TOPIC = {1f, 0f};
   private static final float[] OFF_TOPIC = {0f, 1f};
+  private static final float[] ZERO_MEAN = {0f, 0f};
 
   private static EmbeddingRelevanceScorer scorer(double accept, double reject) {
-    return new EmbeddingRelevanceScorer(ON_TOPIC, OFF_TOPIC, accept, reject);
+    return new EmbeddingRelevanceScorer(ON_TOPIC, OFF_TOPIC, ZERO_MEAN, accept, reject);
   }
 
   @Test
@@ -46,7 +47,7 @@ class EmbeddingRelevanceScorerTest {
   }
 
   @Test
-  void midBandIsReviewWithDefaultThresholds() {
+  void midBandIsReviewBetweenExplicitThresholds() {
     RelevanceScore result = scorer(0.75, 0.45).score(new float[] {1f, 1f});
     assertEquals(0.5, result.score(), 1e-9);
     assertEquals(Band.REVIEW, result.band());
@@ -68,7 +69,7 @@ class EmbeddingRelevanceScorerTest {
         IllegalStateException.class,
         () ->
             new EmbeddingRelevanceScorer(
-                new float[] {1f, 0f}, new float[] {0f, 1f, 0.5f}, 0.75, 0.45));
+                new float[] {1f, 0f}, new float[] {0f, 1f, 0.5f}, ZERO_MEAN, 0.75, 0.45));
   }
 
   @Test
@@ -83,9 +84,11 @@ class EmbeddingRelevanceScorerTest {
     assertEquals(1024, centroids.dimensions());
     assertEquals(1024, centroids.onTopic().length);
     assertEquals(1024, centroids.offTopic().length);
+    assertEquals(1024, centroids.mean().length);
 
     EmbeddingRelevanceScorer scorer =
-        new EmbeddingRelevanceScorer(centroids.onTopic(), centroids.offTopic(), 0.75, 0.45);
+        new EmbeddingRelevanceScorer(
+            centroids.onTopic(), centroids.offTopic(), centroids.mean(), 0.65, 0.43);
     double onScore = scorer.score(centroids.onTopic()).score();
     double offScore = scorer.score(centroids.offTopic()).score();
     assertTrue(onScore > offScore, "on-topic centroid must score higher than off-topic");
