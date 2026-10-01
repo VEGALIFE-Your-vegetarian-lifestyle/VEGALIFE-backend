@@ -25,6 +25,7 @@ import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.post.PostService;
+import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.util.List;
@@ -729,5 +730,36 @@ class PostServiceTest {
     assertThatThrownBy(
             () -> postService.listPostsOfUser(null, false, userId, new PostListRequest()))
         .isInstanceOf(ResourceNotFoundException.class);
+  }
+
+  @Test
+  void listFeed_queriesOnlyPublishedPostsNewestFirst() {
+    Pageable pageable = PageRequest.of(0, 20);
+    Page<Post> page = new PageImpl<>(List.of(), pageable, 0);
+    when(postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
+            Post.Status.published, pageable))
+        .thenReturn(page);
+
+    PageResponse<PostListResponse> response = postService.listFeed(new PostListRequest());
+
+    assertThat(response.getTotalElements()).isZero();
+    verify(postRepository)
+        .findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
+            Post.Status.published, pageable);
+  }
+
+  @Test
+  void listFeed_passesRequestedPageAndSize() {
+    Pageable pageable = PageRequest.of(2, 5);
+    Page<Post> page = new PageImpl<>(List.of(), pageable, 0);
+    when(postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
+            Post.Status.published, pageable))
+        .thenReturn(page);
+
+    postService.listFeed(PostListRequest.builder().page(2).size(5).build());
+
+    verify(postRepository)
+        .findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
+            Post.Status.published, pageable);
   }
 }
