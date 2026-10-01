@@ -80,11 +80,11 @@ Applies to `POST /api/media/upload` and `POST /api/media/{mediaId}/confirm`. The
 ## Enforcement
 - `MediaProperties.upload.maxImageBytes` / `maxVideoBytes` — configuration under `app.media.upload.*`
 - `MediaService` rejects declared oversize before creating a row, and rejects reported oversize at confirmation, setting `status = failed`
-- Provider-side: `max_file_size` is included in the signed upload fields as a first line of defence
+- Provider-side: none. Cloudinary ignores `max_file_size` at upload time (verified 2026-10-02: a grant signed with `max_file_size=1` accepted a 70-byte file) and excludes it from signature verification, so the value returned in `fields` is advisory only. The confirmation read-back above is the sole size enforcement.
 - API: `400 File exceeds the 5 MB image limit` / `400 File exceeds the 50 MB limit`
 
 ## Last Reviewed
-2026-09-30, by Vegalife backend team
+2026-10-02, by Vegalife backend team
 
 ---
 
