@@ -40,3 +40,4 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `post/get-categories.md` | `GET /api/categories` | List active content categories (public) |
 | `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |
 | `ingredients/get-ingredients.md` | `GET /api/ingredients` | List ingredients paginated, with case-insensitive name filter (authenticated) |
+| `recipes/get-dishes.md` | `GET /api/dishes` | List active dishes for recipe-create autocomplete (authenticated) |
