@@ -59,3 +59,6 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-RECP-001 | Recipe Ownership Comes from Authentication | Active | 2026-10-01 |
 | BR-RECP-002 | Ingredient and Dish Names Are Unique Case-Insensitively | Active | 2026-10-01 |
 | BR-RECP-003 | Recipe Name, Instructions, Servings, and Dish Are Required | Active | 2026-10-01 |
+| BR-SUBS-001 | AI Quota Window Is the Current UTC Calendar Month | Active | 2026-10-04 |
+| BR-SUBS-002 | Plan Limits, Prices, and Features Are Data-Driven | Active | 2026-10-04 |
+| BR-SUBS-003 | Members Without a Subscription Row Are FREE by Default | Active | 2026-10-04 |
