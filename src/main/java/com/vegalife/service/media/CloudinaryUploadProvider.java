@@ -105,6 +105,21 @@ public class CloudinaryUploadProvider implements PresignedUploadProvider {
             integer(resource.get("duration"))));
   }
 
+  @Override
+  public void destroy(String publicId, String contentType) {
+    try {
+      cloudinary
+          .api()
+          .deleteResources(List.of(publicId), Map.of(RESOURCE_TYPE, resourceType(contentType)));
+      log.info("Provider destroyed public id {}", publicId);
+    } catch (NotFound missing) {
+      log.info("Provider object {} already gone", publicId);
+    } catch (Exception failure) {
+      log.error("Provider destroy failed for public id {}", publicId, failure);
+      throw new IllegalStateException("Provider destroy failed", failure);
+    }
+  }
+
   private String resourceType(String contentType) {
     return properties.getUpload().isImage(contentType) ? IMAGE : VIDEO;
   }

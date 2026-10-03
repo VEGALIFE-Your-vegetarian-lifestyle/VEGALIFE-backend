@@ -22,6 +22,7 @@ public class FakeUploadProvider implements PresignedUploadProvider {
   private final MediaProperties properties;
   private final Map<String, VerifiedUpload> objects = new ConcurrentHashMap<>();
   private final List<String> preparedPublicIds = new CopyOnWriteArrayList<>();
+  private final List<String> destroyedPublicIds = new CopyOnWriteArrayList<>();
 
   public FakeUploadProvider(MediaProperties properties) {
     this.properties = properties;
@@ -45,6 +46,12 @@ public class FakeUploadProvider implements PresignedUploadProvider {
     return Optional.ofNullable(objects.get(publicId));
   }
 
+  @Override
+  public void destroy(String publicId, String contentType) {
+    objects.remove(publicId);
+    destroyedPublicIds.add(publicId);
+  }
+
   /** Seeds the object a confirm call is expected to read back. */
   public void putObject(String publicId, VerifiedUpload upload) {
     objects.put(publicId, upload);
@@ -54,10 +61,16 @@ public class FakeUploadProvider implements PresignedUploadProvider {
     return List.copyOf(preparedPublicIds);
   }
 
+  /** Public ids physically destroyed so far — assert async purge reached the provider. */
+  public List<String> destroyedPublicIds() {
+    return List.copyOf(destroyedPublicIds);
+  }
+
   /** Clears seeds and recorded grants between tests; the bean outlives rolled-back transactions. */
   public void reset() {
     objects.clear();
     preparedPublicIds.clear();
+    destroyedPublicIds.clear();
   }
 
   private List<String> shortFormats(String contentType) {

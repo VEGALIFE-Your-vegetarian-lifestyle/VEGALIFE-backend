@@ -26,4 +26,15 @@ public interface PresignedUploadProvider {
    * @return the provider-reported facts, or empty when no object exists yet
    */
   Optional<VerifiedUpload> verify(String publicId, String contentType);
+
+  /**
+   * Physically destroys the object at {@code publicId} (issue #39). Called only from the
+   * MEDIA_PURGE outbox delivery, never inline in a request.
+   *
+   * @param publicId provider object key recorded on the media row
+   * @param contentType media type the object was uploaded as, for provider resource typing
+   * @throws RuntimeException when destruction fails and the purge attempt should be retried; an
+   *     already-missing object is success, not failure
+   */
+  void destroy(String publicId, String contentType);
 }
