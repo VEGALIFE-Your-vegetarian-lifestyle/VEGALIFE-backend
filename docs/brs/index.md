@@ -48,6 +48,8 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MEDIA-006 | Flyway Out-of-Order Enabled for Parallel Migration Branches | Active | 2026-09-30 |
 | BR-MEDIA-007 | Confirmation Is Exactly Once | Active | 2026-09-30 |
 | BR-MEDIA-008 | Confirmation Trusts Only Provider Read-Back | Active | 2026-09-30 |
+| BR-MEDIA-009 | Media Deletion Is Owner-or-Admin, Idempotent, and Asynchronous | Active | 2026-10-03 |
+| BR-MEDIA-010 | Deleted Media Are Invisible on Every Read Path | Active | 2026-10-03 |
 | BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-09-30 |
 | BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-09-30 |
 | BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-09-30 |
