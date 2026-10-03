@@ -6,9 +6,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vegalife.model.post.Category;
+import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.CategoryRepository;
+import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
@@ -63,6 +65,8 @@ class AdminPostControllerIntegrationTest {
 
   @Autowired private CategoryRepository categoryRepository;
 
+  @Autowired private MediaRepository mediaRepository;
+
   @Autowired private JwtTokenService jwtTokenService;
 
   private User admin;
@@ -74,6 +78,7 @@ class AdminPostControllerIntegrationTest {
   @BeforeEach
   void setUp() {
     postRepository.deleteAll();
+    mediaRepository.deleteAll();
     categoryRepository.deleteAll();
     userRepository.deleteAll();
 
@@ -286,6 +291,37 @@ class AdminPostControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(0))
         .andExpect(jsonPath("$.data.content.length()").value(0));
+  }
+
+  @Test
+  void listPosts_mediaIds_excludesSoftDeletedMedia() throws Exception {
+    Media live =
+        mediaRepository.save(
+            Media.builder().status(Media.Status.succeed).uploadedBy(member).build());
+    Media gone =
+        mediaRepository.save(
+            Media.builder()
+                .status(Media.Status.succeed)
+                .uploadedBy(member)
+                .deletedAt(Instant.now())
+                .build());
+    postRepository.save(
+        Post.builder()
+            .user(member)
+            .title("Post with media")
+            .content("Post content")
+            .media(new HashSet<>(Set.of(live, gone)))
+            .status(Post.Status.published)
+            .viewCount(0)
+            .build());
+
+    mockMvc
+        .perform(get("/api/admin/posts").header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content.length()").value(1))
+        .andExpect(jsonPath("$.data.content[0].mediaIds").isArray())
+        .andExpect(jsonPath("$.data.content[0].mediaIds.length()").value(1))
+        .andExpect(jsonPath("$.data.content[0].mediaIds[0]").value(live.getId().toString()));
   }
 
   @Test

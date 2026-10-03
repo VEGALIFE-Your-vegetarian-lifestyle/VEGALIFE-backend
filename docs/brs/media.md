@@ -262,7 +262,7 @@ Applies to `DELETE /api/media/{mediaId}` only; reads and confirmation keep the o
 Active
 
 ## Statement
-Once `media.deleted_at` is set, the record must not surface in any read: `GET /api/media/{mediaId}` returns `404`, the admin video list excludes it (`MediaSpecifications` filters `deleted_at IS NULL`), and `PostMapper.mediaIds` omits it so no post response advertises a deleted media ID. The `media` row and its `post_media` links are kept — only visibility is removed.
+Once `media.deleted_at` is set, the record must not surface in any read: `GET /api/media/{mediaId}` returns `404`, the admin video list excludes it (`MediaSpecifications` filters `deleted_at IS NULL`), and `PostMapper.mediaIds` / `AdminPostMapper.mediaIds` omit it so no post response — user-facing or admin — advertises a deleted media ID. The `media` row and its `post_media` links are kept — only visibility is removed.
 
 ## Rationale
 Soft delete must be indistinguishable from gone for every consumer, or the platform keeps serving media its owner or an administrator removed. Filtering by `deleted_at IS NULL` rather than hard-deleting is what preserves `post_media` links and audit history (the row is the tombstone); a read path that forgets the filter would leak deleted IDs straight back into post responses.
@@ -273,7 +273,7 @@ Applies to all media reads, including those nested in other resources (post deta
 ## Enforcement
 - `MediaService` reads go through `MediaRepository.findByIdAndDeletedAtIsNull` (or equivalent)
 - `MediaSpecifications.allVideosWithFilters` adds `cb.isNull(root.get("deletedAt"))`
-- `PostMapper.mediaIds` filters media with `deletedAt != null`
+- `PostMapper.mediaIds` and `AdminPostMapper.mediaIds` filter media with `deletedAt != null`
 - API: `404 Media not found` for `GET /api/media/{mediaId}` on a soft-deleted row
 
 ## Last Reviewed

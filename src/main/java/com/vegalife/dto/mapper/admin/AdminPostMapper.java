@@ -28,6 +28,9 @@ public interface AdminPostMapper {
   }
 
   default Set<UUID> mediaIds(Set<Media> media) {
-    return media.stream().map(Media::getId).collect(Collectors.toSet());
+    return media.stream()
+        .filter(item -> item.getDeletedAt() == null)
+        .map(Media::getId)
+        .collect(Collectors.toSet());
   }
 }

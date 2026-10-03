@@ -33,4 +33,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `list-ingredients-api.md`           | List Ingredients API                      | Implemented | 2026-10-01 |
 | `list-dishes-api.md`                | List Dishes API                           | Implemented | 2026-10-01 |
 | `posts-feed.md`                     | Global Post Feed                          | In progress | 2026-10-02 |
-| `delete-media-api.md`               | Delete Media API (soft delete + async purge) | In progress | 2026-10-03 |
+| `delete-media-api.md`               | Delete Media API (soft delete + async purge) | Implemented | 2026-10-03 |
