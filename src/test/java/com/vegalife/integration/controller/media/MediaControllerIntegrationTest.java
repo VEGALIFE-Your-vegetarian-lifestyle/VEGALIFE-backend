@@ -1,6 +1,7 @@
 package com.vegalife.integration.controller.media;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -9,15 +10,25 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.integration.config.FakeUploadProvider;
+import com.vegalife.model.outbound.OutboundChannel;
+import com.vegalife.model.outbound.OutboundMessage;
+import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Media;
+import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.MediaRepository;
+import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.media.VerifiedUpload;
 import com.vegalife.service.token.JwtTokenService;
 import com.vegalife.shared.config.MediaProperties;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -77,6 +88,10 @@ class MediaControllerIntegrationTest {
   @Autowired private UserRepository userRepository;
 
   @Autowired private MediaRepository mediaRepository;
+
+  @Autowired private PostRepository postRepository;
+
+  @Autowired private OutboundMessageRepository outboundMessageRepository;
 
   @Autowired private JwtTokenService jwtTokenService;
 
@@ -318,6 +333,146 @@ class MediaControllerIntegrationTest {
     mockMvc
         .perform(get("/api/media/{mediaId}", UUID.randomUUID()))
         .andExpect(status().isUnauthorized());
+
+    mockMvc
+        .perform(delete("/api/media/{mediaId}", UUID.randomUUID()))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void deleteMedia_ownerSoftDeletesRowAndEnqueuesExactlyOnePurgeMessage() throws Exception {
+    UUID mediaId = createConfirmedMedia();
+
+    mockMvc
+        .perform(deleteMediaRequest(mediaId, accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Media deleted successfully"))
+        .andExpect(jsonPath("$.data").doesNotExist());
+
+    assertThat(mediaRepository.findByIdAndDeletedAtIsNull(mediaId)).isEmpty();
+    Media row = mediaRepository.findById(mediaId).orElseThrow();
+    assertThat(row.getDeletedAt()).isNotNull();
+
+    List<OutboundMessage> purgeMessages = purgeQueue();
+    assertThat(purgeMessages).hasSize(1);
+    assertThat(purgeMessages.getFirst().getRecipient()).isEqualTo(mediaId.toString());
+    assertThat(purgeMessages.getFirst().getStatus()).isEqualTo(OutboundStatus.PENDING);
+  }
+
+  @Test
+  void deleteMedia_adminDeletesAnotherUsersMedia_returns200AndEnqueuesPurge() throws Exception {
+    UUID mediaId = createConfirmedMedia();
+    User admin =
+        userRepository
+            .findByEmail("mediaadmin@example.com")
+            .orElseGet(() -> createUser("mediaadmin", "mediaadmin@example.com", User.Role.ADMIN));
+    String adminToken = jwtTokenService.generateAccessToken(admin);
+
+    mockMvc
+        .perform(deleteMediaRequest(mediaId, adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Media deleted successfully"));
+
+    assertThat(mediaRepository.findByIdAndDeletedAtIsNull(mediaId)).isEmpty();
+    assertThat(purgeQueue()).hasSize(1);
+  }
+
+  @Test
+  void deleteMedia_nonOwner_returns403WithoutSideEffects() throws Exception {
+    UUID mediaId = createConfirmedMedia();
+    User stranger =
+        userRepository
+            .findByEmail("mediastranger@example.com")
+            .orElseGet(() -> createUser("mediastranger", "mediastranger@example.com"));
+    String strangerToken = jwtTokenService.generateAccessToken(stranger);
+
+    mockMvc
+        .perform(deleteMediaRequest(mediaId, strangerToken))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Forbidden"));
+
+    assertThat(mediaRepository.findByIdAndDeletedAtIsNull(mediaId)).isPresent();
+    assertThat(purgeQueue()).isEmpty();
+  }
+
+  @Test
+  void deleteMedia_unknownId_returns404() throws Exception {
+    mockMvc
+        .perform(deleteMediaRequest(UUID.randomUUID(), accessToken))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Media not found"));
+  }
+
+  @Test
+  void deleteMedia_repeatedDelete_returns200WithoutDuplicateMessage() throws Exception {
+    UUID mediaId = createConfirmedMedia();
+
+    mockMvc.perform(deleteMediaRequest(mediaId, accessToken)).andExpect(status().isOk());
+    mockMvc
+        .perform(deleteMediaRequest(mediaId, accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Media deleted successfully"));
+
+    assertThat(mediaRepository.findByIdAndDeletedAtIsNull(mediaId)).isEmpty();
+    assertThat(purgeQueue()).hasSize(1);
+  }
+
+  @Test
+  void getMedia_afterDelete_returns404() throws Exception {
+    UUID mediaId = createConfirmedMedia();
+
+    mockMvc.perform(deleteMediaRequest(mediaId, accessToken)).andExpect(status().isOk());
+
+    mockMvc
+        .perform(
+            get("/api/media/{mediaId}", mediaId).header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Media not found"));
+  }
+
+  @Test
+  void postList_excludesDeletedMediaFromMediaIds() throws Exception {
+    UUID liveMediaId = createConfirmedMedia();
+    UUID deletedMediaId = createConfirmedMedia();
+    mockMvc.perform(deleteMediaRequest(deletedMediaId, accessToken)).andExpect(status().isOk());
+
+    Media live = mediaRepository.findByIdAndDeletedAtIsNull(liveMediaId).orElseThrow();
+    Media deleted = mediaRepository.findById(deletedMediaId).orElseThrow();
+    Post post =
+        postRepository.saveAndFlush(
+            Post.builder()
+                .user(user)
+                .title("Post with mixed media")
+                .content("Body")
+                .status(Post.Status.published)
+                .viewCount(0)
+                .media(new HashSet<>(Set.of(live, deleted)))
+                .build());
+
+    MvcResult result =
+        mockMvc
+            .perform(get("/api/posts").header("Authorization", "Bearer " + accessToken))
+            .andExpect(status().isOk())
+            .andReturn();
+
+    JsonNode items =
+        objectMapper
+            .readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8))
+            .path("data")
+            .path("content");
+    JsonNode item = null;
+    for (JsonNode candidate : items) {
+      if (post.getId().toString().equals(candidate.path("id").asText())) {
+        item = candidate;
+        break;
+      }
+    }
+    assertThat(item).isNotNull();
+    List<String> mediaIds = new ArrayList<>();
+    item.path("mediaIds").forEach(node -> mediaIds.add(node.asText()));
+    assertThat(mediaIds).containsExactly(liveMediaId.toString());
   }
 
   private String uploadPayload(String contentType, Long sizeBytes) {
@@ -347,6 +502,24 @@ class MediaControllerIntegrationTest {
     return readData(result);
   }
 
+  private UUID createConfirmedMedia() throws Exception {
+    JsonNode data = createGrant("image/jpeg", 1024L);
+    UUID mediaId = UUID.fromString(data.path("mediaId").asText());
+    seedObject(data, "image/jpeg", 2048L);
+    mockMvc.perform(confirmRequest(mediaId)).andExpect(status().isOk());
+    return mediaId;
+  }
+
+  private MockHttpServletRequestBuilder deleteMediaRequest(UUID mediaId, String token) {
+    return delete("/api/media/{mediaId}", mediaId).header("Authorization", "Bearer " + token);
+  }
+
+  private List<OutboundMessage> purgeQueue() {
+    return outboundMessageRepository.findAll().stream()
+        .filter(message -> message.getChannel() == OutboundChannel.MEDIA_PURGE)
+        .toList();
+  }
+
   private void seedObject(JsonNode data, String contentType, long fileSizeBytes) {
     fakeUploadProvider.putObject(
         publicIdOf(data), new VerifiedUpload(SEED_URL, contentType, fileSizeBytes, 800, 600, null));
@@ -363,12 +536,16 @@ class MediaControllerIntegrationTest {
   }
 
   private User createUser(String username, String email) {
+    return createUser(username, email, User.Role.USER);
+  }
+
+  private User createUser(String username, String email, User.Role role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
+            .role(role)
             .status(User.Status.activated)
             .emailVerified(true)
             .build());

@@ -12,7 +12,9 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,8 +23,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Media upload endpoints ({@code docs/apis/media/}). All three require an authenticated caller, but
- * none of them enforces ownership: media is attachable across users by product decision.
+ * Media upload endpoints ({@code docs/apis/media/}). Read endpoints require an authenticated caller
+ * but enforce no ownership (media is attachable across users by product decision); DELETE is
+ * owner-or-admin per BR-MEDIA-009.
  */
 @RestController
 @RequestMapping("/api/media")
@@ -50,5 +53,19 @@ public class MediaController {
   public ResponseEntity<ApiResponse<MediaResponse>> getMedia(@PathVariable UUID mediaId) {
     MediaResponse media = mediaService.get(mediaId);
     return ResponseEntity.ok(ApiResponse.success(media, "Media retrieved successfully"));
+  }
+
+  @DeleteMapping("/{mediaId}")
+  public ResponseEntity<ApiResponse<Void>> deleteMedia(
+      @AuthenticationPrincipal UUID userId,
+      Authentication authentication,
+      @PathVariable UUID mediaId) {
+    mediaService.deleteMedia(userId, isAdmin(authentication), mediaId);
+    return ResponseEntity.ok(ApiResponse.success(null, "Media deleted successfully"));
+  }
+
+  private boolean isAdmin(Authentication authentication) {
+    return authentication.getAuthorities().stream()
+        .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
   }
 }

@@ -1,6 +1,6 @@
 # Business Rules: Media Upload
 
-Constraints governing uploaded media, from grant issuance through confirmation. ID format `BR-MEDIA-<NNN>`.
+Constraints governing uploaded media, from grant issuance through confirmation and deletion. ID format `BR-MEDIA-<NNN>`.
 
 ---
 
@@ -47,7 +47,7 @@ The owner of a media row is the user identified by the authenticated JWT at gran
 Ownership attribution must be unforgeable. If the client could declare the owner, an attacker could attribute uploads to another account, corrupting the audit trail that `media.uploaded_by` exists to provide (acceptance criterion: media is linked to a user).
 
 ## Scope & Exceptions
-Applies to all three media endpoints. Deliberate exception: ownership is **recorded but not enforced as an access boundary** — the product decision for this feature is that attaching another user's media to one's own post is acceptable, so no endpoint returns `403` on the basis of `uploaded_by`. See the feature spec's risks section.
+Applies to all three media endpoints. Deliberate exception: for everything **except deletion**, ownership is recorded but not enforced as an access boundary — the product decision is that attaching another user's media to one's own post is acceptable, so no endpoint returns `403` on the basis of `uploaded_by` when reading or confirming. Deletion is the one destructive operation that does enforce ownership: see BR-MEDIA-009.
 
 ## Enforcement
 - `MediaController` extracts the principal from `SecurityContext`; no user ID is accepted in the request DTO
@@ -221,3 +221,60 @@ Applies to `POST /api/media/{mediaId}/confirm`. The confirmation request body is
 
 ## Last Reviewed
 2026-09-30, by Vegalife backend team
+
+---
+
+# Business Rule: Media Deletion Is Owner-or-Admin, Idempotent, and Asynchronous
+
+## Rule ID
+`BR-MEDIA-009`
+
+## Status
+Active
+
+## Statement
+`DELETE /api/media/{mediaId}` sets `media.deleted_at` and enqueues exactly one `MEDIA_PURGE` message in the same transaction. The caller must be the row's `uploaded_by` or hold `ROLE_ADMIN`; any other authenticated caller gets `403 Forbidden` and nothing is written or enqueued. An ID with no row returns `404 Media not found`. Repeating the call on an already-soft-deleted row returns the same `200` success, changes nothing, and does not enqueue a second purge. The request never contacts the provider — physical destruction happens later through the outbound queue.
+
+## Rationale
+This is the only destructive media operation, so it is the only one that turns `media.uploaded_by` from an audit field into a real access boundary (BR-MEDIA-002 records that reads deliberately do not). Idempotency matters because clients retry on timeouts: without it, a retried delete would multiply purge messages. Keeping the provider call out of the request makes the API independent of Cloudinary's availability and keeps the response fast — the failure mode of an unreachable provider degrades the queue, not the user's delete.
+
+## Scope & Exceptions
+Applies to `DELETE /api/media/{mediaId}` only; reads and confirmation keep the open-access posture of BR-MEDIA-002. Administrators may delete any user's media. A row that exists but is already soft-deleted answers `200`, never `404` — `404` means the row never existed. No exception for media still referenced by posts: the `post_media` links stay (they would only disappear on a hard delete, which is out of scope).
+
+## Enforcement
+- `MediaService.deleteMedia` — ownership/admin check, `deleted_at` set, purge enqueued, all in one `@Transactional` method
+- `ForbiddenException` + `GlobalExceptionHandler` → `403` for non-owner, non-admin callers
+- `OutboundChannel.MEDIA_PURGE` + `MediaPurgeOutboundAdapter` deliver the purge through `OutboundMessageDrainer` with the queue's existing retry/backoff and terminal handling
+- Migration `V24__add_media_purge_channel.sql` widens `chk_outbound_message_channel` (created in `V15`, precedent `V19`) to admit `MEDIA_PURGE`
+- API: `200 Media deleted successfully` / `403 Forbidden` / `404 Media not found`
+
+## Last Reviewed
+2026-10-03, by Vegalife backend team
+
+---
+
+# Business Rule: Deleted Media Are Invisible on Every Read Path
+
+## Rule ID
+`BR-MEDIA-010`
+
+## Status
+Active
+
+## Statement
+Once `media.deleted_at` is set, the record must not surface in any read: `GET /api/media/{mediaId}` returns `404`, the admin video list excludes it (`MediaSpecifications` filters `deleted_at IS NULL`), and `PostMapper.mediaIds` / `AdminPostMapper.mediaIds` omit it so no post response — user-facing or admin — advertises a deleted media ID. The `media` row and its `post_media` links are kept — only visibility is removed.
+
+## Rationale
+Soft delete must be indistinguishable from gone for every consumer, or the platform keeps serving media its owner or an administrator removed. Filtering by `deleted_at IS NULL` rather than hard-deleting is what preserves `post_media` links and audit history (the row is the tombstone); a read path that forgets the filter would leak deleted IDs straight back into post responses.
+
+## Scope & Exceptions
+Applies to all media reads, including those nested in other resources (post detail/list `mediaIds`, admin video list). Applies regardless of who deleted the media or why. In-flight operations that already resolved the row before the delete (a concurrent confirmation) may still write metadata to the row, but the row remains invisible to reads either way.
+
+## Enforcement
+- `MediaService` reads go through `MediaRepository.findByIdAndDeletedAtIsNull` (or equivalent)
+- `MediaSpecifications.allVideosWithFilters` adds `cb.isNull(root.get("deletedAt"))`
+- `PostMapper.mediaIds` and `AdminPostMapper.mediaIds` filter media with `deletedAt != null`
+- API: `404 Media not found` for `GET /api/media/{mediaId}` on a soft-deleted row
+
+## Last Reviewed
+2026-10-03, by Vegalife backend team
