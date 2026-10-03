@@ -15,7 +15,7 @@ Adds two read-only endpoints: an authenticated
 `GET /api/subscriptions/me` that returns the caller's AI tier, quota usage,
 current plan, and latest successful payment, and a public
 `GET /api/subscriptions` that lists every active plan with its limits and
-feature flags. Plan and feature data are stored in new database tables and
+price. Plan and price data are stored in new database tables and
 seeded by migration, never hardcoded in Java.
 
 ## Problem / motivation
@@ -34,8 +34,8 @@ survive a price or limit change.
 - Let an authenticated member see their current AI tier, quota usage for the
   running month, renewal date, and latest successful payment in one call.
 - Let any caller (including logged-out visitors) see the full plan comparison
-  — limits, price, and per-feature flags — from a single public endpoint.
-- Keep every limit, price, and feature flag in the database so a plan change
+  — limits and price — from a single public endpoint.
+- Keep every limit and price in the database so a plan change
   is a data change, not a code change.
 
 ## Non-goals
@@ -47,7 +47,10 @@ survive a price or limit change.
   `payment_ledger` table is created read-only here; nothing writes to it yet.
 - Enforcing the quota on AI endpoints — no AI chat/meal-plan/summarization
   endpoint exists in the codebase yet, so nothing consumes the limit today.
-- Admin CRUD for plans or features (seed data only in this issue).
+- Admin CRUD for plans (seed data only in this issue).
+- Per-feature flags in the API — feature copy is plain text owned by the
+  frontend, and gating is enforced on the AI endpoints themselves rather
+  than served from the plan tables.
 - Trials, coupons, proration, invoices, or multi-currency display.
 
 ## Requirements
@@ -78,9 +81,7 @@ survive a price or limit change.
 - [ ] FR-006: `GET /api/subscriptions` returns `200 OK` without any
       credentials, with `data` as an array of every `active` plan ordered by
       `sort_order`, each shaped `{code, name, monthlyRequestLimit,
-      price{amount, currency}, features[{key, enabled, description}]}`, where
-      `features` pivots `ai_plan_feature` rows of that plan ordered by
-      `feature_key`.
+      price{amount, currency}}`.
 - [ ] FR-007: Security rules are exact-path: `GET /api/subscriptions` is
       `permitAll`, while `GET /api/subscriptions/me` remains authenticated —
       a wildcard `/api/subscriptions/**` is not used.
@@ -100,9 +101,9 @@ survive a price or limit change.
 - [ ] NFR-SEC-002: A missing, expired, or invalid token on `/me` returns the
       existing `401` body `{"success":false,"message":"Unauthorized"}` from
       the `SecurityConfig` entry point, with no stack trace.
-- [ ] NFR-MAINT-001: Limits, prices, and feature flags are read exclusively
-      from `ai_plan` / `ai_plan_feature`; no plan constant appears in Java
-      source or test fixtures as a source of truth.
+- [ ] NFR-MAINT-001: Limits and prices are read exclusively from `ai_plan`;
+      no plan constant appears in Java source or test fixtures as a source of
+      truth.
 - [ ] NFR-SCALE-001: `/me` issues a fixed number of queries (≤ 4) regardless
       of table size; the usage total is one aggregate query over an indexed
       (`idx_ai_usage_user_id`) predicate, not an in-memory scan.
@@ -115,12 +116,10 @@ survive a price or limit change.
 Package-by-layer with a new `subscription` domain sub-package:
 
 - Migration `V25__create_ai_subscription_tables.sql` creates `ai_plan`,
-  `ai_plan_feature`, `ai_subscription`, and `payment_ledger`, then seeds two
-  plans (FREE 20 req/month at 0 VND, PRO 500 req/month at a placeholder
-  49,000 VND) and three feature keys (`ai_chat`, `weekly_meal_plan`,
-  `video_summary`) with per-plan `enabled` flags.
-- Entities `model/subscription/{AiPlan, AiPlanFeature, AiSubscription,
-  PaymentLedger}`; `AiUsage` entity maps the existing `ai_usage` table from
+  `ai_subscription`, and `payment_ledger`, then seeds two plans (FREE 20
+  req/month at 0 VND, PRO 500 req/month at a placeholder 49,000 VND).
+- Entities `model/subscription/{AiPlan, AiSubscription, PaymentLedger}`;
+  `AiUsage` entity maps the existing `ai_usage` table from
   migration `V10` (it has no Java mapping today).
 - Repositories `repository/subscription/` — plan lookup by code and by active
   order, `findByUserId` on subscriptions, latest-succeeded ledger query, and a
@@ -138,7 +137,7 @@ Package-by-layer with a new `subscription` domain sub-package:
 - DTOs `dto/response/subscription/` — `SubscriptionMeResponse`,
   `SubscriptionUsageResponse`, `PlanSummaryResponse`, `PlanPriceResponse`,
   `PaymentResponse` (shared with a future payment-history endpoint),
-  `AvailablePlanResponse`, `PlanFeatureResponse`.
+  `AvailablePlanResponse`.
 
 Two behaviors worth stating as contracts for later issues: the quota
 recorder that will feed `ai_usage` must write non-overlapping periods
@@ -177,7 +176,7 @@ the paid plan.
       the newest `paid_at` wins.
 - [ ] Given no credentials at all, when a caller calls
       `GET /api/subscriptions`, then the API returns `200 OK` with every
-      active plan ordered by `sort_order`, each with its feature list.
+      active plan ordered by `sort_order`.
 - [ ] Given a request without a valid JWT, when `GET /api/subscriptions/me`
       is called, then the API returns `401 Unauthorized`; and calling
       `GET /api/subscriptions` with the same request still returns `200`.

@@ -31,7 +31,7 @@ Applies to every read of AI quota, starting with `GET /api/subscriptions/me`. It
 
 ---
 
-# Business Rule: Plan Limits, Prices, and Features Are Data-Driven
+# Business Rule: Plan Limits and Prices Are Data-Driven
 
 ## Rule ID
 `BR-SUBS-002`
@@ -40,7 +40,7 @@ Applies to every read of AI quota, starting with `GET /api/subscriptions/me`. It
 Active
 
 ## Statement
-Every plan limit, price, and per-feature flag served by the subscription APIs comes from the `ai_plan` and `ai_plan_feature` tables. No plan code, monthly request limit, price, currency, or feature key exists as a constant in Java source — including in tests, which seed or read the rows instead of restating their values. Changing the PRO price or the FREE monthly limit is a data change.
+Every plan limit and price served by the subscription APIs comes from the `ai_plan` table. No plan code, monthly request limit, price, or currency exists as a constant in Java source — including in tests, which seed or read the rows instead of restating their values. Changing the PRO price or the FREE monthly limit is a data change.
 
 ## Rationale
 Plan terms are commercial facts that change for business reasons. A constant in Java means a price change becomes a code change with a release cycle, and — worse — lets different layers of the application disagree: a hardcoded `20` in one service and a seeded `20` in the database is a discrepancy that surfaces only as a wrong number in a response. Tests that restate the value have the same defect in reverse: they pass while the seed drifts.
@@ -49,7 +49,7 @@ Plan terms are commercial facts that change for business reasons. A constant in 
 Applies to every endpoint that returns plan data (`GET /api/subscriptions`, the `currentPlan` and `usage.limit` parts of `GET /api/subscriptions/me`) and to any future feature that gates behaviour on tier. Plan **seed** data lives in the migration that creates the tables — that is data, not a constant. No exception for `code = 'FREE'`: even the FREE fallback resolves through the `ai_plan` row rather than through inlined limits.
 
 ## Enforcement
-- `SubscriptionService` resolves the effective plan and its features exclusively through `PlanRepository` / `PlanFeatureRepository` queries
+- `SubscriptionService` resolves the effective plan exclusively through `AiPlanRepository` queries
 - Seed rows are created by `V25__create_ai_subscription_tables.sql`; a plan change is a new migration or a data update
 - Feature spec `NFR-MAINT-001` records the check: grep for a plan limit constant in `src/main/java` must return nothing
 
