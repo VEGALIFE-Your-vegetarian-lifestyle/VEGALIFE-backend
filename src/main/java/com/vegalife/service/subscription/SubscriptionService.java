@@ -1,6 +1,7 @@
 package com.vegalife.service.subscription;
 
 import com.vegalife.dto.mapper.subscription.SubscriptionMapper;
+import com.vegalife.dto.response.subscription.AvailablePlanResponse;
 import com.vegalife.dto.response.subscription.PaymentResponse;
 import com.vegalife.dto.response.subscription.PlanSummaryResponse;
 import com.vegalife.dto.response.subscription.SubscriptionMeResponse;
@@ -15,6 +16,7 @@ import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -97,5 +99,12 @@ public class SubscriptionService {
       return null;
     }
     return subscriptionMapper.toPaymentResponse(latest.get(), plan.getCode());
+  }
+
+  @Transactional(readOnly = true)
+  public List<AvailablePlanResponse> getAvailablePlans() {
+    return planRepository.findByActiveTrueOrderBySortOrderAsc().stream()
+        .map(subscriptionMapper::toAvailablePlan)
+        .toList();
   }
 }
