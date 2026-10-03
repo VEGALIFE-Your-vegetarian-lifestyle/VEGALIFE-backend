@@ -137,6 +137,31 @@ class SubscriptionControllerIntegrationTest {
   }
 
   @Test
+  void getMySubscription_withoutSubscriptionRow_ignoresExistingPayment() throws Exception {
+    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
+    // FR-003: even with a succeeded payment on file, a member with no
+    // subscription row reads as FREE with no latestPayment.
+    paymentLedgerRepository.save(
+        PaymentLedger.builder()
+            .userId(testUser.getId())
+            .planId(proPlan.getId())
+            .amount(proPlan.getPriceAmount())
+            .currency(proPlan.getPriceCurrency())
+            .status(PaymentLedger.Status.succeeded)
+            .provider("vnpay")
+            .paidAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
+            .build());
+
+    mockMvc
+        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.tier").value("FREE"))
+        .andExpect(jsonPath("$.data.latestPayment").doesNotExist());
+
+    assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
+  }
+
+  @Test
   void getMySubscription_withSubscription_returnsQuotaWindowAndLatestSucceededPayment()
       throws Exception {
     AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();

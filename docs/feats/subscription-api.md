@@ -74,10 +74,12 @@ survive a price or limit change.
       window; `usage.limit` is `ai_plan.monthly_request_limit` of the caller's
       effective plan. No matching rows means `used = 0`, never `null`.
 - [ ] FR-005: `latestPayment` is the caller's most recent `payment_ledger` row
-      with `status = 'succeeded'`, newest `paid_at` first, mapped to
-      `{planCode, amount, currency, status, provider, paidAt}`. It is `null`
-      when no such row exists. `provider_reference` and internal ids are never
-      returned.
+      with `status = 'succeeded'` **for the plan the caller is currently on**
+      (`plan_id` = the effective plan's id), newest `paid_at` first, mapped to
+      `{planCode, amount, currency, status, provider, paidAt}`; `planCode` is
+      therefore always the current plan's code. It is `null` when the caller
+      has no subscription row (FR-003) or when no such row exists for that
+      plan. `provider_reference` and internal ids are never returned.
 - [ ] FR-006: `GET /api/subscriptions` returns `200 OK` without any
       credentials, with `data` as an array of every `active` plan ordered by
       `sort_order`, each shaped `{code, name, monthlyRequestLimit,
@@ -104,12 +106,11 @@ survive a price or limit change.
 - [ ] NFR-MAINT-001: Limits and prices are read exclusively from `ai_plan`;
       no plan constant appears in Java source or test fixtures as a source of
       truth.
-- [ ] NFR-SCALE-001: `/me` issues a fixed number of queries (≤ 5) regardless
+- [ ] NFR-SCALE-001: `/me` issues a fixed number of queries (≤ 4) regardless
       of table size; the usage total is one aggregate query over an indexed
       (`idx_ai_usage_user_id`) predicate, not an in-memory scan. The worst
-      case is 5: subscription lookup, plan lookup, usage aggregate, ledger
-      lookup, and one extra plan lookup when the latest payment references
-      a different plan than the current subscription.
+      case is 4: subscription lookup, plan lookup, usage aggregate, ledger
+      lookup; the FREE default path skips the ledger lookup (FR-003) for 3.
 - [ ] NFR-MAINT-002: DTOs are mapped with MapStruct and wrapped with the
       existing `ApiResponse` helper, matching `GET /api/profile` and
       `GET /api/categories` conventions.
@@ -125,8 +126,8 @@ Package-by-layer with a new `subscription` domain sub-package:
   `AiUsage` entity maps the existing `ai_usage` table from
   migration `V10` (it has no Java mapping today).
 - Repositories `repository/subscription/` — plan lookup by code and by active
-  order, `findByUserId` on subscriptions, latest-succeeded ledger query, and a
-  summed-overlap aggregate on `ai_usage`.
+  order, `findByUserId` on subscriptions, plan-scoped latest-succeeded ledger
+  query, and a summed-overlap aggregate on `ai_usage`.
 - `service/subscription/SubscriptionService` with
   `getMySubscription(UUID userId)` and `getAvailablePlans()`, both
   `@Transactional(readOnly = true)`.
@@ -145,8 +146,8 @@ Package-by-layer with a new `subscription` domain sub-package:
 Two behaviors worth stating as contracts for later issues: the quota
 recorder that will feed `ai_usage` must write non-overlapping periods
 (monthly rows are expected) so the overlap sum cannot double-count, and the
-future payment flow writes `payment_ledger` rows so `latestPayment` stops
-being `null`.
+future payment flow writes `payment_ledger` rows for the current plan so
+`latestPayment` stops being `null`.
 
 ## Success metrics
 
@@ -175,9 +176,9 @@ the paid plan.
       when they call `/me`, then `usage.used` equals the sum of
       `request_count` and `usage.limit` equals the plan's
       `monthly_request_limit`; with no rows, `used` is `0`.
-- [ ] Given the caller has no succeeded `payment_ledger` row, when they call
-      `/me`, then `latestPayment` is `null`; given several, then the one with
-      the newest `paid_at` wins.
+- [ ] Given the caller has no succeeded `payment_ledger` row for their current
+      plan, when they call `/me`, then `latestPayment` is `null`; given
+      several, then the one with the newest `paid_at` wins.
 - [ ] Given no credentials at all, when a caller calls
       `GET /api/subscriptions`, then the API returns `200 OK` with every
       active plan ordered by `sort_order`.

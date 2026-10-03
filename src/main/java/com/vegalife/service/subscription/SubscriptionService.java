@@ -73,7 +73,11 @@ public class SubscriptionService {
     SubscriptionUsageResponse usage =
         subscriptionMapper.toUsageResponse(used, plan, windowStart, windowEnd);
     PlanSummaryResponse currentPlan = subscriptionMapper.toPlanSummary(plan);
-    PaymentResponse latestPayment = resolveLatestPayment(userId, plan);
+    // latestPayment only reports a charge on the plan the member is on now:
+    // no subscription row means the FREE default and therefore no payment (FR-003),
+    // and a payment for some other plan is out of scope for this response (FR-005).
+    PaymentResponse latestPayment =
+        existing.isPresent() ? resolveLatestPayment(userId, plan) : null;
 
     return SubscriptionMeResponse.builder()
         .tier(plan.getCode())
@@ -87,19 +91,11 @@ public class SubscriptionService {
 
   private PaymentResponse resolveLatestPayment(UUID userId, AiPlan plan) {
     Optional<PaymentLedger> latest =
-        paymentLedgerRepository.findFirstByUserIdAndStatusOrderByPaidAtDesc(
-            userId, PaymentLedger.Status.succeeded);
+        paymentLedgerRepository.findFirstByUserIdAndPlanIdAndStatusOrderByPaidAtDesc(
+            userId, plan.getId(), PaymentLedger.Status.succeeded);
     if (latest.isEmpty()) {
       return null;
     }
-
-    PaymentLedger ledger = latest.get();
-    String planCode;
-    if (ledger.getPlanId().equals(plan.getId())) {
-      planCode = plan.getCode();
-    } else {
-      planCode = planRepository.findById(ledger.getPlanId()).map(AiPlan::getCode).orElse(null);
-    }
-    return subscriptionMapper.toPaymentResponse(ledger, planCode);
+    return subscriptionMapper.toPaymentResponse(latest.get(), plan.getCode());
   }
 }

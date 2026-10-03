@@ -9,6 +9,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface PaymentLedgerRepository extends JpaRepository<PaymentLedger, UUID> {
 
-  Optional<PaymentLedger> findFirstByUserIdAndStatusOrderByPaidAtDesc(
-      UUID userId, PaymentLedger.Status status);
+  Optional<PaymentLedger> findFirstByUserIdAndPlanIdAndStatusOrderByPaidAtDesc(
+      UUID userId, UUID planId, PaymentLedger.Status status);
 }

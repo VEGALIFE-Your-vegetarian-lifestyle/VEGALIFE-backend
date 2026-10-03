@@ -88,9 +88,6 @@ class SubscriptionServiceTest {
     when(usageRepository.sumRequestCountInWindow(
             eq(userId), any(Instant.class), any(Instant.class)))
         .thenReturn(0L);
-    when(paymentLedgerRepository.findFirstByUserIdAndStatusOrderByPaidAtDesc(
-            userId, PaymentLedger.Status.succeeded))
-        .thenReturn(Optional.empty());
     when(subscriptionMapper.toUsageResponse(
             eq(0L), eq(freePlan), any(Instant.class), any(Instant.class)))
         .thenReturn(usageResponse);
@@ -106,6 +103,8 @@ class SubscriptionServiceTest {
     assertThat(result.getLatestPayment()).isNull();
     verify(subscriptionRepository, never()).save(any(AiSubscription.class));
     verify(planRepository, never()).save(any(AiPlan.class));
+    // FR-003: the FREE default is synthesized without touching the payment ledger at all.
+    verifyNoInteractions(paymentLedgerRepository);
   }
 
   @Test
@@ -115,9 +114,6 @@ class SubscriptionServiceTest {
     when(usageRepository.sumRequestCountInWindow(
             eq(userId), any(Instant.class), any(Instant.class)))
         .thenReturn(5L);
-    when(paymentLedgerRepository.findFirstByUserIdAndStatusOrderByPaidAtDesc(
-            userId, PaymentLedger.Status.succeeded))
-        .thenReturn(Optional.empty());
     when(subscriptionMapper.toUsageResponse(
             eq(5L), eq(freePlan), any(Instant.class), any(Instant.class)))
         .thenReturn(usageResponse);
@@ -175,8 +171,8 @@ class SubscriptionServiceTest {
     when(usageRepository.sumRequestCountInWindow(
             eq(userId), any(Instant.class), any(Instant.class)))
         .thenReturn(7L);
-    when(paymentLedgerRepository.findFirstByUserIdAndStatusOrderByPaidAtDesc(
-            userId, PaymentLedger.Status.succeeded))
+    when(paymentLedgerRepository.findFirstByUserIdAndPlanIdAndStatusOrderByPaidAtDesc(
+            userId, proPlan.getId(), PaymentLedger.Status.succeeded))
         .thenReturn(Optional.of(ledger));
     when(subscriptionMapper.toUsageResponse(
             eq(7L), eq(proPlan), any(Instant.class), any(Instant.class)))
@@ -196,7 +192,7 @@ class SubscriptionServiceTest {
   }
 
   @Test
-  void getMySubscription_whenPaymentReferencesAnotherPlan_looksUpItsPlanCode() {
+  void getMySubscription_whenPaymentReferencesAnotherPlan_isNotReturned() {
     AiSubscription subscription =
         AiSubscription.builder()
             .id(UUID.randomUUID())
@@ -205,39 +201,28 @@ class SubscriptionServiceTest {
             .status(AiSubscription.Status.active)
             .renewalDate(null)
             .build();
-    PaymentLedger ledger =
-        PaymentLedger.builder()
-            .id(UUID.randomUUID())
-            .userId(userId)
-            .planId(freePlan.getId())
-            .amount(0)
-            .currency("VND")
-            .status(PaymentLedger.Status.succeeded)
-            .provider("vnpay")
-            .paidAt(Instant.parse("2026-09-01T10:00:00Z"))
-            .build();
-    PaymentResponse payment = PaymentResponse.builder().planCode("FREE").amount(0).build();
 
     when(subscriptionRepository.findByUserId(userId)).thenReturn(Optional.of(subscription));
     when(planRepository.findById(proPlan.getId())).thenReturn(Optional.of(proPlan));
     when(usageRepository.sumRequestCountInWindow(
             eq(userId), any(Instant.class), any(Instant.class)))
         .thenReturn(0L);
-    when(paymentLedgerRepository.findFirstByUserIdAndStatusOrderByPaidAtDesc(
-            userId, PaymentLedger.Status.succeeded))
-        .thenReturn(Optional.of(ledger));
-    when(planRepository.findById(freePlan.getId())).thenReturn(Optional.of(freePlan));
+    when(paymentLedgerRepository.findFirstByUserIdAndPlanIdAndStatusOrderByPaidAtDesc(
+            userId, proPlan.getId(), PaymentLedger.Status.succeeded))
+        .thenReturn(Optional.empty());
     when(subscriptionMapper.toUsageResponse(
             eq(0L), eq(proPlan), any(Instant.class), any(Instant.class)))
         .thenReturn(usageResponse);
     when(subscriptionMapper.toPlanSummary(proPlan)).thenReturn(proPlanSummary);
-    when(subscriptionMapper.toPaymentResponse(ledger, "FREE")).thenReturn(payment);
 
     SubscriptionMeResponse result = subscriptionService.getMySubscription(userId);
 
-    assertThat(result.getLatestPayment()).isEqualTo(payment);
-    verify(planRepository).findById(freePlan.getId());
-    verify(subscriptionMapper).toPaymentResponse(ledger, "FREE");
+    assertThat(result.getLatestPayment()).isNull();
+    verify(paymentLedgerRepository)
+        .findFirstByUserIdAndPlanIdAndStatusOrderByPaidAtDesc(
+            userId, proPlan.getId(), PaymentLedger.Status.succeeded);
+    verify(planRepository, never()).findById(freePlan.getId());
+    verify(subscriptionMapper, never()).toPaymentResponse(any(PaymentLedger.class), any());
   }
 
   @Test
