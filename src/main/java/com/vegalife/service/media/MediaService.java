@@ -1,20 +1,28 @@
 package com.vegalife.service.media;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.media.MediaMapper;
 import com.vegalife.dto.request.media.MediaUploadRequest;
 import com.vegalife.dto.response.media.MediaResponse;
 import com.vegalife.dto.response.media.MediaUploadGrantResponse;
+import com.vegalife.model.outbound.OutboundChannel;
+import com.vegalife.model.outbound.OutboundMessage;
+import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Media;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.shared.config.MediaProperties;
 import com.vegalife.shared.exception.DuplicateResourceException;
+import com.vegalife.shared.exception.ForbiddenException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MediaService {
 
   private final MediaRepository mediaRepository;
@@ -32,6 +41,8 @@ public class MediaService {
   private final PresignedUploadProvider uploadProvider;
   private final MediaProperties mediaProperties;
   private final MediaMapper mediaMapper;
+  private final ObjectMapper objectMapper;
+  private final OutboundMessageRepository outboundMessageRepository;
 
   /**
    * FR-001..FR-006: validates the declared content type and size, records the row owned by the
@@ -127,6 +138,58 @@ public class MediaService {
   @Transactional(readOnly = true)
   public MediaResponse get(UUID mediaId) {
     return mediaMapper.toResponse(find(mediaId));
+  }
+
+  /**
+   * BR-MEDIA-009: owner-or-admin soft delete, idempotent on repeat, physical purge delivered
+   * asynchronously through the ADR-005 outbox so the response never waits on the provider. The row
+   * is read with {@code findById} (soft-deleted included) so a repeat delete finds it and answers
+   * the same 200 without enqueueing a second purge message.
+   */
+  @Transactional
+  public void deleteMedia(UUID actorId, boolean isAdmin, UUID mediaId) {
+    Media media =
+        mediaRepository
+            .findById(mediaId)
+            .orElseThrow(() -> new ResourceNotFoundException("Media not found"));
+
+    boolean isOwner =
+        media.getUploadedBy() != null && actorId.equals(media.getUploadedBy().getId());
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException("Forbidden");
+    }
+
+    if (media.getDeletedAt() != null) {
+      return;
+    }
+
+    media.setDeletedAt(Instant.now());
+    mediaRepository.saveAndFlush(media);
+    enqueuePurge(media);
+    log.info("Media {} soft-deleted by user {}", mediaId, actorId);
+  }
+
+  /**
+   * ADR-005 outbox: enqueue a MEDIA_PURGE row in the caller's transaction so the purge survives a
+   * crash between soft-deleting the row and starting the provider call. The adapter re-reads the
+   * row for {@code external_id} and the content type.
+   */
+  private void enqueuePurge(Media media) {
+    try {
+      OutboundMessage message =
+          OutboundMessage.builder()
+              .channel(OutboundChannel.MEDIA_PURGE)
+              .recipient(media.getId().toString())
+              .payload(objectMapper.writeValueAsString(new MediaPurgePayload(media.getId())))
+              .status(OutboundStatus.PENDING)
+              .attempts(0)
+              .nextAttemptAt(Instant.now())
+              .build();
+      outboundMessageRepository.save(message);
+      log.info("Queued media purge for {} on outbound queue", media.getId());
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Failed to serialize media purge payload", e);
+    }
   }
 
   private Media find(UUID mediaId) {

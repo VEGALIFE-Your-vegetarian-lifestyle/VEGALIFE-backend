@@ -9,12 +9,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.media.MediaMapper;
 import com.vegalife.dto.request.media.MediaUploadRequest;
 import com.vegalife.dto.response.media.MediaResponse;
 import com.vegalife.dto.response.media.MediaUploadGrantResponse;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.media.MediaService;
@@ -50,6 +52,8 @@ class MediaServiceTest {
 
   @Mock private MediaMapper mediaMapper;
 
+  @Mock private OutboundMessageRepository outboundMessageRepository;
+
   private MediaProperties mediaProperties;
   private MediaService mediaService;
 
@@ -64,7 +68,13 @@ class MediaServiceTest {
     mediaProperties.getCloudinary().setCloudName("testcloud");
     mediaService =
         new MediaService(
-            mediaRepository, userRepository, uploadProvider, mediaProperties, mediaMapper);
+            mediaRepository,
+            userRepository,
+            uploadProvider,
+            mediaProperties,
+            mediaMapper,
+            new ObjectMapper(),
+            outboundMessageRepository);
     userId = UUID.randomUUID();
     mediaId = UUID.randomUUID();
     user = User.builder().id(userId).username("mediaowner").build();
