@@ -104,9 +104,12 @@ survive a price or limit change.
 - [ ] NFR-MAINT-001: Limits and prices are read exclusively from `ai_plan`;
       no plan constant appears in Java source or test fixtures as a source of
       truth.
-- [ ] NFR-SCALE-001: `/me` issues a fixed number of queries (≤ 4) regardless
+- [ ] NFR-SCALE-001: `/me` issues a fixed number of queries (≤ 5) regardless
       of table size; the usage total is one aggregate query over an indexed
-      (`idx_ai_usage_user_id`) predicate, not an in-memory scan.
+      (`idx_ai_usage_user_id`) predicate, not an in-memory scan. The worst
+      case is 5: subscription lookup, plan lookup, usage aggregate, ledger
+      lookup, and one extra plan lookup when the latest payment references
+      a different plan than the current subscription.
 - [ ] NFR-MAINT-002: DTOs are mapped with MapStruct and wrapped with the
       existing `ApiResponse` helper, matching `GET /api/profile` and
       `GET /api/categories` conventions.
@@ -147,9 +150,10 @@ being `null`.
 
 ## Success metrics
 
-- Both endpoints verified green in this change: `GET /api/subscriptions`
-  answers `200` with 2 plans and no token; `GET /api/subscriptions/me`
-  answers `200` with a valid token and `401` without one.
+- `GET /api/subscriptions/me` verified green in this change: `200` with a
+  valid token, `401` without one. The public `GET /api/subscriptions`
+  (`200` with 2 plans, no token) is verified in the follow-up change that
+  adds the endpoint and its `permitAll` rule.
 - A plan change requires only a migration/seed update — grep for a plan
   limit constant in `src/main/java` returns nothing (NFR-MAINT-001).
 
