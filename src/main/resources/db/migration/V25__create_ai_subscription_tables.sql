@@ -1,8 +1,8 @@
 -- V25__create_ai_subscription_tables.sql
--- AI subscription domain (issue #15): plans, per-plan feature flags, member
--- subscriptions, and the read-only payment ledger. Seeded plan rows are the
--- source of truth for limits, prices, and features (BR-SUBS-002) — changing
--- a plan is a data change, not a code change.
+-- AI subscription domain (issue #15): plans, member subscriptions, and the
+-- read-only payment ledger. Seeded plan rows are the source of truth for
+-- limits and prices (BR-SUBS-002) — changing a plan is a data change, not a
+-- code change.
 
 CREATE TABLE ai_plan (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -15,17 +15,6 @@ CREATE TABLE ai_plan (
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE ai_plan_feature (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    plan_id UUID NOT NULL REFERENCES ai_plan(id) ON DELETE CASCADE,
-    feature_key VARCHAR(50) NOT NULL,
-    enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    description TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (plan_id, feature_key)
 );
 
 CREATE TABLE ai_subscription (
@@ -55,7 +44,6 @@ CREATE TABLE payment_ledger (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_ai_plan_feature_plan_id ON ai_plan_feature(plan_id);
 CREATE INDEX idx_ai_plan_active_sort ON ai_plan(sort_order) WHERE active;
 CREATE INDEX idx_payment_ledger_user_paid_at
     ON payment_ledger(user_id, paid_at DESC)
@@ -67,17 +55,3 @@ INSERT INTO ai_plan (code, name, monthly_request_limit, price_amount, price_curr
 VALUES
     ('FREE', 'Free', 20, 0, 'VND', TRUE, 1),
     ('PRO', 'Pro', 500, 49000, 'VND', TRUE, 2);
-
--- Seed 6 plan-feature rows (3 feature keys x 2 plans).
-INSERT INTO ai_plan_feature (plan_id, feature_key, enabled, description)
-SELECT p.id, v.feature_key, v.enabled, v.description
-FROM ai_plan p
-JOIN (VALUES
-    ('FREE', 'ai_chat', TRUE, 'Chat with the vegan AI assistant'),
-    ('FREE', 'video_summary', FALSE, 'Summarize cooking videos'),
-    ('FREE', 'weekly_meal_plan', FALSE, 'Generate a weekly meal plan'),
-    ('PRO', 'ai_chat', TRUE, 'Chat with the vegan AI assistant'),
-    ('PRO', 'video_summary', TRUE, 'Summarize cooking videos'),
-    ('PRO', 'weekly_meal_plan', TRUE, 'Generate a weekly meal plan')
-) AS v(plan_code, feature_key, enabled, description)
-    ON v.plan_code = p.code;
