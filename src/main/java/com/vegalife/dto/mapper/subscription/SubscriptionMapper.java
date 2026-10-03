@@ -1,5 +1,6 @@
 package com.vegalife.dto.mapper.subscription;
 
+import com.vegalife.dto.response.subscription.AvailablePlanResponse;
 import com.vegalife.dto.response.subscription.PaymentResponse;
 import com.vegalife.dto.response.subscription.PlanSummaryResponse;
 import com.vegalife.dto.response.subscription.SubscriptionUsageResponse;
@@ -18,6 +19,10 @@ public interface SubscriptionMapper {
   @Mapping(target = "price.amount", source = "priceAmount")
   @Mapping(target = "price.currency", source = "priceCurrency")
   PlanSummaryResponse toPlanSummary(AiPlan plan);
+
+  @Mapping(target = "price.amount", source = "priceAmount")
+  @Mapping(target = "price.currency", source = "priceCurrency")
+  AvailablePlanResponse toAvailablePlan(AiPlan plan);
 
   PaymentResponse toPaymentResponse(PaymentLedger ledger, String planCode);
 
