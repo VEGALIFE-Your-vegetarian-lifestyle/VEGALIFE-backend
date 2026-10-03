@@ -254,4 +254,58 @@ class SubscriptionControllerIntegrationTest {
         .andExpect(jsonPath("$.data.latestPayment.provider").value("vnpay"))
         .andExpect(jsonPath("$.data.latestPayment.paidAt").value(latestPaidAt.toString()));
   }
+
+  @Test
+  void getAvailablePlans_withoutAuthentication_returnsActivePlansOrderedBySortOrder()
+      throws Exception {
+    AiPlan freePlan = planRepository.findByCode("FREE").orElseThrow();
+    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
+    long planCountBefore = planRepository.count();
+
+    mockMvc
+        .perform(get("/api/subscriptions"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Plans retrieved successfully"))
+        .andExpect(jsonPath("$.data", hasSize(2)))
+        .andExpect(jsonPath("$.data[0].code").value("FREE"))
+        .andExpect(jsonPath("$.data[0].name").value(freePlan.getName()))
+        .andExpect(
+            jsonPath("$.data[0].monthlyRequestLimit").value(freePlan.getMonthlyRequestLimit()))
+        .andExpect(jsonPath("$.data[0].price.amount").value((int) freePlan.getPriceAmount()))
+        .andExpect(jsonPath("$.data[0].price.currency").value(freePlan.getPriceCurrency()))
+        .andExpect(jsonPath("$.data[1].code").value("PRO"))
+        .andExpect(jsonPath("$.data[1].name").value(proPlan.getName()))
+        .andExpect(
+            jsonPath("$.data[1].monthlyRequestLimit").value(proPlan.getMonthlyRequestLimit()))
+        .andExpect(jsonPath("$.data[1].price.amount").value((int) proPlan.getPriceAmount()))
+        .andExpect(jsonPath("$.data[1].price.currency").value(proPlan.getPriceCurrency()))
+        // NFR-SEC-001: catalogue rows expose no internal ids or bookkeeping columns.
+        .andExpect(jsonPath("$.data[0].id").doesNotExist())
+        .andExpect(jsonPath("$.data[0].sortOrder").doesNotExist())
+        .andExpect(jsonPath("$.data[0].createdAt").doesNotExist());
+
+    // FR-008: reading the catalogue never writes plan rows.
+    assertThat(planRepository.count()).isEqualTo(planCountBefore);
+  }
+
+  @Test
+  void getAvailablePlans_omitsInactivePlans() throws Exception {
+    planRepository.save(
+        AiPlan.builder()
+            .code("LEGACY")
+            .name("Legacy")
+            .monthlyRequestLimit(1)
+            .priceAmount(100)
+            .priceCurrency("VND")
+            .active(false)
+            .sortOrder(3)
+            .build());
+
+    mockMvc
+        .perform(get("/api/subscriptions"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data", hasSize(2)))
+        .andExpect(jsonPath("$.data[?(@.code == 'LEGACY')]", hasSize(0)));
+  }
 }

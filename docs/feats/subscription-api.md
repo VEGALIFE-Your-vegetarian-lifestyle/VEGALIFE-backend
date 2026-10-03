@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress
+Final
 
 ## Author / owner
 
@@ -57,61 +57,61 @@ survive a price or limit change.
 
 ### Functional Requirements
 
-- [ ] FR-001: `GET /api/subscriptions/me` with a valid JWT returns `200 OK`
+- [x] FR-001: `GET /api/subscriptions/me` with a valid JWT returns `200 OK`
       with `data` shaped `{tier, status, renewalDate, usage{used, limit,
       periodStart, periodEnd}, currentPlan{code, name, monthlyRequestLimit,
       price{amount, currency}}, latestPayment}`.
-- [ ] FR-002: A request to `/api/subscriptions/me` without a valid, non-expired
+- [x] FR-002: A request to `/api/subscriptions/me` without a valid, non-expired
       JWT returns `401 Unauthorized`.
-- [ ] FR-003: When the caller has no `ai_subscription` row, the endpoint
+- [x] FR-003: When the caller has no `ai_subscription` row, the endpoint
       synthesizes the FREE default — `tier` and `currentPlan` from the
       `ai_plan` row with `code = 'FREE'`, `status = 'active'`,
       `renewalDate = null`, `latestPayment = null` — and writes no row.
-- [ ] FR-004: `usage` covers the current UTC calendar month
+- [x] FR-004: `usage` covers the current UTC calendar month
       (`periodStart` = first instant of the month, `periodEnd` = first instant
       of the next month). `usage.used` is the sum of `ai_usage.request_count`
       for rows of this user whose `[period_start, period_end)` overlaps that
       window; `usage.limit` is `ai_plan.monthly_request_limit` of the caller's
       effective plan. No matching rows means `used = 0`, never `null`.
-- [ ] FR-005: `latestPayment` is the caller's most recent `payment_ledger` row
+- [x] FR-005: `latestPayment` is the caller's most recent `payment_ledger` row
       with `status = 'succeeded'` **for the plan the caller is currently on**
       (`plan_id` = the effective plan's id), newest `paid_at` first, mapped to
       `{planCode, amount, currency, status, provider, paidAt}`; `planCode` is
       therefore always the current plan's code. It is `null` when the caller
       has no subscription row (FR-003) or when no such row exists for that
       plan. `provider_reference` and internal ids are never returned.
-- [ ] FR-006: `GET /api/subscriptions` returns `200 OK` without any
+- [x] FR-006: `GET /api/subscriptions` returns `200 OK` without any
       credentials, with `data` as an array of every `active` plan ordered by
       `sort_order`, each shaped `{code, name, monthlyRequestLimit,
       price{amount, currency}}`.
-- [ ] FR-007: Security rules are exact-path: `GET /api/subscriptions` is
+- [x] FR-007: Security rules are exact-path: `GET /api/subscriptions` is
       `permitAll`, while `GET /api/subscriptions/me` remains authenticated —
       a wildcard `/api/subscriptions/**` is not used.
-- [ ] FR-008: Neither endpoint performs writes: no `ai_subscription`,
+- [x] FR-008: Neither endpoint performs writes: no `ai_subscription`,
       `ai_usage`, `ai_plan`, or `payment_ledger` row is created or updated by
       a read.
-- [ ] FR-009: Both responses use the standard envelope
+- [x] FR-009: Both responses use the standard envelope
       (`success`, `message`, `data`) and are never `404` when data is absent
       (no subscription row → FREE default; no ledger rows →
       `latestPayment: null`).
 
 ### Non-Functional Requirements
 
-- [ ] NFR-SEC-001: `/me` leaks only subscription facts — no email, no
+- [x] NFR-SEC-001: `/me` leaks only subscription facts — no email, no
       password/token material, no `provider_reference`, no ledger or
       subscription primary keys.
-- [ ] NFR-SEC-002: A missing, expired, or invalid token on `/me` returns the
+- [x] NFR-SEC-002: A missing, expired, or invalid token on `/me` returns the
       existing `401` body `{"success":false,"message":"Unauthorized"}` from
       the `SecurityConfig` entry point, with no stack trace.
-- [ ] NFR-MAINT-001: Limits and prices are read exclusively from `ai_plan`;
+- [x] NFR-MAINT-001: Limits and prices are read exclusively from `ai_plan`;
       no plan constant appears in Java source or test fixtures as a source of
       truth.
-- [ ] NFR-SCALE-001: `/me` issues a fixed number of queries (≤ 4) regardless
+- [x] NFR-SCALE-001: `/me` issues a fixed number of queries (≤ 4) regardless
       of table size; the usage total is one aggregate query over an indexed
       (`idx_ai_usage_user_id`) predicate, not an in-memory scan. The worst
       case is 4: subscription lookup, plan lookup, usage aggregate, ledger
       lookup; the FREE default path skips the ledger lookup (FR-003) for 3.
-- [ ] NFR-MAINT-002: DTOs are mapped with MapStruct and wrapped with the
+- [x] NFR-MAINT-002: DTOs are mapped with MapStruct and wrapped with the
       existing `ApiResponse` helper, matching `GET /api/profile` and
       `GET /api/categories` conventions.
 
@@ -165,27 +165,27 @@ plan, remaining monthly quota, renewal date, and latest payment at a glance,
 **so that** I know when I am about to hit the free limit and whether I am on
 the paid plan.
 
-- [ ] Given an authenticated member, when they call
+- [x] Given an authenticated member, when they call
       `GET /api/subscriptions/me`, then the API returns `200 OK` with their
       tier, status, renewal date, usage (`used`, `limit`, `periodStart`,
       `periodEnd`), current plan summary, and latest payment.
-- [ ] Given a member with no `ai_subscription` row, when they call `/me`,
+- [x] Given a member with no `ai_subscription` row, when they call `/me`,
       then the response is the FREE default synthesized from the seeded
       `ai_plan` row, `renewalDate` is `null`, and no database row is created.
-- [ ] Given the caller has `ai_usage` rows overlapping the current month,
+- [x] Given the caller has `ai_usage` rows overlapping the current month,
       when they call `/me`, then `usage.used` equals the sum of
       `request_count` and `usage.limit` equals the plan's
       `monthly_request_limit`; with no rows, `used` is `0`.
-- [ ] Given the caller has no succeeded `payment_ledger` row for their current
+- [x] Given the caller has no succeeded `payment_ledger` row for their current
       plan, when they call `/me`, then `latestPayment` is `null`; given
       several, then the one with the newest `paid_at` wins.
-- [ ] Given no credentials at all, when a caller calls
+- [x] Given no credentials at all, when a caller calls
       `GET /api/subscriptions`, then the API returns `200 OK` with every
       active plan ordered by `sort_order`.
-- [ ] Given a request without a valid JWT, when `GET /api/subscriptions/me`
+- [x] Given a request without a valid JWT, when `GET /api/subscriptions/me`
       is called, then the API returns `401 Unauthorized`; and calling
       `GET /api/subscriptions` with the same request still returns `200`.
-- [ ] Neither endpoint writes to the database.
+- [x] Neither endpoint writes to the database.
 
 ## Risks / open questions
 
