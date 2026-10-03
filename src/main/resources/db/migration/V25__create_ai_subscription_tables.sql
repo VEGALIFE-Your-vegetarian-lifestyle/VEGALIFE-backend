@@ -41,7 +41,11 @@ CREATE TABLE payment_ledger (
     provider_reference TEXT,
     paid_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- A succeeded payment always has a paid_at: the latest-payment lookup
+    -- ranks by paid_at, so a succeeded NULL would rank unpredictably first.
+    CONSTRAINT chk_payment_ledger_succeeded_paid_at
+        CHECK (status <> 'succeeded' OR paid_at IS NOT NULL)
 );
 
 CREATE INDEX idx_ai_plan_active_sort ON ai_plan(sort_order) WHERE active;
