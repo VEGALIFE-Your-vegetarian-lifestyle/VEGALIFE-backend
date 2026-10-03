@@ -105,6 +105,7 @@ class SubscriptionControllerIntegrationTest {
   @Test
   void getMySubscription_withoutSubscriptionRow_returnsFreeDefaultWithoutWriting()
       throws Exception {
+    AiPlan freePlan = planRepository.findByCode("FREE").orElseThrow();
     YearMonth currentMonth = YearMonth.now(ZoneOffset.UTC);
     Instant periodStart = currentMonth.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
     Instant periodEnd =
@@ -119,14 +120,17 @@ class SubscriptionControllerIntegrationTest {
         .andExpect(jsonPath("$.data.status").value("active"))
         .andExpect(jsonPath("$.data.renewalDate").doesNotExist())
         .andExpect(jsonPath("$.data.usage.used").value(0))
-        .andExpect(jsonPath("$.data.usage.limit").value(20))
+        .andExpect(jsonPath("$.data.usage.limit").value(freePlan.getMonthlyRequestLimit()))
         .andExpect(jsonPath("$.data.usage.periodStart").value(periodStart.toString()))
         .andExpect(jsonPath("$.data.usage.periodEnd").value(periodEnd.toString()))
         .andExpect(jsonPath("$.data.currentPlan.code").value("FREE"))
         .andExpect(jsonPath("$.data.currentPlan.name").value("Free"))
-        .andExpect(jsonPath("$.data.currentPlan.monthlyRequestLimit").value(20))
-        .andExpect(jsonPath("$.data.currentPlan.price.amount").value(0))
-        .andExpect(jsonPath("$.data.currentPlan.price.currency").value("VND"))
+        .andExpect(
+            jsonPath("$.data.currentPlan.monthlyRequestLimit")
+                .value(freePlan.getMonthlyRequestLimit()))
+        .andExpect(
+            jsonPath("$.data.currentPlan.price.amount").value((int) freePlan.getPriceAmount()))
+        .andExpect(jsonPath("$.data.currentPlan.price.currency").value(freePlan.getPriceCurrency()))
         .andExpect(jsonPath("$.data.latestPayment").doesNotExist());
 
     assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
@@ -172,8 +176,8 @@ class SubscriptionControllerIntegrationTest {
         PaymentLedger.builder()
             .userId(testUser.getId())
             .planId(proPlan.getId())
-            .amount(49000)
-            .currency("VND")
+            .amount(proPlan.getPriceAmount())
+            .currency(proPlan.getPriceCurrency())
             .status(PaymentLedger.Status.succeeded)
             .provider("vnpay")
             .paidAt(latestPaidAt.minus(1, ChronoUnit.DAYS))
@@ -182,8 +186,8 @@ class SubscriptionControllerIntegrationTest {
         PaymentLedger.builder()
             .userId(testUser.getId())
             .planId(proPlan.getId())
-            .amount(49000)
-            .currency("VND")
+            .amount(proPlan.getPriceAmount())
+            .currency(proPlan.getPriceCurrency())
             .status(PaymentLedger.Status.succeeded)
             .provider("vnpay")
             .paidAt(latestPaidAt)
@@ -193,8 +197,8 @@ class SubscriptionControllerIntegrationTest {
         PaymentLedger.builder()
             .userId(testUser.getId())
             .planId(proPlan.getId())
-            .amount(49000)
-            .currency("VND")
+            .amount(proPlan.getPriceAmount())
+            .currency(proPlan.getPriceCurrency())
             .status(PaymentLedger.Status.pending)
             .provider("vnpay")
             .paidAt(latestPaidAt.plus(1, ChronoUnit.MINUTES))
@@ -208,16 +212,19 @@ class SubscriptionControllerIntegrationTest {
         .andExpect(jsonPath("$.data.status").value("active"))
         .andExpect(jsonPath("$.data.renewalDate").value(renewalDate.toString()))
         .andExpect(jsonPath("$.data.usage.used").value(3))
-        .andExpect(jsonPath("$.data.usage.limit").value(500))
+        .andExpect(jsonPath("$.data.usage.limit").value(proPlan.getMonthlyRequestLimit()))
         .andExpect(jsonPath("$.data.usage.periodStart").value(periodStart.toString()))
         .andExpect(jsonPath("$.data.usage.periodEnd").value(periodEnd.toString()))
         .andExpect(jsonPath("$.data.currentPlan.code").value("PRO"))
-        .andExpect(jsonPath("$.data.currentPlan.monthlyRequestLimit").value(500))
-        .andExpect(jsonPath("$.data.currentPlan.price.amount").value(49000))
-        .andExpect(jsonPath("$.data.currentPlan.price.currency").value("VND"))
+        .andExpect(
+            jsonPath("$.data.currentPlan.monthlyRequestLimit")
+                .value(proPlan.getMonthlyRequestLimit()))
+        .andExpect(
+            jsonPath("$.data.currentPlan.price.amount").value((int) proPlan.getPriceAmount()))
+        .andExpect(jsonPath("$.data.currentPlan.price.currency").value(proPlan.getPriceCurrency()))
         .andExpect(jsonPath("$.data.latestPayment.planCode").value("PRO"))
-        .andExpect(jsonPath("$.data.latestPayment.amount").value(49000))
-        .andExpect(jsonPath("$.data.latestPayment.currency").value("VND"))
+        .andExpect(jsonPath("$.data.latestPayment.amount").value((int) proPlan.getPriceAmount()))
+        .andExpect(jsonPath("$.data.latestPayment.currency").value(proPlan.getPriceCurrency()))
         .andExpect(jsonPath("$.data.latestPayment.status").value("succeeded"))
         .andExpect(jsonPath("$.data.latestPayment.provider").value("vnpay"))
         .andExpect(jsonPath("$.data.latestPayment.paidAt").value(latestPaidAt.toString()));
