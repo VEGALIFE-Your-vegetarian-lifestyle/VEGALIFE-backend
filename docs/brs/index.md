@@ -62,3 +62,12 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-SUBS-001 | AI Quota Window Is the Current UTC Calendar Month | Active | 2026-10-04 |
 | BR-SUBS-002 | Plan Limits and Prices Are Data-Driven | Active | 2026-10-04 |
 | BR-SUBS-003 | Members Without a Subscription Row Are FREE by Default | Active | 2026-10-04 |
+| BR-PAY-001 | The Payment Webhook Is the Sole Source of Truth for Fulfilment | Active | 2026-10-04 |
+| BR-PAY-002 | A Payment Counts as Paid Only on a Double Zero | Active | 2026-10-04 |
+| BR-PAY-003 | The Notified Amount Must Equal the Recorded Amount | Active | 2026-10-04 |
+| BR-PAY-004 | A Payment Succeeds at Most Once | Active | 2026-10-04 |
+| BR-PAY-005 | One In-Flight Checkout per Member and Plan | Active | 2026-10-04 |
+| BR-PAY-006 | Risk-Flagged and Reversed Transactions Never Fulfil | Active | 2026-10-04 |
+| BR-PAY-007 | The Receipt Is Emailed Exactly Once, Off the Request Thread | Active | 2026-10-04 |
+| BR-PAY-008 | Renewal Date Is Paid Time Plus One Calendar Month | Active | 2026-10-04 |
+| BR-PAY-009 | Only Active, Priced VND Plans Are Purchasable | Active | 2026-10-04 |

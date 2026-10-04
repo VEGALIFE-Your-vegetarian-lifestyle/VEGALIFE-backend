@@ -45,3 +45,5 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `recipes/get-dishes.md` | `GET /api/dishes` | List active dishes for recipe-create autocomplete (authenticated) |
 | `subscriptions/get-me.md` | `GET /api/subscriptions/me` | Get own AI subscription: tier, usage, plan, latest payment (authenticated) |
 | `subscriptions/get-subscriptions.md` | `GET /api/subscriptions` | List active AI plans with limits and price (public) |
+| `payments/post-checkout.md` | `POST /api/payments/checkout` | Start (or resume) a VNPay checkout for an AI plan (authenticated) |
+| `payments/get-vnpay-ipn.md` | `GET /api/payments/vnpay/ipn` | VNPay payment notification webhook; fulfils a verified payment (public, signed) |
