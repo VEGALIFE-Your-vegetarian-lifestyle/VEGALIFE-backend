@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress
+Implemented
 
 ## Author / owner
 
@@ -53,34 +53,34 @@ way to ask the backend whether the payment succeeded:
 
 ### Functional Requirements
 
-- [ ] FR-001: An authenticated member calling `GET /api/payments/{paymentId}` for a
+- [x] FR-001: An authenticated member calling `GET /api/payments/{paymentId}` for a
   payment they own receives `200` with
   `{paymentId, status, plan, amount, currency, createdAt, paidAt}` read from
   `payment_ledger`.
-- [ ] FR-002: `plan` is the full plan object `{code, name, monthlyRequestLimit,
+- [x] FR-002: `plan` is the full plan object `{code, name, monthlyRequestLimit,
   price:{amount, currency}}` — the same shape as `PlanSummaryResponse` — resolved
   through the ledger's plan reference, not a bare plan-code string.
-- [ ] FR-003: A payment id that belongs to a different user returns `404`; the
+- [x] FR-003: A payment id that belongs to a different user returns `404`; the
   response must not reveal whether the id exists.
-- [ ] FR-004: An unknown payment id returns `404`.
-- [ ] FR-005: Calling the endpoint without authentication returns `401`.
-- [ ] FR-006: While a payment is `pending`, the endpoint reports `status = "pending"`
+- [x] FR-004: An unknown payment id returns `404`.
+- [x] FR-005: Calling the endpoint without authentication returns `401`.
+- [x] FR-006: While a payment is `pending`, the endpoint reports `status = "pending"`
   and performs no gateway call — a `payment_ledger` read only.
-- [ ] FR-007: After the IPN webhook fulfils a payment, the endpoint reports the
+- [x] FR-007: After the IPN webhook fulfils a payment, the endpoint reports the
   ledger's final `status` and a non-null `paidAt`.
-- [ ] FR-008: The response is wrapped in the standard `ApiResponse` envelope
+- [x] FR-008: The response is wrapped in the standard `ApiResponse` envelope
   (`success`, `message`, `data`).
 
 ### Non-Functional Requirements
 
-- [ ] NFR-SEC-001: Ownership is enforced in the data-access predicate (the row is
+- [x] NFR-SEC-001: Ownership is enforced in the data-access predicate (the row is
   fetched by id **and** caller), so another user's id can never be read, enumerated,
   or distinguished from a non-existent one.
-- [ ] NFR-SEC-002: The endpoint never writes to `payment_ledger`, `ai_subscription`,
+- [x] NFR-SEC-002: The endpoint never writes to `payment_ledger`, `ai_subscription`,
   or any other table — polling is read-only and cannot double-fulfil (BR-PAY-004).
-- [ ] NFR-MAINT-001: The plan projection reuses `SubscriptionMapper.toPlanSummary`
+- [x] NFR-MAINT-001: The plan projection reuses `SubscriptionMapper.toPlanSummary`
   so `plan` cannot drift from `GET /api/subscriptions/me`'s `currentPlan`.
-- [ ] NFR-PERF-001: One primary-key lookup plus one plan lookup per poll; no gateway,
+- [x] NFR-PERF-001: One primary-key lookup plus one plan lookup per poll; no gateway,
   no queue, no external call — safe to poll every 2–3 s.
 
 ## Design overview
@@ -111,22 +111,22 @@ Adds one read-only path alongside the existing payment endpoints:
 state of the payment I just started, **so that** the result page shows an accurate
 outcome instead of trusting attacker-controllable redirect parameters.
 
-- [ ] Given an authenticated member, when they call
+- [x] Given an authenticated member, when they call
   `GET /api/payments/{paymentId}` for a payment they own, then the response is
   `200` with `{paymentId, status, plan, amount, currency, createdAt, paidAt}` read
   from `payment_ledger`, where `plan` is the full plan object
   `{code, name, monthlyRequestLimit, price}` resolved from the ledger's plan
   reference (same shape as `PlanSummaryResponse`).
-- [ ] Given a payment id that belongs to another user, when an authenticated member
+- [x] Given a payment id that belongs to another user, when an authenticated member
   requests it, then the response is `404` (no enumeration of other users' payments).
-- [ ] Given an unknown payment id, when an authenticated member requests it, then
+- [x] Given an unknown payment id, when an authenticated member requests it, then
   the response is `404`.
-- [ ] Given no authentication, when the endpoint is called, then the response is
+- [x] Given no authentication, when the endpoint is called, then the response is
   `401`.
-- [ ] Given a payment still `pending`, when the endpoint is polled, then `status` is
+- [x] Given a payment still `pending`, when the endpoint is polled, then `status` is
   `pending` and no gateway call is made (ledger read only — never QueryDR,
   ADR-008).
-- [ ] Given a payment fulfilled by IPN, when the endpoint is polled afterwards, then
+- [x] Given a payment fulfilled by IPN, when the endpoint is polled afterwards, then
   `status` is the ledger's final status and `paidAt` is set.
 
 ## Risks / open questions
