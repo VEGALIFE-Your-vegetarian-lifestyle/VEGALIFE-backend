@@ -49,7 +49,6 @@ app:
       tmn-code: integration-test-tmn
       secure-hash-secret: integration-only-vnpay-secret-not-a-real-credential
       payment-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
-      query-url: https://sandbox.vnpayment.vn/merchant_webapi/api/transaction
       locale: vn
 
   scheduling:

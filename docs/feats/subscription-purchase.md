@@ -243,7 +243,7 @@ Package-by-layer, mirroring the subscription feature:
   `.requestMatchers("/api/payments/vnpay/ipn").permitAll()` before
   `.anyRequest().authenticated()`; checkout falls through to authentication.
 - **Config** under `app.payments`: `vnpay.{enabled, tmn-code,
-  secure-hash-secret, payment-url, query-url, locale}`, `return-url`
+  secure-hash-secret, payment-url, locale}`, `return-url`
   (absolute frontend result page), `checkout-ttl` (default `30m`). Dev/test
   profile values point at sandbox hosts with placeholder credentials; prod
   values are environment-only.

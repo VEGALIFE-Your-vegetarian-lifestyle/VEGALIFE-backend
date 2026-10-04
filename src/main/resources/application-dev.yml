@@ -50,5 +50,4 @@ app:
       tmn-code: ${VNPAY_TMN_CODE:}
       secure-hash-secret: ${VNPAY_SECURE_HASH_SECRET:}
       payment-url: ${VNPAY_PAYMENT_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
-      query-url: ${VNPAY_QUERY_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
       locale: vn
