@@ -49,24 +49,36 @@ public class OutboxEmailService implements EmailService {
     enqueue(OutboundEmailPayload.Type.PASSWORD_RESET, to, username, otp, otpExpiryMinutes);
   }
 
+  @Override
+  public void sendPaymentReceipt(String to, String username, OutboundEmailPayload.Receipt receipt) {
+    // A receipt has no OTP-style business deadline: it stays deliverable
+    // until the queue's max-age guard (BR-PAY-007).
+    enqueue(
+        new OutboundEmailPayload(OutboundEmailPayload.Type.RECEIPT, username, null, null, receipt),
+        to,
+        null);
+  }
+
   private void enqueue(
       OutboundEmailPayload.Type type, String to, String username, String otp, int expiryMinutes) {
+    enqueue(new OutboundEmailPayload(type, username, otp, expiryMinutes), to, expiryMinutes * 60L);
+  }
+
+  private void enqueue(OutboundEmailPayload payload, String to, Long ttlSeconds) {
     try {
       Instant now = Instant.now();
       OutboundMessage message =
           OutboundMessage.builder()
               .channel(OutboundChannel.EMAIL)
               .recipient(to)
-              .payload(
-                  objectMapper.writeValueAsString(
-                      new OutboundEmailPayload(type, username, otp, expiryMinutes)))
+              .payload(objectMapper.writeValueAsString(payload))
               .status(OutboundStatus.PENDING)
               .attempts(0)
               .nextAttemptAt(now)
-              .expiresAt(now.plusSeconds(expiryMinutes * 60L))
+              .expiresAt(ttlSeconds == null ? null : now.plusSeconds(ttlSeconds))
               .build();
       outboundMessageRepository.save(message);
-      log.info("Queued {} email for {} on outbound queue", type, to);
+      log.info("Queued {} email for {} on outbound queue", payload.type(), to);
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("Failed to serialize outbound email payload", e);
     }

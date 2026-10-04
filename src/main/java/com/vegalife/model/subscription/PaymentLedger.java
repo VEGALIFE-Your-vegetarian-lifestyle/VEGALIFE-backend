@@ -52,6 +52,15 @@ public class PaymentLedger {
   @Column(name = "provider_reference", columnDefinition = "TEXT")
   private String providerReference;
 
+  @Column(name = "txn_ref", length = 64)
+  private String txnRef;
+
+  @Column(name = "response_code", length = 10)
+  private String responseCode;
+
+  @Column(name = "bank_code", length = 32)
+  private String bankCode;
+
   @Column(name = "paid_at")
   private Instant paidAt;
 

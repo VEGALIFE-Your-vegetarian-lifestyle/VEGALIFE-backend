@@ -11,3 +11,4 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [005-persistent-outbound-message-queue.md](005-persistent-outbound-message-queue.md) | Use a Persistent Outbound Message Queue for Email Delivery | Accepted | 2026-09-26 |
 | [006-optional-otp-verified-stage.md](006-optional-otp-verified-stage.md) | Optional OTP Verified Stage on `otp_code` | Accepted | 2026-09-27 |
 | [007-post-content-filtering.md](007-post-content-filtering.md) | Filter Post Content Before Publication | Accepted | 2026-09-30 |
+| [008-vnpay-integration.md](008-vnpay-integration.md) | Integrate VNPay Through a Hand-Rolled Thin Client, Fulfilling Only From Its IPN Webhook | Accepted | 2026-10-04 |
