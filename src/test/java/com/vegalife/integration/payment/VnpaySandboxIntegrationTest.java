@@ -55,6 +55,7 @@ class VnpaySandboxIntegrationTest {
     String paymentUrl =
         gateway.createPaymentUrl(
             new PaymentOrder(
+                UUID.randomUUID().toString(),
                 UUID.randomUUID().toString().replace("-", ""),
                 49_000L,
                 "Vegalife Pro subscription",

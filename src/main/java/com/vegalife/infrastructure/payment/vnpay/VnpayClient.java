@@ -53,7 +53,7 @@ public class VnpayClient implements PaymentGateway {
     params.put("vnp_OrderInfo", order.orderInfo());
     params.put("vnp_OrderType", ORDER_TYPE);
     params.put("vnp_Amount", String.valueOf(order.amountVnd() * 100L));
-    params.put("vnp_ReturnUrl", paymentProperties.getReturnUrl());
+    params.put("vnp_ReturnUrl", returnUrlWithId(order.paymentId()));
     params.put("vnp_IpAddr", order.ipAddress());
     params.put("vnp_CreateDate", TIMESTAMP.format(now));
     params.put("vnp_ExpireDate", TIMESTAMP.format(now.plus(paymentProperties.getCheckoutTtl())));
@@ -73,5 +73,18 @@ public class VnpayClient implements PaymentGateway {
       return false;
     }
     return signer.verifyParams(params, params.get(VnpaySigner.SECURE_HASH_FIELD));
+  }
+
+  /**
+   * Configured {@code return-url} base with the ledger id appended as a path segment, so the
+   * frontend result page learns which payment the redirect belongs to without trusting query
+   * parameters.
+   */
+  private String returnUrlWithId(String paymentId) {
+    String base = paymentProperties.getReturnUrl();
+    if (base.endsWith("/")) {
+      base = base.substring(0, base.length() - 1);
+    }
+    return base + "/" + paymentId;
   }
 }

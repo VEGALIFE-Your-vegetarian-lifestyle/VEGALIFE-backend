@@ -16,6 +16,9 @@ import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
+import com.vegalife.shared.config.PaymentProperties;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -72,6 +75,8 @@ class CheckoutIntegrationTest {
 
   @Autowired private VnpayProperties vnpayProperties;
 
+  @Autowired private PaymentProperties paymentProperties;
+
   private User testUser;
   private String accessToken;
 
@@ -124,11 +129,13 @@ class CheckoutIntegrationTest {
             .andExpect(jsonPath("$.data.currency").value("VND"))
             .andExpect(jsonPath("$.data.amount").value((int) proPlan.getPriceAmount()))
             .andExpect(jsonPath("$.data.txnRef").isNotEmpty())
+            .andExpect(jsonPath("$.data.paymentId").isNotEmpty())
             .andExpect(jsonPath("$.data.paymentUrl").isNotEmpty())
             .andReturn();
 
     String body = result.getResponse().getContentAsString();
     JsonNode data = objectMapper.readTree(body).get("data");
+    String paymentId = data.get("paymentId").asText();
     String txnRef = data.get("txnRef").asText();
     String paymentUrl = data.get("paymentUrl").asText();
 
@@ -139,7 +146,15 @@ class CheckoutIntegrationTest {
     assertThat(paymentUrl).contains("&" + VnpaySigner.SECURE_HASH_FIELD + "=");
     assertThat(body).doesNotContain(vnpayProperties.getSecureHashSecret());
 
+    // The return URL is the configured base plus the ledger id as a path segment, so the
+    // frontend result page can key its status lookup off the path rather than query params.
+    String expectedReturn =
+        URLEncoder.encode(
+            paymentProperties.getReturnUrl() + "/" + paymentId, StandardCharsets.UTF_8);
+    assertThat(paymentUrl).contains("vnp_ReturnUrl=" + expectedReturn);
+
     PaymentLedger ledger = paymentLedgerRepository.findByTxnRef(txnRef).orElseThrow();
+    assertThat(paymentId).isEqualTo(ledger.getId().toString());
     assertThat(ledger.getStatus()).isEqualTo(PaymentLedger.Status.pending);
     assertThat(ledger.getUserId()).isEqualTo(testUser.getId());
     assertThat(ledger.getPlanId()).isEqualTo(proPlan.getId());

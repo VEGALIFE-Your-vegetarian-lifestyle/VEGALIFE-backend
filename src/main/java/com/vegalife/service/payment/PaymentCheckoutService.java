@@ -62,7 +62,11 @@ public class PaymentCheckoutService {
     String paymentUrl =
         paymentGateway.createPaymentUrl(
             new PaymentGateway.PaymentOrder(
-                ledger.getTxnRef(), ledger.getAmount(), "Upgrade to " + plan.getCode(), ipAddress));
+                ledger.getId().toString(),
+                ledger.getTxnRef(),
+                ledger.getAmount(),
+                "Upgrade to " + plan.getCode(),
+                ipAddress));
 
     log.info(
         "Checkout {} for user {} plan {} amount {} {}",
@@ -72,6 +76,7 @@ public class PaymentCheckoutService {
         ledger.getAmount(),
         ledger.getCurrency());
     return CheckoutResponse.builder()
+        .paymentId(ledger.getId().toString())
         .txnRef(ledger.getTxnRef())
         .planCode(plan.getCode())
         .amount(ledger.getAmount())

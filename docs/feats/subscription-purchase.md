@@ -75,9 +75,10 @@ requirements rather than implementation detail.
 
 - [ ] FR-001: `POST /api/payments/checkout` with a valid JWT and body
       `{"planCode": "<CODE>"}` returns `200 OK` with `data` shaped
-      `{txnRef, planCode, amount, currency, status, paymentUrl}` where
-      `status` is `"pending"` and `paymentUrl` is an absolute VNPay URL for
-      the configured environment.
+      `{paymentId, txnRef, planCode, amount, currency, status, paymentUrl}`
+      where `paymentId` is the `payment_ledger` row id (the frontend's key
+      for post-redirect lookups), `status` is `"pending"` and `paymentUrl`
+      is an absolute VNPay URL for the configured environment.
 - [ ] FR-002: The requested plan must exist and be `active` (`404
       ResourceNotFoundException` when the code matches no plan), must be
       purchasable — `price_amount > 0` and `price_currency = 'VND'`, since
@@ -91,7 +92,8 @@ requirements rather than implementation detail.
 - [ ] FR-004: `paymentUrl` is built from `vnp_Version=2.1.0`,
       `vnp_Command=pay`, `vnp_TmnCode`, `vnp_Amount` (= `amount * 100`),
       `vnp_CurrCode=VND`, `vnp_TxnRef`, `vnp_OrderInfo`, `vnp_OrderType=
-      other`, `vnp_Locale`, `vnp_ReturnUrl`, `vnp_CreateDate`, `vnp_IpAddr`,
+      other`, `vnp_Locale`, `vnp_ReturnUrl` (= configured `return-url` base
+      plus the `/{paymentId}` path segment), `vnp_CreateDate`, `vnp_IpAddr`,
       `vnp_ExpireDate`, and `vnp_SecureHash` (HMAC-SHA512, lowercase hex),
       all URL-encoded and appended to the configured payment URL. No other
       field may be added or renamed.
@@ -244,7 +246,8 @@ Package-by-layer, mirroring the subscription feature:
   `.anyRequest().authenticated()`; checkout falls through to authentication.
 - **Config** under `app.payments`: `vnpay.{enabled, tmn-code,
   secure-hash-secret, payment-url, locale}`, `return-url`
-  (absolute frontend result page), `checkout-ttl` (default `30m`). Dev/test
+  (frontend result-page base; the signed `vnp_ReturnUrl` appends
+  `/{paymentId}`), `checkout-ttl` (default `30m`). Dev/test
   profile values point at sandbox hosts with placeholder credentials; prod
   values are environment-only.
 - **Receipt email** adds `OutboundEmailPayload.Type.RECEIPT` with a nested
@@ -297,8 +300,9 @@ Mapped from issue #16:
 
 - Given an authenticated user on the free tier, when they call
   `POST /api/payments/checkout` with `planCode = "PRO"`, then a
-  `payment_ledger` row is created `pending` and a signed VNPay payment URL
-  is returned — VNPay payment initiated.
+  `payment_ledger` row is created `pending`, a signed VNPay payment URL
+  is returned — VNPay payment initiated — and `paymentId` echoes the
+  ledger row id (the path segment the return URL will carry).
 - Given a payment completed on VNPay's side, when VNPay delivers a valid
   success IPN, then the ledger becomes `succeeded` and the member's
   `ai_subscription` is upserted onto PRO immediately in the same
@@ -332,11 +336,14 @@ downgrade/cancel, and trials.
   registered; until it does, only the self-signed webhook tests prove the
   handler, and the sandbox tests prove only the outbound direction.
 - **`return-url` is required configuration**, not a default. Checkout fails
-  with a clear error when it is blank; `application-dev.yml` ships
-  `http://localhost:5173/payment/result` so local runs work. The frontend
-  result page must treat the redirect's query parameters as **display-only
-  hints** — it must call `GET /api/subscriptions/me` for the authoritative
-  tier, because the return URL can be edited by the user (BR-PAY-001).
+  with a clear error when it is blank; `application.yml` falls back to
+  `http://localhost:3000/payment/result` for local runs. The signed
+  `vnp_ReturnUrl` is that base plus a `/{paymentId}` path segment, so the
+  result page knows which payment the redirect belongs to without parsing
+  query parameters. The page must still treat the redirect's query
+  parameters as **display-only hints** — it must call
+  `GET /api/subscriptions/me` for the authoritative tier, because the
+  return URL can be edited by the user (BR-PAY-001).
 - **No reconciliation job.** If an IPN is lost entirely (VNPay gives up
   after ten retries), a payment could be taken but never fulfilled. The
   client does not speak QueryDR at all; a reconciliation

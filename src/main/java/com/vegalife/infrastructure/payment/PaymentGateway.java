@@ -9,8 +9,13 @@ import java.util.Map;
  */
 public interface PaymentGateway {
 
-  /** A single order to sign; the amount is frozen at checkout so replays quote the original. */
-  record PaymentOrder(String txnRef, long amountVnd, String orderInfo, String ipAddress) {}
+  /**
+   * A single order to sign; the amount is frozen at checkout so replays quote the original. {@code
+   * paymentId} (the ledger row id) rides along so the gateway can append it as the return URL's
+   * path segment — the frontend reads it back after the redirect.
+   */
+  record PaymentOrder(
+      String paymentId, String txnRef, long amountVnd, String orderInfo, String ipAddress) {}
 
   /** Signed URL the browser opens to complete the payment. */
   String createPaymentUrl(PaymentOrder order);

@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CheckoutResponse {
 
+  private String paymentId;
   private String txnRef;
   private String planCode;
   private long amount;

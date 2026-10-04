@@ -36,12 +36,13 @@ None.
   "success": true,
   "message": "Payment session created",
   "data": {
+    "paymentId": "8f14e45f-ceea-167a-5a36-dedd4bea2543",
     "txnRef": "8f14e45fceea167a5a36dedd4bea2543",
     "planCode": "PRO",
     "amount": 49000,
     "currency": "VND",
     "status": "pending",
-    "paymentUrl": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=4900000&vnp_Command=pay&vnp_CreateDate=20261004101500&vnp_CurrCode=VND&vnp_ExpireDate=20261004104500&vnp_IpAddr=127.0.0.1&vnp_Locale=vn&vnp_OrderInfo=Upgrade+to+PRO&vnp_OrderType=other&vnp_ReturnUrl=http%3A%2F%2Flocalhost%3A5173%2Fpayment%2Fresult&vnp_TmnCode=DEMO0000&vnp_TxnRef=8f14e45fceea167a5a36dedd4bea2543&vnp_Version=2.1.0&vnp_SecureHash=..."
+    "paymentUrl": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=4900000&vnp_Command=pay&vnp_CreateDate=20261004101500&vnp_CurrCode=VND&vnp_ExpireDate=20261004104500&vnp_IpAddr=127.0.0.1&vnp_Locale=vn&vnp_OrderInfo=Upgrade+to+PRO&vnp_OrderType=other&vnp_ReturnUrl=http%3A%2F%2Flocalhost%3A5173%2Fpayment%2Fresult%2F8f14e45f-ceea-167a-5a36-dedd4bea2543&vnp_TmnCode=DEMO0000&vnp_TxnRef=8f14e45fceea167a5a36dedd4bea2543&vnp_Version=2.1.0&vnp_SecureHash=..."
   }
 }
 ```
@@ -50,6 +51,7 @@ None.
 |-------|------|--------------|
 | success | boolean | Always true for success |
 | message | string | Human-readable message |
+| data.paymentId | string | `payment_ledger` row id (UUID) — carried as the `vnp_ReturnUrl` path segment so the frontend result page can identify the payment after the redirect |
 | data.txnRef | string | Payment reference — 32 lowercase hex chars, derived from the ledger row id with dashes removed; echoed back by VNPay as `vnp_TxnRef` |
 | data.planCode | string | The plan being purchased |
 | data.amount | number | Charged amount in whole VND, frozen at creation from `ai_plan.price_amount` |
@@ -57,7 +59,7 @@ None.
 | data.status | string | Always `"pending"` at this point; the authoritative status arrives via IPN |
 | data.paymentUrl | string | Absolute VNPay payment URL, already signed — redirect the browser here |
 
-`data.status` is a convenience for the UI. The frontend must not treat it as confirmation of payment; after returning from VNPay it should read `GET /api/subscriptions/me`.
+`data.status` is a convenience for the UI. The frontend must not treat it as confirmation of payment; after returning from VNPay it should read `GET /api/subscriptions/me`. The redirect lands on the configured `return-url` base with `/{paymentId}` as the final path segment — that id (not the query string) is how the result page keys any status lookup.
 
 ### Error Responses
 | Status Code | Condition | Message |
@@ -74,6 +76,7 @@ None.
 - One in-flight checkout per user+plan: a `pending` row younger than `app.payments.checkout-ttl` (default 30 minutes) is reused, so repeated calls return the same `txnRef` and a freshly signed URL instead of creating a second VNPay order (BR-PAY-005).
 - FREE and any zero-priced or non-VND plan are not purchasable (BR-PAY-009).
 - No secret is ever echoed: the response carries only the derived `vnp_SecureHash` embedded in `paymentUrl`, never `tmn-code` configuration or `secure-hash-secret`.
+- The signed `vnp_ReturnUrl` is `app.payments.return-url` plus `/{paymentId}` (the ledger row id), so the frontend learns which payment the redirect belongs to from the path alone.
 - Feature Spec: `docs/feats/subscription-purchase.md`
 
 ## Example
@@ -92,12 +95,13 @@ curl -X POST "http://localhost:8080/api/payments/checkout" \
   "success": true,
   "message": "Payment session created",
   "data": {
+    "paymentId": "8f14e45f-ceea-167a-5a36-dedd4bea2543",
     "txnRef": "8f14e45fceea167a5a36dedd4bea2543",
     "planCode": "PRO",
     "amount": 49000,
     "currency": "VND",
     "status": "pending",
-    "paymentUrl": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=4900000&vnp_Command=pay&vnp_CreateDate=20261004101500&vnp_CurrCode=VND&vnp_ExpireDate=20261004104500&vnp_IpAddr=127.0.0.1&vnp_Locale=vn&vnp_OrderInfo=Upgrade+to+PRO&vnp_OrderType=other&vnp_ReturnUrl=http%3A%2F%2Flocalhost%3A5173%2Fpayment%2Fresult&vnp_TmnCode=DEMO0000&vnp_TxnRef=8f14e45fceea167a5a36dedd4bea2543&vnp_Version=2.1.0&vnp_SecureHash=5f0d3b..."
+    "paymentUrl": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=4900000&vnp_Command=pay&vnp_CreateDate=20261004101500&vnp_CurrCode=VND&vnp_ExpireDate=20261004104500&vnp_IpAddr=127.0.0.1&vnp_Locale=vn&vnp_OrderInfo=Upgrade+to+PRO&vnp_OrderType=other&vnp_ReturnUrl=http%3A%2F%2Flocalhost%3A5173%2Fpayment%2Fresult%2F8f14e45f-ceea-167a-5a36-dedd4bea2543&vnp_TmnCode=DEMO0000&vnp_TxnRef=8f14e45fceea167a5a36dedd4bea2543&vnp_Version=2.1.0&vnp_SecureHash=5f0d3b..."
   }
 }
 ```
