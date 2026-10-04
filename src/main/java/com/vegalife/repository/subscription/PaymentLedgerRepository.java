@@ -16,6 +16,8 @@ public interface PaymentLedgerRepository extends JpaRepository<PaymentLedger, UU
 
   Optional<PaymentLedger> findByTxnRef(String txnRef);
 
+  Optional<PaymentLedger> findByIdAndUserId(UUID id, UUID userId);
+
   Optional<PaymentLedger> findFirstByUserIdAndPlanIdAndStatusAndCreatedAtAfterOrderByCreatedAtDesc(
       UUID userId, UUID planId, PaymentLedger.Status status, Instant createdAtAfter);
 
