@@ -15,8 +15,8 @@ Issue #16 adds the first paid path in the system: a member on FREE buys PRO
 through VNPay. Two things about that integration constrain everything else
 that follows.
 
-**The client.** We need to build a signed payment URL, verify a webhook
-signature, and (for the sandbox test) make one query call. That is
+**The client.** We need to build a signed payment URL and verify a webhook
+signature. That is
 HMAC-SHA512 over a sorted, URL-encoded parameter string plus a fixed
 parameter list — roughly two hundred lines. The usual reason to reach for an
 SDK is that the protocol is large or fiddly; this slice of it is not. On the
@@ -81,13 +81,13 @@ endpoint exists.
   rather than a refactor (NFR-MAINT-001/002).
 - Fulfilment cannot be forged by a crafted redirect, and the outcome
   survives a closed tab (BR-PAY-001).
-- Our own sandbox tests exercise the real signing and query code against
+- Our own sandbox test exercises the real signing code against
   VNPay staging instead of against a mock of it.
 
 **Negative / trade-offs:**
 - We own the protocol correctness: a VNPay-side parameter or hashing change
   is our bug to find, with no upstream library to upgrade to. Mitigated by
-  keeping the wire format in one class and by the real-call sandbox tests.
+  keeping the wire format in one class and by the real-call sandbox test.
 - The secure-hash secret is now handled by our own code rather than a
   library's, so a leak is our exposure. Mitigated by NFR-SEC-001
   (environment-only, never logged, never returned).

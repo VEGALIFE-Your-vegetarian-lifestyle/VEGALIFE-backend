@@ -56,8 +56,8 @@ requirements rather than implementation detail.
 - Subscription downgrade, cancellation, pause, or proration — separate issue.
 - Trial periods (issue #16 non-goal).
 - Refunds, chargebacks, and QueryDR-driven reconciliation in production code.
-  `VnpayClient.queryTransaction` exists only so the sandbox test can make a
-  real signed call against staging; no scheduled reconciliation job ships.
+  The client speaks only the pay-URL and IPN sides of the protocol; no
+  scheduled reconciliation job ships.
 - A backend "return" endpoint. VNPay redirects the browser to a
   **frontend** result page; that page is display-only and never mutates
   state (BR-PAY-001).
@@ -225,8 +225,8 @@ Package-by-layer, mirroring the subscription feature:
   `vnp_TransactionNo` once known.
 - **`infrastructure/payment/vnpay/`** — `VnpayProperties`
   (`@ConfigurationProperties("app.payments.vnpay")`), `VnpaySigner`
-  (build/query/verify HMAC-SHA512, no Spring types), `VnpayClient`
-  (`buildPaymentUrl`, `queryTransaction` via `RestClient`), and
+  (build/verify HMAC-SHA512, no Spring types), `VnpayClient`
+  (`createPaymentUrl`, `verifyCallback`), and
   `VnpayPaymentGateway implements PaymentGateway`. This is the only package
   that knows VNPay's wire format.
 - **`service/payment/`** — `PaymentCheckoutService` (FR-001…FR-006) and
@@ -338,8 +338,8 @@ downgrade/cancel, and trials.
   hints** — it must call `GET /api/subscriptions/me` for the authoritative
   tier, because the return URL can be edited by the user (BR-PAY-001).
 - **No reconciliation job.** If an IPN is lost entirely (VNPay gives up
-  after ten retries), a payment could be taken but never fulfilled. QueryDR
-  exists in the client but nothing calls it on a schedule; a reconciliation
+  after ten retries), a payment could be taken but never fulfilled. The
+  client does not speak QueryDR at all; a reconciliation
   sweeper is a sensible follow-up, not part of #16.
 - **`renewal_date` will drift from the quota window** for mid-month
   subscribers, exactly as BR-SUBS-001 already documents. This feature sets

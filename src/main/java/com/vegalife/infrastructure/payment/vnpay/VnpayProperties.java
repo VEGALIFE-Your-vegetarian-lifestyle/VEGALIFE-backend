@@ -27,12 +27,5 @@ public class VnpayProperties {
 
   private String paymentUrl = "";
 
-  /**
-   * QueryDR endpoint. No profile ships a value and no production code calls it (ADR-008 keeps
-   * QueryDR out of fulfilment); only the sandbox test sets it programmatically to prove our HMAC
-   * against the real gateway.
-   */
-  private String queryUrl = "";
-
   private String locale = "vn";
 }
