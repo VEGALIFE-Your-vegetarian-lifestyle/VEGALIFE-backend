@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html xmlns:th="https://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Payment Receipt - Vegalife</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px;">
+        <h1 style="color: #2c7a7b; margin-bottom: 20px;">Payment Receipt 🌱</h1>
+
+        <p style="font-size: 16px; margin-bottom: 16px;">Hi <span th:text="${username}">User</span>,</p>
+
+        <p style="font-size: 16px; margin-bottom: 16px;">Thanks for your purchase! Your payment for
+            <strong th:text="${planName}">PRO</strong> was successful and your plan is now active.</p>
+
+        <div style="background-color: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; margin: 24px 0;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 15px;">
+                <tr>
+                    <td style="padding: 6px 0; color: #666;">Plan</td>
+                    <td style="padding: 6px 0; text-align: right;"><strong th:text="${planName}">PRO</strong></td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #666;">Amount</td>
+                    <td style="padding: 6px 0; text-align: right;"><strong
+                            th:text="${#numbers.formatInteger(amount, 0, 'COMMA') + ' ' + currency}">100,000 VND</strong></td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #666;">Paid at</td>
+                    <td style="padding: 6px 0; text-align: right;" th:text="${paidAt}">2026-10-04T12:00:00Z</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #666;">Reference</td>
+                    <td style="padding: 6px 0; text-align: right; font-family: monospace;"
+                        th:text="${reference}">txnref</td>
+                </tr>
+            </table>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+
+        <p style="font-size: 14px; color: #666; margin-bottom: 8px;">Keep this email as your proof of purchase.</p>
+        <p style="font-size: 14px; color: #666; margin-bottom: 8px;">If you didn't make this purchase, contact support immediately.</p>
+
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+            <p style="font-size: 12px; color: #999; margin: 0;">&copy; 2026 Vegalife. All rights reserved.</p>
+            <p style="font-size: 12px; color: #999; margin: 8px 0 0;">A social platform for the vegan community.</p>
+        </div>
+    </div>
+</body>
+</html>

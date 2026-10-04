@@ -1,6 +1,7 @@
 package com.vegalife.infrastructure.email;
 
 import com.vegalife.service.email.EmailService;
+import com.vegalife.service.outbound.OutboundEmailPayload;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -78,6 +79,38 @@ public class SmtpEmailServiceImpl implements EmailService {
     } catch (MessagingException e) {
       log.error("Failed to send password reset email to: {}", to, e);
       throw new RuntimeException("Failed to send password reset email", e);
+    }
+  }
+
+  @Override
+  public void sendPaymentReceipt(String to, String username, OutboundEmailPayload.Receipt receipt) {
+    if (receipt == null) {
+      throw new IllegalArgumentException("Payment receipt details are required");
+    }
+    try {
+      MimeMessage message = mailSender.createMimeMessage();
+      MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+      applyFrom(helper);
+
+      helper.setTo(to);
+      helper.setSubject("Your payment receipt - Vegalife");
+
+      Context context = new Context();
+      context.setVariable("username", username);
+      context.setVariable("planName", receipt.planName());
+      context.setVariable("amount", receipt.amount());
+      context.setVariable("currency", receipt.currency());
+      context.setVariable("paidAt", receipt.paidAt());
+      context.setVariable("reference", receipt.reference());
+
+      String htmlContent = templateEngine.process("email/payment-receipt", context);
+      helper.setText(htmlContent, true);
+
+      mailSender.send(message);
+      log.info("Payment receipt email sent to: {}", to);
+    } catch (MessagingException e) {
+      log.error("Failed to send payment receipt email to: {}", to, e);
+      throw new RuntimeException("Failed to send payment receipt email", e);
     }
   }
 
