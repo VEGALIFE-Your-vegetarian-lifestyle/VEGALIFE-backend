@@ -35,3 +35,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `posts-feed.md`                     | Global Post Feed                          | In progress | 2026-10-02 |
 | `delete-media-api.md`               | Delete Media API (soft delete + async purge) | Implemented | 2026-10-03 |
 | `subscription-api.md`               | AI Subscription APIs (Own + Available Plans) | In progress | 2026-10-04 |
+| `subscription-purchase.md`          | Purchase AI Subscription (VNPay Checkout) | In progress | 2026-10-04 |

@@ -107,4 +107,29 @@ public class SubscriptionService {
         .map(subscriptionMapper::toAvailablePlan)
         .toList();
   }
+
+  /**
+   * Fulfils a successful payment: upserts the member's subscription onto the purchased plan
+   * (BR-PAY-008). On upgrade the existing row keeps its {@code started_at} and moves {@code
+   * renewal_date} to paid time plus one calendar month, in UTC. The only writer of {@code
+   * renewal_date}.
+   */
+  @Transactional
+  public AiSubscription activatePlan(UUID userId, UUID planId, Instant paidAt) {
+    AiSubscription subscription =
+        subscriptionRepository
+            .findByUserId(userId)
+            .orElseGet(() -> AiSubscription.builder().userId(userId).startedAt(paidAt).build());
+    subscription.setPlanId(planId);
+    subscription.setStatus(AiSubscription.Status.active);
+    subscription.setRenewalDate(paidAt.atZone(ZoneOffset.UTC).plusMonths(1).toInstant());
+    AiSubscription saved = subscriptionRepository.save(subscription);
+    log.info(
+        "Activated plan {} for user {} (paidAt={}, renewalDate={})",
+        planId,
+        userId,
+        paidAt,
+        saved.getRenewalDate());
+    return saved;
+  }
 }

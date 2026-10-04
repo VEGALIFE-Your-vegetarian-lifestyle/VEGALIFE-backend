@@ -115,6 +115,15 @@ app:
       api-key: ${HF_TOKEN:}
       timeout: 30s
 
+  payments:
+    # Browser page the gateway redirects to after payment; frontend-owned, never an API path.
+    return-url: ${PAYMENT_RETURN_URL:http://localhost:3000/payment/result}
+    checkout-ttl: 30m
+    # Gateway credentials and endpoint are profile-scoped on purpose: only
+    # application-dev.yml ships the VNPay sandbox payment URL, so production must
+    # supply VNPAY_PAYMENT_URL alongside the credentials itself.
+    # Checkout fails fast while these are blank (FR-019); the IPN endpoint does not.
+
 logging:
   level:
     com.vegalife: DEBUG
