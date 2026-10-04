@@ -39,3 +39,16 @@ logging:
     com.vegalife: DEBUG
     org.springframework.web: DEBUG
     org.hibernate.SQL: DEBUG
+
+app:
+  payments:
+    vnpay:
+      # Sandbox is the default for local runs; credentials come from the env and
+      # stay blank until set, so checkout answers 500 (FR-019) rather than signing
+      # with an empty secret.
+      enabled: true
+      tmn-code: ${VNPAY_TMN_CODE:}
+      secure-hash-secret: ${VNPAY_SECURE_HASH_SECRET:}
+      payment-url: ${VNPAY_PAYMENT_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      query-url: ${VNPAY_QUERY_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
+      locale: vn
