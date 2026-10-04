@@ -211,7 +211,7 @@ public class PaymentWebhookService {
   /** FR-010: notified amount (hundredths of VND) must equal the ledger amount exactly. */
   private static boolean amountMatches(String notifiedAmount, PaymentLedger ledger) {
     try {
-      return Long.parseLong(notifiedAmount.trim()) / 100L == ledger.getAmount();
+      return Long.parseLong(notifiedAmount.trim()) == ledger.getAmount() * 100L;
     } catch (NumberFormatException e) {
       return false;
     }
