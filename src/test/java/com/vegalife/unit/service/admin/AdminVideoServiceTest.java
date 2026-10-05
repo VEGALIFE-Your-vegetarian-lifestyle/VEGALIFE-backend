@@ -91,7 +91,6 @@ class AdminVideoServiceTest {
             .user(uploader)
             .title("Vegan chili")
             .content("A hearty chili recipe")
-            .type(Post.Type.blog)
             .status(Post.Status.published)
             .flag(Post.Flag.PASSED)
             .viewCount(7)

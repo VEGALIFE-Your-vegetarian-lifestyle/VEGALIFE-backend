@@ -112,6 +112,8 @@ class AdminRecipeControllerIntegrationTest {
                 .user(author2)
                 .title("Bowl post")
                 .content("Post content")
+                .rawContent(
+                    com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .categories(new HashSet<>(Set.of(recipes)))
                 .status(Post.Status.published)
                 .flag(Post.Flag.PASSED)
@@ -205,6 +207,8 @@ class AdminRecipeControllerIntegrationTest {
                 .user(member)
                 .title("Post in recipes")
                 .content("Content")
+                .rawContent(
+                    com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .categories(new HashSet<>(Set.of(recipes)))
                 .status(Post.Status.published)
                 .viewCount(0)
@@ -215,6 +219,8 @@ class AdminRecipeControllerIntegrationTest {
                 .user(member)
                 .title("Second post in recipes")
                 .content("Content")
+                .rawContent(
+                    com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .categories(new HashSet<>(Set.of(recipes)))
                 .status(Post.Status.published)
                 .viewCount(0)
@@ -225,6 +231,8 @@ class AdminRecipeControllerIntegrationTest {
                 .user(member)
                 .title("Post in snacks")
                 .content("Content")
+                .rawContent(
+                    com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .categories(new HashSet<>(Set.of(snacks)))
                 .status(Post.Status.published)
                 .viewCount(0)

@@ -194,8 +194,8 @@ class PostContentFilterIntegrationTest {
                     """
                     {
                       "title": "Draft notes post",
-                      "type": "blog",
-                      "content": "A draft body that stays unpublished for now."
+                      "content": "A draft body that stays unpublished for now.",
+                      "rawContent": {}
                     }
                     """))
         .andExpect(status().isCreated())
@@ -231,7 +231,8 @@ class PostContentFilterIntegrationTest {
                 .content(
                     """
                     {
-                      "content": "An updated article body with plenty of words and no links at all."
+                      "content": "An updated article body with plenty of words and no links at all.",
+                      "rawContent": {}
                     }
                     """))
         .andExpect(status().isOk())
@@ -269,7 +270,8 @@ class PostContentFilterIntegrationTest {
                 .content(
                     """
                     {
-                      "content": "A clean rewritten article about plant-based cooking ideas."
+                      "content": "A clean rewritten article about plant-based cooking ideas.",
+                      "rawContent": {}
                     }
                     """))
         .andExpect(status().isOk())
@@ -300,7 +302,8 @@ class PostContentFilterIntegrationTest {
                 .content(
                     """
                     {
-                      "content": "Someone else changed this content body completely."
+                      "content": "Someone else changed this content body completely.",
+                      "rawContent": {}
                     }
                     """))
         .andExpect(status().isNotFound());
@@ -325,8 +328,8 @@ class PostContentFilterIntegrationTest {
                     """
                     {
                       "title": "Timeline flag post",
-                      "type": "blog",
                       "content": "A published article whose flag must be visible everywhere.",
+                      "rawContent": {},
                       "categoryIds": ["%s"],
                       "publish": true
                     }
@@ -356,7 +359,9 @@ class PostContentFilterIntegrationTest {
                 .content(
                     """
                     {
-                      "title": "Timeline flag post edited"
+                      "title": "Timeline flag post edited",
+                      "content": "A published article whose flag must be visible everywhere.",
+                      "rawContent": {}
                     }
                     """))
         .andExpect(status().isOk())
@@ -386,8 +391,8 @@ class PostContentFilterIntegrationTest {
                     """
                     {
                       "title": "%s",
-                      "type": "blog",
                       "content": "%s",
+                      "rawContent": {},
                       "categoryIds": ["%s"],
                       "publish": true
                     }

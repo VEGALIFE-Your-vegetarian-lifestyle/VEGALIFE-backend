@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
@@ -99,8 +100,8 @@ class PostControllerIntegrationTest {
                     """
                     {
                       "title": "Vegan tofu bowl",
-                      "type": "blog",
                       "content": "A simple plant-based lunch.",
+                      "rawContent": {"type": "doc"},
                       "featuredImageUrl": "https://example.com/tofu-bowl.jpg"
                     }
                     """))
@@ -108,6 +109,7 @@ class PostControllerIntegrationTest {
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Post created successfully"))
         .andExpect(jsonPath("$.data.title").value("Vegan tofu bowl"))
+        .andExpect(jsonPath("$.data.rawContent.type").value("doc"))
         .andExpect(jsonPath("$.data.status").value("created"))
         .andExpect(jsonPath("$.data.viewCount").value(0));
 
@@ -130,8 +132,8 @@ class PostControllerIntegrationTest {
                     """
                     {
                       "title": "Vegan tofu bowl",
-                      "type": "blog",
                       "content": "A simple plant-based lunch.",
+                      "rawContent": {},
                       "categoryIds": ["%s"],
                       "publish": true
                     }
@@ -140,7 +142,6 @@ class PostControllerIntegrationTest {
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.data.status").value("created"))
         .andExpect(jsonPath("$.data.flag").value("PENDING"))
-        .andExpect(jsonPath("$.data.type").value("blog"))
         .andExpect(jsonPath("$.data.categoryIds[0]").value(category.getId().toString()));
 
     Post queuedPost = postRepository.findAll().getFirst();
@@ -163,19 +164,44 @@ class PostControllerIntegrationTest {
             post("/api/posts")
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"title\":\"T\",\"type\":\"blog\",\"content\":\"C\",\"publish\":true}"))
+                .content("{\"title\":\"T\",\"content\":\"C\",\"rawContent\":{},\"publish\":true}"))
         .andExpect(status().isBadRequest());
   }
 
   @Test
-  void createPost_videoWithoutFileOrLink_returns400() throws Exception {
+  void createPost_withoutRawContent_returns400() throws Exception {
     mockMvc
         .perform(
             post("/api/posts")
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"title\":\"T\",\"type\":\"video\"}"))
-        .andExpect(status().isBadRequest());
+                .content("{\"title\":\"T\",\"content\":\"C\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+  }
+
+  @Test
+  void createPost_withRawContentNotAnObject_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/posts")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"T\",\"content\":\"C\",\"rawContent\":\"not-an-object\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+  }
+
+  @Test
+  void createPost_withBlankContent_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/posts")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"T\",\"content\":\" \",\"rawContent\":{}}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Validation failed"));
   }
 
   @Test
@@ -195,7 +221,7 @@ class PostControllerIntegrationTest {
             post("/api/posts")
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"title\":\" \",\"type\":\"blog\",\"content\":\"Test content\"}"))
+                .content("{\"title\":\" \",\"content\":\"Test content\",\"rawContent\":{}}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.message").value("Validation failed"));
   }
@@ -217,7 +243,9 @@ class PostControllerIntegrationTest {
             patch("/api/posts/{postId}", existingPost.getId())
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"title\":\"New title\",\"content\":null,\"featuredImageUrl\":null}"))
+                .content(
+                    "{\"title\":\"New title\",\"content\":\"Keep this content\",\"rawContent\":{},"
+                        + "\"featuredImageUrl\":null}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Post updated successfully"))
@@ -250,7 +278,8 @@ class PostControllerIntegrationTest {
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    "{\"content\":\"Updated content\",\"featuredImageUrl\":\"https://example.com/new.jpg\"}"))
+                    "{\"content\":\"Updated content\",\"rawContent\":{},"
+                        + "\"featuredImageUrl\":\"https://example.com/new.jpg\"}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.title").value("Post title"))
         .andExpect(jsonPath("$.data.content").value("Updated content"))
@@ -277,7 +306,7 @@ class PostControllerIntegrationTest {
             patch(path)
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"title\":\" \"}"))
+                .content("{\"title\":\" \",\"content\":\"Valid content\",\"rawContent\":{}}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.message").value("Validation failed"));
 
@@ -295,7 +324,7 @@ class PostControllerIntegrationTest {
             patch(path)
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"content\":\" \"}"))
+                .content("{\"content\":\" \",\"rawContent\":{}}"))
         .andExpect(status().isBadRequest());
 
     mockMvc
@@ -303,7 +332,18 @@ class PostControllerIntegrationTest {
             patch(path)
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"title\":\"" + "x".repeat(256) + "\"}"))
+                .content(
+                    "{\"title\":\""
+                        + "x".repeat(256)
+                        + "\",\"content\":\"Valid content\",\"rawContent\":{}}"))
+        .andExpect(status().isBadRequest());
+
+    mockMvc
+        .perform(
+            patch(path)
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"Valid content\",\"rawContent\":\"not-an-object\"}"))
         .andExpect(status().isBadRequest());
   }
 
@@ -311,7 +351,7 @@ class PostControllerIntegrationTest {
   void updatePost_whenPostIsMissingDeletedOrOwnedByAnotherUser_returns404() throws Exception {
     Post deletedPost = createPost(user, "Deleted post", Post.Status.created, Instant.now());
     Post otherUsersPost = createPost(otherUser, "Other user's post", Post.Status.created, null);
-    String body = "{\"title\":\"New title\"}";
+    String body = "{\"title\":\"New title\",\"content\":\"New content\",\"rawContent\":{}}";
 
     mockMvc
         .perform(
@@ -343,20 +383,6 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  void updatePost_changingTypeReturns400() throws Exception {
-    Post existingPost = createPost(user, "Post title", Post.Status.created, null);
-
-    mockMvc
-        .perform(
-            patch("/api/posts/{postId}", existingPost.getId())
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"type\":\"video\"}"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").value("Post type cannot be changed"));
-  }
-
-  @Test
   void updatePost_publishQueuesDraftForFilteringWhenCategoryAssigned() throws Exception {
     Post existingPost = createPost(user, "Post title", Post.Status.created, null);
     Category category = categoryRepository.saveAndFlush(Category.builder().name("Recipes").build());
@@ -366,7 +392,10 @@ class PostControllerIntegrationTest {
             patch("/api/posts/{postId}", existingPost.getId())
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"categoryIds\":[\"%s\"],\"publish\":true}".formatted(category.getId())))
+                .content(
+                    "{\"content\":\"Post content\",\"rawContent\":{},\"categoryIds\":[\"%s\"],"
+                            .formatted(category.getId())
+                        + "\"publish\":true}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.status").value("created"))
         .andExpect(jsonPath("$.data.flag").value("PENDING"))
@@ -387,7 +416,7 @@ class PostControllerIntegrationTest {
             patch("/api/posts/{postId}", existingPost.getId())
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"publish\":true}"))
+                .content("{\"content\":\"Post content\",\"rawContent\":{},\"publish\":true}"))
         .andExpect(status().isBadRequest());
   }
 
@@ -401,7 +430,9 @@ class PostControllerIntegrationTest {
             patch("/api/posts/{postId}", otherUsersPost.getId())
                 .header("Authorization", "Bearer " + jwtTokenService.generateAccessToken(admin))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"title\":\"Moderated title\"}"))
+                .content(
+                    "{\"title\":\"Moderated title\",\"content\":\"Post content\","
+                        + "\"rawContent\":{}}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.title").value("Moderated title"));
 
@@ -512,7 +543,7 @@ class PostControllerIntegrationTest {
             patch("/api/posts/{postId}", published.getId())
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"publish\":true}"))
+                .content("{\"content\":\"Post content\",\"rawContent\":{},\"publish\":true}"))
         .andExpect(status().isBadRequest());
 
     mockMvc
@@ -762,6 +793,7 @@ class PostControllerIntegrationTest {
             .user(owner)
             .title(title)
             .content("Post content")
+            .rawContent(JsonNodeFactory.instance.objectNode())
             .status(status)
             .viewCount(0)
             .deletedAt(deletedAt)

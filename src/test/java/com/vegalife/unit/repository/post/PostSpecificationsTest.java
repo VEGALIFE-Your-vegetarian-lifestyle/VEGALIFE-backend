@@ -184,6 +184,7 @@ class PostSpecificationsTest {
             .user(owner)
             .title(title)
             .content("Post content")
+            .rawContent(com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
             .status(status)
             .flag(Post.Flag.PENDING)
             .viewCount(0)

@@ -446,6 +446,8 @@ class MediaControllerIntegrationTest {
                 .user(user)
                 .title("Post with mixed media")
                 .content("Body")
+                .rawContent(
+                    com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .status(Post.Status.published)
                 .viewCount(0)
                 .media(new HashSet<>(Set.of(live, deleted)))
