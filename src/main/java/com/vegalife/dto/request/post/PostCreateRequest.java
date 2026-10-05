@@ -1,6 +1,7 @@
 package com.vegalife.dto.request.post;
 
-import com.vegalife.model.post.Post;
+import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -21,18 +22,15 @@ public class PostCreateRequest {
   @Size(max = 255, message = "Title must not exceed 255 characters")
   private String title;
 
-  @NotNull(message = "Type is required (blog or video)")
-  private Post.Type type;
-
-  /** Required for blog posts (BR-CONTENT-002); optional description for videos. */
+  /** Plain text used as the semantic-filtering input. */
+  @NotBlank(message = "Content is required")
   private String content;
 
+  /** Rich-text document produced by the frontend editor. */
+  @NotNull(message = "Raw content is required")
+  private JsonNode rawContent;
+
   private String featuredImageUrl;
-
-  /** Video posts need either an external link or an uploaded media (BR-CONTENT-002). */
-  private String videoUrl;
-
-  private UUID mediaId;
 
   private Set<UUID> categoryIds;
 
@@ -42,4 +40,9 @@ public class PostCreateRequest {
    * passes (FR-007).
    */
   private boolean publish;
+
+  @AssertTrue(message = "Raw content must be a JSON object")
+  public boolean isRawContentObject() {
+    return rawContent == null || rawContent.isObject();
+  }
 }

@@ -1,5 +1,6 @@
 package com.vegalife.dto.response.post;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
@@ -16,10 +17,8 @@ public class PostListResponse {
 
   private UUID id;
   private String title;
-  private String type;
-  private String content;
+  private JsonNode rawContent;
   private String featuredImageUrl;
-  private String videoUrl;
   private Set<UUID> categoryIds;
   private Set<UUID> mediaIds;
   private String status;
