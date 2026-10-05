@@ -223,6 +223,31 @@ class PostServiceTest {
     verify(postRepository, never()).saveAndFlush(post);
   }
 
+  @Test
+  void getPost_publishedPostIsReturnedRegardlessOfOwnership() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.published);
+    PostListResponse expectedResponse = PostListResponse.builder().id(postId).build();
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+        .thenReturn(Optional.of(existing));
+    when(postMapper.toListResponse(existing)).thenReturn(expectedResponse);
+
+    PostListResponse response = postService.getPost(postId);
+
+    assertThat(response).isSameAs(expectedResponse);
+  }
+
+  @Test
+  void getPost_nonPublishedOrUnknownPostThrowsNotFound() {
+    UUID postId = UUID.randomUUID();
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> postService.getPost(postId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Post not found");
+  }
+
   private Post ownedPost(UUID postId, Post.Status status) {
     return Post.builder()
         .id(postId)

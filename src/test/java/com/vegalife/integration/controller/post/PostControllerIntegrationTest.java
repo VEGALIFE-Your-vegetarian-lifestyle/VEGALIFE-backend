@@ -90,6 +90,62 @@ class PostControllerIntegrationTest {
   }
 
   @Test
+  void getPost_returnsAnotherUsersPublishedPost() throws Exception {
+    Post published = createPost(otherUser, "Someone else's post", Post.Status.published, null);
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", published.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Post retrieved successfully"))
+        .andExpect(jsonPath("$.data.id").value(published.getId().toString()))
+        .andExpect(jsonPath("$.data.title").value("Someone else's post"));
+  }
+
+  @Test
+  void getPost_ownNonPublishedPostReturns404() throws Exception {
+    Post draft = createPost(user, "My draft", Post.Status.created, null);
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", draft.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Post not found"));
+  }
+
+  @Test
+  void getPost_softDeletedPostReturns404() throws Exception {
+    Post deleted = createPost(user, "Gone", Post.Status.published, Instant.now());
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", deleted.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void getPost_unknownIdReturns404() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", UUID.randomUUID())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void getPost_withoutJwt_returns401() throws Exception {
+    Post published = createPost(user, "Published", Post.Status.published, null);
+
+    mockMvc
+        .perform(get("/api/posts/{postId}", published.getId()))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
   void createPost_createsPostForAuthenticatedUser() throws Exception {
     mockMvc
         .perform(
