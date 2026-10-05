@@ -173,6 +173,20 @@ public class PostService {
     return postMapper.toListResponse(saved);
   }
 
+  /**
+   * BR-POST-011: a single post is visible to any authenticated caller once it is published;
+   * visibility depends only on {@code status}, never on ownership — the owner's own non-published
+   * post is not found either.
+   */
+  @Transactional(readOnly = true)
+  public PostListResponse getPost(UUID postId) {
+    Post post =
+        postRepository
+            .findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published)
+            .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+    return postMapper.toListResponse(post);
+  }
+
   /** Owner sees own posts; an Administrator sees every non-deleted post. */
   private Post findManageablePost(UUID actorId, boolean isAdmin, UUID postId) {
     return (isAdmin
