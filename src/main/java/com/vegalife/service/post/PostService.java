@@ -13,12 +13,10 @@ import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
-import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
-import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.shared.dto.PageResponse;
@@ -48,7 +46,6 @@ public class PostService {
   private final PostRepository postRepository;
   private final UserRepository userRepository;
   private final CategoryRepository categoryRepository;
-  private final MediaRepository mediaRepository;
   private final ModerationLogRepository moderationLogRepository;
   private final OutboundMessageRepository outboundMessageRepository;
   private final PostMapper postMapper;
@@ -61,23 +58,15 @@ public class PostService {
             .findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-    validateTypeSpecificFields(request);
     Set<Category> categories = resolveCategories(request.getCategoryIds());
     if (request.isPublish() && categories.isEmpty()) {
       throw new ValidationException(CATEGORY_REQUIRED_TO_PUBLISH);
     }
-    Media media = resolveMedia(request.getMediaId());
 
     Post post = postMapper.toEntity(request);
     post.setUser(user);
     post.setViewCount(0);
     post.setCategories(categories);
-    if (media != null) {
-      post.setMedia(new HashSet<>(Set.of(media)));
-    }
-    if (post.getContent() == null) {
-      post.setContent("");
-    }
 
     // BR-CONTENT-003 / FR-007: a post never becomes visible directly. With publish=true it is
     // queued for content filtering (BR-FILTER-005) and the filter callback publishes it once it
@@ -105,35 +94,16 @@ public class PostService {
       UUID actorId, boolean isAdmin, UUID postId, PostUpdateRequest request) {
     Post post = findManageablePost(actorId, isAdmin, postId);
 
-    // BR-CONTENT-002: the type is fixed at creation.
-    if (request.getType() != null && request.getType() != post.getType()) {
-      throw new ValidationException("Post type cannot be changed");
-    }
-    boolean isVideo = post.getType() == Post.Type.video;
-    if (!isVideo && (request.getVideoUrl() != null || request.getMediaId() != null)) {
-      throw new ValidationException("A blog post cannot have a video");
-    }
-
     // FR-003: detected before the fields below are overwritten.
     boolean contentChanged = isContentChanged(post, request);
 
     if (request.getTitle() != null) {
       post.setTitle(request.getTitle());
     }
-    if (request.getContent() != null) {
-      post.setContent(request.getContent());
-    }
+    post.setContent(request.getContent());
+    post.setRawContent(request.getRawContent());
     if (request.getFeaturedImageUrl() != null) {
       post.setFeaturedImageUrl(request.getFeaturedImageUrl());
-    }
-    if (request.getVideoUrl() != null) {
-      if (request.getVideoUrl().isBlank()) {
-        throw new ValidationException("Video link must not be blank");
-      }
-      post.setVideoUrl(request.getVideoUrl());
-    }
-    if (request.getMediaId() != null) {
-      post.setMedia(new HashSet<>(Set.of(resolveMedia(request.getMediaId()))));
     }
     if (request.getCategoryIds() != null) {
       post.setCategories(resolveCategories(request.getCategoryIds()));
@@ -225,12 +195,12 @@ public class PostService {
   }
 
   /**
-   * BR-CONTENT-003: a post may be published only when it has the information its type requires and
-   * at least one active category; unpublishing returns it to a private draft (also when it was
-   * {@code flagged}, so a withdrawn flagged post never re-queues implicitly). A post that is (or
-   * becomes, via a content re-queue) published is re-checked so an edit cannot leave it without a
-   * category. Nothing is ever flipped to {@code published} here — that happens only when the
-   * content filter passes (FR-007 / Phase 9).
+   * BR-CONTENT-003: a post may be published only when it has at least one active category;
+   * unpublishing returns it to a private draft (also when it was {@code flagged}, so a withdrawn
+   * flagged post never re-queues implicitly). A post that is (or becomes, via a content re-queue)
+   * published is re-checked so an edit cannot leave it without a category. Nothing is ever flipped
+   * to {@code published} here — that happens only when the content filter passes (FR-007 / Phase
+   * 9).
    *
    * @param willRequeue whether this update also re-queues the post for content filtering, so a
    *     flagged post being re-checked is validated as if it were published
@@ -242,11 +212,6 @@ public class PostService {
     if (willBePublished) {
       if (post.getCategories().isEmpty()) {
         throw new ValidationException(CATEGORY_REQUIRED_TO_PUBLISH);
-      }
-      if (post.getType() == Post.Type.video
-          && isBlank(post.getVideoUrl())
-          && post.getMedia().isEmpty()) {
-        throw new ValidationException("A video post requires a video file or link");
       }
     }
     if (publish == null) {
@@ -274,17 +239,12 @@ public class PostService {
         && (post.getStatus() == Post.Status.published || post.getStatus() == Post.Status.flagged);
   }
 
-  /** FR-003: only a title, content or media change counts as a content change. */
+  /** FR-003: only a title or content change counts as a content change. */
   private boolean isContentChanged(Post post, PostUpdateRequest request) {
     boolean titleChanged =
         request.getTitle() != null && !request.getTitle().equals(post.getTitle());
-    boolean contentChanged =
-        request.getContent() != null && !request.getContent().equals(post.getContent());
-    boolean mediaChanged =
-        request.getMediaId() != null
-            && post.getMedia().stream()
-                .noneMatch(media -> request.getMediaId().equals(media.getId()));
-    return titleChanged || contentChanged || mediaChanged;
+    boolean contentChanged = !request.getContent().equals(post.getContent());
+    return titleChanged || contentChanged;
   }
 
   /**
@@ -352,20 +312,6 @@ public class PostService {
     return PageResponse.from(posts.map(postMapper::toListResponse));
   }
 
-  /** BR-CONTENT-002: a blog needs written content, a video needs a file or a link. */
-  private void validateTypeSpecificFields(PostCreateRequest request) {
-    if (request.getType() == Post.Type.blog) {
-      if (isBlank(request.getContent())) {
-        throw new ValidationException("Content is required for a blog post");
-      }
-      if (!isBlank(request.getVideoUrl()) || request.getMediaId() != null) {
-        throw new ValidationException("A blog post cannot have a video");
-      }
-    } else if (isBlank(request.getVideoUrl()) && request.getMediaId() == null) {
-      throw new ValidationException("A video post requires a video file or link");
-    }
-  }
-
   /** BR-CONTENT-004: only existing, active categories may be assigned. */
   private Set<Category> resolveCategories(Set<UUID> ids) {
     if (ids == null || ids.isEmpty()) {
@@ -376,23 +322,5 @@ public class PostService {
       throw new ValidationException("One or more categories do not exist or are inactive");
     }
     return new HashSet<>(found);
-  }
-
-  private Media resolveMedia(UUID mediaId) {
-    if (mediaId == null) {
-      return null;
-    }
-    Media media =
-        mediaRepository.findByIdInAndDeletedAtIsNull(Set.of(mediaId)).stream()
-            .findFirst()
-            .orElseThrow(() -> new ResourceNotFoundException("Media not found"));
-    if (media.getStatus() != Media.Status.succeed) {
-      throw new ValidationException("Media upload has not completed");
-    }
-    return media;
-  }
-
-  private boolean isBlank(String value) {
-    return value == null || value.isBlank();
   }
 }
