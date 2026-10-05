@@ -38,3 +38,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `subscription-purchase.md`          | Purchase AI Subscription (VNPay Checkout) | In progress | 2026-10-04 |
 | `payment-status-api.md`             | Payment Status API (Poll after VNPay Redirect) | Implemented | 2026-10-04 |
 | `post-raw-content-migration.md`     | Post Schema — Rich-Text raw_content, Drop type/video_url | Implemented | 2026-10-05 |
+| `get-post-by-id.md`                 | View Post Detail API (Get Post by ID) | Implemented | 2026-10-05 |
