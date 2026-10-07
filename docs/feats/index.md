@@ -39,3 +39,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `payment-status-api.md`             | Payment Status API (Poll after VNPay Redirect) | Implemented | 2026-10-04 |
 | `subscription-lifecycle.md`         | AI Subscription Lifecycle (Cancel, Extension, Expiry) | In review | 2026-10-07 |
 | `payment-history.md`                | Payment History API (Member + Admin)     | Approved    | 2026-10-07 |
+| `ai-chat-send.md`                   | AI Chat Send (JSON + SSE Streaming)      | Approved    | 2026-10-07 |
