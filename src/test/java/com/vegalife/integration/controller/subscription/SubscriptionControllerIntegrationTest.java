@@ -17,11 +17,15 @@ import com.vegalife.repository.subscription.AiUsageRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -75,6 +79,8 @@ class SubscriptionControllerIntegrationTest {
   @Autowired private PaymentLedgerRepository paymentLedgerRepository;
 
   @Autowired private JwtTokenService jwtTokenService;
+
+  @PersistenceContext private EntityManager entityManager;
 
   private User testUser;
   private String accessToken;
@@ -363,6 +369,7 @@ class SubscriptionControllerIntegrationTest {
         .andExpect(jsonPath("$.data.status").value("cancelled"))
         .andExpect(jsonPath("$.data.cancelledAt").isNotEmpty());
 
+    entityManager.clear();
     List<AiSubscription> rows = subscriptionRepository.findAllByUserId(testUser.getId());
     assertThat(rows).hasSize(2);
     assertThat(rows)
@@ -389,5 +396,167 @@ class SubscriptionControllerIntegrationTest {
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(jsonPath("$.message").value("Subscription already cancelled"));
+  }
+
+  @Test
+  void getSubscriptionHistory_withoutAuthentication_returns401() throws Exception {
+    mockMvc
+        .perform(get("/api/subscriptions/me/history"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Unauthorized"));
+  }
+
+  @Test
+  void getSubscriptionHistory_withNoRows_returnsEmptyDefaultPage() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/subscriptions/me/history").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Subscription history retrieved successfully"))
+        .andExpect(jsonPath("$.data.content", hasSize(0)))
+        .andExpect(jsonPath("$.data.page").value(0))
+        .andExpect(jsonPath("$.data.size").value(20))
+        .andExpect(jsonPath("$.data.totalElements").value(0));
+  }
+
+  @Test
+  void getSubscriptionHistory_returnsNewestFirstScopedToUserAndHidesInternalFields()
+      throws Exception {
+    AiPlan freePlan = planRepository.findByCode("FREE").orElseThrow();
+    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
+
+    AiSubscription rowA =
+        subscriptionRepository.save(
+            AiSubscription.builder()
+                .userId(testUser.getId())
+                .planId(freePlan.getId())
+                .status(AiSubscription.Status.cancelled)
+                .startedAt(Instant.parse("2026-01-01T00:00:00Z"))
+                .cancelledAt(Instant.parse("2026-02-01T00:00:00Z"))
+                .build());
+    AiSubscription rowB =
+        subscriptionRepository.save(
+            AiSubscription.builder()
+                .userId(testUser.getId())
+                .planId(proPlan.getId())
+                .status(AiSubscription.Status.active)
+                .startedAt(Instant.parse("2026-02-01T00:00:00Z"))
+                .renewalDate(Instant.parse("2026-03-01T00:00:00Z"))
+                .build());
+    AiSubscription rowC =
+        subscriptionRepository.save(
+            AiSubscription.builder()
+                .userId(testUser.getId())
+                .planId(proPlan.getId())
+                .status(AiSubscription.Status.scheduled)
+                .startedAt(Instant.parse("2026-03-01T00:00:00Z"))
+                .renewalDate(Instant.parse("2026-04-01T00:00:00Z"))
+                .build());
+
+    // FR-009: another member's row must never leak into this history.
+    User otherUser =
+        userRepository.save(
+            User.builder()
+                .username("subuser2")
+                .email("sub2@example.com")
+                .passwordHash("$2a$10$test")
+                .role(User.Role.USER)
+                .status(User.Status.activated)
+                .emailVerified(true)
+                .build());
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(otherUser.getId())
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
+            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
+            .build());
+
+    backdate(rowA.getId(), Instant.parse("2026-01-01T00:00:00Z"));
+    backdate(rowB.getId(), Instant.parse("2026-02-01T00:00:00Z"));
+    backdate(rowC.getId(), Instant.parse("2026-03-01T00:00:00Z"));
+
+    mockMvc
+        .perform(
+            get("/api/subscriptions/me/history").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Subscription history retrieved successfully"))
+        .andExpect(jsonPath("$.data.content", hasSize(3)))
+        .andExpect(jsonPath("$.data.totalElements").value(3))
+        .andExpect(jsonPath("$.data.content[0].planCode").value("PRO"))
+        .andExpect(jsonPath("$.data.content[0].status").value("scheduled"))
+        .andExpect(jsonPath("$.data.content[0].createdAt").value("2026-03-01T00:00:00Z"))
+        .andExpect(jsonPath("$.data.content[1].planCode").value("PRO"))
+        .andExpect(jsonPath("$.data.content[1].status").value("active"))
+        .andExpect(jsonPath("$.data.content[1].createdAt").value("2026-02-01T00:00:00Z"))
+        .andExpect(jsonPath("$.data.content[2].planCode").value("FREE"))
+        .andExpect(jsonPath("$.data.content[2].status").value("cancelled"))
+        .andExpect(jsonPath("$.data.content[2].cancelledAt").isNotEmpty())
+        .andExpect(jsonPath("$.data.content[2].createdAt").value("2026-01-01T00:00:00Z"))
+        // NFR-SEC-001: history rows expose only the seven whitelisted fields.
+        .andExpect(jsonPath("$.data.content[0].id").doesNotExist())
+        .andExpect(jsonPath("$.data.content[0].userId").doesNotExist())
+        .andExpect(jsonPath("$.data.content[0].planId").doesNotExist())
+        .andExpect(jsonPath("$.data.content[0].extendedFromId").doesNotExist());
+  }
+
+  @Test
+  void getSubscriptionHistory_pageBeyondRange_returns200WithEmptyContent() throws Exception {
+    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(testUser.getId())
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
+            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
+            .build());
+
+    mockMvc
+        .perform(
+            get("/api/subscriptions/me/history")
+                .param("page", "5")
+                .param("size", "10")
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.content", hasSize(0)))
+        .andExpect(jsonPath("$.data.totalElements").value(1));
+  }
+
+  @Test
+  void getSubscriptionHistory_withInvalidPagingParams_returns400ValidationError() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/subscriptions/me/history")
+                .param("size", "0")
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+
+    mockMvc
+        .perform(
+            get("/api/subscriptions/me/history")
+                .param("page", "-1")
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+  }
+
+  private void backdate(UUID subscriptionId, Instant when) {
+    subscriptionRepository.flush();
+    entityManager
+        .createNativeQuery("UPDATE ai_subscription SET created_at = :ts WHERE id = :id")
+        .setParameter("ts", Timestamp.from(when))
+        .setParameter("id", subscriptionId)
+        .executeUpdate();
+    entityManager.flush();
+    entityManager.clear();
   }
 }

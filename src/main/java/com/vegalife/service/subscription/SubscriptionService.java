@@ -1,10 +1,12 @@
 package com.vegalife.service.subscription;
 
 import com.vegalife.dto.mapper.subscription.SubscriptionMapper;
+import com.vegalife.dto.request.subscription.SubscriptionHistoryRequest;
 import com.vegalife.dto.response.subscription.AvailablePlanResponse;
 import com.vegalife.dto.response.subscription.PaymentResponse;
 import com.vegalife.dto.response.subscription.PlanSummaryResponse;
 import com.vegalife.dto.response.subscription.SubscriptionCancelResponse;
+import com.vegalife.dto.response.subscription.SubscriptionHistoryResponse;
 import com.vegalife.dto.response.subscription.SubscriptionMeResponse;
 import com.vegalife.dto.response.subscription.SubscriptionUsageResponse;
 import com.vegalife.model.subscription.AiPlan;
@@ -14,15 +16,23 @@ import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.AiUsageRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
+import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -108,6 +118,39 @@ public class SubscriptionService {
     return planRepository.findByActiveTrueOrderBySortOrderAsc().stream()
         .map(subscriptionMapper::toAvailablePlan)
         .toList();
+  }
+
+  /**
+   * Answers FR-009: every subscription row ever created for the member, newest first, with each
+   * row's plan resolved in one extra page query. Exposes only the history fields (FR-009); the row
+   * id, plan id, user id, and extended-from link stay internal (NFR-SEC-001).
+   */
+  @Transactional(readOnly = true)
+  public PageResponse<SubscriptionHistoryResponse> getMySubscriptionHistory(
+      UUID userId, SubscriptionHistoryRequest request) {
+    Pageable pageable =
+        PageRequest.of(
+            request.getPage(), request.getSize(), Sort.by(Sort.Direction.DESC, "createdAt"));
+    Page<AiSubscription> page = subscriptionRepository.findByUserId(userId, pageable);
+
+    List<AiSubscription> rows = page.getContent();
+    Map<UUID, AiPlan> plans =
+        planRepository
+            .findAllById(rows.stream().map(AiSubscription::getPlanId).collect(Collectors.toSet()))
+            .stream()
+            .collect(Collectors.toMap(AiPlan::getId, Function.identity()));
+
+    Page<SubscriptionHistoryResponse> mapped =
+        page.map(
+            subscription -> {
+              AiPlan plan = plans.get(subscription.getPlanId());
+              if (plan == null) {
+                throw new IllegalStateException(
+                    "Plan of subscription not found: " + subscription.getPlanId());
+              }
+              return subscriptionMapper.toHistoryResponse(subscription, plan);
+            });
+    return PageResponse.from(mapped);
   }
 
   /**

@@ -6,6 +6,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -19,6 +21,8 @@ public interface AiSubscriptionRepository extends JpaRepository<AiSubscription, 
   Optional<AiSubscription> findByUserId(UUID userId);
 
   List<AiSubscription> findAllByUserId(UUID userId);
+
+  Page<AiSubscription> findByUserId(UUID userId, Pageable pageable);
 
   @Query(
       "select s from AiSubscription s"

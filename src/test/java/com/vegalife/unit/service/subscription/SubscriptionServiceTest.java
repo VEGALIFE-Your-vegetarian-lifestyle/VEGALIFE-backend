@@ -10,11 +10,13 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.mapper.subscription.SubscriptionMapper;
+import com.vegalife.dto.request.subscription.SubscriptionHistoryRequest;
 import com.vegalife.dto.response.subscription.AvailablePlanResponse;
 import com.vegalife.dto.response.subscription.PaymentResponse;
 import com.vegalife.dto.response.subscription.PlanPriceResponse;
 import com.vegalife.dto.response.subscription.PlanSummaryResponse;
 import com.vegalife.dto.response.subscription.SubscriptionCancelResponse;
+import com.vegalife.dto.response.subscription.SubscriptionHistoryResponse;
 import com.vegalife.dto.response.subscription.SubscriptionMeResponse;
 import com.vegalife.dto.response.subscription.SubscriptionUsageResponse;
 import com.vegalife.model.subscription.AiPlan;
@@ -25,12 +27,14 @@ import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.AiUsageRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.service.subscription.SubscriptionService;
+import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +43,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 @ExtendWith(MockitoExtension.class)
 class SubscriptionServiceTest {
@@ -527,5 +535,110 @@ class SubscriptionServiceTest {
         .hasMessage("Subscription already cancelled");
     verify(subscriptionRepository, never()).save(any(AiSubscription.class));
     verify(subscriptionRepository, never()).cancelScheduledForUser(any(), any(), any(), any());
+  }
+
+  @Test
+  void getMySubscriptionHistory_defaultsToPageZeroSizeTwentySortedByCreatedAtDesc() {
+    SubscriptionHistoryRequest request = new SubscriptionHistoryRequest();
+    when(subscriptionRepository.findByUserId(eq(userId), any(Pageable.class)))
+        .thenAnswer(
+            invocation -> new PageImpl<AiSubscription>(List.of(), invocation.getArgument(1), 0));
+
+    PageResponse<SubscriptionHistoryResponse> result =
+        subscriptionService.getMySubscriptionHistory(userId, request);
+
+    ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+    verify(subscriptionRepository).findByUserId(eq(userId), pageableCaptor.capture());
+    Pageable pageable = pageableCaptor.getValue();
+    assertThat(pageable.getPageNumber()).isZero();
+    assertThat(pageable.getPageSize()).isEqualTo(20);
+    assertThat(pageable.getSort()).containsExactly(Sort.Order.desc("createdAt"));
+
+    assertThat(result.getContent()).isEmpty();
+    assertThat(result.getPage()).isZero();
+    assertThat(result.getSize()).isEqualTo(20);
+    assertThat(result.getTotalElements()).isZero();
+    verify(planRepository).findAllById(Set.of());
+    verify(subscriptionRepository, never()).save(any(AiSubscription.class));
+    verifyNoInteractions(usageRepository, paymentLedgerRepository, subscriptionMapper);
+  }
+
+  @Test
+  void getMySubscriptionHistory_mapsRowsWithResolvedPlansAndPreservesPageMetadata() {
+    AiSubscription newer =
+        AiSubscription.builder()
+            .id(UUID.randomUUID())
+            .userId(userId)
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .startedAt(Instant.parse("2026-10-01T00:00:00Z"))
+            .renewalDate(Instant.parse("2026-11-01T00:00:00Z"))
+            .createdAt(Instant.parse("2026-10-01T00:00:00Z"))
+            .build();
+    AiSubscription older =
+        AiSubscription.builder()
+            .id(UUID.randomUUID())
+            .userId(userId)
+            .planId(freePlan.getId())
+            .status(AiSubscription.Status.cancelled)
+            .startedAt(Instant.parse("2026-01-01T00:00:00Z"))
+            .cancelledAt(Instant.parse("2026-02-01T00:00:00Z"))
+            .createdAt(Instant.parse("2026-01-01T00:00:00Z"))
+            .build();
+    SubscriptionHistoryResponse newerResponse =
+        SubscriptionHistoryResponse.builder().planCode("PRO").status("active").build();
+    SubscriptionHistoryResponse olderResponse =
+        SubscriptionHistoryResponse.builder().planCode("FREE").status("cancelled").build();
+
+    SubscriptionHistoryRequest request = new SubscriptionHistoryRequest();
+    request.setPage(1);
+    request.setSize(5);
+    when(subscriptionRepository.findByUserId(eq(userId), any(Pageable.class)))
+        .thenReturn(new PageImpl<>(List.of(newer, older), PageRequest.of(1, 5), 7));
+    when(planRepository.findAllById(Set.of(proPlan.getId(), freePlan.getId())))
+        .thenReturn(List.of(proPlan, freePlan));
+    when(subscriptionMapper.toHistoryResponse(newer, proPlan)).thenReturn(newerResponse);
+    when(subscriptionMapper.toHistoryResponse(older, freePlan)).thenReturn(olderResponse);
+
+    PageResponse<SubscriptionHistoryResponse> result =
+        subscriptionService.getMySubscriptionHistory(userId, request);
+
+    ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+    verify(subscriptionRepository).findByUserId(eq(userId), pageableCaptor.capture());
+    assertThat(pageableCaptor.getValue().getPageNumber()).isEqualTo(1);
+    assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(5);
+
+    assertThat(result.getContent()).containsExactly(newerResponse, olderResponse);
+    assertThat(result.getPage()).isEqualTo(1);
+    assertThat(result.getSize()).isEqualTo(5);
+    assertThat(result.getTotalElements()).isEqualTo(7);
+    assertThat(result.getTotalPages()).isEqualTo(2);
+    verify(planRepository).findAllById(Set.of(proPlan.getId(), freePlan.getId()));
+    verify(subscriptionRepository, never()).save(any(AiSubscription.class));
+    verifyNoInteractions(usageRepository, paymentLedgerRepository);
+  }
+
+  @Test
+  void getMySubscriptionHistory_whenPlanMissing_throwsIllegalState() {
+    AiSubscription row =
+        AiSubscription.builder()
+            .id(UUID.randomUUID())
+            .userId(userId)
+            .planId(UUID.randomUUID())
+            .status(AiSubscription.Status.active)
+            .createdAt(Instant.parse("2026-10-01T00:00:00Z"))
+            .build();
+    when(subscriptionRepository.findByUserId(eq(userId), any(Pageable.class)))
+        .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
+    when(planRepository.findAllById(any())).thenReturn(List.of());
+
+    assertThatThrownBy(
+            () ->
+                subscriptionService.getMySubscriptionHistory(
+                    userId, new SubscriptionHistoryRequest()))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Plan of subscription not found");
+
+    verifyNoInteractions(subscriptionMapper, usageRepository, paymentLedgerRepository);
   }
 }
