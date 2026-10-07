@@ -15,4 +15,10 @@ public interface AiMessageRepository extends JpaRepository<AiMessage, UUID> {
    * share NOW()). Reverse in the service to get chronological order for the prompt.
    */
   List<AiMessage> findTop20ByConversationIdOrderByCreatedAtDescIdDesc(UUID conversationId);
+
+  /**
+   * Full conversation history in chronological order (issue #115). The id tie-breaks rows sharing a
+   * created_at (user and assistant rows written in one transaction share NOW()).
+   */
+  List<AiMessage> findByConversationIdOrderByCreatedAtAscIdAsc(UUID conversationId);
 }
