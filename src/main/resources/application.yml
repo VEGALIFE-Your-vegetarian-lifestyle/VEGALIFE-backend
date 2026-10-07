@@ -12,8 +12,9 @@ spring:
     openai:
       # Dedicated chat env vars (BR-AI-005): chat traffic no longer shares the
       # HF embedding credentials; api-key chains AI_CHAT_API_KEY -> HF_TOKEN so
-      # existing deployments keep working until migrated.
-      base-url: ${AI_CHAT_BASE_URL:https://api.openai.com/v1}
+      # existing deployments keep working until migrated. base-url is the host
+      # root only — Spring AI appends /v1/chat/completions itself.
+      base-url: ${AI_CHAT_BASE_URL:https://api.openai.com}
       api-key: ${AI_CHAT_API_KEY:${HF_TOKEN:}}
       chat:
         options:
