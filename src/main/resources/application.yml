@@ -10,8 +10,14 @@ spring:
 
   ai:
     openai:
-      base-url: ${HF_BASE_URL:https://router.huggingface.co/v1}
-      api-key: ${HF_TOKEN:}
+      # Dedicated chat env vars (BR-AI-005): chat traffic no longer shares the
+      # HF embedding credentials; api-key chains AI_CHAT_API_KEY -> HF_TOKEN so
+      # existing deployments keep working until migrated.
+      base-url: ${AI_CHAT_BASE_URL:https://api.openai.com/v1}
+      api-key: ${AI_CHAT_API_KEY:${HF_TOKEN:}}
+      chat:
+        options:
+          model: ${AI_CHAT_MODEL:gpt-4o-mini}
 
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/vegalife}

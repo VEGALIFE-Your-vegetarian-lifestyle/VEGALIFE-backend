@@ -6,7 +6,7 @@ spring:
   ai:
     openai:
       # Spring AI refuses to start with an empty key; never a real credential.
-      api-key: ${HF_TOKEN:test-dummy-key-not-a-secret}
+      api-key: ${AI_CHAT_API_KEY:${HF_TOKEN:test-dummy-key-not-a-secret}}
 
   datasource:
     url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH

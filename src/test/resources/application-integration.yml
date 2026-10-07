@@ -2,7 +2,7 @@ spring:
   ai:
     openai:
       # Spring AI refuses to start with an empty key; never a real credential.
-      api-key: ${HF_TOKEN:integration-dummy-key-not-a-secret}
+      api-key: ${AI_CHAT_API_KEY:${HF_TOKEN:integration-dummy-key-not-a-secret}}
 
   jpa:
     hibernate:
