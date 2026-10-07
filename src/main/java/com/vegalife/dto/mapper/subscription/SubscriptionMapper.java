@@ -3,8 +3,10 @@ package com.vegalife.dto.mapper.subscription;
 import com.vegalife.dto.response.subscription.AvailablePlanResponse;
 import com.vegalife.dto.response.subscription.PaymentResponse;
 import com.vegalife.dto.response.subscription.PlanSummaryResponse;
+import com.vegalife.dto.response.subscription.SubscriptionHistoryResponse;
 import com.vegalife.dto.response.subscription.SubscriptionUsageResponse;
 import com.vegalife.model.subscription.AiPlan;
+import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
 import java.time.Instant;
 import org.mapstruct.Mapper;
@@ -29,4 +31,13 @@ public interface SubscriptionMapper {
   @Mapping(target = "limit", source = "plan.monthlyRequestLimit")
   SubscriptionUsageResponse toUsageResponse(
       long used, AiPlan plan, Instant periodStart, Instant periodEnd);
+
+  @Mapping(target = "planCode", source = "plan.code")
+  @Mapping(target = "planName", source = "plan.name")
+  @Mapping(target = "status", source = "subscription.status")
+  @Mapping(target = "startedAt", source = "subscription.startedAt")
+  @Mapping(target = "renewalDate", source = "subscription.renewalDate")
+  @Mapping(target = "cancelledAt", source = "subscription.cancelledAt")
+  @Mapping(target = "createdAt", source = "subscription.createdAt")
+  SubscriptionHistoryResponse toHistoryResponse(AiSubscription subscription, AiPlan plan);
 }

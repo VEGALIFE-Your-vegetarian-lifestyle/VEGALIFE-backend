@@ -130,6 +130,16 @@ requirements rather than implementation detail.
       plan (`status = 'active'`, `renewal_date = paid_at + 1 calendar month
       in UTC`) and enqueues a receipt email — then acks
       `{"RspCode":"00","Message":"Confirm Success"}`.
+      **Amended by `docs/feats/subscription-lifecycle.md` (FR-008):** once
+      `ai_subscription` allows multiple rows per member, the upsert becomes
+      a branch-dependent insert through the shared purchase gate
+      (BR-SUBS-004) — no row in effect → new `active` row (`started_at =
+      paid_at`, `renewal_date = paid_at + 1 calendar month in UTC`); same
+      plan already active with no successor → new `scheduled` successor row
+      (`extended_from_id` set, `renewal_date` = current `renewal_date` + 1
+      month); any other state → no subscription write and a WARN log, with
+      the payment remaining `succeeded`. The ledger transition, receipt
+      email, and ack above are unchanged.
 - [ ] FR-012: On any other terminal outcome (`vnp_ResponseCode != 00` or
       `vnp_TransactionStatus != 00`), the webhook records
       `status = 'failed'` with `response_code` set, changes no

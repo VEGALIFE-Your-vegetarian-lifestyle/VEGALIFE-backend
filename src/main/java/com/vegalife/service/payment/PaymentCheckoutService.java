@@ -6,12 +6,10 @@ import com.vegalife.infrastructure.payment.PaymentGateway;
 import com.vegalife.infrastructure.payment.vnpay.VnpayProperties;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.PaymentLedger;
-import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
+import com.vegalife.service.subscription.PlanPurchasePolicy;
 import com.vegalife.shared.config.PaymentProperties;
 import com.vegalife.shared.exception.PaymentGatewayException;
-import com.vegalife.shared.exception.ResourceNotFoundException;
-import com.vegalife.shared.exception.ValidationException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -38,9 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class PaymentCheckoutService {
 
   private static final String PROVIDER = "vnpay";
-  private static final String CURRENCY_VND = "VND";
 
-  private final AiPlanRepository planRepository;
+  private final PlanPurchasePolicy planPurchasePolicy;
   private final PaymentLedgerRepository paymentLedgerRepository;
   private final PaymentGateway paymentGateway;
   private final PaymentProperties paymentProperties;
@@ -50,11 +47,7 @@ public class PaymentCheckoutService {
   public CheckoutResponse checkout(UUID userId, CheckoutRequest request, String ipAddress) {
     ensureGatewayConfigured();
 
-    AiPlan plan =
-        planRepository
-            .findByCode(request.getPlanCode())
-            .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
-    validatePurchasable(plan);
+    AiPlan plan = planPurchasePolicy.requirePurchasableByCode(request.getPlanCode());
 
     PaymentLedger ledger =
         findReusablePending(userId, plan).orElseGet(() -> createPendingRow(userId, plan));
@@ -106,18 +99,6 @@ public class PaymentCheckoutService {
     if (!missing.isEmpty()) {
       log.error("Checkout refused, payment gateway not configured: missing {}", missing);
       throw new PaymentGatewayException("Payment gateway not configured, missing " + missing);
-    }
-  }
-
-  private void validatePurchasable(AiPlan plan) {
-    if (!plan.isActive()) {
-      throw new ValidationException("Plan is not active");
-    }
-    if (plan.getPriceAmount() <= 0) {
-      throw new ValidationException("Plan is not purchasable: price must be greater than zero");
-    }
-    if (!CURRENCY_VND.equals(plan.getPriceCurrency())) {
-      throw new ValidationException("Plan is not purchasable: only VND plans can be purchased");
     }
   }
 
