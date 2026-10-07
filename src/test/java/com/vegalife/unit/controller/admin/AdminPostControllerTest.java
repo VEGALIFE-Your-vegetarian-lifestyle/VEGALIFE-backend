@@ -39,7 +39,6 @@ class AdminPostControllerTest {
         AdminPostListResponse.builder()
             .id(UUID.randomUUID())
             .title("Vegan chili")
-            .type("blog")
             .status("published")
             .flag("PASSED")
             .createdAt(Instant.parse("2026-09-21T10:00:00Z"))

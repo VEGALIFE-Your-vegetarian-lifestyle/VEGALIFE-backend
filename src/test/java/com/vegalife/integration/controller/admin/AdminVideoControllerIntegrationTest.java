@@ -93,6 +93,8 @@ class AdminVideoControllerIntegrationTest {
                 .user(member)
                 .title("Stir fry write-up")
                 .content("Post content")
+                .rawContent(
+                    com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .media(Set.of(withPost))
                 .status(Post.Status.published)
                 .flag(Post.Flag.PASSED)

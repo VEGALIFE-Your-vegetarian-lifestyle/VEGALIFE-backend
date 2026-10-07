@@ -342,6 +342,8 @@ class AdminCategoryControllerIntegrationTest {
                 .user(author)
                 .title("Post title")
                 .content("Post content")
+                .rawContent(
+                    com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .status(Post.Status.published)
                 .viewCount(0)
                 .categories(Set.of(category))

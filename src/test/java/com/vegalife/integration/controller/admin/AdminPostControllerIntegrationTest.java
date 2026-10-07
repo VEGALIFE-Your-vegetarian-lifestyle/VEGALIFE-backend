@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
@@ -97,8 +98,8 @@ class AdminPostControllerIntegrationTest {
             .user(author2)
             .title("Aardvark tofu bowl")
             .content("Rich post content")
+            .rawContent(JsonNodeFactory.instance.objectNode())
             .featuredImageUrl("https://example.com/tofu.jpg")
-            .videoUrl("https://example.com/tofu.mp4")
             .categories(new HashSet<>(Set.of(recipes)))
             .status(Post.Status.published)
             .flag(Post.Flag.PASSED)
@@ -124,10 +125,8 @@ class AdminPostControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].title").value("Aardvark tofu bowl"))
         .andExpect(jsonPath("$.data.content[0].id").exists())
         .andExpect(jsonPath("$.data.content[0].content").value("Rich post content"))
-        .andExpect(jsonPath("$.data.content[0].type").value("blog"))
         .andExpect(
             jsonPath("$.data.content[0].featuredImageUrl").value("https://example.com/tofu.jpg"))
-        .andExpect(jsonPath("$.data.content[0].videoUrl").value("https://example.com/tofu.mp4"))
         .andExpect(jsonPath("$.data.content[0].categoryIds[0]").value(recipes.getId().toString()))
         .andExpect(jsonPath("$.data.content[0].mediaIds").isArray())
         .andExpect(jsonPath("$.data.content[0].status").value("published"))
@@ -222,6 +221,7 @@ class AdminPostControllerIntegrationTest {
             .user(author2)
             .title("In both categories")
             .content("Content")
+            .rawContent(JsonNodeFactory.instance.objectNode())
             .categories(new HashSet<>(Set.of(recipes, snacks)))
             .status(Post.Status.published)
             .viewCount(0)
@@ -231,6 +231,7 @@ class AdminPostControllerIntegrationTest {
             .user(member)
             .title("In recipes only")
             .content("Content")
+            .rawContent(JsonNodeFactory.instance.objectNode())
             .categories(new HashSet<>(Set.of(recipes)))
             .status(Post.Status.published)
             .viewCount(0)
@@ -240,6 +241,7 @@ class AdminPostControllerIntegrationTest {
             .user(member)
             .title("In snacks only")
             .content("Content")
+            .rawContent(JsonNodeFactory.instance.objectNode())
             .categories(new HashSet<>(Set.of(snacks)))
             .status(Post.Status.published)
             .viewCount(0)
@@ -249,6 +251,7 @@ class AdminPostControllerIntegrationTest {
             .user(member)
             .title("Deleted from recipes")
             .content("Content")
+            .rawContent(JsonNodeFactory.instance.objectNode())
             .categories(new HashSet<>(Set.of(recipes)))
             .status(Post.Status.published)
             .viewCount(0)
@@ -310,6 +313,7 @@ class AdminPostControllerIntegrationTest {
             .user(member)
             .title("Post with media")
             .content("Post content")
+            .rawContent(JsonNodeFactory.instance.objectNode())
             .media(new HashSet<>(Set.of(live, gone)))
             .status(Post.Status.published)
             .viewCount(0)
@@ -454,6 +458,7 @@ class AdminPostControllerIntegrationTest {
             .user(owner)
             .title(title)
             .content("Post content for " + title)
+            .rawContent(JsonNodeFactory.instance.objectNode())
             .status(status)
             .flag(flag)
             .viewCount(0)

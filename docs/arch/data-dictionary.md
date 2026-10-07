@@ -81,7 +81,8 @@ _Description: Manages community blog posts and vegetarian articles._
 | user_id | UUID | FK | No | References User(id) - Author of the post |
 | location_id | UUID | FK | Yes | References Location(id) - Location tagged in post |
 | title | VARCHAR(255) | - | No | Title of the blog post |
-| content | TEXT | - | No | Full content body of the post |
+| content | TEXT | - | No | Plain-text content body, used as the semantic-filtering input |
+| raw_content | JSONB | - | No | Rich-text document produced by the frontend editor (V27) |
 | featured_image_url | TEXT | - | Yes | Thumbnail image for feed display |
 | status | VARCHAR(20) | - | No | Post status: created, processed, published, unpublished, hidden |
 | view_count | INT | - | No | Number of views |

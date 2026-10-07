@@ -43,10 +43,8 @@ No request body
       {
         "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
         "title": "Vegan pho at home",
-        "type": "blog",
         "content": "A step-by-step guide to a clear mushroom broth...",
         "featuredImageUrl": "https://cdn.example.com/posts/pho.jpg",
-        "videoUrl": null,
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "mediaIds": [],
         "status": "published",
@@ -76,10 +74,8 @@ No request body
 | data.content | array | Post items for this page |
 | data.content[].id | uuid | Post id |
 | data.content[].title | string | Post title |
-| data.content[].type | string | `blog` or `video` |
-| data.content[].content | string | Post body |
+| data.content[].content | string | Post body, kept for moderation review (issue #101) |
 | data.content[].featuredImageUrl | string | Featured image URL, nullable |
-| data.content[].videoUrl | string | Video URL, nullable (`type=video`) |
 | data.content[].categoryIds | uuid[] | Category ids the post belongs to |
 | data.content[].mediaIds | uuid[] | Media ids attached to the post |
 | data.content[].status | string | created, processed, published, unpublished, hidden, or flagged |
@@ -128,10 +124,8 @@ curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&status=flagged
       {
         "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
         "title": "Vegan pho at home",
-        "type": "blog",
         "content": "A step-by-step guide to a clear mushroom broth...",
         "featuredImageUrl": "https://cdn.example.com/posts/pho.jpg",
-        "videoUrl": null,
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "mediaIds": [],
         "status": "flagged",

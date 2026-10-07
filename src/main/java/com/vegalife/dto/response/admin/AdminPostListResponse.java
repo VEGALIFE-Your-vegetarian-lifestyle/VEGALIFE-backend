@@ -16,10 +16,8 @@ public class AdminPostListResponse {
 
   private UUID id;
   private String title;
-  private String type;
   private String content;
   private String featuredImageUrl;
-  private String videoUrl;
   private Set<UUID> categoryIds;
   private Set<UUID> mediaIds;
   private String status;

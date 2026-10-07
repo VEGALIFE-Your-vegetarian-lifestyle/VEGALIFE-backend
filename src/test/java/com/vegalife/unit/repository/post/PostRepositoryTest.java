@@ -74,6 +74,7 @@ class PostRepositoryTest {
             .user(owner)
             .title(title)
             .content("Post content")
+            .rawContent(com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
             .status(status)
             .viewCount(0)
             .deletedAt(deletedAt)

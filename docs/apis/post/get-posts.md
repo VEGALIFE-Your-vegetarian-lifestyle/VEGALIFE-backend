@@ -46,10 +46,8 @@ No request body.
       {
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "title": "Easy tofu bowl",
-        "type": "blog",
-        "content": "A simple plant-based lunch.",
+        "rawContent": {"type": "doc", "content": []},
         "featuredImageUrl": "https://example.com/tofu-bowl.jpg",
-        "videoUrl": null,
         "categoryIds": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
         "mediaIds": [],
         "status": "published",
@@ -76,10 +74,8 @@ No request body.
 | data.content | array | Posts on this page. An empty array is returned when there are no matching posts. |
 | data.content[].id | uuid | Post identifier. |
 | data.content[].title | string | Post title. |
-| data.content[].content | string | Post text. |
+| data.content[].rawContent | object | Rich-text document produced by the frontend editor (issue #101). |
 | data.content[].featuredImageUrl | string or null | Featured image URL, if present. |
-| data.content[].type | string | `blog` or `video`. |
-| data.content[].videoUrl | string or null | Video link, video posts only. |
 | data.content[].categoryIds | array of UUID | Assigned categories. |
 | data.content[].mediaIds | array of UUID | Attached uploaded media. |
 | data.content[].status | string | Post status: `created`, `processed`, `published`, `unpublished`, `hidden`, or `flagged` (rejected or held for review after content filtering, BR-POST-010). |
@@ -112,5 +108,5 @@ No request body.
 
 ## Related
 
-- Database schema: `src/main/resources/db/migration/V7__create_post_tables.sql`
+- Database schema: `src/main/resources/db/migration/V7__create_post_tables.sql`, `src/main/resources/db/migration/V27__add_post_raw_content_drop_type_video_url.sql`
 - Shared pagination response: `src/main/java/com/vegalife/shared/dto/PageResponse.java`

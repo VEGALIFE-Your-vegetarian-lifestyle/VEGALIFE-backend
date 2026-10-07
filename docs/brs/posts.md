@@ -14,6 +14,7 @@
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
 | BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
 | BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
+| BR-POST-011 | Single Post Detail Requires Published Status, Not Ownership | Active | 2026-10-05 |
 | BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-09-30 |
 | BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-09-30 |
 | BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-09-30 |
@@ -142,7 +143,7 @@ Active
 
 ## Statement
 
-When a user creates a post, the system sets its view count to `0`. The post starts as a private draft (`created`) unless the client asks to publish (`publish: true`), which is accepted only when the post has all information required for its type and at least one active category (BR-CONTENT-002/003/004). Publishing is then gated by content filtering: the post is saved as `created` with `flag = PENDING` and a `CONTENT_FILTER` message enqueued (BR-FILTER-005, BR-FILTER-006), and it becomes `published` with `publishedAt` set only once filtering returns `PASSED` (BR-FILTER-007). Status and view count cannot otherwise be set by the client.
+When a user creates a post, the system sets its view count to `0`. The post starts as a private draft (`created`) unless the client asks to publish (`publish: true`), which is accepted only when the post has at least one active category (BR-CONTENT-004). Publishing is then gated by content filtering: the post is saved as `created` with `flag = PENDING` and a `CONTENT_FILTER` message enqueued (BR-FILTER-005, BR-FILTER-006), and it becomes `published` with `publishedAt` set only once filtering returns `PASSED` (BR-FILTER-007). Status and view count cannot otherwise be set by the client.
 
 ## Rationale
 
@@ -178,25 +179,25 @@ Active
 
 ## Statement
 
-Post creation requires a non-blank title no longer than 255 characters and non-blank content. A featured image URL is optional.
+Post creation requires a non-blank title no longer than 255 characters, non-blank plain `content` (used only as the semantic-filtering input, BR-FILTER-004), and a `rawContent` JSON object (the frontend editor's rich-text document). A featured image URL is optional.
 
 ## Rationale
 
-Each post needs a title and body to be useful to readers; an image is supplementary content.
+Each post needs a title and body to be useful to readers; an image is supplementary content. Plain content and the rich-text document are both required because the frontend editor only produces rich text, while filtering only understands plain text.
 
 ## Scope & Exceptions
 
-Applies to requests to create a post through `POST /api/posts`. The existing database also requires title and content columns to be non-null.
+Applies to requests to create a post through `POST /api/posts`. The existing database also requires `title`, `content`, and `raw_content` columns to be non-null.
 
 ## Enforcement
 
-- DTO: `PostCreateRequest` uses `@NotBlank` for title and content and `@Size(max = 255)` for title.
-- Database: the existing `post` table defines title and content as `NOT NULL`.
+- DTO: `PostCreateRequest` uses `@NotBlank` for title and content, `@NotNull` plus a custom `@AssertTrue` check for `rawContent` (must be a JSON object), and `@Size(max = 255)` for title.
+- Database: the `post` table defines `title`, `content`, and `raw_content` as `NOT NULL` (migration `V27__add_post_raw_content_drop_type_video_url.sql`).
 - API reference: `docs/apis/post/post-posts.md`.
 
 ## Last Reviewed
 
-2026-09-26, by Vegalife backend team
+2026-10-05, by Vegalife backend team
 
 ---
 
@@ -248,11 +249,11 @@ Active
 
 ## Statement
 
-Post edits accept a non-empty subset of `title`, `content`, `featuredImageUrl`, `videoUrl`, `mediaId`, `categoryIds`, and `publish`. Only supplied, non-null values are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters, and supplied content must not be blank. The post `type` is fixed at creation and any different `type` is rejected (BR-CONTENT-002); video fields are rejected for blog posts. `categoryIds` replaces the category set and may only reference active categories (BR-CONTENT-004). `publish: true` requests publication and re-queues the post for content filtering (BR-FILTER-005): the post only becomes `published` once the filter returns `PASSED` (BR-FILTER-007). `publish: false` withdraws the post to a private draft immediately — a withdrawn `flagged` post returns to `created` but keeps its `flag` value — and never triggers filtering. A content change (title, content, or media) to a post whose status is `published` or `flagged` re-queues it for filtering (BR-FILTER-005). A post that is or becomes published must keep at least one category and, for video, a video file or link (BR-CONTENT-003). Only an Administrator may change the state of a `hidden` post. Ownership and view count are not editable.
+Post edits require `content` and `rawContent` on every request, and accept a non-empty subset of `title`, `featuredImageUrl`, `categoryIds`, and `publish` on top of them. Only supplied, non-null values among the optional fields are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters; `content` must not be blank and `rawContent` must be a JSON object. `categoryIds` replaces the category set and may only reference active categories (BR-CONTENT-004). `publish: true` requests publication and re-queues the post for content filtering (BR-FILTER-005): the post only becomes `published` once the filter returns `PASSED` (BR-FILTER-007). `publish: false` withdraws the post to a private draft immediately — a withdrawn `flagged` post returns to `created` but keeps its `flag` value — and never triggers filtering. A title or plain-content change to a post whose status is `published` or `flagged` re-queues it for filtering (BR-FILTER-005); a `rawContent`-only change does not re-queue, since filtering only reads plain `content`. A post that is or becomes published must keep at least one category (BR-CONTENT-003). Only an Administrator may change the state of a `hidden` post. Ownership and view count are not editable.
 
 ## Rationale
 
-Partial updates let clients change one field without resending the full post and prevent omitted fields from being overwritten with empty values.
+Partial updates let clients change title, image, categories, or publish state without resending the full post; `content`/`rawContent` are required on every edit because the frontend editor always resubmits both together.
 
 ## Scope & Exceptions
 
@@ -260,8 +261,8 @@ Applies to `PATCH /api/posts/{postId}`. Removing a featured image by sending nul
 
 ## Enforcement
 
-- Request DTO: `PostUpdateRequest` validates supplied text (null allowed, blank rejected) and rejects an empty update.
-- Service: `PostService.updatePost()` applies only non-null request values and enforces the type, category and publish rules.
+- Request DTO: `PostUpdateRequest` requires `content` (`@NotBlank`) and `rawContent` (`@NotNull` plus a JSON-object `@AssertTrue` check) on every request; other fields stay optional (null allowed, blank/invalid rejected when supplied).
+- Service: `PostService.updatePost()` applies only non-null optional request values and enforces the category and publish rules.
 - API reference: `docs/apis/post/patch-posts-postid.md`.
 
 ## Last Reviewed
@@ -372,6 +373,43 @@ Applies to `GET /api/users/{userId}/posts`. `GET /api/posts` is the caller's own
 
 ---
 
+# Business Rule: Single Post Detail Requires Published Status, Not Ownership
+
+## Rule ID
+
+`BR-POST-011`
+
+## Status
+
+Active
+
+## Statement
+
+When an authenticated caller requests a single post by id, the post is returned only when its status is `published` and `deleted_at` is null. Ownership is never checked: another user's published post is returned, and the caller's own post is not returned unless it is also `published`. A missing, soft-deleted, or non-published post — including the caller's own — returns `404 Post not found`; there is no public/guest access to this endpoint.
+
+## Rationale
+
+A shared or linked post must be readable by any signed-in member regardless of who wrote it, but only once it has passed moderation into the `published` state; reporting every other case as the same generic 404 avoids leaking whether a post exists, is still a draft, or was removed.
+
+## Scope & Exceptions
+
+Applies to `GET /api/posts/{postId}`. It does not define owner/admin draft preview, caching, or view-count behavior — none of these exist for this endpoint. `GET /api/posts` (the caller's own list, all statuses) and `GET /api/users/{userId}/posts` (public, owner/admin see all statuses) have their own rules (BR-POST-002, BR-POST-010).
+
+## Enforcement
+
+- Repository: `PostRepository.findByIdAndStatusAndDeletedAtIsNull(id, Post.Status.published)`.
+- Service: `PostService.getPost()` maps a missing result to `ResourceNotFoundException("Post not found")`.
+- Security: no explicit rule for this path in `SecurityConfig`; it falls through to `.anyRequest().authenticated()`.
+- API reference: `docs/apis/post/get-posts-postid.md`.
+
+## Last Reviewed
+
+2026-10-05, by Vegalife backend team
+
+---
+
+---
+
 # Business Rule: Semantic Relevance Uses Three Bands and Configured Thresholds
 
 ## Rule ID
@@ -420,7 +458,7 @@ Active
 
 ## Statement
 
-A post is filtered only when it is submitted for publication or when already-visible content changes. An explicit `publish: true` on create or edit always queues a filter run. Without an explicit `publish` field, a content change (title, content, or media) on a post whose status is `published` or `flagged` re-queues it for filtering. A draft — created or edited without `publish: true`, `flag` NULL — is never filtered, and unpublishing with `publish: false` never triggers a filter run.
+A post is filtered only when it is submitted for publication or when already-visible content changes. An explicit `publish: true` on create or edit always queues a filter run. Without an explicit `publish` field, a title or plain-`content` change on a post whose status is `published` or `flagged` re-queues it for filtering; a `rawContent`-only change does not, since filtering never reads `rawContent`. A draft — created or edited without `publish: true`, `flag` NULL — is never filtered, and unpublishing with `publish: false` never triggers a filter run.
 
 ## Rationale
 
@@ -428,7 +466,7 @@ Only content that is (or is about to be) public needs screening; screening draft
 
 ## Scope & Exceptions
 
-Applies to `POST /api/posts` and `PATCH /api/posts/{postId}`. Ownership, category, and type validation (BR-POST-006, BR-POST-007, BR-CONTENT-002/003/004) are unchanged and happen before any queueing decision. Withdrawing stays immediate (BR-CONTENT-003).
+Applies to `POST /api/posts` and `PATCH /api/posts/{postId}`. Ownership and category validation (BR-POST-006, BR-POST-007, BR-CONTENT-003/004) are unchanged and happen before any queueing decision. Withdrawing stays immediate (BR-CONTENT-003).
 
 ## Enforcement
 

@@ -18,6 +18,8 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
 
   Optional<Post> findByIdAndDeletedAtIsNull(UUID id);
 
+  Optional<Post> findByIdAndStatusAndDeletedAtIsNull(UUID id, Post.Status status);
+
   Optional<Post> findByIdAndUser_IdAndDeletedAtIsNull(UUID id, UUID userId);
 
   Page<Post> findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID userId, Pageable pageable);

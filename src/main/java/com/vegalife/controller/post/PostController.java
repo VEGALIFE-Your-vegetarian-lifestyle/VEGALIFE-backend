@@ -43,6 +43,12 @@ public class PostController {
         .body(ApiResponse.success(post, "Post created successfully"));
   }
 
+  @GetMapping("/{postId}")
+  public ResponseEntity<ApiResponse<PostListResponse>> getPost(@PathVariable UUID postId) {
+    PostListResponse post = postService.getPost(postId);
+    return ResponseEntity.ok(ApiResponse.success(post, "Post retrieved successfully"));
+  }
+
   @PatchMapping("/{postId}")
   public ResponseEntity<ApiResponse<PostListResponse>> updatePost(
       @AuthenticationPrincipal UUID userId,

@@ -1,5 +1,6 @@
 package com.vegalife.model.post;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.vegalife.model.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -23,7 +24,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "post")
@@ -51,13 +54,10 @@ public class Post {
   @Column(name = "featured_image_url", columnDefinition = "TEXT")
   private String featuredImageUrl;
 
-  @Enumerated(EnumType.STRING)
-  @Column(name = "type", length = 10, nullable = false, updatable = false)
-  @Builder.Default
-  private Type type = Type.blog;
-
-  @Column(name = "video_url", columnDefinition = "TEXT")
-  private String videoUrl;
+  /** Rich-text document produced by the frontend editor; {@code content} stays the filter input. */
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "raw_content", nullable = false)
+  private JsonNode rawContent;
 
   @ManyToMany
   @JoinTable(
@@ -99,11 +99,6 @@ public class Post {
 
   @Column(name = "deleted_at")
   private Instant deletedAt;
-
-  public enum Type {
-    blog,
-    video
-  }
 
   public enum Status {
     created,

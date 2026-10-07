@@ -1,7 +1,9 @@
 package com.vegalife.dto.request.post;
 
-import com.vegalife.model.post.Post;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.Set;
@@ -11,7 +13,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Partial update: null/omitted fields are left unchanged. */
+/**
+ * Partial update for title/featuredImageUrl/categoryIds/publish: null/omitted fields are left
+ * unchanged. {@code content} and {@code rawContent} are required on every edit.
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -22,16 +27,15 @@ public class PostUpdateRequest {
   @Size(max = 255, message = "Title must not exceed 255 characters")
   private String title;
 
-  @Pattern(regexp = "(?s).*\\S.*", message = "Content must not be blank")
+  /** Plain text used as the semantic-filtering input. */
+  @NotBlank(message = "Content is required")
   private String content;
 
+  /** Rich-text document produced by the frontend editor. */
+  @NotNull(message = "Raw content is required")
+  private JsonNode rawContent;
+
   private String featuredImageUrl;
-
-  /** Video posts only; replaces the current video link. */
-  private String videoUrl;
-
-  /** Video posts only; replaces the current uploaded video. */
-  private UUID mediaId;
 
   /** Replaces the whole category set when supplied (BR-CONTENT-004). */
   private Set<UUID> categoryIds;
@@ -43,18 +47,8 @@ public class PostUpdateRequest {
    */
   private Boolean publish;
 
-  /** Only accepted when equal to the current type (BR-CONTENT-002: type is immutable). */
-  private Post.Type type;
-
-  @AssertTrue(message = "At least one field must be provided")
-  public boolean isUpdateRequestNotEmpty() {
-    return title != null
-        || content != null
-        || featuredImageUrl != null
-        || videoUrl != null
-        || mediaId != null
-        || categoryIds != null
-        || publish != null
-        || type != null;
+  @AssertTrue(message = "Raw content must be a JSON object")
+  public boolean isRawContentObject() {
+    return rawContent == null || rawContent.isObject();
   }
 }

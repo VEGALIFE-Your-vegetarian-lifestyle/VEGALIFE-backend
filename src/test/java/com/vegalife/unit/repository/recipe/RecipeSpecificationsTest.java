@@ -196,6 +196,7 @@ class RecipeSpecificationsTest {
             .user(owner)
             .title(title)
             .content("Post content")
+            .rawContent(com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
             .status(Post.Status.published)
             .flag(Post.Flag.PENDING)
             .viewCount(0)
