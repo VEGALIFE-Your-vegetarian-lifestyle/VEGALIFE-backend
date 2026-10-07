@@ -75,6 +75,8 @@ class AiChatServiceTest {
 
   private void stubClient() {
     when(chatClientBuilder.build()).thenReturn(chatClient);
+    // @InjectMocks does not run @PostConstruct, so build the client the way startup would.
+    aiChatService.initChatClient();
     when(chatClient.prompt()).thenReturn(spec);
     when(spec.system(anyString())).thenReturn(spec);
     when(spec.messages(anyList())).thenReturn(spec);

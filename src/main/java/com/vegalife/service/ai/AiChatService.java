@@ -11,6 +11,7 @@ import com.vegalife.repository.ai.AiMessageRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.shared.exception.AiProviderException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
+import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -23,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -53,6 +55,12 @@ public class AiChatService {
 
   private ChatClient chatClient;
 
+  /** Built once at startup so the streaming path never races to initialise a shared field. */
+  @PostConstruct
+  public void initChatClient() {
+    this.chatClient = chatClientBuilder.build();
+  }
+
   /** Blocking turn for {@code POST /api/ai/messages}. */
   public SendMessageResponse send(UUID userId, SendMessageRequest request) {
     Optional<AiConversation> existing = resolveConversation(userId, request.getConversationId());
@@ -61,7 +69,7 @@ public class AiChatService {
     String reply;
     try {
       reply =
-          chatClient()
+          chatClient
               .prompt()
               .system(buildSystemPrompt(userId))
               .messages(buildContext(existing, request.getMessage()))
@@ -99,7 +107,7 @@ public class AiChatService {
     StringBuilder fullReply = new StringBuilder();
 
     Disposable subscription =
-        chatClient().prompt().system(systemPrompt).messages(context).stream()
+        chatClient.prompt().system(systemPrompt).messages(context).stream()
             .content()
             .subscribe(
                 delta -> {
@@ -108,31 +116,11 @@ public class AiChatService {
                 },
                 error -> {
                   log.error("AI provider stream failed for user {}", userId, error);
-                  sendEvent(emitter, "error", Map.of("message", "AI provider request failed"));
-                  emitter.complete();
+                  failStream(emitter);
                 },
-                () -> {
-                  String reply = fullReply.toString();
-                  if (reply.isBlank()) {
-                    sendEvent(emitter, "error", Map.of("message", "AI provider request failed"));
-                    emitter.complete();
-                    return;
-                  }
-                  try {
-                    PersistedTurn persisted =
-                        persistTurn(userId, existing, request.getMessage(), reply, window);
-                    Map<String, Object> done = new LinkedHashMap<>();
-                    done.put("conversationId", persisted.conversationId());
-                    done.put("reply", reply);
-                    done.put("usage", toQuotaResponse(window));
-                    sendEvent(emitter, "done", done);
-                    emitter.complete();
-                  } catch (RuntimeException ex) {
-                    log.error("Failed to persist AI turn for user {}", userId, ex);
-                    sendEvent(emitter, "error", Map.of("message", "AI provider request failed"));
-                    emitter.complete();
-                  }
-                });
+                () ->
+                    completeStream(
+                        emitter, fullReply.toString(), userId, existing, request, window));
 
     emitter.onCompletion(subscription::dispose);
     emitter.onTimeout(
@@ -143,11 +131,39 @@ public class AiChatService {
     return emitter;
   }
 
-  private ChatClient chatClient() {
-    if (chatClient == null) {
-      chatClient = chatClientBuilder.build();
+  /**
+   * Terminal success branch of a stream: persist the turn and emit {@code done}, or emit {@code
+   * error} when the reply is empty or persistence fails. The quota is counted only here, so a
+   * stream that dies before completion consumes nothing (BR-AI-002).
+   */
+  private void completeStream(
+      SseEmitter emitter,
+      String reply,
+      UUID userId,
+      Optional<AiConversation> existing,
+      SendMessageRequest request,
+      AiQuotaGuard.QuotaWindow window) {
+    if (reply.isBlank()) {
+      failStream(emitter);
+      return;
     }
-    return chatClient;
+    try {
+      PersistedTurn persisted = persistTurn(userId, existing, request.getMessage(), reply, window);
+      Map<String, Object> done = new LinkedHashMap<>();
+      done.put("conversationId", persisted.conversationId());
+      done.put("reply", reply);
+      done.put("usage", toQuotaResponse(window));
+      sendEvent(emitter, "done", done);
+      emitter.complete();
+    } catch (RuntimeException ex) {
+      log.error("Failed to persist AI turn for user {}", userId, ex);
+      failStream(emitter);
+    }
+  }
+
+  private void failStream(SseEmitter emitter) {
+    sendEvent(emitter, "error", Map.of("message", "AI provider request failed"));
+    emitter.complete();
   }
 
   /**
@@ -221,7 +237,10 @@ public class AiChatService {
   private Message toProviderMessage(AiMessage message) {
     return switch (message.getRole()) {
       case assistant -> new AssistantMessage(message.getContent());
-      default -> new UserMessage(message.getContent());
+      // No system rows are persisted (the system prompt is passed via .system()), but map the role
+      // explicitly so a future "persist system messages" change cannot silently mislabel one.
+      case system -> new SystemMessage(message.getContent());
+      case user -> new UserMessage(message.getContent());
     };
   }
 
