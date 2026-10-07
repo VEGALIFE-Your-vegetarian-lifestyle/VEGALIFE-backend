@@ -136,9 +136,14 @@ public class PaymentWebhookService {
     ledger.setProviderReference(params.get("vnp_TransactionNo"));
     ledger.setResponseCode(params.get("vnp_ResponseCode"));
     ledger.setBankCode(params.get("vnp_BankCode"));
-    paymentLedgerRepository.save(ledger);
 
-    subscriptionService.activatePlan(ledger.getUserId(), ledger.getPlanId(), paidAt);
+    // Issue #111 FR-002: record which subscription this payment produced; a denied
+    // purchase (gate) leaves the row unlinked while the payment stays succeeded.
+    subscriptionService
+        .activatePlan(ledger.getUserId(), ledger.getPlanId(), paidAt)
+        .ifPresent(subscription -> ledger.setSubscriptionId(subscription.getId()));
+
+    paymentLedgerRepository.save(ledger);
 
     AiPlan plan =
         planRepository
