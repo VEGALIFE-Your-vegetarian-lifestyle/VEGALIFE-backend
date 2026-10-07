@@ -56,3 +56,5 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `admin/get-payments.md` | `GET /api/admin/payments` | List payments across all users with user/status/date filters (Admin) |
 | `ai/post-messages.md` | `POST /api/ai/messages` | Send a chat message, get the AI reply (authenticated) |
 | `ai/post-messages-stream.md` | `POST /api/ai/messages/stream` | Send a chat message, stream the AI reply as SSE (authenticated) |
+| `ai/get-conversations.md` | `GET /api/ai/conversations` | List own AI conversations, most recently active first (authenticated) |
+| `ai/get-conversations-id.md` | `GET /api/ai/conversations/{id}` | Read one owned conversation's messages in order (authenticated) |
