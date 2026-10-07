@@ -51,3 +51,5 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `payments/post-checkout.md` | `POST /api/payments/checkout` | Start (or resume) a VNPay checkout for an AI plan (authenticated) |
 | `payments/get-vnpay-ipn.md` | `GET /api/payments/vnpay/ipn` | VNPay payment notification webhook; fulfils a verified payment (public, signed) |
 | `payments/get-payments-paymentid.md` | `GET /api/payments/{paymentId}` | Read one of your payments' status from the ledger (authenticated; owner only) |
+| `payments/get-payments.md` | `GET /api/payments` | List own payment history, newest first, with subscription and plan context (authenticated) |
+| `admin/get-payments.md` | `GET /api/admin/payments` | List payments across all users with user/status/date filters (Admin) |

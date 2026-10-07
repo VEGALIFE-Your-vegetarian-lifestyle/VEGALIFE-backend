@@ -36,6 +36,9 @@ public class PaymentLedger {
   @Column(name = "plan_id", nullable = false)
   private UUID planId;
 
+  @Column(name = "subscription_id")
+  private UUID subscriptionId;
+
   @Column(name = "amount", nullable = false)
   private long amount;
 
