@@ -6,6 +6,7 @@ import jakarta.validation.ConstraintViolationException;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -75,6 +76,20 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ApiResponse<Void>> handleForbidden(
       ForbiddenException ex, HttpServletRequest request) {
     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.failure(ex.getMessage()));
+  }
+
+  @ExceptionHandler(AiQuotaExceededException.class)
+  public ResponseEntity<ApiResponse<Void>> handleAiQuotaExceeded(
+      AiQuotaExceededException ex, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+        .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+        .body(ApiResponse.failure(ex.getMessage()));
+  }
+
+  @ExceptionHandler(AiProviderException.class)
+  public ResponseEntity<ApiResponse<Void>> handleAiProvider(
+      AiProviderException ex, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(ApiResponse.failure(ex.getMessage()));
   }
 
   @ExceptionHandler(DataIntegrityViolationException.class)
