@@ -37,6 +37,18 @@ public interface AiSubscriptionRepository extends JpaRepository<AiSubscription, 
 
   boolean existsByUserIdAndPlanIdAndStatus(UUID userId, UUID planId, AiSubscription.Status status);
 
+  @Query(
+      "select s from AiSubscription s"
+          + " where s.status in ('active', 'past_due') and s.renewalDate <= :now"
+          + " order by s.renewalDate asc")
+  List<AiSubscription> findDueForExpiry(@Param("now") Instant now);
+
+  @Query(
+      "select s from AiSubscription s"
+          + " where s.userId = :userId and s.status = 'scheduled'"
+          + " order by s.startedAt asc")
+  List<AiSubscription> findScheduledForUser(@Param("userId") UUID userId);
+
   @Modifying
   @Query(
       "update AiSubscription s set s.status = :cancelled, s.cancelledAt = :cancelledAt"
