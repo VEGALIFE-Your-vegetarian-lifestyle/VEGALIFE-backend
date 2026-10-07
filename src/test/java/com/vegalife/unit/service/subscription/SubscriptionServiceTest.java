@@ -14,6 +14,7 @@ import com.vegalife.dto.response.subscription.AvailablePlanResponse;
 import com.vegalife.dto.response.subscription.PaymentResponse;
 import com.vegalife.dto.response.subscription.PlanPriceResponse;
 import com.vegalife.dto.response.subscription.PlanSummaryResponse;
+import com.vegalife.dto.response.subscription.SubscriptionCancelResponse;
 import com.vegalife.dto.response.subscription.SubscriptionMeResponse;
 import com.vegalife.dto.response.subscription.SubscriptionUsageResponse;
 import com.vegalife.model.subscription.AiPlan;
@@ -486,5 +487,45 @@ class SubscriptionServiceTest {
         .hasMessage("A renewal is already scheduled for this plan");
     verify(subscriptionRepository, never()).findInEffectForUpdate(any());
     verify(subscriptionRepository, never()).save(any(AiSubscription.class));
+  }
+
+  @Test
+  void cancelMySubscription_whenRowInEffect_cancelsRowAndCascadesScheduled() {
+    AiSubscription current =
+        AiSubscription.builder()
+            .id(UUID.randomUUID())
+            .userId(userId)
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .startedAt(Instant.parse("2026-09-20T00:00:00Z"))
+            .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
+            .build();
+    when(subscriptionRepository.findInEffectForUpdate(userId)).thenReturn(Optional.of(current));
+    when(subscriptionRepository.save(any(AiSubscription.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    SubscriptionCancelResponse response = subscriptionService.cancelMySubscription(userId);
+
+    assertThat(response.getStatus()).isEqualTo("cancelled");
+    assertThat(response.getCancelledAt()).isNotNull();
+    assertThat(current.getStatus()).isEqualTo(AiSubscription.Status.cancelled);
+    assertThat(current.getCancelledAt()).isEqualTo(response.getCancelledAt());
+    verify(subscriptionRepository)
+        .cancelScheduledForUser(
+            eq(userId),
+            eq(response.getCancelledAt()),
+            eq(AiSubscription.Status.cancelled),
+            eq(AiSubscription.Status.scheduled));
+  }
+
+  @Test
+  void cancelMySubscription_whenNothingInEffect_throwsConflictWithoutWriting() {
+    when(subscriptionRepository.findInEffectForUpdate(userId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> subscriptionService.cancelMySubscription(userId))
+        .isInstanceOf(DuplicateResourceException.class)
+        .hasMessage("Subscription already cancelled");
+    verify(subscriptionRepository, never()).save(any(AiSubscription.class));
+    verify(subscriptionRepository, never()).cancelScheduledForUser(any(), any(), any(), any());
   }
 }

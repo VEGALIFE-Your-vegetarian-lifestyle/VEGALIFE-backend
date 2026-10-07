@@ -1,6 +1,7 @@
 package com.vegalife.controller.subscription;
 
 import com.vegalife.dto.response.subscription.AvailablePlanResponse;
+import com.vegalife.dto.response.subscription.SubscriptionCancelResponse;
 import com.vegalife.dto.response.subscription.SubscriptionMeResponse;
 import com.vegalife.service.subscription.SubscriptionService;
 import com.vegalife.shared.config.OpenApiConfig;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -35,5 +37,14 @@ public class SubscriptionController {
 
     SubscriptionMeResponse response = subscriptionService.getMySubscription(userId);
     return ResponseEntity.ok(ApiResponse.success(response, "Subscription retrieved successfully"));
+  }
+
+  @PostMapping("/me/cancel")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<SubscriptionCancelResponse>> cancelMySubscription(
+      @AuthenticationPrincipal UUID userId) {
+
+    SubscriptionCancelResponse response = subscriptionService.cancelMySubscription(userId);
+    return ResponseEntity.ok(ApiResponse.success(response, "Subscription cancelled successfully"));
   }
 }

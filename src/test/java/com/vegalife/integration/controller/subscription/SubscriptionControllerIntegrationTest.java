@@ -3,6 +3,7 @@ package com.vegalife.integration.controller.subscription;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.vegalife.model.subscription.AiPlan;
@@ -20,6 +21,7 @@ import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -308,5 +310,84 @@ class SubscriptionControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data", hasSize(2)))
         .andExpect(jsonPath("$.data[?(@.code == 'LEGACY')]", hasSize(0)));
+  }
+
+  @Test
+  void cancelSubscription_withoutAuthentication_returns401() throws Exception {
+    mockMvc
+        .perform(post("/api/subscriptions/me/cancel"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Unauthorized"));
+  }
+
+  @Test
+  void cancelSubscription_whenNoRowInEffect_returns409AndWritesNothing() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/cancel").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Subscription already cancelled"));
+
+    assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
+  }
+
+  @Test
+  void cancelSubscription_cancelsRowInEffectAndScheduledSuccessor_thenReadsFreeAndRepeatIs409()
+      throws Exception {
+    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(testUser.getId())
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
+            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
+            .build());
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(testUser.getId())
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.scheduled)
+            .startedAt(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
+            .renewalDate(Instant.now().plus(60, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
+            .build());
+
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/cancel").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Subscription cancelled successfully"))
+        .andExpect(jsonPath("$.data.status").value("cancelled"))
+        .andExpect(jsonPath("$.data.cancelledAt").isNotEmpty());
+
+    List<AiSubscription> rows = subscriptionRepository.findAllByUserId(testUser.getId());
+    assertThat(rows).hasSize(2);
+    assertThat(rows)
+        .allSatisfy(
+            row -> {
+              assertThat(row.getStatus()).isEqualTo(AiSubscription.Status.cancelled);
+              assertThat(row.getCancelledAt()).isNotNull();
+            });
+    assertThat(rows.get(0).getCancelledAt().truncatedTo(ChronoUnit.SECONDS))
+        .isEqualTo(rows.get(1).getCancelledAt().truncatedTo(ChronoUnit.SECONDS));
+    assertThat(subscriptionRepository.findInEffect(testUser.getId())).isEmpty();
+
+    mockMvc
+        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.tier").value("FREE"))
+        .andExpect(jsonPath("$.data.status").value("active"))
+        .andExpect(jsonPath("$.data.renewalDate").doesNotExist())
+        .andExpect(jsonPath("$.data.latestPayment").doesNotExist());
+
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/cancel").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Subscription already cancelled"));
   }
 }

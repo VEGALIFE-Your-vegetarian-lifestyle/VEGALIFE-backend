@@ -4,6 +4,7 @@ import com.vegalife.dto.mapper.subscription.SubscriptionMapper;
 import com.vegalife.dto.response.subscription.AvailablePlanResponse;
 import com.vegalife.dto.response.subscription.PaymentResponse;
 import com.vegalife.dto.response.subscription.PlanSummaryResponse;
+import com.vegalife.dto.response.subscription.SubscriptionCancelResponse;
 import com.vegalife.dto.response.subscription.SubscriptionMeResponse;
 import com.vegalife.dto.response.subscription.SubscriptionUsageResponse;
 import com.vegalife.model.subscription.AiPlan;
@@ -107,6 +108,38 @@ public class SubscriptionService {
     return planRepository.findByActiveTrueOrderBySortOrderAsc().stream()
         .map(subscriptionMapper::toAvailablePlan)
         .toList();
+  }
+
+  /**
+   * Answers FR-003: cancels the member's row in effect and every scheduled successor in one
+   * transaction. Throws 409 when nothing is in effect (FR-004) — a pure guard that writes nothing.
+   */
+  @Transactional
+  public SubscriptionCancelResponse cancelMySubscription(UUID userId) {
+    Optional<AiSubscription> inEffect = subscriptionRepository.findInEffectForUpdate(userId);
+    if (inEffect.isEmpty()) {
+      throw new DuplicateResourceException("Subscription already cancelled");
+    }
+
+    Instant cancelledAt = Instant.now();
+    AiSubscription subscription = inEffect.get();
+    subscription.setStatus(AiSubscription.Status.cancelled);
+    subscription.setCancelledAt(cancelledAt);
+    subscriptionRepository.save(subscription);
+    int cascaded =
+        subscriptionRepository.cancelScheduledForUser(
+            userId, cancelledAt, AiSubscription.Status.cancelled, AiSubscription.Status.scheduled);
+    log.info(
+        "Cancelled subscription {} for user {} (cancelledAt={}, scheduledCascaded={})",
+        subscription.getId(),
+        userId,
+        cancelledAt,
+        cascaded);
+
+    return SubscriptionCancelResponse.builder()
+        .status(AiSubscription.Status.cancelled.name())
+        .cancelledAt(cancelledAt)
+        .build();
   }
 
   /**
