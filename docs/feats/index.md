@@ -37,3 +37,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `subscription-api.md`               | AI Subscription APIs (Own + Available Plans) | In progress | 2026-10-04 |
 | `subscription-purchase.md`          | Purchase AI Subscription (VNPay Checkout) | In progress | 2026-10-04 |
 | `payment-status-api.md`             | Payment Status API (Poll after VNPay Redirect) | Implemented | 2026-10-04 |
+| `subscription-lifecycle.md`         | AI Subscription Lifecycle (Cancel, Extension, Expiry) | In review | 2026-10-07 |
