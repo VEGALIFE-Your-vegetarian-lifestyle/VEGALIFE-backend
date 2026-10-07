@@ -54,3 +54,5 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `payments/get-payments-paymentid.md` | `GET /api/payments/{paymentId}` | Read one of your payments' status from the ledger (authenticated; owner only) |
 | `payments/get-payments.md` | `GET /api/payments` | List own payment history, newest first, with subscription and plan context (authenticated) |
 | `admin/get-payments.md` | `GET /api/admin/payments` | List payments across all users with user/status/date filters (Admin) |
+| `ai/post-messages.md` | `POST /api/ai/messages` | Send a chat message, get the AI reply (authenticated) |
+| `ai/post-messages-stream.md` | `POST /api/ai/messages/stream` | Send a chat message, stream the AI reply as SSE (authenticated) |

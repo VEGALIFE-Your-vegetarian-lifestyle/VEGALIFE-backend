@@ -75,3 +75,8 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-PAY-007 | The Receipt Is Emailed Exactly Once, Off the Request Thread | Active | 2026-10-04 |
 | BR-PAY-008 | Renewal Date Is Paid Time Plus One Calendar Month | Active | 2026-10-04 |
 | BR-PAY-009 | Only Active, Priced VND Plans Are Purchasable | Active | 2026-10-04 |
+| BR-AI-001 | Quota Gate Precedes the Provider Call | Active | 2026-10-07 |
+| BR-AI-002 | Only Successful Replies Count Toward Quota | Active | 2026-10-07 |
+| BR-AI-003 | Conversation Ownership Comes from Authentication | Active | 2026-10-07 |
+| BR-AI-004 | Context Is Profile Plus Own Conversation History | Active | 2026-10-07 |
+| BR-AI-005 | Chat Provider Is OpenAI-Compatible and Set by Dedicated Env Vars | Active | 2026-10-07 |
