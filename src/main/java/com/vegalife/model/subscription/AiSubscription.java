@@ -8,7 +8,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
@@ -19,7 +18,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
-@Table(name = "ai_subscription", uniqueConstraints = @UniqueConstraint(columnNames = "user_id"))
+@Table(name = "ai_subscription")
 @Data
 @Builder
 @NoArgsConstructor
@@ -31,7 +30,7 @@ public class AiSubscription {
   @Column(name = "id", updatable = false, nullable = false)
   private UUID id;
 
-  @Column(name = "user_id", nullable = false, unique = true)
+  @Column(name = "user_id", nullable = false)
   private UUID userId;
 
   @Column(name = "plan_id", nullable = false)
@@ -44,6 +43,12 @@ public class AiSubscription {
 
   @Column(name = "renewal_date")
   private Instant renewalDate;
+
+  @Column(name = "extended_from_id")
+  private UUID extendedFromId;
+
+  @Column(name = "cancelled_at")
+  private Instant cancelledAt;
 
   @CreationTimestamp
   @Column(name = "started_at", nullable = false)
@@ -60,6 +65,8 @@ public class AiSubscription {
   public enum Status {
     active,
     cancelled,
-    past_due
+    past_due,
+    scheduled,
+    expired
   }
 }
