@@ -1,4 +1,4 @@
--- V27__add_subscription_lifecycle.sql
+-- V29__add_subscription_lifecycle.sql
 -- Subscription lifecycle (issue #112): free user_id from its one-row unique
 -- constraint so a member can accumulate subscription history, and add the
 -- columns/statuses the lifecycle needs (docs/feats/subscription-lifecycle.md
