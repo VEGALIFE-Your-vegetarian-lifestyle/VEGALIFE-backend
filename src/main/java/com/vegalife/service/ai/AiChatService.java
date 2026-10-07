@@ -58,13 +58,19 @@ public class AiChatService {
     Optional<AiConversation> existing = resolveConversation(userId, request.getConversationId());
     AiQuotaGuard.QuotaWindow window = quotaGuard.requireAllowance(userId);
 
-    String reply =
-        chatClient()
-            .prompt()
-            .system(buildSystemPrompt(userId))
-            .messages(buildContext(existing, request.getMessage()))
-            .call()
-            .content();
+    String reply;
+    try {
+      reply =
+          chatClient()
+              .prompt()
+              .system(buildSystemPrompt(userId))
+              .messages(buildContext(existing, request.getMessage()))
+              .call()
+              .content();
+    } catch (RuntimeException ex) {
+      log.error("AI provider call failed for user {}", userId, ex);
+      throw new AiProviderException("AI provider request failed", ex);
+    }
 
     if (reply == null || reply.isBlank()) {
       throw new AiProviderException("AI provider request failed");
