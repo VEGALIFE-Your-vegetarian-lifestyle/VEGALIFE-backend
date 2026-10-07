@@ -46,6 +46,11 @@ Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 | `recipes/get-dishes.md` | `GET /api/dishes` | List active dishes for recipe-create autocomplete (authenticated) |
 | `subscriptions/get-me.md` | `GET /api/subscriptions/me` | Get own AI subscription: tier, usage, plan, latest payment (authenticated) |
 | `subscriptions/get-subscriptions.md` | `GET /api/subscriptions` | List active AI plans with limits and price (public) |
+| `subscriptions/get-history.md` | `GET /api/subscriptions/me/history` | Paginated history of own AI subscription rows, newest first (authenticated) |
+| `subscriptions/post-cancel.md` | `POST /api/subscriptions/me/cancel` | Cancel own AI subscription immediately, cascading scheduled successors (authenticated) |
+| `subscriptions/post-purchase-eligibility.md` | `POST /api/subscriptions/me/purchase/eligibility` | Check whether a plan purchase/extension is allowed; read-only (authenticated) |
 | `payments/post-checkout.md` | `POST /api/payments/checkout` | Start (or resume) a VNPay checkout for an AI plan (authenticated) |
 | `payments/get-vnpay-ipn.md` | `GET /api/payments/vnpay/ipn` | VNPay payment notification webhook; fulfils a verified payment (public, signed) |
 | `payments/get-payments-paymentid.md` | `GET /api/payments/{paymentId}` | Read one of your payments' status from the ledger (authenticated; owner only) |
+| `payments/get-payments.md` | `GET /api/payments` | List own payment history, newest first, with subscription and plan context (authenticated) |
+| `admin/get-payments.md` | `GET /api/admin/payments` | List payments across all users with user/status/date filters (Admin) |

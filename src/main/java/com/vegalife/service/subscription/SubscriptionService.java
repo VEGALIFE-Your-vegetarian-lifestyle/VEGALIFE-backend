@@ -1,9 +1,12 @@
 package com.vegalife.service.subscription;
 
 import com.vegalife.dto.mapper.subscription.SubscriptionMapper;
+import com.vegalife.dto.request.subscription.SubscriptionHistoryRequest;
 import com.vegalife.dto.response.subscription.AvailablePlanResponse;
 import com.vegalife.dto.response.subscription.PaymentResponse;
 import com.vegalife.dto.response.subscription.PlanSummaryResponse;
+import com.vegalife.dto.response.subscription.SubscriptionCancelResponse;
+import com.vegalife.dto.response.subscription.SubscriptionHistoryResponse;
 import com.vegalife.dto.response.subscription.SubscriptionMeResponse;
 import com.vegalife.dto.response.subscription.SubscriptionUsageResponse;
 import com.vegalife.model.subscription.AiPlan;
@@ -13,14 +16,23 @@ import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.AiUsageRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
+import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.DuplicateResourceException;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,10 +48,11 @@ public class SubscriptionService {
   private final AiUsageRepository usageRepository;
   private final PaymentLedgerRepository paymentLedgerRepository;
   private final SubscriptionMapper subscriptionMapper;
+  private final PlanPurchasePolicy planPurchasePolicy;
 
   @Transactional(readOnly = true)
   public SubscriptionMeResponse getMySubscription(UUID userId) {
-    Optional<AiSubscription> existing = subscriptionRepository.findByUserId(userId);
+    Optional<AiSubscription> existing = subscriptionRepository.findInEffect(userId);
 
     AiPlan plan;
     String status;
@@ -109,27 +122,182 @@ public class SubscriptionService {
   }
 
   /**
-   * Fulfils a successful payment: upserts the member's subscription onto the purchased plan
-   * (BR-PAY-008). On upgrade the existing row keeps its {@code started_at} and moves {@code
-   * renewal_date} to paid time plus one calendar month, in UTC. The only writer of {@code
-   * renewal_date}.
+   * Answers FR-009: every subscription row ever created for the member, newest first, with each
+   * row's plan resolved in one extra page query. Exposes only the history fields (FR-009); the row
+   * id, plan id, user id, and extended-from link stay internal (NFR-SEC-001).
+   */
+  @Transactional(readOnly = true)
+  public PageResponse<SubscriptionHistoryResponse> getMySubscriptionHistory(
+      UUID userId, SubscriptionHistoryRequest request) {
+    Pageable pageable =
+        PageRequest.of(
+            request.getPage(), request.getSize(), Sort.by(Sort.Direction.DESC, "createdAt"));
+    Page<AiSubscription> page = subscriptionRepository.findByUserId(userId, pageable);
+
+    List<AiSubscription> rows = page.getContent();
+    Map<UUID, AiPlan> plans =
+        planRepository
+            .findAllById(rows.stream().map(AiSubscription::getPlanId).collect(Collectors.toSet()))
+            .stream()
+            .collect(Collectors.toMap(AiPlan::getId, Function.identity()));
+
+    Page<SubscriptionHistoryResponse> mapped =
+        page.map(
+            subscription -> {
+              AiPlan plan = plans.get(subscription.getPlanId());
+              if (plan == null) {
+                throw new IllegalStateException(
+                    "Plan of subscription not found: " + subscription.getPlanId());
+              }
+              return subscriptionMapper.toHistoryResponse(subscription, plan);
+            });
+    return PageResponse.from(mapped);
+  }
+
+  /**
+   * Answers FR-003: cancels the member's row in effect and every scheduled successor in one
+   * transaction. Throws 409 when nothing is in effect (FR-004) — a pure guard that writes nothing.
    */
   @Transactional
-  public AiSubscription activatePlan(UUID userId, UUID planId, Instant paidAt) {
-    AiSubscription subscription =
-        subscriptionRepository
-            .findByUserId(userId)
-            .orElseGet(() -> AiSubscription.builder().userId(userId).startedAt(paidAt).build());
-    subscription.setPlanId(planId);
-    subscription.setStatus(AiSubscription.Status.active);
-    subscription.setRenewalDate(paidAt.atZone(ZoneOffset.UTC).plusMonths(1).toInstant());
-    AiSubscription saved = subscriptionRepository.save(subscription);
+  public SubscriptionCancelResponse cancelMySubscription(UUID userId) {
+    Optional<AiSubscription> inEffect = subscriptionRepository.findInEffectForUpdate(userId);
+    if (inEffect.isEmpty()) {
+      throw new DuplicateResourceException("Subscription already cancelled");
+    }
+
+    Instant cancelledAt = Instant.now();
+    AiSubscription subscription = inEffect.get();
+    subscription.setStatus(AiSubscription.Status.cancelled);
+    subscription.setCancelledAt(cancelledAt);
+    subscriptionRepository.save(subscription);
+    int cascaded =
+        subscriptionRepository.cancelScheduledForUser(
+            userId, cancelledAt, AiSubscription.Status.cancelled, AiSubscription.Status.scheduled);
     log.info(
-        "Activated plan {} for user {} (paidAt={}, renewalDate={})",
-        planId,
+        "Cancelled subscription {} for user {} (cancelledAt={}, scheduledCascaded={})",
+        subscription.getId(),
         userId,
-        paidAt,
-        saved.getRenewalDate());
-    return saved;
+        cancelledAt,
+        cascaded);
+
+    return SubscriptionCancelResponse.builder()
+        .status(AiSubscription.Status.cancelled.name())
+        .cancelledAt(cancelledAt)
+        .build();
+  }
+
+  /**
+   * Answers FR-007: whether the member may currently buy the given plan. Re-runs the purchase gate
+   * (FR-006) with a read-only query — no row is created, updated, or write-locked — and throws 409
+   * on a denial.
+   */
+  @Transactional(readOnly = true)
+  public void checkPurchaseEligibility(UUID userId, UUID planId) {
+    GateOutcome outcome = evaluateGate(userId, planId, subscriptionRepository.findInEffect(userId));
+    if (outcome.denyMessage != null) {
+      throw new DuplicateResourceException(outcome.denyMessage);
+    }
+  }
+
+  /**
+   * Answers FR-007 by plan code: resolves and validates the plan through the shared policy
+   * (404/400, NFR-MAINT-001) before re-running the purchase gate read-only. A denial is 409; an
+   * allowed answer writes nothing.
+   */
+  @Transactional(readOnly = true)
+  public void checkPurchaseEligibilityByCode(UUID userId, String planCode) {
+    AiPlan plan = planPurchasePolicy.requirePurchasableByCode(planCode);
+    checkPurchaseEligibility(userId, plan.getId());
+  }
+
+  /**
+   * Fulfils a successful payment: re-runs the purchase gate (FR-006) under a pessimistic write lock
+   * on the member's row in effect and inserts exactly one new row (FR-008): an active row starting
+   * at paid time when nothing is in effect, or a scheduled successor chained via {@code
+   * extended_from_id} whose window starts at the current {@code renewal_date} when the same plan is
+   * being extended. Any other configuration writes nothing and logs WARN — the payment stays
+   * succeeded (BR-PAY-001). One calendar month, UTC. The only writer of {@code renewal_date}
+   * besides the expiry sweep.
+   */
+  @Transactional
+  public Optional<AiSubscription> activatePlan(UUID userId, UUID planId, Instant paidAt) {
+    Optional<AiSubscription> inEffect = subscriptionRepository.findInEffectForUpdate(userId);
+    GateOutcome outcome = evaluateGate(userId, planId, inEffect);
+
+    return switch (outcome) {
+      case NEW -> {
+        AiSubscription saved =
+            subscriptionRepository.save(
+                AiSubscription.builder()
+                    .userId(userId)
+                    .planId(planId)
+                    .status(AiSubscription.Status.active)
+                    .startedAt(paidAt)
+                    .renewalDate(paidAt.atZone(ZoneOffset.UTC).plusMonths(1).toInstant())
+                    .build());
+        log.info(
+            "Activated plan {} for user {} (paidAt={}, renewalDate={})",
+            planId,
+            userId,
+            paidAt,
+            saved.getRenewalDate());
+        yield Optional.of(saved);
+      }
+      case EXTENSION -> {
+        AiSubscription current = inEffect.get();
+        Instant base = current.getRenewalDate() != null ? current.getRenewalDate() : paidAt;
+        AiSubscription saved =
+            subscriptionRepository.save(
+                AiSubscription.builder()
+                    .userId(userId)
+                    .planId(planId)
+                    .status(AiSubscription.Status.scheduled)
+                    .startedAt(base)
+                    .renewalDate(base.atZone(ZoneOffset.UTC).plusMonths(1).toInstant())
+                    .extendedFromId(current.getId())
+                    .build());
+        log.info(
+            "Scheduled renewal of plan {} for user {} (startedAt={}, renewalDate={})",
+            planId,
+            userId,
+            saved.getStartedAt(),
+            saved.getRenewalDate());
+        yield Optional.of(saved);
+      }
+      case DENY_DIFFERENT_PLAN, DENY_ALREADY_SCHEDULED -> {
+        log.warn(
+            "Purchase of plan {} for user {} denied by subscription gate: {}",
+            planId,
+            userId,
+            outcome.denyMessage);
+        yield Optional.empty();
+      }
+    };
+  }
+
+  private GateOutcome evaluateGate(UUID userId, UUID planId, Optional<AiSubscription> inEffect) {
+    if (inEffect.isEmpty()) {
+      return GateOutcome.NEW;
+    }
+    if (!planId.equals(inEffect.get().getPlanId())) {
+      return GateOutcome.DENY_DIFFERENT_PLAN;
+    }
+    boolean scheduledExists =
+        subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
+            userId, planId, AiSubscription.Status.scheduled);
+    return scheduledExists ? GateOutcome.DENY_ALREADY_SCHEDULED : GateOutcome.EXTENSION;
+  }
+
+  private enum GateOutcome {
+    NEW(null),
+    EXTENSION(null),
+    DENY_DIFFERENT_PLAN("Cancel your current subscription before purchasing a different plan"),
+    DENY_ALREADY_SCHEDULED("A renewal is already scheduled for this plan");
+
+    private final String denyMessage;
+
+    GateOutcome(String denyMessage) {
+      this.denyMessage = denyMessage;
+    }
   }
 }

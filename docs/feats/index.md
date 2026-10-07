@@ -39,3 +39,5 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `payment-status-api.md`             | Payment Status API (Poll after VNPay Redirect) | Implemented | 2026-10-04 |
 | `post-raw-content-migration.md`     | Post Schema — Rich-Text raw_content, Drop type/video_url | Implemented | 2026-10-05 |
 | `get-post-by-id.md`                 | View Post Detail API (Get Post by ID) | Implemented | 2026-10-05 |
+| `subscription-lifecycle.md`         | AI Subscription Lifecycle (Cancel, Extension, Expiry) | In review | 2026-10-07 |
+| `payment-history.md`                | Payment History API (Member + Admin)     | Approved    | 2026-10-07 |
