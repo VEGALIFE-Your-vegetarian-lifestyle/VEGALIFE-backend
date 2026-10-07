@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -547,6 +548,184 @@ class SubscriptionControllerIntegrationTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(jsonPath("$.message").value("Validation failed"));
+  }
+
+  @Test
+  void purchaseEligibility_withoutAuthentication_returns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/purchase/eligibility")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"planCode\":\"PRO\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Unauthorized"));
+  }
+
+  @Test
+  void purchaseEligibility_whenNothingInEffect_returnsAllowedAndWritesNothing() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/purchase/eligibility")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"planCode\":\"PRO\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Purchase allowed"))
+        .andExpect(jsonPath("$.data.allowed").value(true));
+
+    assertThat(subscriptionRepository.findAllByUserId(testUser.getId())).isEmpty();
+  }
+
+  @Test
+  void purchaseEligibility_whenPlanCodeMissingOrBlank_returns400ValidationError() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/purchase/eligibility")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/purchase/eligibility")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"planCode\":\"   \"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+  }
+
+  @Test
+  void purchaseEligibility_whenPlanCodeUnknown_returns404PlanNotFound() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/purchase/eligibility")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"planCode\":\"GOLD\"}"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Plan not found"));
+  }
+
+  @Test
+  void purchaseEligibility_whenPlanNotPurchasable_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/purchase/eligibility")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"planCode\":\"FREE\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(
+            jsonPath("$.message")
+                .value("Plan is not purchasable: price must be greater than zero"));
+  }
+
+  @Test
+  void purchaseEligibility_whenSamePlanInEffect_returnsAllowedExtensionAndWritesNothing()
+      throws Exception {
+    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(testUser.getId())
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
+            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
+            .build());
+
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/purchase/eligibility")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"planCode\":\"PRO\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.allowed").value(true));
+
+    entityManager.clear();
+    List<AiSubscription> rows = subscriptionRepository.findAllByUserId(testUser.getId());
+    assertThat(rows).hasSize(1);
+    assertThat(rows.get(0).getStatus()).isEqualTo(AiSubscription.Status.active);
+  }
+
+  @Test
+  void purchaseEligibility_whenDifferentPlanInEffect_returns409AndWritesNothing() throws Exception {
+    AiPlan freePlan = planRepository.findByCode("FREE").orElseThrow();
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(testUser.getId())
+            .planId(freePlan.getId())
+            .status(AiSubscription.Status.active)
+            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
+            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
+            .build());
+
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/purchase/eligibility")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"planCode\":\"PRO\"}"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(
+            jsonPath("$.message")
+                .value("Cancel your current subscription before purchasing a different plan"));
+
+    entityManager.clear();
+    List<AiSubscription> rows = subscriptionRepository.findAllByUserId(testUser.getId());
+    assertThat(rows).hasSize(1);
+    assertThat(rows.get(0).getStatus()).isEqualTo(AiSubscription.Status.active);
+    assertThat(rows.get(0).getCancelledAt()).isNull();
+  }
+
+  @Test
+  void purchaseEligibility_whenScheduledSuccessorExists_returns409AndWritesNothing()
+      throws Exception {
+    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(testUser.getId())
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
+            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
+            .build());
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(testUser.getId())
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.scheduled)
+            .startedAt(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
+            .renewalDate(Instant.now().plus(60, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
+            .build());
+
+    mockMvc
+        .perform(
+            post("/api/subscriptions/me/purchase/eligibility")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"planCode\":\"PRO\"}"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("A renewal is already scheduled for this plan"));
+
+    entityManager.clear();
+    List<AiSubscription> rows = subscriptionRepository.findAllByUserId(testUser.getId());
+    assertThat(rows).hasSize(2);
+    assertThat(rows)
+        .extracting(AiSubscription::getStatus)
+        .containsExactlyInAnyOrder(AiSubscription.Status.active, AiSubscription.Status.scheduled);
   }
 
   private void backdate(UUID subscriptionId, Instant when) {

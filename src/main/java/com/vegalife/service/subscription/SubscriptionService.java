@@ -48,6 +48,7 @@ public class SubscriptionService {
   private final AiUsageRepository usageRepository;
   private final PaymentLedgerRepository paymentLedgerRepository;
   private final SubscriptionMapper subscriptionMapper;
+  private final PlanPurchasePolicy planPurchasePolicy;
 
   @Transactional(readOnly = true)
   public SubscriptionMeResponse getMySubscription(UUID userId) {
@@ -196,6 +197,17 @@ public class SubscriptionService {
     if (outcome.denyMessage != null) {
       throw new DuplicateResourceException(outcome.denyMessage);
     }
+  }
+
+  /**
+   * Answers FR-007 by plan code: resolves and validates the plan through the shared policy
+   * (404/400, NFR-MAINT-001) before re-running the purchase gate read-only. A denial is 409; an
+   * allowed answer writes nothing.
+   */
+  @Transactional(readOnly = true)
+  public void checkPurchaseEligibilityByCode(UUID userId, String planCode) {
+    AiPlan plan = planPurchasePolicy.requirePurchasableByCode(planCode);
+    checkPurchaseEligibility(userId, plan.getId());
   }
 
   /**

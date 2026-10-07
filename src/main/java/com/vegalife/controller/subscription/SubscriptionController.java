@@ -1,5 +1,6 @@
 package com.vegalife.controller.subscription;
 
+import com.vegalife.dto.request.subscription.PurchaseEligibilityRequest;
 import com.vegalife.dto.request.subscription.SubscriptionHistoryRequest;
 import com.vegalife.dto.response.subscription.AvailablePlanResponse;
 import com.vegalife.dto.response.subscription.SubscriptionCancelResponse;
@@ -12,6 +13,7 @@ import com.vegalife.shared.dto.PageResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +21,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -64,5 +67,15 @@ public class SubscriptionController {
         subscriptionService.getMySubscriptionHistory(userId, request);
     return ResponseEntity.ok(
         ApiResponse.success(response, "Subscription history retrieved successfully"));
+  }
+
+  @PostMapping("/me/purchase/eligibility")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<Map<String, Boolean>>> checkPurchaseEligibility(
+      @AuthenticationPrincipal UUID userId,
+      @Valid @RequestBody PurchaseEligibilityRequest request) {
+
+    subscriptionService.checkPurchaseEligibilityByCode(userId, request.getPlanCode());
+    return ResponseEntity.ok(ApiResponse.success(Map.of("allowed", true), "Purchase allowed"));
   }
 }
