@@ -17,6 +17,7 @@ public class PostListResponse {
 
   private UUID id;
   private String title;
+  private String content;
   private JsonNode rawContent;
   private String featuredImageUrl;
   private Set<UUID> categoryIds;
