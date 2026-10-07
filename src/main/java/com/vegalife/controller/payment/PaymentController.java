@@ -1,12 +1,16 @@
 package com.vegalife.controller.payment;
 
 import com.vegalife.dto.request.payment.CheckoutRequest;
+import com.vegalife.dto.request.payment.PaymentListRequest;
 import com.vegalife.dto.response.payment.CheckoutResponse;
+import com.vegalife.dto.response.payment.PaymentHistoryItemResponse;
 import com.vegalife.dto.response.payment.PaymentStatusResponse;
 import com.vegalife.service.payment.PaymentCheckoutService;
+import com.vegalife.service.payment.PaymentHistoryService;
 import com.vegalife.service.payment.PaymentStatusService;
 import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
+import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,6 +34,7 @@ public class PaymentController {
 
   private final PaymentCheckoutService paymentCheckoutService;
   private final PaymentStatusService paymentStatusService;
+  private final PaymentHistoryService paymentHistoryService;
 
   @PostMapping("/checkout")
   @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
@@ -39,6 +45,17 @@ public class PaymentController {
     CheckoutResponse response =
         paymentCheckoutService.checkout(userId, request, clientIp(httpRequest));
     return ResponseEntity.ok(ApiResponse.success(response, "Payment session created"));
+  }
+
+  /** Exact-path route; Spring MVC resolves it ahead of the {@code /{paymentId}} template. */
+  @GetMapping
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<PageResponse<PaymentHistoryItemResponse>>> listMyPayments(
+      @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute PaymentListRequest request) {
+    PageResponse<PaymentHistoryItemResponse> response =
+        paymentHistoryService.listMyPayments(userId, request);
+    return ResponseEntity.ok(
+        ApiResponse.success(response, "Payment history retrieved successfully"));
   }
 
   @GetMapping("/{paymentId}")
