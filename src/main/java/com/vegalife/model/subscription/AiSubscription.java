@@ -50,7 +50,6 @@ public class AiSubscription {
   @Column(name = "cancelled_at")
   private Instant cancelledAt;
 
-  @CreationTimestamp
   @Column(name = "started_at", nullable = false)
   private Instant startedAt;
 

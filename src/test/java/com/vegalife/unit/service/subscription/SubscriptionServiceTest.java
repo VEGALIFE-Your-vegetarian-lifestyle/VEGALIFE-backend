@@ -24,6 +24,7 @@ import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.AiUsageRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.service.subscription.SubscriptionService;
+import com.vegalife.shared.exception.DuplicateResourceException;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
@@ -86,7 +87,7 @@ class SubscriptionServiceTest {
 
   @Test
   void getMySubscription_whenNoSubscriptionRow_synthesizesFreeDefaultWithoutWriting() {
-    when(subscriptionRepository.findByUserId(userId)).thenReturn(Optional.empty());
+    when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.empty());
     when(planRepository.findByCode("FREE")).thenReturn(Optional.of(freePlan));
     when(usageRepository.sumRequestCountInWindow(
             eq(userId), any(Instant.class), any(Instant.class)))
@@ -112,7 +113,7 @@ class SubscriptionServiceTest {
 
   @Test
   void getMySubscription_usageWindow_isCurrentUtcMonthBounds() {
-    when(subscriptionRepository.findByUserId(userId)).thenReturn(Optional.empty());
+    when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.empty());
     when(planRepository.findByCode("FREE")).thenReturn(Optional.of(freePlan));
     when(usageRepository.sumRequestCountInWindow(
             eq(userId), any(Instant.class), any(Instant.class)))
@@ -169,7 +170,7 @@ class SubscriptionServiceTest {
             .paidAt(ledger.getPaidAt())
             .build();
 
-    when(subscriptionRepository.findByUserId(userId)).thenReturn(Optional.of(subscription));
+    when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.of(subscription));
     when(planRepository.findById(proPlan.getId())).thenReturn(Optional.of(proPlan));
     when(usageRepository.sumRequestCountInWindow(
             eq(userId), any(Instant.class), any(Instant.class)))
@@ -205,7 +206,7 @@ class SubscriptionServiceTest {
             .renewalDate(null)
             .build();
 
-    when(subscriptionRepository.findByUserId(userId)).thenReturn(Optional.of(subscription));
+    when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.of(subscription));
     when(planRepository.findById(proPlan.getId())).thenReturn(Optional.of(proPlan));
     when(usageRepository.sumRequestCountInWindow(
             eq(userId), any(Instant.class), any(Instant.class)))
@@ -230,7 +231,7 @@ class SubscriptionServiceTest {
 
   @Test
   void getMySubscription_whenFreePlanMissing_throwsIllegalState() {
-    when(subscriptionRepository.findByUserId(userId)).thenReturn(Optional.empty());
+    when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.empty());
     when(planRepository.findByCode("FREE")).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> subscriptionService.getMySubscription(userId))
@@ -250,7 +251,7 @@ class SubscriptionServiceTest {
             .status(AiSubscription.Status.active)
             .renewalDate(null)
             .build();
-    when(subscriptionRepository.findByUserId(userId)).thenReturn(Optional.of(subscription));
+    when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.of(subscription));
     when(planRepository.findById(subscription.getPlanId())).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> subscriptionService.getMySubscription(userId))
@@ -289,5 +290,201 @@ class SubscriptionServiceTest {
     verify(planRepository, never()).save(any(AiPlan.class));
     // FR-008: the public catalogue never reads usage, subscriptions, or payments.
     verifyNoInteractions(subscriptionRepository, usageRepository, paymentLedgerRepository);
+  }
+
+  @Test
+  void activatePlan_whenNothingInEffect_insertsActiveRowStartingAtPaidAt() {
+    Instant paidAt = Instant.parse("2026-10-05T12:00:00Z");
+    when(subscriptionRepository.findInEffectForUpdate(userId)).thenReturn(Optional.empty());
+    when(subscriptionRepository.save(any(AiSubscription.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    Optional<AiSubscription> result =
+        subscriptionService.activatePlan(userId, proPlan.getId(), paidAt);
+
+    assertThat(result).isPresent();
+    AiSubscription saved = result.get();
+    assertThat(saved.getUserId()).isEqualTo(userId);
+    assertThat(saved.getPlanId()).isEqualTo(proPlan.getId());
+    assertThat(saved.getStatus()).isEqualTo(AiSubscription.Status.active);
+    assertThat(saved.getStartedAt()).isEqualTo(paidAt);
+    assertThat(saved.getRenewalDate()).isEqualTo(Instant.parse("2026-11-05T12:00:00Z"));
+    assertThat(saved.getExtendedFromId()).isNull();
+    verify(subscriptionRepository, never()).existsByUserIdAndPlanIdAndStatus(any(), any(), any());
+  }
+
+  @Test
+  void activatePlan_whenSamePlanInEffect_insertsScheduledSuccessorFromCurrentRenewal() {
+    Instant paidAt = Instant.parse("2026-10-05T12:00:00Z");
+    AiSubscription current =
+        AiSubscription.builder()
+            .id(UUID.randomUUID())
+            .userId(userId)
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .startedAt(Instant.parse("2026-09-20T00:00:00Z"))
+            .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
+            .build();
+    when(subscriptionRepository.findInEffectForUpdate(userId)).thenReturn(Optional.of(current));
+    when(subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
+            userId, proPlan.getId(), AiSubscription.Status.scheduled))
+        .thenReturn(false);
+    when(subscriptionRepository.save(any(AiSubscription.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    Optional<AiSubscription> result =
+        subscriptionService.activatePlan(userId, proPlan.getId(), paidAt);
+
+    assertThat(result).isPresent();
+    AiSubscription saved = result.get();
+    assertThat(saved.getStatus()).isEqualTo(AiSubscription.Status.scheduled);
+    assertThat(saved.getStartedAt()).isEqualTo(Instant.parse("2026-10-20T00:00:00Z"));
+    assertThat(saved.getRenewalDate()).isEqualTo(Instant.parse("2026-11-20T00:00:00Z"));
+    assertThat(saved.getExtendedFromId()).isEqualTo(current.getId());
+    assertThat(current.getRenewalDate()).isEqualTo(Instant.parse("2026-10-20T00:00:00Z"));
+    verify(subscriptionRepository).save(any(AiSubscription.class));
+  }
+
+  @Test
+  void activatePlan_whenCurrentRenewalMissing_fallsBackToPaidAt() {
+    Instant paidAt = Instant.parse("2026-10-05T12:00:00Z");
+    AiSubscription current =
+        AiSubscription.builder()
+            .id(UUID.randomUUID())
+            .userId(userId)
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .renewalDate(null)
+            .build();
+    when(subscriptionRepository.findInEffectForUpdate(userId)).thenReturn(Optional.of(current));
+    when(subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
+            userId, proPlan.getId(), AiSubscription.Status.scheduled))
+        .thenReturn(false);
+    when(subscriptionRepository.save(any(AiSubscription.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    Optional<AiSubscription> result =
+        subscriptionService.activatePlan(userId, proPlan.getId(), paidAt);
+
+    assertThat(result).isPresent();
+    assertThat(result.get().getStartedAt()).isEqualTo(paidAt);
+    assertThat(result.get().getRenewalDate()).isEqualTo(Instant.parse("2026-11-05T12:00:00Z"));
+  }
+
+  @Test
+  void activatePlan_whenDifferentPlanInEffect_writesNothingAndReturnsEmpty() {
+    Instant paidAt = Instant.parse("2026-10-05T12:00:00Z");
+    AiSubscription current =
+        AiSubscription.builder()
+            .id(UUID.randomUUID())
+            .userId(userId)
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
+            .build();
+    when(subscriptionRepository.findInEffectForUpdate(userId)).thenReturn(Optional.of(current));
+
+    Optional<AiSubscription> result =
+        subscriptionService.activatePlan(userId, freePlan.getId(), paidAt);
+
+    assertThat(result).isEmpty();
+    verify(subscriptionRepository, never()).save(any(AiSubscription.class));
+    verify(subscriptionRepository, never()).existsByUserIdAndPlanIdAndStatus(any(), any(), any());
+  }
+
+  @Test
+  void activatePlan_whenRenewalAlreadyScheduled_writesNothingAndReturnsEmpty() {
+    Instant paidAt = Instant.parse("2026-10-05T12:00:00Z");
+    AiSubscription current =
+        AiSubscription.builder()
+            .id(UUID.randomUUID())
+            .userId(userId)
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
+            .build();
+    when(subscriptionRepository.findInEffectForUpdate(userId)).thenReturn(Optional.of(current));
+    when(subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
+            userId, proPlan.getId(), AiSubscription.Status.scheduled))
+        .thenReturn(true);
+
+    Optional<AiSubscription> result =
+        subscriptionService.activatePlan(userId, proPlan.getId(), paidAt);
+
+    assertThat(result).isEmpty();
+    verify(subscriptionRepository, never()).save(any(AiSubscription.class));
+  }
+
+  @Test
+  void checkPurchaseEligibility_whenNothingInEffect_allowsWithoutLocking() {
+    when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.empty());
+
+    subscriptionService.checkPurchaseEligibility(userId, proPlan.getId());
+
+    verify(subscriptionRepository, never()).findInEffectForUpdate(any());
+    verify(subscriptionRepository, never()).save(any(AiSubscription.class));
+    verify(subscriptionRepository, never()).existsByUserIdAndPlanIdAndStatus(any(), any(), any());
+  }
+
+  @Test
+  void checkPurchaseEligibility_whenSamePlanWithoutScheduledRenewal_allowsExtension() {
+    AiSubscription current =
+        AiSubscription.builder()
+            .id(UUID.randomUUID())
+            .userId(userId)
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
+            .build();
+    when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.of(current));
+    when(subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
+            userId, proPlan.getId(), AiSubscription.Status.scheduled))
+        .thenReturn(false);
+
+    subscriptionService.checkPurchaseEligibility(userId, proPlan.getId());
+
+    verify(subscriptionRepository, never()).findInEffectForUpdate(any());
+    verify(subscriptionRepository, never()).save(any(AiSubscription.class));
+  }
+
+  @Test
+  void checkPurchaseEligibility_whenDifferentPlanInEffect_deniesWithConflictMessage() {
+    AiSubscription current =
+        AiSubscription.builder()
+            .id(UUID.randomUUID())
+            .userId(userId)
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
+            .build();
+    when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.of(current));
+
+    assertThatThrownBy(() -> subscriptionService.checkPurchaseEligibility(userId, freePlan.getId()))
+        .isInstanceOf(DuplicateResourceException.class)
+        .hasMessage("Cancel your current subscription before purchasing a different plan");
+    verify(subscriptionRepository, never()).findInEffectForUpdate(any());
+    verify(subscriptionRepository, never()).save(any(AiSubscription.class));
+  }
+
+  @Test
+  void checkPurchaseEligibility_whenRenewalAlreadyScheduled_deniesWithConflictMessage() {
+    AiSubscription current =
+        AiSubscription.builder()
+            .id(UUID.randomUUID())
+            .userId(userId)
+            .planId(proPlan.getId())
+            .status(AiSubscription.Status.active)
+            .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
+            .build();
+    when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.of(current));
+    when(subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
+            userId, proPlan.getId(), AiSubscription.Status.scheduled))
+        .thenReturn(true);
+
+    assertThatThrownBy(() -> subscriptionService.checkPurchaseEligibility(userId, proPlan.getId()))
+        .isInstanceOf(DuplicateResourceException.class)
+        .hasMessage("A renewal is already scheduled for this plan");
+    verify(subscriptionRepository, never()).findInEffectForUpdate(any());
+    verify(subscriptionRepository, never()).save(any(AiSubscription.class));
   }
 }

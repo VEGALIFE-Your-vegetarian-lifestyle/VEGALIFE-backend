@@ -13,6 +13,7 @@ import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.AiUsageRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
+import com.vegalife.shared.exception.DuplicateResourceException;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
@@ -39,7 +40,7 @@ public class SubscriptionService {
 
   @Transactional(readOnly = true)
   public SubscriptionMeResponse getMySubscription(UUID userId) {
-    Optional<AiSubscription> existing = subscriptionRepository.findByUserId(userId);
+    Optional<AiSubscription> existing = subscriptionRepository.findInEffect(userId);
 
     AiPlan plan;
     String status;
@@ -109,27 +110,106 @@ public class SubscriptionService {
   }
 
   /**
-   * Fulfils a successful payment: upserts the member's subscription onto the purchased plan
-   * (BR-PAY-008). On upgrade the existing row keeps its {@code started_at} and moves {@code
-   * renewal_date} to paid time plus one calendar month, in UTC. The only writer of {@code
-   * renewal_date}.
+   * Answers FR-007: whether the member may currently buy the given plan. Re-runs the purchase gate
+   * (FR-006) with a read-only query — no row is created, updated, or write-locked — and throws 409
+   * on a denial.
+   */
+  @Transactional(readOnly = true)
+  public void checkPurchaseEligibility(UUID userId, UUID planId) {
+    GateOutcome outcome = evaluateGate(userId, planId, subscriptionRepository.findInEffect(userId));
+    if (outcome.denyMessage != null) {
+      throw new DuplicateResourceException(outcome.denyMessage);
+    }
+  }
+
+  /**
+   * Fulfils a successful payment: re-runs the purchase gate (FR-006) under a pessimistic write lock
+   * on the member's row in effect and inserts exactly one new row (FR-008): an active row starting
+   * at paid time when nothing is in effect, or a scheduled successor chained via {@code
+   * extended_from_id} whose window starts at the current {@code renewal_date} when the same plan is
+   * being extended. Any other configuration writes nothing and logs WARN — the payment stays
+   * succeeded (BR-PAY-001). One calendar month, UTC. The only writer of {@code renewal_date}
+   * besides the expiry sweep.
    */
   @Transactional
-  public AiSubscription activatePlan(UUID userId, UUID planId, Instant paidAt) {
-    AiSubscription subscription =
-        subscriptionRepository
-            .findByUserId(userId)
-            .orElseGet(() -> AiSubscription.builder().userId(userId).startedAt(paidAt).build());
-    subscription.setPlanId(planId);
-    subscription.setStatus(AiSubscription.Status.active);
-    subscription.setRenewalDate(paidAt.atZone(ZoneOffset.UTC).plusMonths(1).toInstant());
-    AiSubscription saved = subscriptionRepository.save(subscription);
-    log.info(
-        "Activated plan {} for user {} (paidAt={}, renewalDate={})",
-        planId,
-        userId,
-        paidAt,
-        saved.getRenewalDate());
-    return saved;
+  public Optional<AiSubscription> activatePlan(UUID userId, UUID planId, Instant paidAt) {
+    Optional<AiSubscription> inEffect = subscriptionRepository.findInEffectForUpdate(userId);
+    GateOutcome outcome = evaluateGate(userId, planId, inEffect);
+
+    return switch (outcome) {
+      case NEW -> {
+        AiSubscription saved =
+            subscriptionRepository.save(
+                AiSubscription.builder()
+                    .userId(userId)
+                    .planId(planId)
+                    .status(AiSubscription.Status.active)
+                    .startedAt(paidAt)
+                    .renewalDate(paidAt.atZone(ZoneOffset.UTC).plusMonths(1).toInstant())
+                    .build());
+        log.info(
+            "Activated plan {} for user {} (paidAt={}, renewalDate={})",
+            planId,
+            userId,
+            paidAt,
+            saved.getRenewalDate());
+        yield Optional.of(saved);
+      }
+      case EXTENSION -> {
+        AiSubscription current = inEffect.get();
+        Instant base = current.getRenewalDate() != null ? current.getRenewalDate() : paidAt;
+        AiSubscription saved =
+            subscriptionRepository.save(
+                AiSubscription.builder()
+                    .userId(userId)
+                    .planId(planId)
+                    .status(AiSubscription.Status.scheduled)
+                    .startedAt(base)
+                    .renewalDate(base.atZone(ZoneOffset.UTC).plusMonths(1).toInstant())
+                    .extendedFromId(current.getId())
+                    .build());
+        log.info(
+            "Scheduled renewal of plan {} for user {} (startedAt={}, renewalDate={})",
+            planId,
+            userId,
+            saved.getStartedAt(),
+            saved.getRenewalDate());
+        yield Optional.of(saved);
+      }
+      case DENY_DIFFERENT_PLAN, DENY_ALREADY_SCHEDULED -> {
+        log.warn(
+            "Purchase of plan {} for user {} denied by subscription gate: {}",
+            planId,
+            userId,
+            outcome.denyMessage);
+        yield Optional.empty();
+      }
+    };
+  }
+
+  private GateOutcome evaluateGate(UUID userId, UUID planId, Optional<AiSubscription> inEffect) {
+    if (inEffect.isEmpty()) {
+      return GateOutcome.NEW;
+    }
+    if (!planId.equals(inEffect.get().getPlanId())) {
+      return GateOutcome.DENY_DIFFERENT_PLAN;
+    }
+    boolean scheduledExists =
+        subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
+            userId, planId, AiSubscription.Status.scheduled);
+    return scheduledExists ? GateOutcome.DENY_ALREADY_SCHEDULED : GateOutcome.EXTENSION;
+  }
+
+  private enum GateOutcome {
+    NEW(null),
+    EXTENSION(null),
+    DENY_DIFFERENT_PLAN("Cancel your current subscription before purchasing a different plan"),
+    DENY_ALREADY_SCHEDULED("A renewal is already scheduled for this plan");
+
+    private final String denyMessage;
+
+    GateOutcome(String denyMessage) {
+      this.denyMessage = denyMessage;
+    }
   }
 }

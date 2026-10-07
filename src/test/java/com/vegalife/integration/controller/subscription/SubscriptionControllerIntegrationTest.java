@@ -172,6 +172,7 @@ class SubscriptionControllerIntegrationTest {
             .planId(proPlan.getId())
             .status(AiSubscription.Status.active)
             .renewalDate(renewalDate)
+            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
             .build());
 
     YearMonth currentMonth = YearMonth.now(ZoneOffset.UTC);
