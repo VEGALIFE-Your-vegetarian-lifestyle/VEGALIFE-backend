@@ -7,6 +7,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
  * degrades to "signature mismatch" under a blank secret (FR-020).
  */
 @Component
+@Slf4j
 public class VnpayClient implements PaymentGateway {
 
   private static final String API_VERSION = "2.1.0";
@@ -72,7 +74,18 @@ public class VnpayClient implements PaymentGateway {
     if (params == null) {
       return false;
     }
-    return signer.verifyParams(params, params.get(VnpaySigner.SECURE_HASH_FIELD));
+    boolean valid = signer.verifyParams(params, params.get(VnpaySigner.SECURE_HASH_FIELD));
+    if (!valid) {
+      // Safe diagnostics: the canonical form holds only public gateway fields and the configured
+      // secret is never logged. Distinguishes a missing secret (config fault) from a real
+      // signature/encoding mismatch on a captured payload.
+      log.warn(
+          "VNPay callback rejected: secretConfigured={}, tmnCode={}, canonical=[{}]",
+          signer.hasSecret(),
+          properties.getTmnCode(),
+          signer.canonicalize(params));
+    }
+    return valid;
   }
 
   /**

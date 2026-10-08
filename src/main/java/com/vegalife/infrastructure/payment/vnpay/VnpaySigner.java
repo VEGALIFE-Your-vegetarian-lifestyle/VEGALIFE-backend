@@ -63,6 +63,15 @@ public final class VnpaySigner {
     return String.join("&", pairs);
   }
 
+  /**
+   * True when no secret was configured. The webhook answers {@code 97} either way, but the caller
+   * can distinguish "secret missing" (a configuration fault) from "secret present but signature
+   * mismatch" (a payload/encoding fault) when diagnosing.
+   */
+  public boolean hasSecret() {
+    return secret.length > 0;
+  }
+
   /** Lowercase-hex HMAC-SHA512 of an already-canonical (or pipe-joined) string. */
   public String sign(String payload) {
     try {
