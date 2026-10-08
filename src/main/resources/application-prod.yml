@@ -50,6 +50,18 @@ app:
   mail:
     # Required — real Brevo-verified sender address.
     from: ${MAIL_FROM}
+  payments:
+    vnpay:
+      # The credential placeholders must exist in every profile that serves the
+      # webhook: a ${VNPAY_*} env var only binds to these properties through a
+      # placeholder, so without this block the secret resolves to blank on the
+      # prod profile and every IPN answers 97 (issue #16). Prod must supply the
+      # credentials (and, for checkout, the payment URL) via the Render dashboard.
+      enabled: ${VNPAY_ENABLED:true}
+      tmn-code: ${VNPAY_TMN_CODE:}
+      secure-hash-secret: ${VNPAY_SECURE_HASH_SECRET:}
+      payment-url: ${VNPAY_PAYMENT_URL:}
+      locale: ${VNPAY_LOCALE:vn}
 
 logging:
   level:
