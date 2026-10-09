@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,6 +28,7 @@ public class ProfileController {
   private final UserProfileService profileService;
 
   @GetMapping
+  @PreAuthorize("isAuthenticated()")
   public ResponseEntity<ApiResponse<ProfileResponse>> getOwnProfile(
       @AuthenticationPrincipal UUID userId) {
 
@@ -43,6 +45,7 @@ public class ProfileController {
   }
 
   @PutMapping
+  @PreAuthorize("isAuthenticated()")
   public ResponseEntity<ApiResponse<ProfileResponse>> updateProfile(
       @AuthenticationPrincipal UUID userId, @Valid @RequestBody UpdateProfileRequest request) {
 
