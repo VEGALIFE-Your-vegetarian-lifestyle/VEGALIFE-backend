@@ -49,12 +49,13 @@ public class SecurityConfig {
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers("/api/auth/**")
+                auth
+                    // Public endpoints and paths with no controller method. Everything else is
+                    // authenticated here; role rules (admin) live on the endpoint via @PreAuthorize
+                    // (ADR-009). The catch-all keeps the fail-safe default: an endpoint nobody
+                    // listed is at worst logged-in-only, never open.
+                    .requestMatchers("/api/auth/**")
                     .permitAll()
-                    .requestMatchers("/api/admin/**")
-                    .hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.PATCH, "/api/posts/*/visibility")
-                    .hasRole("ADMIN")
                     .requestMatchers(HttpMethod.GET, "/api/users/*/posts")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/posts/feed")

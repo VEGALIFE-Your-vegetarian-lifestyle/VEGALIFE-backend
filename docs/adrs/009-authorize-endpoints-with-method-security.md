@@ -33,30 +33,45 @@ enabled with `@EnableMethodSecurity` and denial throws `AuthorizationDeniedExcep
 
 ## Decision
 
-Move the **role/authentication** rule onto the endpoint:
+Move the **role/authentication** rule onto the endpoint, and keep **public** endpoints as path rules:
 
 - `@EnableMethodSecurity` on `SecurityConfig`.
-- **Authenticated** endpoints: `@PreAuthorize("isAuthenticated()")` — class-level where the whole
-  controller is uniform, method-level where a controller mixes classes.
-- **Admin-only** endpoints: `@PreAuthorize("hasRole('ADMIN')")`.
-- **Public** endpoints and paths with no controller method (Actuator, OpenAPI/Swagger, the VNPay IPN
-  webhook) stay as `permitAll()` path rules in `SecurityConfig` — `permitAll()` is the correct Spring
-  idiom there, and public access is a deliberate, reviewable statement best kept in one place.
-- The catch-all becomes `.anyRequest().denyAll()`: a forgotten endpoint fails closed (403 to
-  everyone) instead of silently inheriting "authenticated".
+- **Authenticated** endpoints: `@PreAuthorize("isAuthenticated()")` where an explicit statement helps
+  (mixed controllers); otherwise the path-level `.authenticated()` default covers them.
+- **Admin-only** endpoints: `@PreAuthorize("hasRole('ADMIN')")` — class-level on the six admin
+  controllers, method-level on `PATCH /api/posts/{postId}/visibility`. No path rule grants ADMIN any
+  more, so these annotations are the sole role gate.
+- **Public** endpoints stay as `permitAll()` path rules in `SecurityConfig` (`/api/auth/**`, the
+  public `GET` routes, the VNPay IPN webhook, Actuator, OpenAPI/Swagger). `permitAll()` is the
+  correct Spring idiom for public access and keeps that deliberate decision in one reviewable place.
+- The catch-all stays `.anyRequest().authenticated()` — the fail-safe default: an endpoint nobody
+  listed is at worst logged-in-only, never open.
+- A **guard test** fails the build if a handler is neither on the public allowlist nor carries
+  `@PreAuthorize`, so a new endpoint cannot skip the access decision silently.
+
+Note: `.anyRequest().denyAll()` and a `.anyRequest().permitAll()` catch-all were both rejected.
+`denyAll()` rejects every request in the filter chain before `@PreAuthorize` is evaluated, so it
+disables method security entirely. `permitAll()` lets anonymous requests reach the controller, where
+Spring MVC binds and validates the body **before** the method-security interceptor runs — so an
+anonymous caller sending a malformed body gets `400`, not `401`, breaking the established contract
+(and it makes every unannotated endpoint public). `.authenticated()` returns `401` before MVC and
+keeps method security for role checks.
 
 `SecurityConfig` remains the single place for the filter pipeline, CORS, session policy, the 401
-entry point, and these path-level exceptions.
+entry point, and the public path rules.
 
 ## Considered options
 
-- **Option A — `@PreAuthorize` for roles/auth, `permitAll` path rules for public (chosen).** Rule is
-  local and reviewable for the cases that carry risk (who may call a protected endpoint), public
-  access stays explicit and centralized, and the fail-closed default stops silent inheritance.
-- **Option B — Annotate everything, including public, with `@PreAuthorize("permitAll")`.** Uniform,
-  but `permitAll` is a SpEL property with no parentheses and it fights the method-security model
-  (which runs only for an existing `Authentication`); public access is clearer as a path rule.
-- **Option C — Keep the central path list as-is.** Zero churn, but preserves the cross-file audit and
+- **Option A — `@PreAuthorize` for roles/auth, `permitAll` path rules for public, `.authenticated()`
+  catch-all (chosen).** Rule is local for the cases that carry risk (who may call a protected
+  endpoint); public access stays explicit and centralized; the fail-safe default plus a guard test
+  prevent silent inheritance. Preserves every existing `401`/`403` contract, verified by the suite.
+- **Option B — Method security for everything, `permitAll` catch-all, guard test.** One source of
+  truth, but provably breaks `anonymous → 401 before validation` (bodies validate before
+  `@PreAuthorize`), so it was rejected.
+- **Option C — `.denyAll()` catch-all.** Rejected: it blocks requests before method security runs, so
+  it cannot coexist with `@PreAuthorize`.
+- **Option D — Keep the central path list as-is.** Zero churn, but preserves the cross-file audit and
   the silent default that motivated this change.
 
 ## Consequences
