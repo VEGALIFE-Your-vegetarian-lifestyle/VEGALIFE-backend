@@ -15,6 +15,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,6 +36,7 @@ public class PostController {
   private final PostService postService;
 
   @PostMapping
+  @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PostListResponse>> createPost(
       @AuthenticationPrincipal UUID userId, @Valid @RequestBody PostCreateRequest request) {
@@ -50,6 +52,7 @@ public class PostController {
   }
 
   @PatchMapping("/{postId}")
+  @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PostListResponse>> updatePost(
       @AuthenticationPrincipal UUID userId,
@@ -62,6 +65,7 @@ public class PostController {
   }
 
   @PatchMapping("/{postId}/visibility")
+  @PreAuthorize("hasRole('ADMIN')")
   @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PostListResponse>> updateVisibility(
       @AuthenticationPrincipal UUID adminId,
@@ -73,6 +77,7 @@ public class PostController {
   }
 
   @DeleteMapping("/{postId}")
+  @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<Void>> deletePost(
       @AuthenticationPrincipal UUID userId,
@@ -83,6 +88,7 @@ public class PostController {
   }
 
   @GetMapping
+  @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listUserPosts(
       @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute PostListRequest request) {

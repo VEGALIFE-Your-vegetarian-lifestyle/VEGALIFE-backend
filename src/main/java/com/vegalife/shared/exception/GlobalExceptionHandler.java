@@ -11,6 +11,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -143,6 +146,26 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ApiResponse<Void>> handleForbidden(
       ForbiddenException ex, HttpServletRequest request) {
     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.failure(ex.getMessage()));
+  }
+
+  /**
+   * Method-security denials ({@code @PreAuthorize}) surface here because the {@code permitAll}
+   * catch-all lets the request reach the controller (ADR-009). An anonymous caller gets {@code 401}
+   * to match the filter-chain contract; an authenticated caller without the required authority gets
+   * {@code 403}.
+   */
+  @ExceptionHandler(AccessDeniedException.class)
+  public ResponseEntity<ApiResponse<Void>> handleAccessDenied(
+      AccessDeniedException ex, Authentication authentication) {
+    boolean anonymous =
+        authentication == null
+            || !authentication.isAuthenticated()
+            || authentication instanceof AnonymousAuthenticationToken;
+    if (anonymous) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+          .body(ApiResponse.failure("Unauthorized"));
+    }
+    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.failure("Forbidden"));
   }
 
   @ExceptionHandler(AiQuotaExceededException.class)

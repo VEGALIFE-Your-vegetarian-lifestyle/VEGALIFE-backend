@@ -329,7 +329,7 @@ Applies to `PATCH /api/posts/{postId}/visibility`. Owners withdraw their own pos
 
 ## Enforcement
 
-- Security: `SecurityConfig` requires `ROLE_ADMIN` for the route.
+- Security: `PostController.updateVisibility()` is annotated `@PreAuthorize("hasRole('ADMIN')")` (ADR-009); the route is no longer granted `ROLE_ADMIN` by a `SecurityConfig` path rule.
 - Service: `PostService.updateVisibility()` changes status and writes the log; `applyPublishState()` blocks non-admins on hidden posts.
 - API reference: `docs/apis/post/patch-posts-postid-visibility.md`.
 
