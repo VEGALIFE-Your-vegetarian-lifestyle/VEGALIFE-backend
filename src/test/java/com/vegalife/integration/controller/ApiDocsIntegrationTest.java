@@ -75,6 +75,9 @@ class ApiDocsIntegrationTest {
         .perform(get("/v3/api-docs"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.paths['/api/posts'].get.security[0].bearerAuth").exists())
+        .andExpect(
+            jsonPath("$.paths['/api/posts/{postId}/comments'].post.security[0].bearerAuth")
+                .exists())
         .andExpect(jsonPath("$.paths['/api/profile'].put.security[0].bearerAuth").exists())
         .andExpect(jsonPath("$.paths['/api/admin/users'].get.security[0].bearerAuth").exists());
   }

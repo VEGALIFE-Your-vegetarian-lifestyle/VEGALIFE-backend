@@ -3,7 +3,9 @@ package com.vegalife.controller.post;
 import com.vegalife.dto.request.post.CommentCreateRequest;
 import com.vegalife.dto.response.post.CommentResponse;
 import com.vegalife.service.post.CommentService;
+import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/posts/{postId}/comments")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RequiredArgsConstructor
 public class CommentController {
 
