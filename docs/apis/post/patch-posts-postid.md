@@ -86,3 +86,4 @@ curl -X PATCH http://localhost:8080/api/posts/550e8400-e29b-41d4-a716-4466554400
 - Feature spec: `docs/feats/edit-user-post.md`
 - Business rules: `docs/brs/posts.md`
 - Create a post: `docs/apis/post/post-posts.md`
+- Shared error/response contract: `docs/apis/error-responses.md`

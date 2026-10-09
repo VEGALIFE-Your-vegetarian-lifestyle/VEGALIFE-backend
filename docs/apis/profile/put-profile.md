@@ -141,9 +141,12 @@ curl -X PUT http://localhost:8080/api/profile \
 {
   "success": false,
   "message": "Validation failed",
-  "data": null
+  "data": {
+    "age": "must be greater than or equal to 0"
+  }
 }
 ```
+`data` is a field → message map; see `docs/apis/error-responses.md`.
 
 ### Error Response (401 - Unauthorized)
 ```json

@@ -285,6 +285,48 @@ class PostControllerIntegrationTest {
   }
 
   @Test
+  void createPost_withBlankTitle_returnsFieldLevelError() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/posts")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\" \",\"content\":\"Test content\",\"rawContent\":{}}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Validation failed"))
+        .andExpect(jsonPath("$.data.title").isNotEmpty());
+  }
+
+  @Test
+  void listFeed_withInvalidSize_returnsFieldLevelError() throws Exception {
+    mockMvc
+        .perform(get("/api/posts/feed").param("size", "0"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Validation failed"))
+        .andExpect(jsonPath("$.data.size").isNotEmpty());
+  }
+
+  @Test
+  void getPost_withMalformedId_returns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", "not-a-uuid")
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void createPost_withMalformedJson_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/posts")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void createPost_withoutJwt_returns401() throws Exception {
     mockMvc
         .perform(

@@ -114,5 +114,6 @@ curl -X POST http://localhost:8080/api/posts \
 ## Related
 
 - List the authenticated user's posts: `docs/apis/post/get-posts.md`
+- Shared error/response contract: `docs/apis/error-responses.md`
 - Content filtering feature: `docs/feats/post-content-filtering.md`
 - Database schema: `src/main/resources/db/migration/V7__create_post_tables.sql`, `src/main/resources/db/migration/V27__add_post_raw_content_drop_type_video_url.sql`

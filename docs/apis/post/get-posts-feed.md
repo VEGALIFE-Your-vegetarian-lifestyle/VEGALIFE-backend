@@ -92,3 +92,4 @@ curl "http://localhost:8080/api/posts/feed?page=0&size=10"
 - Business rules: `docs/brs/posts.md`
 - List your own posts: `docs/apis/post/get-posts.md`
 - List a member's posts: `docs/apis/post/get-users-userid-posts.md`
+- Shared error/response contract: `docs/apis/error-responses.md`

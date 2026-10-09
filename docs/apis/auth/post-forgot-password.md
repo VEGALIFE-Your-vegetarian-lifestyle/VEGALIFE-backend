@@ -92,9 +92,12 @@ curl -X POST http://localhost:8080/api/auth/forgot-password \
 {
   "success": false,
   "message": "Validation failed",
-  "data": null
+  "data": {
+    "email": "Email must be valid"
+  }
 }
 ```
+`data` is a field → message map; see `docs/apis/error-responses.md`.
 
 ## Related
 - Feature Spec: `docs/feats/forgot-password-reset.md`
