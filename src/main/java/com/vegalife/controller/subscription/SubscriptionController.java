@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -39,6 +40,7 @@ public class SubscriptionController {
   }
 
   @GetMapping("/me")
+  @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<SubscriptionMeResponse>> getMySubscription(
       @AuthenticationPrincipal UUID userId) {
@@ -48,6 +50,7 @@ public class SubscriptionController {
   }
 
   @PostMapping("/me/cancel")
+  @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<SubscriptionCancelResponse>> cancelMySubscription(
       @AuthenticationPrincipal UUID userId) {
@@ -57,6 +60,7 @@ public class SubscriptionController {
   }
 
   @GetMapping("/me/history")
+  @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<SubscriptionHistoryResponse>>>
       getMySubscriptionHistory(
@@ -70,6 +74,7 @@ public class SubscriptionController {
   }
 
   @PostMapping("/me/purchase/eligibility")
+  @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<Map<String, Boolean>>> checkPurchaseEligibility(
       @AuthenticationPrincipal UUID userId,
