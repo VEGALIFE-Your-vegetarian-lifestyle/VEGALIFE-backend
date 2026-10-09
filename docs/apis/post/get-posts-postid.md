@@ -12,7 +12,7 @@ GET /api/posts/{postId}
 
 ## Authentication
 
-Required: a valid JWT access token in the `Authorization` header (`Bearer <token>`). Any authenticated user may read any `published` post, not only their own.
+Optional. No JWT is needed; the route is `permitAll`. Any caller — guest or authenticated — may read any `published` post. If a token is sent it is still validated: an invalid or expired token returns `401`.
 
 ## Request
 
@@ -60,7 +60,7 @@ Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-po
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 401 | JWT is missing, invalid, expired, or the account is inactive | `Unauthorized` |
+| 401 | A token is supplied but is invalid, expired, or the account is inactive | `Unauthorized` |
 | 404 | The post does not exist, is soft-deleted, or its status is not `published` (including the caller's own non-published post) | `Post not found` |
 | 500 | Unexpected server error | `Internal server error` |
 
@@ -68,14 +68,13 @@ Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-po
 
 - Visibility is gated by `status == published` and `deleted_at IS NULL` only (BR-POST-011); ownership is never checked, so another user's published post is returned and the caller's own draft is not.
 - A non-published or soft-deleted post, and an unknown id, are all reported as `404 Post not found` — the same not-found-over-leak pattern used elsewhere in the post API, so no post data or existence is leaked.
-- A valid JWT is required; there is no public/guest access to this endpoint (unlike `GET /api/users/{userId}/posts`, which does allow guests).
+- Public access: this route is `permitAll`, so guests may read any `published` post — like `GET /api/posts/feed` and `GET /api/users/{userId}/posts`. Only a supplied-but-invalid token is rejected (`401`); a missing token is not.
 - No view-count increment, caching, or ETags are performed by this endpoint.
 
 ## Example
 
 ```bash
-curl http://localhost:8080/api/posts/550e8400-e29b-41d4-a716-446655440000 \
-  -H "Authorization: Bearer <access-token>"
+curl http://localhost:8080/api/posts/550e8400-e29b-41d4-a716-446655440000
 ```
 
 ## Related

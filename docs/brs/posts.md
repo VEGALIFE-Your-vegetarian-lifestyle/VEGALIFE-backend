@@ -14,7 +14,7 @@
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
 | BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
 | BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
-| BR-POST-011 | Single Post Detail Requires Published Status, Not Ownership | Active | 2026-10-05 |
+| BR-POST-011 | Single Post Detail Requires Published Status, Not Ownership | Active | 2026-10-09 |
 | BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-09-30 |
 | BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-09-30 |
 | BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-09-30 |
@@ -385,26 +385,26 @@ Active
 
 ## Statement
 
-When an authenticated caller requests a single post by id, the post is returned only when its status is `published` and `deleted_at` is null. Ownership is never checked: another user's published post is returned, and the caller's own post is not returned unless it is also `published`. A missing, soft-deleted, or non-published post — including the caller's own — returns `404 Post not found`; there is no public/guest access to this endpoint.
+When a caller — guest or authenticated — requests a single post by id, the post is returned only when its status is `published` and `deleted_at` is null. Ownership is never checked: another user's published post is returned, and the caller's own post is not returned unless it is also `published`. A missing, soft-deleted, or non-published post — including the caller's own — returns `404 Post not found`. The endpoint is public (no authentication required).
 
 ## Rationale
 
-A shared or linked post must be readable by any signed-in member regardless of who wrote it, but only once it has passed moderation into the `published` state; reporting every other case as the same generic 404 avoids leaking whether a post exists, is still a draft, or was removed.
+A shared or linked post must be readable by anyone who opens the link, signed in or not, but only once it has passed moderation into the `published` state; reporting every other case as the same generic 404 avoids leaking whether a post exists, is still a draft, or was removed.
 
 ## Scope & Exceptions
 
-Applies to `GET /api/posts/{postId}`. It does not define owner/admin draft preview, caching, or view-count behavior — none of these exist for this endpoint. `GET /api/posts` (the caller's own list, all statuses) and `GET /api/users/{userId}/posts` (public, owner/admin see all statuses) have their own rules (BR-POST-002, BR-POST-010).
+Applies to `GET /api/posts/{postId}`. It does not define owner/admin draft preview, caching, or view-count behavior — none of these exist for this endpoint. `GET /api/posts` (the caller's own list, all statuses, authenticated) and `GET /api/users/{userId}/posts` (public, owner/admin see all statuses) have their own rules (BR-POST-002, BR-POST-010).
 
 ## Enforcement
 
 - Repository: `PostRepository.findByIdAndStatusAndDeletedAtIsNull(id, Post.Status.published)`.
 - Service: `PostService.getPost()` maps a missing result to `ResourceNotFoundException("Post not found")`.
-- Security: no explicit rule for this path in `SecurityConfig`; it falls through to `.anyRequest().authenticated()`.
+- Security: `SecurityConfig` permits unauthenticated `GET /api/posts/*` (single path segment — matches `feed` and `{postId}`, never the auth-required list route); `PostController` declares `@SecurityRequirement` per protected operation instead of at class level, so `getPost` is documented as public in OpenAPI.
 - API reference: `docs/apis/post/get-posts-postid.md`.
 
 ## Last Reviewed
 
-2026-10-05, by Vegalife backend team
+2026-10-09, by Vegalife backend team
 
 ---
 
