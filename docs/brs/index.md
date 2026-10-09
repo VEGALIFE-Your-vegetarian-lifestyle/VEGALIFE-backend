@@ -41,6 +41,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
 | BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
 | BR-POST-011 | Single Post Detail Requires Published Status, Not Ownership | Active | 2026-10-05 |
+| BR-COMMENT-001 | Comment Creation Requires Authentication; Reading Is Public | Active | 2026-10-10 |
 | BR-MEDIA-001 | Media Content-Type Allowlist | Active | 2026-09-30 |
 | BR-MEDIA-002 | Media Ownership Is Derived from Authentication | Active | 2026-09-30 |
 | BR-MEDIA-003 | Per-Class Upload Size Ceilings | Active | 2026-10-02 |
