@@ -86,6 +86,7 @@ class ApiDocsIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.security").doesNotExist())
         .andExpect(jsonPath("$.paths['/api/categories'].get.security").doesNotExist())
-        .andExpect(jsonPath("$.paths['/api/auth/login'].post.security").doesNotExist());
+        .andExpect(jsonPath("$.paths['/api/auth/login'].post.security").doesNotExist())
+        .andExpect(jsonPath("$.paths['/api/posts/{postId}'].get.security").doesNotExist());
   }
 }

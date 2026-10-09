@@ -30,12 +30,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/posts")
 @RequiredArgsConstructor
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class PostController {
 
   private final PostService postService;
 
   @PostMapping
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PostListResponse>> createPost(
       @AuthenticationPrincipal UUID userId, @Valid @RequestBody PostCreateRequest request) {
     PostListResponse post = postService.createPost(userId, request);
@@ -50,6 +50,7 @@ public class PostController {
   }
 
   @PatchMapping("/{postId}")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PostListResponse>> updatePost(
       @AuthenticationPrincipal UUID userId,
       Authentication authentication,
@@ -61,6 +62,7 @@ public class PostController {
   }
 
   @PatchMapping("/{postId}/visibility")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PostListResponse>> updateVisibility(
       @AuthenticationPrincipal UUID adminId,
       @PathVariable UUID postId,
@@ -71,6 +73,7 @@ public class PostController {
   }
 
   @DeleteMapping("/{postId}")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<Void>> deletePost(
       @AuthenticationPrincipal UUID userId,
       Authentication authentication,
@@ -80,6 +83,7 @@ public class PostController {
   }
 
   @GetMapping
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listUserPosts(
       @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute PostListRequest request) {
     PageResponse<PostListResponse> posts = postService.listUserPosts(userId, request);

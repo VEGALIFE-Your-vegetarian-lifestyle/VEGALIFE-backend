@@ -137,12 +137,36 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  void getPost_withoutJwt_returns401() throws Exception {
-    Post published = createPost(user, "Published", Post.Status.published, null);
+  void getPost_withoutJwt_returnsPublishedPost() throws Exception {
+    Post published = createPost(otherUser, "Public post", Post.Status.published, null);
 
     mockMvc
         .perform(get("/api/posts/{postId}", published.getId()))
-        .andExpect(status().isUnauthorized());
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.id").value(published.getId().toString()));
+  }
+
+  @Test
+  void getPost_withoutJwt_nonPublishedPostReturns404() throws Exception {
+    Post draft = createPost(user, "My draft", Post.Status.created, null);
+
+    mockMvc
+        .perform(get("/api/posts/{postId}", draft.getId()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Post not found"));
+  }
+
+  @Test
+  void getPost_withoutJwt_softDeletedPostReturns404() throws Exception {
+    Post deleted = createPost(user, "Gone", Post.Status.published, Instant.now());
+
+    mockMvc.perform(get("/api/posts/{postId}", deleted.getId())).andExpect(status().isNotFound());
+  }
+
+  @Test
+  void getPost_withoutJwt_unknownIdReturns404() throws Exception {
+    mockMvc.perform(get("/api/posts/{postId}", UUID.randomUUID())).andExpect(status().isNotFound());
   }
 
   @Test

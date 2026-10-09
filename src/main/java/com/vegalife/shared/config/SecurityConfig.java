@@ -57,6 +57,8 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/posts/feed")
                     .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/posts/*")
+                    .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/categories")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/subscriptions")
