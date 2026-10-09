@@ -63,3 +63,4 @@ curl -X DELETE http://localhost:8080/api/posts/550e8400-e29b-41d4-a716-446655440
 - Feature spec: `docs/feats/delete-user-post.md`
 - Business rules: `docs/brs/posts.md`
 - Edit a post: `docs/apis/post/patch-posts-postid.md`
+- Shared error/response contract: `docs/apis/error-responses.md`

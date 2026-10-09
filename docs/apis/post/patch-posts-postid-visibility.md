@@ -79,3 +79,4 @@ curl -X PATCH http://localhost:8080/api/posts/550e8400-e29b-41d4-a716-4466554400
 - Feature spec: `docs/feats/hide-user-post.md`
 - Business rules: `docs/brs/posts.md`
 - Edit a post: `docs/apis/post/patch-posts-postid.md`
+- Shared error/response contract: `docs/apis/error-responses.md`

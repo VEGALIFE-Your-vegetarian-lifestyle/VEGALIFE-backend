@@ -4,6 +4,8 @@ Supplementary human-written API docs for the Vegalife backend (complements auto-
 
 Each file documents one endpoint: `docs/apis/<feature>/<method>-<resource>.md`
 
+Shared error/response contract: [`error-responses.md`](error-responses.md).
+
 | File | Endpoint | Description |
 |------|----------|-------------|
 | `auth/post-register.md` | `POST /api/auth/register` | Register new user (sends verification OTP) |

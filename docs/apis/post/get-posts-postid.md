@@ -82,3 +82,4 @@ curl http://localhost:8080/api/posts/550e8400-e29b-41d4-a716-446655440000
 - Feature spec: `docs/feats/get-post-by-id.md`
 - Business rules: `docs/brs/posts.md`
 - List responses use the same shape: `docs/apis/post/get-posts.md`
+- Shared error/response contract: `docs/apis/error-responses.md`

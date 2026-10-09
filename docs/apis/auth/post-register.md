@@ -116,9 +116,13 @@ curl -X POST http://localhost:8080/api/auth/register \
 {
   "success": false,
   "message": "Validation failed",
-  "data": null
+  "data": {
+    "email": "Email must be valid"
+  }
 }
 ```
+`data` is a field → message map naming each invalid field; see
+`docs/apis/error-responses.md` for the shared contract.
 
 ### Error Response (409 - Duplicate)
 ```json

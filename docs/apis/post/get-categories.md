@@ -110,3 +110,4 @@ curl -X GET "http://localhost:8080/api/categories?name=vegan&page=0&size=20"
 - Feature Spec: `docs/feats/list-categories-api.md`
 - Companion API: `docs/apis/admin/post-categories.md` (creation, Admin), `docs/apis/admin/patch-categories-categoryid.md` (edit, Admin), `docs/apis/admin/delete-categories-categoryid.md` (retire, Admin)
 - Consumer: `docs/apis/post/post-posts.md` (categoryIds)
+- Shared error/response contract: `docs/apis/error-responses.md`

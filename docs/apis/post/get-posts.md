@@ -110,3 +110,4 @@ No request body.
 
 - Database schema: `src/main/resources/db/migration/V7__create_post_tables.sql`, `src/main/resources/db/migration/V27__add_post_raw_content_drop_type_video_url.sql`
 - Shared pagination response: `src/main/java/com/vegalife/shared/dto/PageResponse.java`
+- Shared error/response contract: `docs/apis/error-responses.md`

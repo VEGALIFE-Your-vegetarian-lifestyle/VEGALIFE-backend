@@ -78,3 +78,7 @@ curl -X POST http://localhost:8080/api/auth/resend-email \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com"}'
 ```
+
+## Related
+
+- Shared error/response contract: `docs/apis/error-responses.md`
