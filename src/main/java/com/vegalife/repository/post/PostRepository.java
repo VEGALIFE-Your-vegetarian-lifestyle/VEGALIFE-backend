@@ -18,6 +18,14 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
 
   Optional<Post> findByIdAndDeletedAtIsNull(UUID id);
 
+  /**
+   * Single-post detail lookup: any status is returned, only soft-deleted rows are excluded
+   * (BR-POST-011). The status-scoped variant is retained for callers that gate on publication
+   * (comment creation).
+   */
+  @Query("select p from Post p where p.id = :id and p.deletedAt is null")
+  Optional<Post> findDetailById(@Param("id") UUID id);
+
   Optional<Post> findByIdAndStatusAndDeletedAtIsNull(UUID id, Post.Status status);
 
   Optional<Post> findByIdAndUser_IdAndDeletedAtIsNull(UUID id, UUID userId);
