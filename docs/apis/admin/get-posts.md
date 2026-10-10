@@ -23,7 +23,7 @@ None.
 | size | integer | No | Page size, default 20, max 100 |
 | sort | string | No | Format `property,direction`. Default `createdAt,desc`. Property must be one of: `createdAt`, `publishedAt`, `updatedAt`, `viewCount`, `title` |
 | status | string | No | One of: `created`, `processed`, `published`, `unpublished`, `hidden` |
-| flag | string | No | Content-filter verdict: `PENDING`, `PASSED`, `REJECTED`, or `NEEDS_REVIEW` |
+| flag | string | No | Content-filter verdict: `PENDING`, `PASSED`, `REJECTED`, `NEEDS_REVIEW`, or `all`. Defaults to `NEEDS_REVIEW` when omitted; `all` disables the flag filter (issue #5) |
 | userId | uuid | No | Only posts authored by this user |
 | categoryId | uuid | No | Only posts belonging to this category |
 | createdFrom | string | No | ISO-8601 datetime lower bound (inclusive) on `createdAt`, e.g. `2026-01-01T00:00:00Z` |
@@ -104,9 +104,10 @@ No request body
 
 ## Business Rules
 - Soft-deleted posts (`deletedAt != null`) are excluded (issue #1 / FR-006).
-- Only `ROLE_ADMIN` may call this endpoint (SecurityConfig `/api/admin/**`).
+- Only `ROLE_ADMIN` may call this endpoint (`@PreAuthorize("hasRole('ADMIN')")` on `AdminPostController`; ADR-009 — there is no `/api/admin/**` path rule).
 - Unlike `GET /api/posts` and `GET /api/users/{userId}/posts`, no status restriction is applied: every status is listable (issue #1 / FR-002).
 - `status` and `flag` are independent filters and combine with AND; `flag` matches the content-filter verdict exactly (BR-FILTER-008).
+- When no `flag` parameter is supplied, the list defaults to `flag = NEEDS_REVIEW` so an admin lands on posts awaiting a decision (issue #5). Pass `flag=all` to list every flag (including posts never filtered).
 
 ## Example
 

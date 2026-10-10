@@ -113,6 +113,7 @@ class AdminPostControllerIntegrationTest {
         .perform(
             get("/api/admin/posts")
                 .header("Authorization", "Bearer " + adminToken)
+                .param("flag", "all")
                 .param("sort", "title,asc"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
@@ -153,7 +154,10 @@ class AdminPostControllerIntegrationTest {
     createPost(admin, "P6", Post.Status.published, null, null);
 
     mockMvc
-        .perform(get("/api/admin/posts").header("Authorization", "Bearer " + adminToken))
+        .perform(
+            get("/api/admin/posts")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("flag", "all"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(6))
         .andExpect(jsonPath("$.data.content.length()").value(6))
@@ -184,7 +188,8 @@ class AdminPostControllerIntegrationTest {
         .perform(
             get("/api/admin/posts")
                 .header("Authorization", "Bearer " + adminToken)
-                .param("status", "unpublished"))
+                .param("status", "unpublished")
+                .param("flag", "all"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(1))
         .andExpect(jsonPath("$.data.content.length()").value(1))
@@ -213,6 +218,22 @@ class AdminPostControllerIntegrationTest {
   }
 
   @Test
+  void listPosts_withoutFlagParam_defaultsToNeedsReview() throws Exception {
+    createPost(member, "Draft", Post.Status.created, Post.Flag.PENDING, null);
+    createPost(member, "Rejected", Post.Status.unpublished, Post.Flag.REJECTED, null);
+    createPost(member, "Held", Post.Status.unpublished, Post.Flag.NEEDS_REVIEW, null);
+    createPost(member, "Live", Post.Status.published, Post.Flag.PASSED, null);
+
+    mockMvc
+        .perform(get("/api/admin/posts").header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content.length()").value(1))
+        .andExpect(jsonPath("$.data.content[0].title").value("Held"))
+        .andExpect(jsonPath("$.data.content[0].flag").value("NEEDS_REVIEW"));
+  }
+
+  @Test
   void listPosts_filterByUserId_returnsOnlyThatAuthorsPosts() throws Exception {
     createPost(member, "Member post", Post.Status.published, null, null);
     createPost(author2, "Author post", Post.Status.created, null, null);
@@ -221,7 +242,8 @@ class AdminPostControllerIntegrationTest {
         .perform(
             get("/api/admin/posts")
                 .header("Authorization", "Bearer " + adminToken)
-                .param("userId", author2.getId().toString()))
+                .param("userId", author2.getId().toString())
+                .param("flag", "all"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(1))
         .andExpect(jsonPath("$.data.content.length()").value(1))
@@ -281,7 +303,8 @@ class AdminPostControllerIntegrationTest {
         .perform(
             get("/api/admin/posts")
                 .header("Authorization", "Bearer " + adminToken)
-                .param("categoryId", recipes.getId().toString()))
+                .param("categoryId", recipes.getId().toString())
+                .param("flag", "all"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(2))
         .andExpect(jsonPath("$.data.content.length()").value(2))
@@ -300,7 +323,8 @@ class AdminPostControllerIntegrationTest {
             get("/api/admin/posts")
                 .header("Authorization", "Bearer " + adminToken)
                 .param("createdFrom", "2000-01-01T00:00:00Z")
-                .param("createdTo", "2100-01-01T00:00:00Z"))
+                .param("createdTo", "2100-01-01T00:00:00Z")
+                .param("flag", "all"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(2))
         .andExpect(jsonPath("$.data.content.length()").value(2));
@@ -339,7 +363,10 @@ class AdminPostControllerIntegrationTest {
             .build());
 
     mockMvc
-        .perform(get("/api/admin/posts").header("Authorization", "Bearer " + adminToken))
+        .perform(
+            get("/api/admin/posts")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("flag", "all"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.content.length()").value(1))
         .andExpect(jsonPath("$.data.content[0].mediaIds").isArray())
@@ -371,6 +398,7 @@ class AdminPostControllerIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken)
                 .param("page", "0")
                 .param("size", "1")
+                .param("flag", "all")
                 .param("sort", "title,asc"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.page").value(0))

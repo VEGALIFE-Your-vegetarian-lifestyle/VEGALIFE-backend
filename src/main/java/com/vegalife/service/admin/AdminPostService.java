@@ -2,11 +2,15 @@ package com.vegalife.service.admin;
 
 import com.vegalife.dto.mapper.admin.AdminPostMapper;
 import com.vegalife.dto.request.admin.PostListRequest;
+import com.vegalife.dto.request.admin.PostModerationRequest;
 import com.vegalife.dto.response.admin.AdminPostListResponse;
+import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Post;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.post.PostSpecifications;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
 import java.util.Set;
@@ -32,7 +36,11 @@ public class AdminPostService {
   private static final String SORTABLE_PROPERTIES_MESSAGE =
       "Sort property must be one of: createdAt, publishedAt, updatedAt, viewCount, title";
 
+  private static final String CATEGORY_REQUIRED_TO_PUBLISH =
+      "At least one category is required to publish a post";
+
   private final PostRepository postRepository;
+  private final ModerationLogRepository moderationLogRepository;
   private final AdminPostMapper adminPostMapper;
 
   @Transactional(readOnly = true)
@@ -64,6 +72,60 @@ public class AdminPostService {
     return PageResponse.from(mapped);
   }
 
+  /**
+   * Issue #5: an Administrator publishes a filter-withheld post or unpublishes a live one. Only the
+   * visibility axis ({@link Post.Status}) changes — the filter verdict ({@link Post.Flag}) is left
+   * untouched (ADR-011). A publish requires at least one category (BR-CONTENT-003). A no-op (target
+   * status already reached) returns the post unchanged and writes no log entry. Every real change
+   * is recorded in {@code moderation_log} with the acting admin and the supplied reason.
+   */
+  @Transactional
+  public AdminPostListResponse moderatePost(
+      UUID adminId, UUID postId, PostModerationRequest request) {
+    Post post =
+        postRepository
+            .findByIdAndDeletedAtIsNull(postId)
+            .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+    if (post.getStatus() == Post.Status.hidden) {
+      throw new ValidationException(
+          "A hidden post is moderated through the visibility endpoint, not publish/unpublish");
+    }
+
+    boolean publish = request.isPublish();
+    Post.Status target = publish ? Post.Status.published : Post.Status.unpublished;
+
+    if (post.getStatus() == target) {
+      return adminPostMapper.toResponse(post);
+    }
+
+    if (publish && post.getCategories().isEmpty()) {
+      throw new ValidationException(CATEGORY_REQUIRED_TO_PUBLISH);
+    }
+
+    post.setStatus(target);
+    post.setPublishedAt(publish ? Instant.now() : null);
+    Post saved = postRepository.saveAndFlush(post);
+
+    moderationLogRepository.save(
+        ModerationLog.builder()
+            .actorId(adminId)
+            .action(publish ? "PUBLISH_POST" : "UNPUBLISH_POST")
+            .targetType("POST")
+            .targetId(saved.getId())
+            .reason(request.getReason())
+            .build());
+
+    log.info(
+        "Admin {} {} post {} (reason present={})",
+        adminId,
+        publish ? "published" : "unpublished",
+        saved.getId(),
+        request.getReason() != null);
+
+    return adminPostMapper.toResponse(saved);
+  }
+
   private Post.Status parseStatus(String status) {
     if (status == null || status.isBlank()) {
       return null;
@@ -77,13 +139,14 @@ public class AdminPostService {
   }
 
   private Post.Flag parseFlag(String flag) {
-    if (flag == null || flag.isBlank()) {
+    if (flag == null || flag.isBlank() || "all".equalsIgnoreCase(flag)) {
       return null;
     }
     try {
       return Post.Flag.valueOf(flag);
     } catch (IllegalArgumentException ex) {
-      throw new ValidationException("Flag must be one of: PENDING, PASSED, REJECTED, NEEDS_REVIEW");
+      throw new ValidationException(
+          "Flag must be one of: all, PENDING, PASSED, REJECTED, NEEDS_REVIEW");
     }
   }
 

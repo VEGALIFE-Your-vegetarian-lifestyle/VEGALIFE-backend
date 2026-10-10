@@ -44,3 +44,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `payment-history.md`                | Payment History API (Member + Admin)     | Approved    | 2026-10-07 |
 | `ai-chat-send.md`                   | AI Chat Send (JSON + SSE Streaming)      | Approved    | 2026-10-07 |
 | `query-menus-by-range.md`           | Query Menus by Week, Month, or Date Range | Approved    | 2026-10-10 |
+| `moderate-posts-admin-api.md`       | Moderate Posts API (Admin)                | Implemented | 2026-10-10 |
