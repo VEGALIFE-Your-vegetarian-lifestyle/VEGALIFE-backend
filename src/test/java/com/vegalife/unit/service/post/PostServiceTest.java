@@ -59,6 +59,8 @@ class PostServiceTest {
 
   @Spy private ObjectMapper objectMapper = new ObjectMapper();
 
+  @Mock private com.vegalife.filter.FilterProperties filterProperties;
+
   @InjectMocks private PostService postService;
 
   private UUID userId;
@@ -70,6 +72,8 @@ class PostServiceTest {
 
   @BeforeEach
   void setUp() {
+    // Default the suite to the filter-enabled path; bypass tests override this to false.
+    org.mockito.Mockito.lenient().when(filterProperties.isEnabled()).thenReturn(true);
     userId = UUID.randomUUID();
     categoryId = UUID.randomUUID();
     user = User.builder().id(userId).username("postowner").build();
@@ -129,6 +133,25 @@ class PostServiceTest {
     assertThat(post.getFlag()).isEqualTo(Post.Flag.PENDING);
     assertThat(post.getCategories()).containsExactly(category);
     assertContentFilterQueued(post);
+  }
+
+  @Test
+  void createPost_publishForwardsToAdminReviewWhenFilterDisabled() {
+    when(filterProperties.isEnabled()).thenReturn(false);
+    request.setPublish(true);
+    request.setCategoryIds(Set.of(categoryId));
+    when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+    when(categoryRepository.findByIdInAndDeletedAtIsNull(Set.of(categoryId)))
+        .thenReturn(List.of(category));
+    when(postMapper.toEntity(request)).thenReturn(post);
+    when(postRepository.saveAndFlush(post)).thenReturn(post);
+
+    postService.createPost(userId, request);
+
+    assertThat(post.getStatus()).isEqualTo(Post.Status.unpublished);
+    assertThat(post.getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
+    assertThat(post.getPublishedAt()).isNull();
+    verifyContentFilterNotQueued();
   }
 
   @Test
@@ -395,6 +418,24 @@ class PostServiceTest {
     assertThat(existing.getStatus()).isEqualTo(Post.Status.unpublished);
     assertThat(existing.getFlag()).isEqualTo(Post.Flag.PENDING);
     assertContentFilterQueued(existing);
+  }
+
+  @Test
+  void updatePost_publishForwardsToAdminReviewWhenFilterDisabled() {
+    when(filterProperties.isEnabled()).thenReturn(false);
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.created);
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.updatePost(
+        userId, false, postId, PostUpdateRequest.builder().content("Body").publish(true).build());
+
+    assertThat(existing.getStatus()).isEqualTo(Post.Status.unpublished);
+    assertThat(existing.getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
+    assertThat(existing.getPublishedAt()).isNull();
+    verifyContentFilterNotQueued();
   }
 
   @Test
