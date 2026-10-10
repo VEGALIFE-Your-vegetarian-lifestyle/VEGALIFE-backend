@@ -79,7 +79,11 @@ class ApiDocsIntegrationTest {
             jsonPath("$.paths['/api/posts/{postId}/comments'].post.security[0].bearerAuth")
                 .exists())
         .andExpect(jsonPath("$.paths['/api/profile'].put.security[0].bearerAuth").exists())
-        .andExpect(jsonPath("$.paths['/api/admin/users'].get.security[0].bearerAuth").exists());
+        .andExpect(jsonPath("$.paths['/api/admin/users'].get.security[0].bearerAuth").exists())
+        .andExpect(jsonPath("$.paths['/api/admin/posts'].get.security[0].bearerAuth").exists())
+        .andExpect(
+            jsonPath("$.paths['/api/admin/posts/{postId}/moderate'].post.security[0].bearerAuth")
+                .exists());
   }
 
   @Test
