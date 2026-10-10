@@ -3,8 +3,6 @@ package com.vegalife.unit.service.menu;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +33,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 @ExtendWith(MockitoExtension.class)
 class MenuServiceQueryTest {
@@ -54,9 +53,7 @@ class MenuServiceQueryTest {
     MenuQueryFilter filter =
         MenuQueryFilter.builder().from(MONDAY).to(SUNDAY).status(MenuStatus.scheduled).build();
     Page<Menu> page = new PageImpl<>(List.of(menu(MONDAY, SUNDAY, MenuStatus.scheduled)));
-    when(menuRepository.findOwnMenus(
-            eq(USER), eq(MONDAY), eq(SUNDAY), eq(MenuStatus.scheduled), any(Pageable.class)))
-        .thenReturn(page);
+    when(menuRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
     PageResponse<MenuSummaryResponse> response = menuService.listMenus(USER, filter, 0, 20, null);
 
@@ -67,13 +64,13 @@ class MenuServiceQueryTest {
   @Test
   void listMenusDefaultsToStartDateDescending() {
     MenuQueryFilter filter = MenuQueryFilter.builder().build();
-    when(menuRepository.findOwnMenus(eq(USER), isNull(), isNull(), isNull(), any(Pageable.class)))
+    when(menuRepository.findAll(any(Specification.class), any(Pageable.class)))
         .thenReturn(new PageImpl<>(List.of()));
 
     menuService.listMenus(USER, filter, 0, 20, null);
 
     ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-    verify(menuRepository).findOwnMenus(eq(USER), isNull(), isNull(), isNull(), captor.capture());
+    verify(menuRepository).findAll(any(Specification.class), captor.capture());
     Sort.Order order = captor.getValue().getSort().getOrderFor("startDate");
     assertThat(order).isNotNull();
     assertThat(order.getDirection()).isEqualTo(Sort.Direction.DESC);
@@ -82,13 +79,12 @@ class MenuServiceQueryTest {
   @Test
   void listMenusUsesTheAuthenticatedUserAsOwner() {
     MenuQueryFilter filter = MenuQueryFilter.builder().from(MONDAY).to(SUNDAY).build();
-    when(menuRepository.findOwnMenus(any(), any(), any(), any(), any(Pageable.class)))
+    when(menuRepository.findAll(any(Specification.class), any(Pageable.class)))
         .thenReturn(new PageImpl<>(List.of()));
 
     menuService.listMenus(USER, filter, 0, 20, "startDate,asc");
 
-    verify(menuRepository)
-        .findOwnMenus(eq(USER), eq(MONDAY), eq(SUNDAY), isNull(), any(Pageable.class));
+    verify(menuRepository).findAll(any(Specification.class), any(Pageable.class));
   }
 
   @Test

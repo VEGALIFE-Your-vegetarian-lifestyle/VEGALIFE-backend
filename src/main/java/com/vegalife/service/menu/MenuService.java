@@ -8,6 +8,7 @@ import com.vegalife.model.menu.Menu;
 import com.vegalife.model.menu.MenuDetail;
 import com.vegalife.repository.menu.MenuDetailRepository;
 import com.vegalife.repository.menu.MenuRepository;
+import com.vegalife.repository.menu.MenuSpecifications;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -48,8 +49,10 @@ public class MenuService {
       UUID userId, MenuQueryFilter filter, int page, int size, String sort) {
     Pageable pageable = PageRequest.of(page, size, parseSort(sort));
     Page<Menu> menus =
-        menuRepository.findOwnMenus(
-            userId, filter.getFrom(), filter.getTo(), filter.getStatus(), pageable);
+        menuRepository.findAll(
+            MenuSpecifications.ownedByWithinWindowAndStatus(
+                userId, filter.getFrom(), filter.getTo(), filter.getStatus()),
+            pageable);
     return PageResponse.from(menus.map(this::toSummary));
   }
 
