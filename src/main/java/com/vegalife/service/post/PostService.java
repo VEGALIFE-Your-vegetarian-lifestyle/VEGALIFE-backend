@@ -8,6 +8,7 @@ import com.vegalife.dto.request.post.PostListRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.filter.ContentFilterPayload;
+import com.vegalife.filter.FilterProperties;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
@@ -50,6 +51,7 @@ public class PostService {
   private final OutboundMessageRepository outboundMessageRepository;
   private final PostMapper postMapper;
   private final ObjectMapper objectMapper;
+  private final FilterProperties filterProperties;
 
   @Transactional
   public PostListResponse createPost(UUID userId, PostCreateRequest request) {
@@ -68,18 +70,24 @@ public class PostService {
     post.setViewCount(0);
     post.setCategories(categories);
 
-    // BR-CONTENT-003 / FR-007: a post never becomes visible directly. With publish=true it is
-    // queued for content filtering (BR-FILTER-005) and the filter callback publishes it once it
-    // passes; without it the post stays a private draft that is never filtered. The queued
-    // outbound row's creation time is the enqueue clock (BR-FILTER-009).
+    // BR-CONTENT-003 / FR-007: a post never becomes visible directly. With publish=true and the
+    // filter enabled it is queued for content filtering (BR-FILTER-005) and the filter callback
+    // publishes it once it passes; without it the post stays a private draft that is never
+    // filtered. The queued outbound row's creation time is the enqueue clock (BR-FILTER-009).
+    // While app.filter.enabled=false a published post skips the filter and lands directly in the
+    // admin review queue (flag=NEEDS_REVIEW, status=unpublished) with no embedding call.
     post.setStatus(Post.Status.created);
     if (request.isPublish()) {
-      post.setFlag(Post.Flag.PENDING);
+      post.setFlag(filterProperties.isEnabled() ? Post.Flag.PENDING : Post.Flag.NEEDS_REVIEW);
     }
 
     Post saved = postRepository.saveAndFlush(post);
     if (request.isPublish()) {
-      enqueueContentFilter(saved);
+      if (filterProperties.isEnabled()) {
+        enqueueContentFilter(saved);
+      } else {
+        markForAdminReview(saved);
+      }
     }
     return postMapper.toListResponse(saved);
   }
@@ -112,12 +120,16 @@ public class PostService {
     boolean willEnqueue = shouldEnqueueFilter(post, request.getPublish(), contentChanged);
     applyPublishState(post, request.getPublish(), isAdmin, willEnqueue);
     if (willEnqueue) {
-      post.setFlag(Post.Flag.PENDING);
+      post.setFlag(filterProperties.isEnabled() ? Post.Flag.PENDING : Post.Flag.NEEDS_REVIEW);
     }
 
     Post saved = postRepository.saveAndFlush(post);
     if (willEnqueue) {
-      enqueueContentFilter(saved);
+      if (filterProperties.isEnabled()) {
+        enqueueContentFilter(saved);
+      } else {
+        markForAdminReview(saved);
+      }
     }
     recordModerationIfAdminOverride(actorId, isAdmin, saved, "EDIT_POST");
     return postMapper.toListResponse(saved);
@@ -261,6 +273,20 @@ public class PostService {
         request.getTitle() != null && !request.getTitle().equals(post.getTitle());
     boolean contentChanged = !request.getContent().equals(post.getContent());
     return titleChanged || contentChanged;
+  }
+
+  /**
+   * Filter bypass ({@code app.filter.enabled=false}): route a post that would have been queued for
+   * content filtering straight to the admin review queue instead — {@code flag=NEEDS_REVIEW},
+   * {@code status=unpublished}, no publication timestamp and no outbound row. An admin then acts on
+   * it through the moderation endpoint.
+   */
+  private void markForAdminReview(Post post) {
+    post.setFlag(Post.Flag.NEEDS_REVIEW);
+    post.setStatus(Post.Status.unpublished);
+    post.setPublishedAt(null);
+    postRepository.saveAndFlush(post);
+    log.info("Filter disabled: forwarded post {} to admin review queue", post.getId());
   }
 
   /**

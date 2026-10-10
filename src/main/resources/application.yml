@@ -112,6 +112,9 @@ app:
       allowed-video-types: [video/mp4, video/webm]
 
   filter:
+    # When false, a published post skips the semantic filter and lands directly in the admin review
+    # queue (flag=NEEDS_REVIEW, status=unpublished) with no embedding call. Set true to re-enable.
+    enabled: ${FILTER_ENABLED:false}
     accept-threshold: 0.65
     reject-threshold: 0.43
     sweep-max-age: 24h
