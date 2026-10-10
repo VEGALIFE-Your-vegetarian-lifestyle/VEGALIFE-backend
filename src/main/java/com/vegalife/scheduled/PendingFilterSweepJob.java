@@ -18,11 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Stale-pending sweep (FR-011, BR-FILTER-009): any post still {@code flag=PENDING} whose latest
  * CONTENT_FILTER queue row is older than {@code app.filter.sweep-max-age} moves to {@code
- * NEEDS_REVIEW} / {@code status=flagged} with an ERROR log, covering queue messages that were lost
- * or exhausted their retries. The queue row's creation time is the enqueue clock — the message and
- * the PENDING flag are written in one transaction (ADR-005) — and terminal rows outlive the sweep
- * window, so a stuck post is always observable. Fresh {@code PENDING} and NULL-flag posts are never
- * touched.
+ * NEEDS_REVIEW} / {@code status=unpublished} with an ERROR log, covering queue messages that were
+ * lost or exhausted their retries. The queue row's creation time is the enqueue clock — the message
+ * and the PENDING flag are written in one transaction (ADR-005) — and terminal rows outlive the
+ * sweep window, so a stuck post is always observable. Fresh {@code PENDING} and NULL-flag posts are
+ * never touched.
  */
 @Component
 @Slf4j
@@ -63,17 +63,17 @@ public class PendingFilterSweepJob {
             .toList();
     for (Post post : stalePosts) {
       post.setFlag(Post.Flag.NEEDS_REVIEW);
-      post.setStatus(Post.Status.flagged);
+      post.setStatus(Post.Status.unpublished);
       postRepository.save(post);
       log.error(
-          "Post {} still pending while its content-filter queue row is older than {} — flagged"
+          "Post {} still pending while its content-filter queue row is older than {} — moved to"
               + " NEEDS_REVIEW for manual review",
           post.getId(),
           filterProperties.getSweepMaxAge());
     }
     if (!stalePosts.isEmpty()) {
       log.info(
-          "Pending filter sweep flagged {} post(s) with queue rows older than {}",
+          "Pending filter sweep moved {} post(s) to NEEDS_REVIEW with queue rows older than {}",
           stalePosts.size(),
           cutoff);
     }
