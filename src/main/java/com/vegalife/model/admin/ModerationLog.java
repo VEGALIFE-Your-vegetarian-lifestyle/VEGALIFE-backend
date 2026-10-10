@@ -39,6 +39,9 @@ public class ModerationLog {
   @Column(name = "target_id", nullable = false)
   private UUID targetId;
 
+  @Column(name = "reason", columnDefinition = "TEXT")
+  private String reason;
+
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
