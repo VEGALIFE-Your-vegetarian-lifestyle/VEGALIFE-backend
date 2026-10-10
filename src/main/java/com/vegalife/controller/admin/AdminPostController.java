@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class AdminPostController {
 
   private final AdminPostService adminPostService;
@@ -38,7 +39,6 @@ public class AdminPostController {
   }
 
   @PostMapping("/posts/{postId}/moderate")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
   public ResponseEntity<ApiResponse<AdminPostListResponse>> moderatePost(
       @AuthenticationPrincipal UUID adminId,
       @PathVariable UUID postId,
