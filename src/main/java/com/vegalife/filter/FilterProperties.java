@@ -19,4 +19,10 @@ public class FilterProperties {
   private double acceptThreshold = 0.65;
   private double rejectThreshold = 0.43;
   private Duration sweepMaxAge = Duration.ofHours(24);
+
+  /**
+   * When false, a published post skips the semantic filter entirely and lands directly in the admin
+   * review queue ({@code flag=NEEDS_REVIEW}, {@code status=unpublished}) with no embedding call.
+   */
+  private boolean enabled = false;
 }
