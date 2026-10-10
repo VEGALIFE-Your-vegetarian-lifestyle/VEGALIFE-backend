@@ -22,7 +22,7 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `profile/get-profile-userid.md` | `GET /api/profile/{userId}` | Get a member's profile (public) |
 | `post/post-posts.md` | `POST /api/posts` | Create a post for the authenticated user |
 | `post/get-posts.md` | `GET /api/posts` | List the authenticated user's posts |
-| `post/get-posts-postid.md` | `GET /api/posts/{postId}` | View a single published post by id (any author, public) |
+| `post/get-posts-postid.md` | `GET /api/posts/{postId}` | View a single non-deleted post by id (any status, any author, public) |
 | `post/post-posts-postid-comments.md` | `POST /api/posts/{postId}/comments` | Create a top-level comment or nested reply on a published post (authenticated) |
 | `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts (public: published only; owner/Admin: all) |
 | `post/get-posts-feed.md` | `GET /api/posts/feed` | Global feed of published posts, newest first (public) |

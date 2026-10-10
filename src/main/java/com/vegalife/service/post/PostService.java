@@ -174,15 +174,15 @@ public class PostService {
   }
 
   /**
-   * BR-POST-011: a single post is visible to any authenticated caller once it is published;
-   * visibility depends only on {@code status}, never on ownership — the owner's own non-published
-   * post is not found either.
+   * BR-POST-011: a single post is returned for any status; only soft-deleted posts are excluded.
+   * Ownership is never checked — another user's post is returned and the caller's own draft is
+   * returned too.
    */
   @Transactional(readOnly = true)
   public PostListResponse getPost(UUID postId) {
     Post post =
         postRepository
-            .findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published)
+            .findDetailById(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
     return postMapper.toListResponse(post);
   }
