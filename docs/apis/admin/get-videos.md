@@ -99,7 +99,7 @@ No request body
 | data.content[].posts | array | Non-deleted posts this video is attached to; empty when unattached |
 | data.content[].posts[].id | uuid | Post id |
 | data.content[].posts[].title | string | Post title |
-| data.content[].posts[].status | string | Post moderation status: created, processed, published, unpublished, hidden, or flagged |
+| data.content[].posts[].status | string | Post moderation status: created, processed, published, unpublished, or hidden |
 | data.page | integer | 0-based page index returned |
 | data.size | integer | Page size used |
 | data.totalElements | integer | Total matching videos |

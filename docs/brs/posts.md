@@ -19,8 +19,8 @@
 | BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-09-30 |
 | BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-09-30 |
 | BR-FILTER-007 | A Passed Filter Publishes the Post | Active | 2026-09-30 |
-| BR-FILTER-008 | A Rejected or Uncertain Filter Flags the Post | Active | 2026-09-30 |
-| BR-FILTER-009 | Posts Stuck Pending Are Flagged After 24 Hours | Active | 2026-09-30 |
+| BR-FILTER-008 | A Rejected or Uncertain Filter Unpublishes the Post | Active | 2026-10-10 |
+| BR-FILTER-009 | Posts Stuck Pending Are Unpublished After 24 Hours | Active | 2026-10-10 |
 
 ---
 
@@ -249,7 +249,7 @@ Active
 
 ## Statement
 
-Post edits require `content` and `rawContent` on every request, and accept a non-empty subset of `title`, `featuredImageUrl`, `categoryIds`, and `publish` on top of them. Only supplied, non-null values among the optional fields are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters; `content` must not be blank and `rawContent` must be a JSON object. `categoryIds` replaces the category set and may only reference active categories (BR-CONTENT-004). `publish: true` requests publication and re-queues the post for content filtering (BR-FILTER-005): the post only becomes `published` once the filter returns `PASSED` (BR-FILTER-007). `publish: false` withdraws the post to a private draft immediately — a withdrawn `flagged` post returns to `created` but keeps its `flag` value — and never triggers filtering. A title or plain-content change to a post whose status is `published` or `flagged` re-queues it for filtering (BR-FILTER-005); a `rawContent`-only change does not re-queue, since filtering only reads plain `content`. A post that is or becomes published must keep at least one category (BR-CONTENT-003). Only an Administrator may change the state of a `hidden` post. Ownership and view count are not editable.
+Post edits require `content` and `rawContent` on every request, and accept a non-empty subset of `title`, `featuredImageUrl`, `categoryIds`, and `publish` on top of them. Only supplied, non-null values among the optional fields are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters; `content` must not be blank and `rawContent` must be a JSON object. `categoryIds` replaces the category set and may only reference active categories (BR-CONTENT-004). `publish: true` requests publication and re-queues the post for content filtering (BR-FILTER-005): the post only becomes `published` once the filter returns `PASSED` (BR-FILTER-007). `publish: false` withdraws the post to a private draft immediately — a withdrawn `unpublished` post returns to `created` but keeps its `flag` value — and never triggers filtering. A title or plain-content change to a post whose status is `published` or `unpublished` re-queues it for filtering (BR-FILTER-005); a `rawContent`-only change does not re-queue, since filtering only reads plain `content`. A post that is or becomes published must keep at least one category (BR-CONTENT-003). Only an Administrator may change the state of a `hidden` post. Ownership and view count are not editable.
 
 ## Rationale
 
@@ -351,7 +351,7 @@ Active
 
 ## Statement
 
-When a member's posts are listed, guests and other members see only `published`, non-deleted posts. Drafts and other non-public states (`created`, `processed`, `unpublished`, `hidden`, `flagged`) are visible only to the post's creator and Administrators (BR-CONTENT-003).
+When a member's posts are listed, guests and other members see only `published`, non-deleted posts. Drafts and other non-public states (`created`, `processed`, `unpublished`, `hidden`) are visible only to the post's creator and Administrators (BR-CONTENT-003). A post the content filter did not pass is `unpublished` with a `REJECTED`/`NEEDS_REVIEW` flag, so it is not public.
 
 ## Rationale
 
@@ -369,7 +369,7 @@ Applies to `GET /api/users/{userId}/posts`. `GET /api/posts` is the caller's own
 
 ## Last Reviewed
 
-2026-09-30, by Vegalife backend team
+2026-10-10, by Vegalife backend team
 
 ---
 
@@ -385,7 +385,7 @@ Active
 
 ## Statement
 
-When a caller — guest or authenticated — requests a single post by id, the post is returned whenever `deleted_at` is null, regardless of its status. Neither status nor ownership is checked: another user's post is returned, and the caller's own draft, `flagged`, or `hidden` post is returned too. Only a missing or soft-deleted post returns `404 Post not found`. The endpoint is public (no authentication required).
+When a caller — guest or authenticated — requests a single post by id, the post is returned whenever `deleted_at` is null, regardless of its status. Neither status nor ownership is checked: another user's post is returned, and the caller's own draft, `unpublished`, or `hidden` post is returned too. Only a missing or soft-deleted post returns `404 Post not found`. The endpoint is public (no authentication required).
 
 ## Rationale
 
@@ -458,7 +458,7 @@ Active
 
 ## Statement
 
-A post is filtered only when it is submitted for publication or when already-visible content changes. An explicit `publish: true` on create or edit always queues a filter run. Without an explicit `publish` field, a title or plain-`content` change on a post whose status is `published` or `flagged` re-queues it for filtering; a `rawContent`-only change does not, since filtering never reads `rawContent`. A draft — created or edited without `publish: true`, `flag` NULL — is never filtered, and unpublishing with `publish: false` never triggers a filter run.
+A post is filtered only when it is submitted for publication or when already-visible content changes. An explicit `publish: true` on create or edit always queues a filter run. Without an explicit `publish` field, a title or plain-`content` change on a post whose status is `published` or `unpublished` (a post the filter did not pass) re-queues it for filtering; a `rawContent`-only change does not, since filtering never reads `rawContent`. A draft — created or edited without `publish: true`, `flag` NULL — is never filtered, and unpublishing with `publish: false` never triggers a filter run.
 
 ## Rationale
 
@@ -470,12 +470,12 @@ Applies to `POST /api/posts` and `PATCH /api/posts/{postId}`. Ownership and cate
 
 ## Enforcement
 
-- Service: `PostService.createPost()` / `updatePost()` decide whether to enqueue from an explicit `publish: true` or from the content dirty check on a `published`/`flagged` post, and enqueue in the caller's transaction.
+- Service: `PostService.createPost()` / `updatePost()` decide whether to enqueue from an explicit `publish: true` or from the content dirty check on a `published`/`unpublished` post, and enqueue in the caller's transaction.
 - API references: `docs/apis/post/post-posts.md`, `docs/apis/post/patch-posts-postid.md`.
 
 ## Last Reviewed
 
-2026-09-30, by Vegalife backend team
+2026-10-10, by Vegalife backend team
 
 ---
 
@@ -527,7 +527,7 @@ Active
 
 ## Statement
 
-When a filter run ends with `PASSED`, the post's `flag` becomes `PASSED`, its status becomes `published`, and `publishedAt` is set if it was null. Every queued run was enqueued by an explicit publish request or by a content change on a `published`/`flagged` post (BR-FILTER-005), so a `PASSED` verdict publishes the post unconditionally — the verdict, not the client's request, drives publication.
+When a filter run ends with `PASSED`, the post's `flag` becomes `PASSED`, its status becomes `published`, and `publishedAt` is set if it was null. Every queued run was enqueued by an explicit publish request or by a content change on a `published`/`unpublished` post (BR-FILTER-005), so a `PASSED` verdict publishes the post unconditionally — the verdict, not the client's request, drives publication.
 
 ## Rationale
 
@@ -535,7 +535,7 @@ Passing the filter is the gate that makes publication legitimate; the transition
 
 ## Scope & Exceptions
 
-Applies to every `PASSED` verdict, whether it comes from a create, an edit, or a re-run of a flagged post (a passing edit returns a flagged post to `published`). Administrative hide/unhide (BR-POST-009) is unaffected.
+Applies to every `PASSED` verdict, whether it comes from a create, an edit, or a re-run of an `unpublished` post (a passing edit returns an `unpublished` post to `published`). Administrative hide/unhide (BR-POST-009) is unaffected.
 
 ## Enforcement
 
@@ -544,11 +544,11 @@ Applies to every `PASSED` verdict, whether it comes from a create, an edit, or a
 
 ## Last Reviewed
 
-2026-09-30, by Vegalife backend team
+2026-10-10, by Vegalife backend team
 
 ---
 
-# Business Rule: A Rejected or Uncertain Filter Flags the Post
+# Business Rule: A Rejected or Uncertain Filter Unpublishes the Post
 
 ## Rule ID
 
@@ -560,11 +560,11 @@ Active
 
 ## Statement
 
-When a filter run ends with `REJECTED` or `NEEDS_REVIEW`, the post's `flag` is set to that value and its status becomes `flagged`, which is not publicly visible (BR-POST-010). A `REJECTED` run logs a WARN carrying the out-of-band score; a `NEEDS_REVIEW` run logs a WARN recording that the score fell between the two thresholds. `NEEDS_REVIEW` is a data state only this sprint — no admin endpoint changes it. There is no `prev_status` column: the previous status is not tracked.
+When a filter run ends with `REJECTED` or `NEEDS_REVIEW`, the post's `flag` is set to that value and its status becomes `unpublished`, which is not publicly visible (BR-POST-010). The verdict is carried only by `flag`; `status` carries visibility. A `REJECTED` run logs a WARN carrying the out-of-band score; a `NEEDS_REVIEW` run logs a WARN recording that the score fell between the two thresholds. `NEEDS_REVIEW` is a data state only this sprint — no admin endpoint changes it. There is no `prev_status` column: the previous status is not tracked.
 
 ## Rationale
 
-Failing content must not stay public, but it must not be destroyed either — `flagged` keeps the post intact for its owner and for later review, and distinguishing rejection from uncertainty tells a future reviewer how much scrutiny to apply.
+Failing content must not stay public, but it must not be destroyed either — `unpublished` keeps the post intact for its owner and for later review, and distinguishing rejection from uncertainty in `flag` tells a future reviewer how much scrutiny to apply.
 
 ## Scope & Exceptions
 
@@ -573,17 +573,17 @@ Applies to every `REJECTED` / `NEEDS_REVIEW` verdict and to the stale-pending sw
 ## Enforcement
 
 - `ContentFilterOutboundAdapter` sets flag and status and writes the WARN log.
-- `post.status` accepts `flagged` from migration V19 on.
+- `post.status` no longer accepts `flagged` from migration V31 on; a non-`PASSED` verdict maps to `unpublished` (ADR-011).
 
 ## Last Reviewed
 
-2026-09-30, by Vegalife backend team
+2026-10-10, by Vegalife backend team
 
 ---
 
 ---
 
-# Business Rule: Posts Stuck Pending Are Flagged After 24 Hours
+# Business Rule: Posts Stuck Pending Are Unpublished After 24 Hours
 
 ## Rule ID
 
@@ -595,7 +595,7 @@ Active
 
 ## Statement
 
-A scheduled job finds every `CONTENT_FILTER` recipient whose newest outbound message is older than `app.filter.sweep-max-age` (default 24 hours) and, for each such post still at `flag = PENDING`, sets `flag = NEEDS_REVIEW`, `status = flagged`, logging at ERROR. Posts with a fresh outbound message or a NULL `flag` are never touched.
+A scheduled job finds every `CONTENT_FILTER` recipient whose newest outbound message is older than `app.filter.sweep-max-age` (default 24 hours) and, for each such post still at `flag = PENDING`, sets `flag = NEEDS_REVIEW`, `status = unpublished`, logging at ERROR. Posts with a fresh outbound message or a NULL `flag` are never touched.
 
 ## Rationale
 
@@ -612,6 +612,6 @@ Applies only to posts still at `PENDING`; it never re-runs a completed verdict a
 
 ## Last Reviewed
 
-2026-09-30, by Vegalife backend team
+2026-10-10, by Vegalife backend team
 
 ---

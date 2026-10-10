@@ -29,7 +29,7 @@ Admins review reported and flagged content, but the post list endpoints that exi
 
 ### Functional Requirements
 - [x] FR-001: `GET /api/admin/posts` returns a paginated list of posts to callers with role ADMIN.
-- [x] FR-002: The result spans all authors and all `Post.Status` values (`created`, `processed`, `published`, `unpublished`, `hidden`, `flagged`).
+- [x] FR-002: The result spans all authors and all `Post.Status` values (`created`, `processed`, `published`, `unpublished`, `hidden`), and can be filtered by content-filter verdict (`flag`) as well as status.
 - [x] FR-003: Each item includes `id`, `title`, `content`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `status`, `flag`, `viewCount`, `publishedAt`, `createdAt`, plus author `userId`, `username`, `email` (`type`/`videoUrl` removed by issue #101).
 - [x] FR-004: Optional query filters: `status` (Post.Status), `userId` (UUID), `categoryId` (UUID), `createdFrom`, `createdTo` (ISO-8601 datetime on `createdAt`).
 - [x] FR-005: Pagination via `page` (0-based, default 0), `size` (default 20, max 100), optional `sort` (default `createdAt,desc`); sort property must be one of `createdAt`, `publishedAt`, `updatedAt`, `viewCount`, `title`, otherwise 400.

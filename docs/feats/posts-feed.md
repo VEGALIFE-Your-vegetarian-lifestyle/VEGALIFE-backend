@@ -39,7 +39,7 @@ Issue #8 was originally a personalized recommendation feed, but the schema canno
 - [ ] FR-003: Results are ordered by `published_at DESC, created_at DESC` (ties fall back to creation time).
 - [ ] FR-004: Pagination uses the existing `PostListRequest` bounds: `page` defaults to `0`, `size` defaults to `20`, `size` must be between `1` and `100`; out-of-range values return `400`.
 - [ ] FR-005: If a token is supplied it must still be valid — an invalid or expired token returns `401` even on a public route.
-- [ ] FR-006: Draft, processed, unpublished, hidden, and flagged posts are never returned (BR-POST-010).
+- [ ] FR-006: Draft, processed, unpublished (including filter-rejected), and hidden posts are never returned (BR-POST-010).
 - [ ] FR-007: Items use the existing `PostListResponse` shape in the standard `PageResponse` envelope.
 
 ### Non-Functional Requirements
@@ -67,7 +67,7 @@ Four touch points, no migration:
 **As a** guest or member, **I want to** scroll a platform-wide feed of published posts, **so that** I can discover community content without knowing whose profile to open.
 
 - [ ] Given a guest, when `GET /api/posts/feed` is requested, then a paginated list of published, non-deleted posts is returned.
-- [ ] Given mixed post statuses in the database, when the feed is read, then drafts, flagged, hidden, and soft-deleted posts are absent.
+- [ ] Given mixed post statuses in the database, when the feed is read, then drafts, unpublished (including filter-rejected), hidden, and soft-deleted posts are absent.
 - [ ] Given several published posts, when the feed is read, then they appear newest-first by publish time, with creation time as the tie-breaker.
 - [ ] Given no pagination parameters, when the feed is read, then page `0` of size `20` is returned; given `size=101`, then `400`.
 - [ ] Given an invalid or expired token, when the feed is requested, then `401 Unauthorized` is returned.
