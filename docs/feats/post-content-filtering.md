@@ -12,8 +12,9 @@ Vegalife backend team
 
 Automatically screen every post a user asks to publish with an
 embedding-based relevance score, and only let a post become public when
-it passes. Posts that fail or land in an ambiguous band are flagged for
-review instead of published.
+it passes. Posts that fail or land in an ambiguous band are left
+`unpublished` (with a `REJECTED`/`NEEDS_REVIEW` flag) for review instead
+of published.
 
 ## Problem / motivation
 
@@ -53,7 +54,7 @@ vegan food at all, or what it contains.
   messages are out of scope).
 - Backfilling or re-screening pre-existing rows: `flag` starts as NULL
   everywhere and stays NULL until a post is actually filtered.
-- Tracking the status a post held before it was flagged
+- Tracking the status a post held before it was unpublished by the filter
   (`prev_status` does not exist).
 
 ## Requirements
@@ -66,11 +67,12 @@ vegan food at all, or what it contains.
 - [ ] FR-002: Creating a post with `publish: false` (a draft) leaves
       `flag` NULL and enqueues nothing; the draft is never filtered.
 - [ ] FR-003: Editing the title, content, or media of a post whose
-      status is `published` or `flagged` re-enqueues it for filtering
-      with the same `PENDING` handshake.
+      status is `published` or `unpublished` (a post the filter did not
+      pass) re-enqueues it for filtering with the same `PENDING`
+      handshake.
 - [ ] FR-004: Editing a draft, or withdrawing a post with
       `publish: false`, does not trigger filtering; withdrawal stays
-      immediate (a withdrawn `flagged` post returns to `created` but
+      immediate (a withdrawn `unpublished` post returns to `created` but
       keeps its `flag`).
 - [ ] FR-005: The filter runs no static-rule stage — length, links, and
       wordlists are never evaluated as separate rules — so every
@@ -87,13 +89,13 @@ vegan food at all, or what it contains.
 - [ ] FR-008: `PASSED` sets `flag = PASSED` and publishes the post
       (`status = published`, `publishedAt` set) — every queued run was
       enqueued by an explicit publish request or a content change on a
-      `published`/`flagged` post.
+      `published`/`unpublished` post.
 - [ ] FR-009: `REJECTED` and `NEEDS_REVIEW` set the flag accordingly and
-      move the post to `status = flagged`, with a WARN log carrying the
-      score band.
+      move the post to `status = unpublished`, with a WARN log carrying
+      the score band.
 - [ ] FR-011: A `CONTENT_FILTER` recipient whose newest outbound message
       is older than `app.filter.sweep-max-age` (24h) and whose post is
-      still `PENDING` is moved to `NEEDS_REVIEW` / `flagged` with an
+      still `PENDING` is moved to `NEEDS_REVIEW` / `unpublished` with an
       ERROR log, covering lost or exhausted queue messages.
 - [ ] FR-012: The create and update responses, and the user's post list,
       expose `flag` (`null` = never filtered).
@@ -128,11 +130,12 @@ existing outbound queue:
    corpora committed as resources), mean-centered over the seed corpus
    before comparison. Thresholds come from `app.filter.*`.
 
-State lives in one new column on `post` (`flag`) plus the `flagged`
-value added to `post.status`;
+State lives in one new column on `post` (`flag`);
 `flag` is deliberately separate from `status`: `status` stays the
-lifecycle field, `flag` is the filter state, and NULL means "never
-filtered". Enqueue age is read from the outbox row's `created_at`
+lifecycle/visibility field, `flag` is the filter state, and NULL means
+"never filtered". A non-`PASSED` verdict sets `status = unpublished`
+(the short-lived `flagged` status value from ADR-007 was retired by
+ADR-011, migration `V31`). Enqueue age is read from the outbox row's `created_at`
 (written in the same transaction as `flag = PENDING`), not from a post
 column. The verdict persists only in `post.flag`; the score and
 reasons are written to SLF4J WARN/ERROR logs — there is no audit
@@ -165,10 +168,10 @@ Issue #33 (create):
 - [ ] Given a queued filter run, when the semantic score is in the accept
       band, then the post becomes `published` with `flag = PASSED`.
 - [ ] Given a queued filter run with an off-topic score below the reject
-      threshold, when it runs, then the post becomes `flagged` with
+      threshold, when it runs, then the post becomes `unpublished` with
       `flag = REJECTED` after exactly one embedding call.
 - [ ] Given a semantic score between the two thresholds, when the run
-      completes, then the post becomes `flagged` with
+      completes, then the post becomes `unpublished` with
       `flag = NEEDS_REVIEW`.
 - [ ] Given a draft creation (`publish: false`), when it is saved, then
       `flag` is NULL and no `CONTENT_FILTER` message is enqueued.
@@ -179,10 +182,10 @@ Issue #34 (edit):
       it is re-enqueued, and a passing re-run leaves it `published` with
       `flag = PASSED`.
 - [ ] Given a published post, when a re-run scores below the thresholds,
-      then the post becomes `flagged` with `flag = REJECTED` or
+      then the post becomes `unpublished` with `flag = REJECTED` or
       `NEEDS_REVIEW`.
-- [ ] Given a flagged post, when a subsequent edit passes filtering, then
-      it returns to `published`.
+- [ ] Given an `unpublished` post, when a subsequent edit passes
+      filtering, then it returns to `published`.
 - [ ] Given a non-owner edit attempt, when it is submitted, then it is
       rejected exactly as before (ownership rules unchanged).
 - [ ] Given create, update, and list responses, when returned, then each
@@ -198,9 +201,10 @@ Issue #34 (edit):
   centered seed distribution (highest off-topic 0.4058, lowest
   on-topic 0.7279), not measured against production traffic. Expect
   one tuning pass after real content flows through.
-- **False rejects are user-visible**: a rejected post is `flagged`, not
-  deleted, and re-editing re-runs the filter — but there is no admin
-  release path until review endpoints exist (accepted for this sprint).
+- **False rejects are user-visible**: a rejected post is `unpublished`
+  (with `flag = REJECTED`/`NEEDS_REVIEW`), not deleted, and re-editing
+  re-runs the filter — but there is no admin release path until review
+  endpoints exist (accepted for this sprint).
 
 ---
 

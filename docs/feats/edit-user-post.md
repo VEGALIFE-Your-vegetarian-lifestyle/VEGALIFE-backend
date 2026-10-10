@@ -39,7 +39,7 @@ Users can create and list their posts, but currently cannot correct or update co
 - [ ] FR-004: A supplied title must not be blank and must be at most 255 characters; supplied content must not be blank.
 - [ ] FR-005: A request with no updatable non-null fields returns `400 Bad Request`.
 - [ ] FR-006: A successful edit returns `200 OK` with the updated post response; post ownership, view count, publication timestamp, and creation timestamp are not changed by the request.
-- [ ] FR-007: A title or content change to a published or flagged post re-queues semantic filtering: `flag` returns to `PENDING` (BR-POST-007); a failing verdict moves the post to status `flagged` (BR-FILTER-008) and a passing one returns it to `published` (BR-FILTER-007). `publish: true` always (re-)queues a filter run instead of publishing directly (BR-POST-004, BR-FILTER-005).
+- [ ] FR-007: A title or content change to a published or unpublished post re-queues semantic filtering: `flag` returns to `PENDING` (BR-POST-007); a failing verdict moves the post to status `unpublished` (BR-FILTER-008) and a passing one returns it to `published` (BR-FILTER-007). `publish: true` always (re-)queues a filter run instead of publishing directly (BR-POST-004, BR-FILTER-005).
 
 ### Non-Functional Requirements
 
@@ -48,7 +48,7 @@ Users can create and list their posts, but currently cannot correct or update co
 
 ## Design overview
 
-`PostController` accepts the post UUID, authenticated UUID principal, and validated partial-update DTO. `PostService` loads the post by both post ID and owner ID while requiring `deletedAt` to be null, applies only supplied values, saves the entity, and maps it to `PostListResponse`. `publish: true` and content changes to a `published`/`flagged` post (re-)queue filtering through the ADR-005 outbox instead of publishing directly (BR-POST-004, BR-POST-007). No column is written by this endpoint that migration `V19__add_post_filtering.sql` does not already provide (`flag` is read into the response and written by the filter job).
+`PostController` accepts the post UUID, authenticated UUID principal, and validated partial-update DTO. `PostService` loads the post by both post ID and owner ID while requiring `deletedAt` to be null, applies only supplied values, saves the entity, and maps it to `PostListResponse`. `publish: true` and content changes to a `published`/`unpublished` post (re-)queue filtering through the ADR-005 outbox instead of publishing directly (BR-POST-004, BR-POST-007). No column is written by this endpoint that migration `V19__add_post_filtering.sql` does not already provide (`flag` is read into the response and written by the filter job).
 
 ## Success metrics
 

@@ -29,8 +29,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
  * Verdict-matrix tests for the CONTENT_FILTER queue adapter: PASSED publishes unconditionally
- * (every queued message came from a publish request or a content change on a published/flagged
- * post, BR-FILTER-005), REJECTED/NEEDS_REVIEW flag and move to {@code flagged}, and the verdict
+ * (every queued message came from a publish request or a content change on a published/unpublished
+ * post, BR-FILTER-005), REJECTED/NEEDS_REVIEW flag and move to {@code unpublished}, and the verdict
  * persists only in {@code post.flag} / {@code post.status}. Failures propagate so the queue
  * retries.
  */
@@ -84,8 +84,8 @@ class ContentFilterOutboundAdapterTest {
   }
 
   @Test
-  void passedOnFlaggedPostRepublishesIt() throws Exception {
-    Post post = post(Post.Status.flagged);
+  void passedOnUnpublishedPostRepublishesIt() throws Exception {
+    Post post = post(Post.Status.unpublished);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
     when(contentFilterService.filter(TITLE + "\n" + CONTENT))
         .thenReturn(new FilterVerdict(Post.Flag.PASSED, 0.77, List.of()));
@@ -99,7 +99,7 @@ class ContentFilterOutboundAdapterTest {
   }
 
   @Test
-  void rejectedMovesPublishedPostToFlagged() throws Exception {
+  void rejectedMovesPublishedPostToUnpublished() throws Exception {
     Post post = post(Post.Status.published);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
     when(contentFilterService.filter(TITLE + "\n" + CONTENT))
@@ -109,12 +109,12 @@ class ContentFilterOutboundAdapterTest {
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
     assertEquals(Post.Flag.REJECTED, post.getFlag());
-    assertEquals(Post.Status.flagged, post.getStatus());
+    assertEquals(Post.Status.unpublished, post.getStatus());
     verify(postRepository).save(post);
   }
 
   @Test
-  void needsReviewMovesToFlagged() throws Exception {
+  void needsReviewMovesToUnpublished() throws Exception {
     Post post = post(Post.Status.created);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
     when(contentFilterService.filter(TITLE + "\n" + CONTENT))
@@ -125,7 +125,7 @@ class ContentFilterOutboundAdapterTest {
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
     assertEquals(Post.Flag.NEEDS_REVIEW, post.getFlag());
-    assertEquals(Post.Status.flagged, post.getStatus());
+    assertEquals(Post.Status.unpublished, post.getStatus());
     verify(postRepository).save(post);
   }
 

@@ -27,10 +27,14 @@ public class PostListRequest {
   private String sort;
 
   @Pattern(
-      regexp = "^(created|processed|published|unpublished|hidden|flagged)$",
-      message =
-          "Status must be one of: created, processed, published, unpublished, hidden, flagged")
+      regexp = "^(created|processed|published|unpublished|hidden)$",
+      message = "Status must be one of: created, processed, published, unpublished, hidden")
   private String status;
+
+  @Pattern(
+      regexp = "^(PENDING|PASSED|REJECTED|NEEDS_REVIEW)$",
+      message = "Flag must be one of: PENDING, PASSED, REJECTED, NEEDS_REVIEW")
+  private String flag;
 
   private UUID userId;
 

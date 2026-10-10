@@ -40,7 +40,7 @@ class PendingFilterSweepJobTest {
   }
 
   @Test
-  void sweepStalePendingPosts_flagsPostWhoseLatestQueueRowIsStale() {
+  void sweepStalePendingPosts_movesPostWhoseLatestQueueRowIsStaleToNeedsReview() {
     Post stalePost =
         Post.builder()
             .id(UUID.randomUUID())
@@ -63,7 +63,7 @@ class PendingFilterSweepJobTest {
     assertThat(cutoffCaptor.getValue())
         .isBetween(expectedCutoff.minusSeconds(5), expectedCutoff.plusSeconds(5));
     assertThat(stalePost.getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
-    assertThat(stalePost.getStatus()).isEqualTo(Post.Status.flagged);
+    assertThat(stalePost.getStatus()).isEqualTo(Post.Status.unpublished);
     verify(postRepository).save(stalePost);
   }
 

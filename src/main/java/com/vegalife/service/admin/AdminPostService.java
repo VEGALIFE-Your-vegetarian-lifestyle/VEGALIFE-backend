@@ -38,6 +38,7 @@ public class AdminPostService {
   @Transactional(readOnly = true)
   public PageResponse<AdminPostListResponse> listPosts(PostListRequest request) {
     Post.Status status = parseStatus(request.getStatus());
+    Post.Flag flag = parseFlag(request.getFlag());
     UUID userId = request.getUserId();
     UUID categoryId = request.getCategoryId();
     Instant createdFrom = request.getCreatedFrom();
@@ -50,7 +51,7 @@ public class AdminPostService {
     Pageable pageable =
         PageRequest.of(request.getPage(), request.getSize(), parseSort(request.getSort()));
     Specification<Post> spec =
-        PostSpecifications.allWithFilters(status, userId, categoryId, createdFrom, createdTo);
+        PostSpecifications.allWithFilters(status, flag, userId, categoryId, createdFrom, createdTo);
     Page<Post> page = postRepository.findAll(spec, pageable);
 
     log.debug(
@@ -71,7 +72,18 @@ public class AdminPostService {
       return Post.Status.valueOf(status);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException(
-          "Status must be one of: created, processed, published, unpublished, hidden, flagged");
+          "Status must be one of: created, processed, published, unpublished, hidden");
+    }
+  }
+
+  private Post.Flag parseFlag(String flag) {
+    if (flag == null || flag.isBlank()) {
+      return null;
+    }
+    try {
+      return Post.Flag.valueOf(flag);
+    } catch (IllegalArgumentException ex) {
+      throw new ValidationException("Flag must be one of: PENDING, PASSED, REJECTED, NEEDS_REVIEW");
     }
   }
 

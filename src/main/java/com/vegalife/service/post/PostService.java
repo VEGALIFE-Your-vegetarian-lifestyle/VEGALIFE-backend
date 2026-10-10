@@ -210,18 +210,18 @@ public class PostService {
 
   /**
    * BR-CONTENT-003: a post may be published only when it has at least one active category;
-   * unpublishing returns it to a private draft (also when it was {@code flagged}, so a withdrawn
-   * flagged post never re-queues implicitly). A post that is (or becomes, via a content re-queue)
-   * published is re-checked so an edit cannot leave it without a category. Nothing is ever flipped
-   * to {@code published} here — that happens only when the content filter passes (FR-007 / Phase
-   * 9).
+   * unpublishing returns it to a private draft (also when it was {@code unpublished}, so a
+   * withdrawn rejected post never re-queues implicitly). A post that is (or becomes, via a content
+   * re-queue) published is re-checked so an edit cannot leave it without a category. Nothing is
+   * ever flipped to {@code published} here — that happens only when the content filter passes
+   * (FR-007 / Phase 9).
    *
-   * @param willRequeue whether this update also re-queues the post for content filtering, so a
-   *     flagged post being re-checked is validated as if it were published
+   * @param willRequeue whether this update also re-queues the post for content filtering, so an
+   *     unpublished post being re-checked is validated as if it were published
    */
   private void applyPublishState(Post post, Boolean publish, boolean isAdmin, boolean willRequeue) {
     boolean published = post.getStatus() == Post.Status.published;
-    boolean flagged = post.getStatus() == Post.Status.flagged;
+    boolean unpublished = post.getStatus() == Post.Status.unpublished;
     boolean willBePublished = publish != null ? publish : (published || willRequeue);
     if (willBePublished) {
       if (post.getCategories().isEmpty()) {
@@ -234,7 +234,7 @@ public class PostService {
     if (post.getStatus() == Post.Status.hidden && !isAdmin) {
       throw new ValidationException("A hidden post can only be changed by an administrator");
     }
-    if (!publish && (published || flagged)) {
+    if (!publish && (published || unpublished)) {
       post.setStatus(Post.Status.created);
       post.setPublishedAt(null);
     }
@@ -243,14 +243,16 @@ public class PostService {
   /**
    * BR-FILTER-005: an explicit {@code publish: true} always queues (and re-queues) for content
    * filtering; a content change re-queues a post that is still meant to be visible — status {@code
-   * published} or {@code flagged}. A withdrawn post (draft) never re-queues implicitly.
+   * published} or {@code unpublished} (a post the filter did not pass). A withdrawn post (draft)
+   * never re-queues implicitly.
    */
   private boolean shouldEnqueueFilter(Post post, Boolean publish, boolean contentChanged) {
     if (publish != null) {
       return publish;
     }
     return contentChanged
-        && (post.getStatus() == Post.Status.published || post.getStatus() == Post.Status.flagged);
+        && (post.getStatus() == Post.Status.published
+            || post.getStatus() == Post.Status.unpublished);
   }
 
   /** FR-003: only a title or content change counts as a content change. */

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Return a single post by id, using the same response shape as the post list endpoints. Visibility depends only on the post not being soft-deleted, never on status or ownership — a draft, `flagged`, or `hidden` post is returned to any caller just like a published one.
+Return a single post by id, using the same response shape as the post list endpoints. Visibility depends only on the post not being soft-deleted, never on status or ownership — a draft, `unpublished`, or `hidden` post is returned to any caller just like a published one.
 
 ## Endpoint
 

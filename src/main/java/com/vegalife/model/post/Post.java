@@ -105,8 +105,7 @@ public class Post {
     processed,
     published,
     unpublished,
-    hidden,
-    flagged
+    hidden
   }
 
   public enum Flag {

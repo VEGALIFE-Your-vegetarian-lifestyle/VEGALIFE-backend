@@ -17,9 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
  * CONTENT_FILTER channel adapter (ADR-005): loads the queued post, runs the filter pipeline (FR-005
  * embedding scoring, FR-006 bands) and applies the verdict. {@code PASSED} publishes the post —
  * every queued message was enqueued by an explicit publish request (BR-FILTER-005); {@code
- * REJECTED} / {@code NEEDS_REVIEW} flag the post, move it to {@code flagged} and WARN (FR-009). Any
- * failure propagates so the queue retries; permanent failure is the existing FAILED@24h handling of
- * the outbound job. No {@code prev_status} tracking.
+ * REJECTED} / {@code NEEDS_REVIEW} flag the post, move it to {@code unpublished} and WARN (FR-009).
+ * Any failure propagates so the queue retries; permanent failure is the existing FAILED@24h
+ * handling of the outbound job. No {@code prev_status} tracking.
  */
 @Service
 @RequiredArgsConstructor
@@ -65,11 +65,11 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
         log.info("Content filter passed post {} (score {})", post.getId(), verdict.score());
       }
       case REJECTED -> {
-        post.setStatus(Post.Status.flagged);
+        post.setStatus(Post.Status.unpublished);
         log.warn("Content filter rejected post {}: {}", post.getId(), verdict.reasons());
       }
       case NEEDS_REVIEW -> {
-        post.setStatus(Post.Status.flagged);
+        post.setStatus(Post.Status.unpublished);
         log.warn(
             "Content filter needs review for post {} (score between bands: {})",
             post.getId(),

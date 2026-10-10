@@ -22,7 +22,8 @@ None.
 | page | integer | No | 0-based page index, default 0 |
 | size | integer | No | Page size, default 20, max 100 |
 | sort | string | No | Format `property,direction`. Default `createdAt,desc`. Property must be one of: `createdAt`, `publishedAt`, `updatedAt`, `viewCount`, `title` |
-| status | string | No | One of: `created`, `processed`, `published`, `unpublished`, `hidden`, `flagged` |
+| status | string | No | One of: `created`, `processed`, `published`, `unpublished`, `hidden` |
+| flag | string | No | Content-filter verdict: `PENDING`, `PASSED`, `REJECTED`, or `NEEDS_REVIEW` |
 | userId | uuid | No | Only posts authored by this user |
 | categoryId | uuid | No | Only posts belonging to this category |
 | createdFrom | string | No | ISO-8601 datetime lower bound (inclusive) on `createdAt`, e.g. `2026-01-01T00:00:00Z` |
@@ -78,7 +79,7 @@ No request body
 | data.content[].featuredImageUrl | string | Featured image URL, nullable |
 | data.content[].categoryIds | uuid[] | Category ids the post belongs to |
 | data.content[].mediaIds | uuid[] | Media ids attached to the post |
-| data.content[].status | string | created, processed, published, unpublished, hidden, or flagged |
+| data.content[].status | string | created, processed, published, unpublished, or hidden |
 | data.content[].flag | string | Content-filter verdict: PENDING, PASSED, REJECTED, NEEDS_REVIEW; null when never filtered |
 | data.content[].viewCount | integer | View counter |
 | data.content[].publishedAt | string | ISO-8601 publish timestamp, nullable |
@@ -96,7 +97,7 @@ No request body
 ### Error Responses
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | Unknown `sort` property, invalid `status`/date format, `createdFrom` after `createdTo`, or `size` > 100 | "Validation failed" or the parse error message |
+| 400 | Unknown `sort` property, invalid `status`/`flag`/date format, `createdFrom` after `createdTo`, or `size` > 100 | "Validation failed" or the parse error message |
 | 401 | Missing/invalid JWT | "Unauthorized" |
 | 403 | Authenticated non-admin | "Forbidden" |
 | 500 | Server error | "Internal server error" |
@@ -105,12 +106,13 @@ No request body
 - Soft-deleted posts (`deletedAt != null`) are excluded (issue #1 / FR-006).
 - Only `ROLE_ADMIN` may call this endpoint (SecurityConfig `/api/admin/**`).
 - Unlike `GET /api/posts` and `GET /api/users/{userId}/posts`, no status restriction is applied: every status is listable (issue #1 / FR-002).
+- `status` and `flag` are independent filters and combine with AND; `flag` matches the content-filter verdict exactly (BR-FILTER-008).
 
 ## Example
 
 ### Request
 ```bash
-curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&status=flagged&categoryId=1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed&sort=createdAt,desc" \
+curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&flag=REJECTED&categoryId=1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed&sort=createdAt,desc" \
   -H "Authorization: Bearer <admin_access_token>"
 ```
 
@@ -128,7 +130,7 @@ curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&status=flagged
         "featuredImageUrl": "https://cdn.example.com/posts/pho.jpg",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "mediaIds": [],
-        "status": "flagged",
+        "status": "unpublished",
         "flag": "REJECTED",
         "viewCount": 42,
         "publishedAt": "2026-09-28T08:15:00Z",

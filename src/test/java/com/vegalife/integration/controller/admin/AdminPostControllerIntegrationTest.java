@@ -148,9 +148,9 @@ class AdminPostControllerIntegrationTest {
     createPost(member, "P1", Post.Status.created, null, null);
     createPost(member, "P2", Post.Status.processed, null, null);
     createPost(member, "P3", Post.Status.published, null, null);
-    createPost(author2, "P4", Post.Status.unpublished, null, null);
+    createPost(author2, "P4", Post.Status.unpublished, Post.Flag.REJECTED, null);
     createPost(author2, "P5", Post.Status.hidden, null, null);
-    createPost(admin, "P6", Post.Status.flagged, Post.Flag.REJECTED, null);
+    createPost(admin, "P6", Post.Status.published, null, null);
 
     mockMvc
         .perform(get("/api/admin/posts").header("Authorization", "Bearer " + adminToken))
@@ -161,7 +161,7 @@ class AdminPostControllerIntegrationTest {
             jsonPath("$.data.content[*].status")
                 .value(
                     containsInAnyOrder(
-                        "created", "processed", "published", "unpublished", "hidden", "flagged")))
+                        "created", "processed", "published", "unpublished", "hidden", "published")))
         .andExpect(
             jsonPath("$.data.content[*].username")
                 .value(
@@ -177,19 +177,38 @@ class AdminPostControllerIntegrationTest {
   @Test
   void listPosts_filterByStatus_returnsOnlyMatchingPosts() throws Exception {
     createPost(member, "Draft", Post.Status.created, null, null);
-    createPost(member, "Rejected", Post.Status.flagged, Post.Flag.REJECTED, null);
+    createPost(member, "Rejected", Post.Status.unpublished, Post.Flag.REJECTED, null);
     createPost(member, "Live", Post.Status.published, null, null);
 
     mockMvc
         .perform(
             get("/api/admin/posts")
                 .header("Authorization", "Bearer " + adminToken)
-                .param("status", "flagged"))
+                .param("status", "unpublished"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(1))
         .andExpect(jsonPath("$.data.content.length()").value(1))
         .andExpect(jsonPath("$.data.content[0].title").value("Rejected"))
-        .andExpect(jsonPath("$.data.content[0].status").value("flagged"))
+        .andExpect(jsonPath("$.data.content[0].status").value("unpublished"))
+        .andExpect(jsonPath("$.data.content[0].flag").value("REJECTED"));
+  }
+
+  @Test
+  void listPosts_filterByFlag_returnsOnlyMatchingPosts() throws Exception {
+    createPost(member, "Draft", Post.Status.created, Post.Flag.PENDING, null);
+    createPost(member, "Rejected", Post.Status.unpublished, Post.Flag.REJECTED, null);
+    createPost(member, "Held", Post.Status.unpublished, Post.Flag.NEEDS_REVIEW, null);
+    createPost(member, "Live", Post.Status.published, Post.Flag.PASSED, null);
+
+    mockMvc
+        .perform(
+            get("/api/admin/posts")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("flag", "REJECTED"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content.length()").value(1))
+        .andExpect(jsonPath("$.data.content[0].title").value("Rejected"))
         .andExpect(jsonPath("$.data.content[0].flag").value("REJECTED"));
   }
 

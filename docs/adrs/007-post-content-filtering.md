@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted — decision 5's `status = flagged` value is superseded by ADR-011
+(the verdict now lives only in `post.flag`; a non-`PASSED` run sets
+`status = unpublished`). The rest of this ADR stands.
 
 ## Date
 

@@ -14,3 +14,4 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [008-vnpay-integration.md](008-vnpay-integration.md) | Integrate VNPay Through a Hand-Rolled Thin Client, Fulfilling Only From Its IPN Webhook | Accepted | 2026-10-04 |
 | [009-authorize-endpoints-with-method-security.md](009-authorize-endpoints-with-method-security.md) | Authorize Endpoints with Method-Security Annotations, Not a Central Path List | Accepted | 2026-10-09 |
 | [010-menu-scheduled-overlap-gist-constraint.md](010-menu-scheduled-overlap-gist-constraint.md) | Enforce Non-Overlapping Scheduled Menus with a GiST Exclusion Constraint | Accepted | 2026-10-10 |
+| [011-post-status-and-filter-axis-separation.md](011-post-status-and-filter-axis-separation.md) | Keep Post Visibility in `status` and the Filter Verdict in `flag` Only | Accepted | 2026-10-10 |
