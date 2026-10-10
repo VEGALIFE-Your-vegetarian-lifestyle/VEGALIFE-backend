@@ -10,7 +10,7 @@ Vegalife backend team
 
 ## Summary
 
-Add `GET /api/posts/{postId}` so any authenticated user can read a single published post by id, regardless of who wrote it — closing the gap where a post's detail/share view could only be reached by listing and filtering, and another user's post was unreachable at all.
+Add `GET /api/posts/{postId}` so any caller can read a single non-deleted post by id, regardless of who wrote it or its status — closing the gap where a post's detail/share view could only be reached by listing and filtering, and another user's post was unreachable at all.
 
 ## Problem / motivation
 
@@ -18,13 +18,13 @@ The frontend post detail page (and shared links) cannot fetch a single post toda
 
 ## Goals
 
-- Let any caller — authenticated user or guest — fetch any `published`, non-deleted post by id, owned by anyone.
+- Let any caller — authenticated user or guest — fetch any non-deleted post by id, in any status, owned by anyone.
 - Return the same `PostListResponse` shape the list endpoints already use.
-- Keep visibility rules consistent with the rest of the post API: non-public states are never exposed through this endpoint, not even to their owner.
+- Exclude only soft-deleted posts; the endpoint is a direct-by-id read, so it does not gate on the `published` status that controls the feed.
 
 ## Non-goals
 
-- Owner/admin draft preview (only `published` posts are revealed by this endpoint).
+- Gating the response on the post's status or on ownership — only soft-deletion excludes a post.
 - View-count increment, caching, or ETags.
 - Comments, reactions, or "related posts" in the payload.
 - A global feed or listing other users' posts (that's `GET /api/posts/feed`, a separate feature).
@@ -36,29 +36,29 @@ The frontend post detail page (and shared links) cannot fetch a single post toda
 ### Functional Requirements
 
 - [x] FR-001: `GET /api/posts/{postId}` is public (`permitAll`); no JWT is required. A supplied-but-invalid or expired token is still rejected with `401`.
-- [x] FR-002: Given an existing, non-deleted, `published` post, the endpoint returns `200 OK` with `ApiResponse` wrapping the same `PostListResponse` the list endpoints use, regardless of who the authenticated caller is.
-- [x] FR-003: Given a soft-deleted post, a post whose status is not `published` (`created`/`processed`/`unpublished`/`hidden`/`flagged`), or an unknown/malformed id, the endpoint returns `404 Post not found` — including when the caller is the post's own owner and the post is not yet published.
+- [x] FR-002: Given an existing, non-deleted post, the endpoint returns `200 OK` with `ApiResponse` wrapping the same `PostListResponse` the list endpoints use, regardless of who the caller is or the post's status.
+- [x] FR-003: Given a soft-deleted post or an unknown/malformed id, the endpoint returns `404 Post not found`.
 
 ### Non-Functional Requirements
 
-- [x] NFR-SEC-001: Visibility is derived from the post's own `status`/`deletedAt`, never from the caller's identity or ownership; no post data leaks through a different status code or response shape for a non-visible post.
+- [x] NFR-SEC-001: Visibility is derived from the post's own `deletedAt` only, never from the caller's identity, ownership, or the post's status; a soft-deleted or unknown post is reported as the same `404` so no post existence leaks.
 - [x] NFR-MAINT-001: Follows the existing controller-service-repository structure and reuses `PostListResponse`/`PostMapper` rather than introducing a parallel DTO.
 
 ## Design overview
 
-`PostController.getPost()` accepts the path `postId` and delegates to `PostService.getPost(postId)`, which calls a new repository method `PostRepository.findByIdAndStatusAndDeletedAtIsNull(id, Post.Status.published)` and maps a missing result to the existing `ResourceNotFoundException("Post not found")` — the same not-found-over-leak pattern `PostService` already uses elsewhere (e.g. `findManageablePost`). The route is opened to guests by a `permitAll` rule in `SecurityConfig` for `GET /api/posts/*` (a single path segment, so it matches `feed` and `{postId}` but never the auth-required `GET /api/posts` list); the controller no longer carries a class-level bearer requirement — each protected operation declares `@SecurityRequirement` itself, so `getPost` (and `listFeed`) are documented as public.
+`PostController.getPost()` accepts the path `postId` and delegates to `PostService.getPost(postId)`, which calls `PostRepository.findDetailById(id)` (a `where p.id = :id and p.deletedAt is null` query — no status predicate) and maps a missing result to the existing `ResourceNotFoundException("Post not found")` — the same not-found-over-leak pattern `PostService` already uses elsewhere (e.g. `findManageablePost`). The status-scoped `findByIdAndStatusAndDeletedAtIsNull` is retained for callers that gate on publication (comment creation). The route is opened to guests by a `permitAll` rule in `SecurityConfig` for `GET /api/posts/*` (a single path segment, so it matches `feed` and `{postId}` but never the auth-required `GET /api/posts` list); the controller no longer carries a class-level bearer requirement — each protected operation declares `@SecurityRequirement` itself, so `getPost` (and `listFeed`) are documented as public.
 
 ## Success metrics
 
-All automated acceptance scenarios (ownership-independent 200, every non-visible case as 404, unauthenticated 401) pass before merge.
+All automated acceptance scenarios (any-status 200, soft-deleted/unknown as 404, invalid-token 401) pass before merge.
 
 ## Acceptance criteria
 
 **As a** visitor (guest or member), **I want to** open a single post by its id, **so that** I can view a post's detail page or follow a shared link regardless of who wrote it.
 
-- [x] Given any caller, when they request an existing, non-deleted, published post by id, then `200 OK` is returned with the post's `PostListResponse`.
-- [x] Given any caller, when the post belongs to someone else but is published, then it is returned — visibility depends only on published status, never on ownership.
-- [x] Given any caller, when the target post is not published (or soft-deleted, or the id is unknown), then `404 Post not found` is returned.
+- [x] Given any caller, when they request an existing, non-deleted post by id, then `200 OK` is returned with the post's `PostListResponse`, whatever its status.
+- [x] Given any caller, when the post belongs to someone else or is not published, then it is returned — visibility depends only on soft-deletion, never on ownership or status.
+- [x] Given any caller, when the target post is soft-deleted or the id is unknown, then `404 Post not found` is returned.
 - [x] Given no authentication, when the endpoint is called, then the request is served like any other caller (no `401`); only an invalid/expired token is rejected.
 
 ## Risks / open questions

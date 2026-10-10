@@ -2,7 +2,7 @@
 
 ## Overview
 
-Return a single post by id, using the same response shape as the post list endpoints. Visibility depends only on the post's `published` status, never on ownership — the caller's own draft is not visible either.
+Return a single post by id, using the same response shape as the post list endpoints. Visibility depends only on the post not being soft-deleted, never on status or ownership — a draft, `flagged`, or `hidden` post is returned to any caller just like a published one.
 
 ## Endpoint
 
@@ -61,14 +61,14 @@ Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-po
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
 | 401 | A token is supplied but is invalid, expired, or the account is inactive | `Unauthorized` |
-| 404 | The post does not exist, is soft-deleted, or its status is not `published` (including the caller's own non-published post) | `Post not found` |
+| 404 | The post does not exist or is soft-deleted | `Post not found` |
 | 500 | Unexpected server error | `Internal server error` |
 
 ## Business Rules
 
-- Visibility is gated by `status == published` and `deleted_at IS NULL` only (BR-POST-011); ownership is never checked, so another user's published post is returned and the caller's own draft is not.
-- A non-published or soft-deleted post, and an unknown id, are all reported as `404 Post not found` — the same not-found-over-leak pattern used elsewhere in the post API, so no post data or existence is leaked.
-- Public access: this route is `permitAll`, so guests may read any `published` post — like `GET /api/posts/feed` and `GET /api/users/{userId}/posts`. Only a supplied-but-invalid token is rejected (`401`); a missing token is not.
+- Visibility is gated by `deleted_at IS NULL` only (BR-POST-011); neither status nor ownership is checked, so another user's post is returned and the caller's own non-published post is returned too.
+- A soft-deleted post and an unknown id are both reported as `404 Post not found` — the same not-found-over-leak pattern used elsewhere in the post API, so no post data or existence is leaked.
+- Public access: this route is `permitAll`, so guests may read any non-deleted post — like `GET /api/posts/feed` and `GET /api/users/{userId}/posts`. Only a supplied-but-invalid token is rejected (`401`); a missing token is not.
 - No view-count increment, caching, or ETags are performed by this endpoint.
 
 ## Example
