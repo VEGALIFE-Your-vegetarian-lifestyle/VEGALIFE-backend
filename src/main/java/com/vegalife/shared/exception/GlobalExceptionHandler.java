@@ -118,6 +118,12 @@ public class GlobalExceptionHandler {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.failure(ex.getMessage()));
   }
 
+  @ExceptionHandler(InvalidMenuFilterException.class)
+  public ResponseEntity<ApiResponse<Void>> handleInvalidMenuFilter(
+      InvalidMenuFilterException ex, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.failure(ex.getMessage()));
+  }
+
   @ExceptionHandler(DuplicateResourceException.class)
   public ResponseEntity<ApiResponse<Void>> handleDuplicateResource(
       DuplicateResourceException ex, HttpServletRequest request) {
