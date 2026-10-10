@@ -16,17 +16,25 @@ public final class PostSpecifications {
   private PostSpecifications() {}
 
   /**
-   * Every non-deleted post, optionally narrowed by status, author, category, and createdAt range.
-   * The category join is de-duplicated so a matching post is never returned twice.
+   * Every non-deleted post, optionally narrowed by status, filter flag, author, category, and
+   * createdAt range. The category join is de-duplicated so a matching post is never returned twice.
    */
   public static Specification<Post> allWithFilters(
-      Post.Status status, UUID userId, UUID categoryId, Instant createdFrom, Instant createdTo) {
+      Post.Status status,
+      Post.Flag flag,
+      UUID userId,
+      UUID categoryId,
+      Instant createdFrom,
+      Instant createdTo) {
     return (root, query, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
       predicates.add(cb.isNull(root.get("deletedAt")));
 
       if (status != null) {
         predicates.add(cb.equal(root.get("status"), status));
+      }
+      if (flag != null) {
+        predicates.add(cb.equal(root.get("flag"), flag));
       }
       if (userId != null) {
         predicates.add(cb.equal(root.get("user").get("id"), userId));
