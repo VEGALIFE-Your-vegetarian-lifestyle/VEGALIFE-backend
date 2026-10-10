@@ -4,24 +4,33 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.mapper.admin.AdminPostMapper;
 import com.vegalife.dto.request.admin.PostListRequest;
+import com.vegalife.dto.request.admin.PostModerationRequest;
 import com.vegalife.dto.response.admin.AdminPostListResponse;
+import com.vegalife.model.admin.ModerationLog;
+import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.service.admin.AdminPostService;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,6 +45,8 @@ import org.springframework.data.jpa.domain.Specification;
 class AdminPostServiceTest {
 
   @Mock private PostRepository postRepository;
+
+  @Mock private ModerationLogRepository moderationLogRepository;
 
   @Mock private AdminPostMapper adminPostMapper;
 
@@ -194,5 +205,132 @@ class AdminPostServiceTest {
     assertThat(result.getTotalElements()).isZero();
     assertThat(result.isFirst()).isTrue();
     assertThat(result.isLast()).isTrue();
+  }
+
+  @Test
+  void moderatePost_publish_setsStatusAndLogsWithReason() {
+    UUID adminId = UUID.randomUUID();
+    post.setStatus(Post.Status.unpublished);
+    post.setFlag(Post.Flag.REJECTED);
+    post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(postRepository.saveAndFlush(post)).thenReturn(post);
+    when(adminPostMapper.toResponse(post)).thenReturn(postResponse);
+
+    adminPostService.moderatePost(
+        adminId,
+        post.getId(),
+        PostModerationRequest.builder()
+            .action(PostModerationRequest.Action.PUBLISH)
+            .reason("Vegetarian recipe, filter false positive")
+            .build());
+
+    assertThat(post.getStatus()).isEqualTo(Post.Status.published);
+    assertThat(post.getPublishedAt()).isNotNull();
+    assertThat(post.getFlag()).isEqualTo(Post.Flag.REJECTED);
+
+    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
+    verify(moderationLogRepository).save(captor.capture());
+    ModerationLog entry = captor.getValue();
+    assertThat(entry.getActorId()).isEqualTo(adminId);
+    assertThat(entry.getAction()).isEqualTo("PUBLISH_POST");
+    assertThat(entry.getTargetType()).isEqualTo("POST");
+    assertThat(entry.getTargetId()).isEqualTo(post.getId());
+    assertThat(entry.getReason()).isEqualTo("Vegetarian recipe, filter false positive");
+  }
+
+  @Test
+  void moderatePost_unpublish_clearsPublishedAtAndLogs() {
+    UUID adminId = UUID.randomUUID();
+    post.setStatus(Post.Status.published);
+    post.setPublishedAt(Instant.parse("2026-09-21T10:00:00Z"));
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(postRepository.saveAndFlush(post)).thenReturn(post);
+    when(adminPostMapper.toResponse(post)).thenReturn(postResponse);
+
+    adminPostService.moderatePost(
+        adminId,
+        post.getId(),
+        PostModerationRequest.builder().action(PostModerationRequest.Action.UNPUBLISH).build());
+
+    assertThat(post.getStatus()).isEqualTo(Post.Status.unpublished);
+    assertThat(post.getPublishedAt()).isNull();
+
+    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
+    verify(moderationLogRepository).save(captor.capture());
+    assertThat(captor.getValue().getAction()).isEqualTo("UNPUBLISH_POST");
+    assertThat(captor.getValue().getReason()).isNull();
+  }
+
+  @Test
+  void moderatePost_publishAlreadyPublished_isNoOpWithoutLog() {
+    UUID adminId = UUID.randomUUID();
+    post.setStatus(Post.Status.published);
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(adminPostMapper.toResponse(post)).thenReturn(postResponse);
+
+    adminPostService.moderatePost(
+        adminId,
+        post.getId(),
+        PostModerationRequest.builder().action(PostModerationRequest.Action.PUBLISH).build());
+
+    verify(postRepository, never()).saveAndFlush(any(Post.class));
+    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
+  }
+
+  @Test
+  void moderatePost_publishWithoutCategory_throwsValidationException() {
+    UUID adminId = UUID.randomUUID();
+    post.setStatus(Post.Status.unpublished);
+    post.setCategories(Set.of());
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(
+            () ->
+                adminPostService.moderatePost(
+                    adminId,
+                    post.getId(),
+                    PostModerationRequest.builder()
+                        .action(PostModerationRequest.Action.PUBLISH)
+                        .build()))
+        .isInstanceOf(ValidationException.class)
+        .hasMessage("At least one category is required to publish a post");
+
+    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
+  }
+
+  @Test
+  void moderatePost_hiddenPost_throwsValidationException() {
+    UUID adminId = UUID.randomUUID();
+    post.setStatus(Post.Status.hidden);
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(
+            () ->
+                adminPostService.moderatePost(
+                    adminId,
+                    post.getId(),
+                    PostModerationRequest.builder()
+                        .action(PostModerationRequest.Action.PUBLISH)
+                        .build()))
+        .isInstanceOf(ValidationException.class);
+  }
+
+  @Test
+  void moderatePost_missingPost_throwsResourceNotFound() {
+    UUID adminId = UUID.randomUUID();
+    UUID postId = UUID.randomUUID();
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                adminPostService.moderatePost(
+                    adminId,
+                    postId,
+                    PostModerationRequest.builder()
+                        .action(PostModerationRequest.Action.UNPUBLISH)
+                        .build()))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Post not found");
   }
 }
