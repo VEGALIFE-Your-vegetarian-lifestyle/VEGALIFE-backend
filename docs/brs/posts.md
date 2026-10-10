@@ -615,3 +615,98 @@ Applies only to posts still at `PENDING`; it never re-runs a completed verdict a
 2026-10-10, by Vegalife backend team
 
 ---
+
+# Business Rule: Only Administrators Publish or Unpublish a Post as a Moderation Action
+
+## Rule ID
+
+`BR-POST-012`
+
+## Status
+
+Active
+
+## Statement
+
+Only an Administrator may moderate a post's publish state directly, through
+`POST /api/admin/posts/{postId}/moderate` with action `PUBLISH` or `UNPUBLISH`. `PUBLISH` sets
+`status = published` and stamps `publishedAt`; it requires the post to have at least one category
+(BR-CONTENT-003). `UNPUBLISH` sets `status = unpublished` and clears `publishedAt`. Neither action
+changes `flag`: the content-filter verdict is a record of what the filter decided and stays as
+written (ADR-011). A `hidden` post is moderated through the visibility endpoint (BR-POST-009), not
+these verbs, and a request whose target status already holds is a no-op that writes no log entry.
+Every real change is recorded in `moderation_log` (BR-ADMIN-002).
+
+## Rationale
+
+The filter can withhold a post the admin judges acceptable, and an admin may need to take a live
+post down as a moderation decision distinct from hiding it. Both are administrator powers, so
+recording them keeps decisions reviewable; leaving `flag` untouched keeps the two axes of ADR-011
+independent, so "why is this not public" is still answerable from the verdict.
+
+## Scope & Exceptions
+
+Applies to `POST /api/admin/posts/{postId}/moderate`. It does not cover editing content (BR-POST-006),
+hiding (BR-POST-009), or deletion (BR-POST-008), each of which has its own rule and log action. The
+admin post list's default `flag = NEEDS_REVIEW` filter (issue #5) is a query default, not a rule about
+which posts exist.
+
+## Enforcement
+
+- Security: `AdminPostController` carries `@PreAuthorize("hasRole('ADMIN')")` (ADR-009); no
+  `SecurityConfig` path rule grants `/api/admin/**`.
+- Service: `AdminPostService.moderatePost()` loads a non-deleted post, rejects `hidden` and a
+  categoryless publish, no-ops on an already-target status, sets `status`/`publishedAt`, and writes
+  the log row with the reason.
+- API reference: `docs/apis/admin/post-posts-postid-moderate.md`.
+
+## Last Reviewed
+
+2026-10-10, by Vegalife backend team
+
+---
+
+# Business Rule: Every Administrator Content-Moderation Action Is Logged
+
+## Rule ID
+
+`BR-ADMIN-002`
+
+## Status
+
+Active
+
+## Statement
+
+Every administrator action that changes another user's content — editing (`EDIT_POST`), deleting
+(`DELETE_POST`), hiding or lifting a hide (`HIDE_POST` / `UNHIDE_POST`), and moderating a post's
+publish state (`PUBLISH_POST` / `UNPUBLISH_POST`) — is written to `moderation_log` with the acting
+administrator (`actor_id`), the action, the target (`target_type`, `target_id`), the time
+(`created_at`), and — for the moderation verbs — an optional reason. A no-op that changes nothing is
+never logged. The log is append-only; entries are never edited or deleted by application code.
+
+## Rationale
+
+Moderation is an administrator power over content they do not own; a durable, attributable record is
+what makes those actions auditable and reviewable after the fact, including the stated justification.
+
+## Scope & Exceptions
+
+Applies to post and comment moderation. Category creation, edit, and retirement are deliberately
+**not** logged — BR-ADMIN-002 scopes the log to content/comment moderation, not category management
+(the decision recorded in `create-category-api.md`, `edit-category-api.md`, `delete-category-api.md`).
+`reason` is optional today; a required-reason contract would be a separate validation change.
+
+## Enforcement
+
+- Table: `moderation_log` (migration `V18`); `V32` adds the nullable `reason` column.
+- Service: every writer builds a `ModerationLog` through `ModerationLogRepository` in the same
+  transaction as the change (`PostService`, `AdminPostService`).
+- API references: `docs/apis/post/patch-posts-postid.md`, `docs/apis/post/delete-posts-postid.md`,
+  `docs/apis/post/patch-posts-postid-visibility.md`, `docs/apis/admin/post-posts-postid-moderate.md`.
+
+## Last Reviewed
+
+2026-10-10, by Vegalife backend team
+
+---
