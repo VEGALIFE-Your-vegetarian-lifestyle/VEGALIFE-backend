@@ -81,3 +81,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-AI-003 | Conversation Ownership Comes from Authentication | Active | 2026-10-07 |
 | BR-AI-004 | Context Is Profile Plus Own Conversation History | Active | 2026-10-07 |
 | BR-AI-005 | Chat Provider Is OpenAI-Compatible and Set by Dedicated Env Vars | Active | 2026-10-07 |
+| BR-MENU-001 | Menu Ownership Comes from Authentication | Active | 2026-10-10 |
+| BR-MENU-002 | Menu Read Windows Are Intersections | Active | 2026-10-10 |
+| BR-MENU-003 | One Scheduled Week per User, No Overlap | Active | 2026-10-10 |
+| BR-MENU-004 | Menu Windows Are Evaluated in Server (UTC) Time | Active | 2026-10-10 |

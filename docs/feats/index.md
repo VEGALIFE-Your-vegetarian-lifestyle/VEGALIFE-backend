@@ -43,3 +43,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `subscription-lifecycle.md`         | AI Subscription Lifecycle (Cancel, Extension, Expiry) | In review | 2026-10-07 |
 | `payment-history.md`                | Payment History API (Member + Admin)     | Approved    | 2026-10-07 |
 | `ai-chat-send.md`                   | AI Chat Send (JSON + SSE Streaming)      | Approved    | 2026-10-07 |
+| `query-menus-by-range.md`           | Query Menus by Week, Month, or Date Range | Approved    | 2026-10-10 |

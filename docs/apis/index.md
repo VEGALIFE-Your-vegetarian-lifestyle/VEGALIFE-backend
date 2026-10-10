@@ -61,3 +61,5 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `ai/post-messages-stream.md` | `POST /api/ai/messages/stream` | Send a chat message, stream the AI reply as SSE (authenticated) |
 | `ai/get-conversations.md` | `GET /api/ai/conversations` | List own AI conversations, most recently active first (authenticated) |
 | `ai/get-conversations-id.md` | `GET /api/ai/conversations/{id}` | Read one owned conversation's messages in order (authenticated) |
+| `menus/get-menus.md` | `GET /api/menus` | List own menus filtered by week, month, or date range, plus status (authenticated) |
+| `menus/get-menus-menuid.md` | `GET /api/menus/{menuId}` | Read one owned menu with its days and meals (authenticated) |
