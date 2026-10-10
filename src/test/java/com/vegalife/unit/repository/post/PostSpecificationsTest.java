@@ -39,7 +39,7 @@ class PostSpecificationsTest {
   private Category vegan;
   private Category quick;
   private Post alicePublished;
-  private Post aliceFlagged;
+  private Post aliceUnpublished;
   private Post aliceDeleted;
   private Post bobCreated;
 
@@ -51,15 +51,35 @@ class PostSpecificationsTest {
     quick = createCategory("Quick meals");
 
     alicePublished =
-        createPost(alice, "Alice published", Post.Status.published, null, Set.of(vegan, quick));
-    aliceFlagged = createPost(alice, "Alice flagged", Post.Status.flagged, null, Set.of(quick));
+        createPost(
+            alice,
+            "Alice published",
+            Post.Status.published,
+            Post.Flag.PASSED,
+            null,
+            Set.of(vegan, quick));
+    aliceUnpublished =
+        createPost(
+            alice,
+            "Alice unpublished",
+            Post.Status.unpublished,
+            Post.Flag.REJECTED,
+            null,
+            Set.of(quick));
     aliceDeleted =
-        createPost(alice, "Alice deleted", Post.Status.published, Instant.now(), Set.of(vegan));
-    bobCreated = createPost(bob, "Bob created", Post.Status.created, null, Set.of());
+        createPost(
+            alice,
+            "Alice deleted",
+            Post.Status.published,
+            Post.Flag.PASSED,
+            Instant.now(),
+            Set.of(vegan));
+    bobCreated =
+        createPost(bob, "Bob created", Post.Status.created, Post.Flag.PENDING, null, Set.of());
 
     entityManager.flush();
     setCreatedAt(alicePublished, CREATED_MARCH);
-    setCreatedAt(aliceFlagged, CREATED_JUNE);
+    setCreatedAt(aliceUnpublished, CREATED_JUNE);
     setCreatedAt(aliceDeleted, CREATED_MARCH);
     setCreatedAt(bobCreated, CREATED_SEPTEMBER);
     entityManager.flush();
@@ -68,25 +88,46 @@ class PostSpecificationsTest {
 
   @Test
   void allWithFilters_withoutFilters_returnsEveryNonDeletedPostAcrossAuthorsAndStatuses() {
-    Page<Post> result = findAll(null, null, null, null, null);
+    Page<Post> result = findAll(null, null, null, null, null, null);
 
     assertThat(result.getContent())
         .extracting(Post::getTitle)
-        .containsExactlyInAnyOrder("Alice published", "Alice flagged", "Bob created");
+        .containsExactlyInAnyOrder("Alice published", "Alice unpublished", "Bob created");
     assertThat(result.getTotalElements()).isEqualTo(3);
   }
 
   @Test
   void allWithFilters_byStatus_returnsOnlyThatStatus() {
-    Page<Post> result = findAll(Post.Status.flagged, null, null, null, null);
+    Page<Post> result = findAll(Post.Status.unpublished, null, null, null, null, null);
 
-    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice flagged");
+    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice unpublished");
     assertThat(result.getTotalElements()).isOne();
   }
 
   @Test
+  void allWithFilters_byFlag_returnsOnlyThatFlag() {
+    Page<Post> result = findAll(null, Post.Flag.REJECTED, null, null, null, null);
+
+    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice unpublished");
+    assertThat(result.getTotalElements()).isOne();
+  }
+
+  @Test
+  void allWithFilters_byStatusAndFlag_appliesBothPredicates() {
+    Page<Post> result =
+        findAll(Post.Status.unpublished, Post.Flag.REJECTED, null, null, null, null);
+
+    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice unpublished");
+    assertThat(result.getTotalElements()).isOne();
+
+    Page<Post> contradictory =
+        findAll(Post.Status.unpublished, Post.Flag.PASSED, null, null, null, null);
+    assertThat(contradictory.getContent()).isEmpty();
+  }
+
+  @Test
   void allWithFilters_byUserId_returnsOnlyThatAuthorsPosts() {
-    Page<Post> result = findAll(null, bob.getId(), null, null, null);
+    Page<Post> result = findAll(null, null, bob.getId(), null, null, null);
 
     assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Bob created");
     assertThat(result.getTotalElements()).isOne();
@@ -94,17 +135,17 @@ class PostSpecificationsTest {
 
   @Test
   void allWithFilters_byCategoryId_returnsEachMatchingPostExactlyOnce() {
-    Page<Post> result = findAll(null, null, quick.getId(), null, null);
+    Page<Post> result = findAll(null, null, null, quick.getId(), null, null);
 
     assertThat(result.getContent())
         .extracting(Post::getTitle)
-        .containsExactlyInAnyOrder("Alice published", "Alice flagged");
+        .containsExactlyInAnyOrder("Alice published", "Alice unpublished");
     assertThat(result.getTotalElements()).isEqualTo(2);
   }
 
   @Test
   void allWithFilters_byCategoryWithSingleMembership_returnsThePostOnce() {
-    Page<Post> result = findAll(null, null, vegan.getId(), null, null);
+    Page<Post> result = findAll(null, null, null, vegan.getId(), null, null);
 
     assertThat(result.getContent())
         .extracting(Post::getTitle)
@@ -114,28 +155,35 @@ class PostSpecificationsTest {
 
   @Test
   void allWithFilters_byCreatedAtRange_isInclusiveOnBothBounds() {
-    Page<Post> result = findAll(null, null, null, CREATED_MARCH, CREATED_JUNE);
+    Page<Post> result = findAll(null, null, null, null, CREATED_MARCH, CREATED_JUNE);
 
     assertThat(result.getContent())
         .extracting(Post::getTitle)
-        .containsExactlyInAnyOrder("Alice published", "Alice flagged");
+        .containsExactlyInAnyOrder("Alice published", "Alice unpublished");
     assertThat(result.getTotalElements()).isEqualTo(2);
   }
 
   @Test
   void allWithFilters_byCreatedAtLowerBound_excludesPostsCreatedBeforeIt() {
-    Page<Post> result = findAll(null, null, null, Instant.parse("2026-04-01T00:00:00Z"), null);
+    Page<Post> result =
+        findAll(null, null, null, null, Instant.parse("2026-04-01T00:00:00Z"), null);
 
     assertThat(result.getContent())
         .extracting(Post::getTitle)
-        .containsExactlyInAnyOrder("Alice flagged", "Bob created");
+        .containsExactlyInAnyOrder("Alice unpublished", "Bob created");
     assertThat(result.getTotalElements()).isEqualTo(2);
   }
 
   @Test
   void allWithFilters_withCombinedFilters_appliesEveryPredicate() {
     Page<Post> result =
-        findAll(Post.Status.published, alice.getId(), vegan.getId(), CREATED_MARCH, CREATED_JUNE);
+        findAll(
+            Post.Status.published,
+            Post.Flag.PASSED,
+            alice.getId(),
+            vegan.getId(),
+            CREATED_MARCH,
+            CREATED_JUNE);
 
     assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice published");
     assertThat(result.getTotalElements()).isOne();
@@ -143,16 +191,21 @@ class PostSpecificationsTest {
 
   @Test
   void allWithFilters_withFilterMatchingNothing_returnsEmptyPage() {
-    Page<Post> result = findAll(Post.Status.unpublished, null, null, null, null);
+    Page<Post> result = findAll(Post.Status.hidden, null, null, null, null, null);
 
     assertThat(result.getContent()).isEmpty();
     assertThat(result.getTotalElements()).isZero();
   }
 
   private Page<Post> findAll(
-      Post.Status status, UUID userId, UUID categoryId, Instant createdFrom, Instant createdTo) {
+      Post.Status status,
+      Post.Flag flag,
+      UUID userId,
+      UUID categoryId,
+      Instant createdFrom,
+      Instant createdTo) {
     Specification<Post> spec =
-        PostSpecifications.allWithFilters(status, userId, categoryId, createdFrom, createdTo);
+        PostSpecifications.allWithFilters(status, flag, userId, categoryId, createdFrom, createdTo);
     Sort sort = Sort.by(Sort.Direction.ASC, "createdAt");
     return postRepository.findAll(spec, PageRequest.of(0, 20, sort));
   }
@@ -178,7 +231,12 @@ class PostSpecificationsTest {
   }
 
   private Post createPost(
-      User owner, String title, Post.Status status, Instant deletedAt, Set<Category> categories) {
+      User owner,
+      String title,
+      Post.Status status,
+      Post.Flag flag,
+      Instant deletedAt,
+      Set<Category> categories) {
     Post post =
         Post.builder()
             .user(owner)
@@ -186,7 +244,7 @@ class PostSpecificationsTest {
             .content("Post content")
             .rawContent(com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
             .status(status)
-            .flag(Post.Flag.PENDING)
+            .flag(flag)
             .viewCount(0)
             .deletedAt(deletedAt)
             .categories(categories)

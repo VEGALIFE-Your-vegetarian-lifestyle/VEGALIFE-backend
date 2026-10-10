@@ -113,7 +113,8 @@ class AdminPostServiceTest {
             .page(1)
             .size(10)
             .sort("viewCount,asc")
-            .status("flagged")
+            .status("unpublished")
+            .flag("REJECTED")
             .userId(author.getId())
             .categoryId(UUID.randomUUID())
             .createdFrom(from)
@@ -151,8 +152,16 @@ class AdminPostServiceTest {
 
     assertThatThrownBy(() -> adminPostService.listPosts(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage(
-            "Status must be one of: created, processed, published, unpublished, hidden, flagged");
+        .hasMessage("Status must be one of: created, processed, published, unpublished, hidden");
+  }
+
+  @Test
+  void listPosts_withInvalidFlag_throwsValidationException() {
+    PostListRequest request = PostListRequest.builder().flag("bogus").build();
+
+    assertThatThrownBy(() -> adminPostService.listPosts(request))
+        .isInstanceOf(ValidationException.class)
+        .hasMessage("Flag must be one of: PENDING, PASSED, REJECTED, NEEDS_REVIEW");
   }
 
   @Test

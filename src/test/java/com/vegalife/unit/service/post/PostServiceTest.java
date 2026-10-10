@@ -381,9 +381,9 @@ class PostServiceTest {
   }
 
   @Test
-  void updatePost_contentChangeOnFlaggedPostRequeuesForFiltering() {
+  void updatePost_contentChangeOnUnpublishedPostRequeuesForFiltering() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.flagged);
+    Post existing = ownedPost(postId, Post.Status.unpublished);
     existing.setFlag(Post.Flag.REJECTED);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
@@ -392,7 +392,7 @@ class PostServiceTest {
     postService.updatePost(
         userId, false, postId, PostUpdateRequest.builder().content("Revised body").build());
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.flagged);
+    assertThat(existing.getStatus()).isEqualTo(Post.Status.unpublished);
     assertThat(existing.getFlag()).isEqualTo(Post.Flag.PENDING);
     assertContentFilterQueued(existing);
   }
@@ -439,9 +439,9 @@ class PostServiceTest {
   }
 
   @Test
-  void updatePost_withdrawFlaggedPostReturnsToDraftKeepingFlagAndDoesNotRequeue() {
+  void updatePost_withdrawUnpublishedPostReturnsToDraftKeepingFlagAndDoesNotRequeue() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.flagged);
+    Post existing = ownedPost(postId, Post.Status.unpublished);
     existing.setFlag(Post.Flag.NEEDS_REVIEW);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));

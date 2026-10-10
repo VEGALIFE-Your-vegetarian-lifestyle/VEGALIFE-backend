@@ -157,7 +157,7 @@ class PostContentFilterIntegrationTest {
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(Post.Status.flagged);
+    assertThat(filtered.getStatus()).isEqualTo(Post.Status.unpublished);
     assertThat(filtered.getFlag()).isEqualTo(Post.Flag.REJECTED);
     assertThat(filtered.getPublishedAt()).isNull();
 
@@ -176,7 +176,7 @@ class PostContentFilterIntegrationTest {
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(Post.Status.flagged);
+    assertThat(filtered.getStatus()).isEqualTo(Post.Status.unpublished);
     assertThat(filtered.getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
     assertThat(filtered.getPublishedAt()).isNull();
   }
@@ -246,19 +246,19 @@ class PostContentFilterIntegrationTest {
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(Post.Status.flagged);
+    assertThat(filtered.getStatus()).isEqualTo(Post.Status.unpublished);
     assertThat(filtered.getFlag()).isEqualTo(Post.Flag.REJECTED);
   }
 
   @Test
-  void editFlaggedPost_requeuesAndRepublishesOnPass() throws Exception {
+  void editUnpublishedPost_requeuesAndRepublishesOnPass() throws Exception {
     stubScore(0.3, Band.REJECT);
     UUID postId =
         createPostWithPublish(
-            "Flagged post edit", "A body that initially lands in the reject band.");
+            "Unpublished post edit", "A body that initially lands in the reject band.");
 
     drainFilterQueue();
-    assertThat(postById(postId).getStatus()).isEqualTo(Post.Status.flagged);
+    assertThat(postById(postId).getStatus()).isEqualTo(Post.Status.unpublished);
     assertThat(postById(postId).getFlag()).isEqualTo(Post.Flag.REJECTED);
 
     stubScore(0.9, Band.PASS);
@@ -275,7 +275,7 @@ class PostContentFilterIntegrationTest {
                     }
                     """))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("flagged"))
+        .andExpect(jsonPath("$.data.status").value("unpublished"))
         .andExpect(jsonPath("$.data.flag").value("PENDING"));
 
     assertThat(contentFilterQueue()).hasSize(2);
