@@ -172,7 +172,20 @@ class AdminPostServiceTest {
 
     assertThatThrownBy(() -> adminPostService.listPosts(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage("Flag must be one of: PENDING, PASSED, REJECTED, NEEDS_REVIEW");
+        .hasMessage("Flag must be one of: all, PENDING, PASSED, REJECTED, NEEDS_REVIEW");
+  }
+
+  @Test
+  void listPosts_withFlagAll_passesNoFlagFilter() {
+    PostListRequest request = PostListRequest.builder().flag("all").build();
+    Page<Post> page = new PageImpl<>(List.of(post), expectedPageable, 1);
+    when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+    when(adminPostMapper.toResponse(post)).thenReturn(postResponse);
+
+    PageResponse<AdminPostListResponse> result = adminPostService.listPosts(request);
+
+    assertThat(result.getContent()).containsExactly(postResponse);
+    verify(postRepository).findAll(any(Specification.class), any(Pageable.class));
   }
 
   @Test

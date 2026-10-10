@@ -32,8 +32,8 @@ public class PostListRequest {
   private String status;
 
   @Pattern(
-      regexp = "^(PENDING|PASSED|REJECTED|NEEDS_REVIEW)$",
-      message = "Flag must be one of: PENDING, PASSED, REJECTED, NEEDS_REVIEW")
+      regexp = "^(all|PENDING|PASSED|REJECTED|NEEDS_REVIEW)?$",
+      message = "Flag must be one of: all, PENDING, PASSED, REJECTED, NEEDS_REVIEW")
   private String flag;
 
   private UUID userId;
@@ -56,5 +56,13 @@ public class PostListRequest {
 
   public String getSort() {
     return sort == null || sort.isBlank() ? "createdAt,desc" : sort;
+  }
+
+  /**
+   * Issue #5: an admin opening the list without a flag lands on the posts awaiting review. The
+   * literal {@code all} disables the flag filter entirely.
+   */
+  public String getFlag() {
+    return flag == null || flag.isBlank() ? "NEEDS_REVIEW" : flag;
   }
 }

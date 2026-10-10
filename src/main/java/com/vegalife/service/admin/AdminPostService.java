@@ -139,13 +139,14 @@ public class AdminPostService {
   }
 
   private Post.Flag parseFlag(String flag) {
-    if (flag == null || flag.isBlank()) {
+    if (flag == null || flag.isBlank() || "all".equalsIgnoreCase(flag)) {
       return null;
     }
     try {
       return Post.Flag.valueOf(flag);
     } catch (IllegalArgumentException ex) {
-      throw new ValidationException("Flag must be one of: PENDING, PASSED, REJECTED, NEEDS_REVIEW");
+      throw new ValidationException(
+          "Flag must be one of: all, PENDING, PASSED, REJECTED, NEEDS_REVIEW");
     }
   }
 
