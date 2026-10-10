@@ -105,15 +105,18 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  void getPost_ownNonPublishedPostReturns404() throws Exception {
+  void getPost_ownNonPublishedPostIsReturned() throws Exception {
     Post draft = createPost(user, "My draft", Post.Status.created, null);
 
     mockMvc
         .perform(
             get("/api/posts/{postId}", draft.getId())
                 .header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.message").value("Post not found"));
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.id").value(draft.getId().toString()))
+        .andExpect(jsonPath("$.data.title").value("My draft"))
+        .andExpect(jsonPath("$.data.status").value("created"));
   }
 
   @Test
@@ -148,13 +151,15 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  void getPost_withoutJwt_nonPublishedPostReturns404() throws Exception {
+  void getPost_withoutJwt_nonPublishedPostIsReturned() throws Exception {
     Post draft = createPost(user, "My draft", Post.Status.created, null);
 
     mockMvc
         .perform(get("/api/posts/{postId}", draft.getId()))
-        .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.message").value("Post not found"));
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.id").value(draft.getId().toString()))
+        .andExpect(jsonPath("$.data.status").value("created"));
   }
 
   @Test

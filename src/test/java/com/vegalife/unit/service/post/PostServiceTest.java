@@ -228,8 +228,7 @@ class PostServiceTest {
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, Post.Status.published);
     PostListResponse expectedResponse = PostListResponse.builder().id(postId).build();
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
-        .thenReturn(Optional.of(existing));
+    when(postRepository.findDetailById(postId)).thenReturn(Optional.of(existing));
     when(postMapper.toListResponse(existing)).thenReturn(expectedResponse);
 
     PostListResponse response = postService.getPost(postId);
@@ -238,10 +237,22 @@ class PostServiceTest {
   }
 
   @Test
-  void getPost_nonPublishedOrUnknownPostThrowsNotFound() {
+  void getPost_nonPublishedPostIsReturned() {
     UUID postId = UUID.randomUUID();
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
-        .thenReturn(Optional.empty());
+    Post draft = ownedPost(postId, Post.Status.created);
+    PostListResponse expectedResponse = PostListResponse.builder().id(postId).build();
+    when(postRepository.findDetailById(postId)).thenReturn(Optional.of(draft));
+    when(postMapper.toListResponse(draft)).thenReturn(expectedResponse);
+
+    PostListResponse response = postService.getPost(postId);
+
+    assertThat(response).isSameAs(expectedResponse);
+  }
+
+  @Test
+  void getPost_deletedOrUnknownPostThrowsNotFound() {
+    UUID postId = UUID.randomUUID();
+    when(postRepository.findDetailById(postId)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> postService.getPost(postId))
         .isInstanceOf(ResourceNotFoundException.class)
