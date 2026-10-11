@@ -15,3 +15,4 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [009-authorize-endpoints-with-method-security.md](009-authorize-endpoints-with-method-security.md) | Authorize Endpoints with Method-Security Annotations, Not a Central Path List | Accepted | 2026-10-09 |
 | [010-menu-scheduled-overlap-gist-constraint.md](010-menu-scheduled-overlap-gist-constraint.md) | Enforce Non-Overlapping Scheduled Menus with a GiST Exclusion Constraint | Accepted | 2026-10-10 |
 | [011-post-status-and-filter-axis-separation.md](011-post-status-and-filter-axis-separation.md) | Keep Post Visibility in `status` and the Filter Verdict in `flag` Only | Accepted | 2026-10-10 |
+| [012-multi-module-mcp-tool-surface.md](012-multi-module-mcp-tool-surface.md) | Expose Menu Operations as an Internal MCP Server With Caller-Identity Propagation | Accepted | 2026-10-12 |

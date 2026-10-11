@@ -32,6 +32,8 @@ These are part of the current tech stack. Use freely.
 | `org.hibernate:hibernate-jpamodelgen` | JPA static metamodel generation (test scope) | In pom.xml |
 | `spring-boot-starter-actuator` | Health endpoint `/actuator/health` (CD + Render health checks; status only, see `deployment.md`) | In pom.xml |
 | `com.cloudinary:cloudinary-http5` | Signed direct-to-Cloudinary upload + Admin API verification (media upload, issue #38) | In pom.xml |
+| `spring-ai-starter-mcp-server` | Expose menu tools over Streamable HTTP in the `mcp-server` module (ADR-012) | Approved for `feat/mcp-server-implementation` |
+| `spring-ai-starter-mcp-client` | Chat tool calling against the MCP server in `backend` (ADR-012) | Approved for `feat/mcp-server-implementation` |
 
 ## Planned (approved, add when a feature needs it)
 
