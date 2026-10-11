@@ -126,6 +126,52 @@ class MenuOverlapConstraintIntegrationTest {
     assertThat(menuRepository.findAll()).hasSize(2);
   }
 
+  /** The write-time scheduling pre-check (BR-MENU-003 / BR-MENU-007) against real Postgres. */
+  @Test
+  void overlapPreCheckSeesOnlyOtherOverlappingScheduledMenusOfTheSameUser() {
+    Menu scheduledWeek = menuRepository.saveAndFlush(scheduled(user, LocalDate.of(2026, 10, 5)));
+    Menu draftSameWeek =
+        menuRepository.saveAndFlush(
+            Menu.builder()
+                .userId(user.getId())
+                .startDate(LocalDate.of(2026, 10, 5))
+                .endDate(LocalDate.of(2026, 10, 11))
+                .status(MenuStatus.drafted)
+                .build());
+    Menu laterWeek = menuRepository.saveAndFlush(scheduled(user, LocalDate.of(2026, 10, 12)));
+    // A week where only otherUser has a scheduled menu.
+    menuRepository.saveAndFlush(scheduled(otherUser, LocalDate.of(2026, 10, 19)));
+    Menu draftInOtherUsersWeek =
+        menuRepository.saveAndFlush(
+            Menu.builder()
+                .userId(user.getId())
+                .startDate(LocalDate.of(2026, 10, 19))
+                .endDate(LocalDate.of(2026, 10, 25))
+                .status(MenuStatus.drafted)
+                .build());
+
+    // The draft's window is covered by another scheduled week: scheduling it must be blocked.
+    assertThat(overlapsScheduled(user, draftSameWeek)).isTrue();
+    // A touching (adjacent) week is not an overlap.
+    assertThat(overlapsScheduled(user, laterWeek)).isFalse();
+    // A menu never blocks itself.
+    assertThat(overlapsScheduled(user, scheduledWeek)).isFalse();
+    // Another user's scheduled week is invisible to this user's check, and vice versa:
+    // the same window is blocked for otherUser (own row) but free for user.
+    assertThat(overlapsScheduled(user, draftInOtherUsersWeek)).isFalse();
+    assertThat(overlapsScheduled(otherUser, draftInOtherUsersWeek)).isTrue();
+  }
+
+  private boolean overlapsScheduled(User owner, Menu candidate) {
+    return menuRepository
+        .existsByUserIdAndStatusAndIdNotAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            owner.getId(),
+            MenuStatus.scheduled,
+            candidate.getId(),
+            candidate.getStartDate(),
+            candidate.getEndDate());
+  }
+
   @Test
   void menuDetailStoresServings() {
     Menu menu = menuRepository.saveAndFlush(scheduled(user, LocalDate.of(2026, 10, 5)));
