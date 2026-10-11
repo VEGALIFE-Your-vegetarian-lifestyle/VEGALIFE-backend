@@ -52,7 +52,8 @@ class EndpointAuthorizationGuardTest {
           "PaymentWebhookController#ipnGet",
           "PaymentWebhookController#ipnPost",
           "DishController#listDishes",
-          "CommentController#listComments");
+          "CommentController#listComments",
+          "VoteController#getVotes");
 
   @Test
   void everyControllerHandlerIsEitherPublicOrAnnotated() {

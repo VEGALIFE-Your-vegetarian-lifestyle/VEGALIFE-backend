@@ -46,6 +46,8 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-COMMENT-001 | Comment Creation Requires Authentication; Reading Is Public | Active | 2026-10-11 |
 | BR-COMMENT-002 | Only the Owner May Edit a Comment | Active | 2026-10-11 |
 | BR-COMMENT-003 | Comment Deletion Is Owner-or-Admin and Soft | Active | 2026-10-11 |
+| BR-VOTE-001 | One Vote Per User Per Post, Toggled | Active | 2026-10-11 |
+| BR-VOTE-002 | Voting Requires Authentication; Reading Counts Is Public | Active | 2026-10-11 |
 | BR-MEDIA-001 | Media Content-Type Allowlist | Active | 2026-09-30 |
 | BR-MEDIA-002 | Media Ownership Is Derived from Authentication | Active | 2026-09-30 |
 | BR-MEDIA-003 | Per-Class Upload Size Ceilings | Active | 2026-10-02 |
