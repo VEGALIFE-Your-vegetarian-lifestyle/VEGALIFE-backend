@@ -3,6 +3,8 @@ package com.vegalife.unit.service.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +13,7 @@ import com.vegalife.dto.request.post.CommentUpdateRequest;
 import com.vegalife.dto.response.post.CommentResponse;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.service.post.CommentService;
@@ -31,6 +34,8 @@ class CommentServiceTest {
   @Mock private CommentRepository commentRepository;
 
   @Mock private PostRepository postRepository;
+
+  @Mock private ModerationLogRepository moderationLogRepository;
 
   @InjectMocks private CommentService commentService;
 
@@ -206,6 +211,81 @@ class CommentServiceTest {
                     postId,
                     commentId,
                     CommentUpdateRequest.builder().content("Hello").build()))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Comment not found");
+  }
+
+  @Test
+  void deleteComment_ownerSoftDeletesOwnCommentWithoutLogging() {
+    UUID commentId = UUID.randomUUID();
+    Comment existing =
+        Comment.builder().id(commentId).userId(userId).postId(postId).content("Mine").build();
+    when(commentRepository.findByIdAndPostIdAndUserIdAndDeletedAtIsNull(commentId, postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(commentRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    commentService.deleteComment(userId, false, postId, commentId);
+
+    assertThat(existing.getDeletedAt()).isNotNull();
+    verify(moderationLogRepository, never()).save(any());
+  }
+
+  @Test
+  void deleteComment_nonOwnerNonAdminReturnsNotFound() {
+    UUID commentId = UUID.randomUUID();
+    when(commentRepository.findByIdAndPostIdAndUserIdAndDeletedAtIsNull(commentId, postId, userId))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> commentService.deleteComment(userId, false, postId, commentId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Comment not found");
+  }
+
+  @Test
+  void deleteComment_adminDeletingAnotherUsersCommentIsLogged() {
+    UUID commentId = UUID.randomUUID();
+    UUID ownerId = UUID.randomUUID();
+    UUID adminId = UUID.randomUUID();
+    Comment existing =
+        Comment.builder().id(commentId).userId(ownerId).postId(postId).content("Theirs").build();
+    when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(commentId, postId))
+        .thenReturn(Optional.of(existing));
+    when(commentRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    commentService.deleteComment(adminId, true, postId, commentId);
+
+    assertThat(existing.getDeletedAt()).isNotNull();
+    verify(moderationLogRepository)
+        .save(
+            argThat(
+                log ->
+                    adminId.equals(log.getActorId())
+                        && commentId.equals(log.getTargetId())
+                        && "DELETE_COMMENT".equals(log.getAction())
+                        && "COMMENT".equals(log.getTargetType())));
+  }
+
+  @Test
+  void deleteComment_adminDeletingOwnCommentIsNotLogged() {
+    UUID commentId = UUID.randomUUID();
+    Comment existing =
+        Comment.builder().id(commentId).userId(userId).postId(postId).content("Mine").build();
+    when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(commentId, postId))
+        .thenReturn(Optional.of(existing));
+    when(commentRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    commentService.deleteComment(userId, true, postId, commentId);
+
+    verify(moderationLogRepository, never()).save(any());
+  }
+
+  @Test
+  void deleteComment_adminMissingCommentReturnsNotFound() {
+    UUID commentId = UUID.randomUUID();
+    when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(commentId, postId))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> commentService.deleteComment(userId, true, postId, commentId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Comment not found");
   }

@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -51,5 +52,19 @@ public class CommentController {
     UUID userId = (UUID) authentication.getPrincipal();
     CommentResponse comment = commentService.updateComment(userId, postId, commentId, request);
     return ResponseEntity.ok(ApiResponse.success(comment, "Comment updated successfully"));
+  }
+
+  @DeleteMapping("/{commentId}")
+  @PreAuthorize("isAuthenticated()")
+  public ResponseEntity<ApiResponse<Void>> deleteComment(
+      Authentication authentication, @PathVariable UUID postId, @PathVariable UUID commentId) {
+    UUID userId = (UUID) authentication.getPrincipal();
+    commentService.deleteComment(userId, isAdmin(authentication), postId, commentId);
+    return ResponseEntity.ok(ApiResponse.success(null, "Comment deleted successfully"));
+  }
+
+  private boolean isAdmin(Authentication authentication) {
+    return authentication.getAuthorities().stream()
+        .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
   }
 }

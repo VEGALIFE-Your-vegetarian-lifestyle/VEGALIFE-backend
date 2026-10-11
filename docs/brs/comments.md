@@ -6,6 +6,7 @@
 |---------|-------|--------|---------------|
 | BR-COMMENT-001 | Comment Creation Requires Authentication; Reading Is Public | Active | 2026-10-10 |
 | BR-COMMENT-002 | Only the Owner May Edit a Comment | Active | 2026-10-11 |
+| BR-COMMENT-003 | Comment Deletion Is Owner-or-Admin and Soft | Active | 2026-10-11 |
 
 ---
 
@@ -70,6 +71,40 @@ Applies to comment edits (`PATCH /api/posts/{postId}/comments/{commentId}`). Doe
 - The service loads the comment and compares its `userId` to the authenticated principal; a mismatch raises `403 Forbidden` regardless of the caller's role.
 - No elapsed-time check is performed against `createdAt`.
 - API reference: `docs/apis/post/patch-posts-postid-comments-commentid.md`.
+
+## Last Reviewed
+
+2026-10-11, by Vegalife backend team
+
+---
+
+# Business Rule: Comment Deletion Is Owner-or-Admin and Soft
+
+## Rule ID
+
+`BR-COMMENT-003`
+
+## Status
+
+Active
+
+## Statement
+
+A comment may be deleted only by its owner or an Administrator. Deletion is soft: `deleted_at` is set and the row is kept, so replies keep pointing at it and the thread shape is preserved. For a non-admin, a missing, already-deleted, or other user's comment is reported as not found. Every deletion an Administrator makes to another user's comment is recorded in `moderation_log` (`BR-ADMIN-002`); deleting your own comment, admin or not, is not logged.
+
+## Rationale
+
+Unlike editing (`BR-COMMENT-002`, deliberately owner-only per issue #42), deletion explicitly includes an Administrator moderation path per issue #43 — abusive content must be removable by moderators. Soft deletion (the same approach as `BR-POST-008`) avoids breaking reply threads that a hard delete would orphan, and keeps a moderation trail.
+
+## Scope & Exceptions
+
+Applies to `DELETE /api/posts/{postId}/comments/{commentId}`. Does not apply to comment creation (`BR-COMMENT-001`) or editing (`BR-COMMENT-002`). Restoring a deleted comment is not supported. Rendering deleted comments as "[deleted]" is the responsibility of a future comment-thread read endpoint, not this rule — see the open question in `docs/feats/delete-comments-api.md`.
+
+## Enforcement
+
+- Controller: `CommentController.deleteComment()` supplies the JWT principal and admin flag (mirrors `PostController.isAdmin()`).
+- Service: `CommentService.deleteComment()` scopes the lookup by ownership unless the caller is an Administrator, and logs only an admin's cross-user override.
+- API reference: `docs/apis/post/delete-posts-postid-comments-commentid.md`.
 
 ## Last Reviewed
 

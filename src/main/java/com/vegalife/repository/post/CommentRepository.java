@@ -12,4 +12,6 @@ public interface CommentRepository
     extends JpaRepository<Comment, UUID>, JpaSpecificationExecutor<Comment> {
 
   Optional<Comment> findByIdAndPostIdAndDeletedAtIsNull(UUID id, UUID postId);
+
+  Optional<Comment> findByIdAndPostIdAndUserIdAndDeletedAtIsNull(UUID id, UUID postId, UUID userId);
 }

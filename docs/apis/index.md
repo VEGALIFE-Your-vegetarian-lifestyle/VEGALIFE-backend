@@ -25,6 +25,7 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `post/get-posts-postid.md` | `GET /api/posts/{postId}` | View a single non-deleted post by id (any status, any author, public) |
 | `post/post-posts-postid-comments.md` | `POST /api/posts/{postId}/comments` | Create a top-level comment or nested reply on a published post (authenticated) |
 | `post/patch-posts-postid-comments-commentid.md` | `PATCH /api/posts/{postId}/comments/{commentId}` | Edit a comment's content, no time limit (owner only) |
+| `post/delete-posts-postid-comments-commentid.md` | `DELETE /api/posts/{postId}/comments/{commentId}` | Soft-delete a comment (owner or Admin) |
 | `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts (public: published only; owner/Admin: all) |
 | `post/get-posts-feed.md` | `GET /api/posts/feed` | Global feed of published posts, newest first (public) |
 | `post/patch-posts-postid.md` | `PATCH /api/posts/{postId}` | Edit a post (owner or Admin) |
