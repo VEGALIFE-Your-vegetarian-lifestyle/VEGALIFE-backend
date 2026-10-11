@@ -48,6 +48,10 @@ public class Comment {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
 
+  @Builder.Default
+  @Column(name = "is_edited", nullable = false)
+  private boolean isEdited = false;
+
   @Column(name = "deleted_at")
   private Instant deletedAt;
 }

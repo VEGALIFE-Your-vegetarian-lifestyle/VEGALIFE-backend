@@ -24,6 +24,11 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `post/get-posts.md` | `GET /api/posts` | List the authenticated user's posts |
 | `post/get-posts-postid.md` | `GET /api/posts/{postId}` | View a single non-deleted post by id (any status, any author, public) |
 | `post/post-posts-postid-comments.md` | `POST /api/posts/{postId}/comments` | Create a top-level comment or nested reply on a published post (authenticated) |
+| `post/get-posts-postid-comments.md` | `GET /api/posts/{postId}/comments` | List a post's comments as a paginated nested thread (public) |
+| `post/patch-posts-postid-comments-commentid.md` | `PATCH /api/posts/{postId}/comments/{commentId}` | Edit a comment's content, no time limit (owner only) |
+| `post/delete-posts-postid-comments-commentid.md` | `DELETE /api/posts/{postId}/comments/{commentId}` | Soft-delete a comment (owner or Admin) |
+| `post/put-posts-postid-votes.md` | `PUT /api/posts/{postId}/votes` | Cast, switch, or remove a vote on a post (authenticated) |
+| `post/get-posts-postid-votes.md` | `GET /api/posts/{postId}/votes` | Read a post's vote counts and the caller's own vote if identified (public) |
 | `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts (public: published only; owner/Admin: all) |
 | `post/get-posts-feed.md` | `GET /api/posts/feed` | Global feed of published posts, newest first (public) |
 | `post/patch-posts-postid.md` | `PATCH /api/posts/{postId}` | Edit a post (owner or Admin) |
