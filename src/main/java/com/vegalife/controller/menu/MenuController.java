@@ -3,6 +3,7 @@ package com.vegalife.controller.menu;
 import com.vegalife.dto.request.menu.CreateMenuRequest;
 import com.vegalife.dto.request.menu.MenuQueryRequest;
 import com.vegalife.dto.request.menu.UpdateMenuRequest;
+import com.vegalife.dto.request.menu.UpdateMenuStatusRequest;
 import com.vegalife.dto.response.menu.MenuDetailResponse;
 import com.vegalife.dto.response.menu.MenuSummaryResponse;
 import com.vegalife.service.menu.MenuQueryFilter;
@@ -85,5 +86,20 @@ public class MenuController {
       @Valid @RequestBody UpdateMenuRequest request) {
     MenuDetailResponse updated = menuService.updateMenu(userId, menuId, request);
     return ResponseEntity.ok(ApiResponse.success(updated, "Menu updated successfully"));
+  }
+
+  /**
+   * BR-MENU-007: transitions an owned menu through the legal table; scheduling enforces the
+   * no-overlap rule (BR-MENU-003). Illegal transitions and overlaps return 409.
+   */
+  @PostMapping("/{menuId}/status")
+  @PreAuthorize("isAuthenticated()")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<MenuDetailResponse>> changeMenuStatus(
+      @AuthenticationPrincipal UUID userId,
+      @PathVariable UUID menuId,
+      @Valid @RequestBody UpdateMenuStatusRequest request) {
+    MenuDetailResponse updated = menuService.changeStatus(userId, menuId, request.getStatus());
+    return ResponseEntity.ok(ApiResponse.success(updated, "Menu status updated successfully"));
   }
 }
