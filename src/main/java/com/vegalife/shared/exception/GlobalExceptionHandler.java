@@ -124,6 +124,12 @@ public class GlobalExceptionHandler {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.failure(ex.getMessage()));
   }
 
+  @ExceptionHandler(MenuValidationException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMenuValidation(
+      MenuValidationException ex, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.failure(ex.getMessage()));
+  }
+
   @ExceptionHandler(DuplicateResourceException.class)
   public ResponseEntity<ApiResponse<Void>> handleDuplicateResource(
       DuplicateResourceException ex, HttpServletRequest request) {
