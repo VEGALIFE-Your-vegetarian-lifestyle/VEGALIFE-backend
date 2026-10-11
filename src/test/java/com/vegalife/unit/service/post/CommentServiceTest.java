@@ -7,12 +7,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.request.post.CommentCreateRequest;
+import com.vegalife.dto.request.post.CommentUpdateRequest;
 import com.vegalife.dto.response.post.CommentResponse;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.service.post.CommentService;
+import com.vegalife.shared.exception.ForbiddenException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import java.util.Optional;
 import java.util.UUID;
@@ -122,5 +124,89 @@ class CommentServiceTest {
                     userId, postId, CommentCreateRequest.builder().content("Hello").build()))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
+  }
+
+  @Test
+  void updateComment_ownerUpdatesContentAndMarksEdited() {
+    UUID commentId = UUID.randomUUID();
+    Comment existing =
+        Comment.builder()
+            .id(commentId)
+            .userId(userId)
+            .postId(postId)
+            .content("Typo")
+            .isEdited(false)
+            .build();
+    when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(commentId, postId))
+        .thenReturn(Optional.of(existing));
+    when(commentRepository.saveAndFlush(any(Comment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    CommentResponse response =
+        commentService.updateComment(
+            userId, postId, commentId, CommentUpdateRequest.builder().content("Fixed").build());
+
+    assertThat(response.getContent()).isEqualTo("Fixed");
+    assertThat(response.isEdited()).isTrue();
+  }
+
+  @Test
+  void updateComment_secondEditStaysMarkedEdited() {
+    UUID commentId = UUID.randomUUID();
+    Comment existing =
+        Comment.builder()
+            .id(commentId)
+            .userId(userId)
+            .postId(postId)
+            .content("Already edited once")
+            .isEdited(true)
+            .build();
+    when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(commentId, postId))
+        .thenReturn(Optional.of(existing));
+    when(commentRepository.saveAndFlush(any(Comment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    CommentResponse response =
+        commentService.updateComment(
+            userId,
+            postId,
+            commentId,
+            CommentUpdateRequest.builder().content("Edited again").build());
+
+    assertThat(response.isEdited()).isTrue();
+  }
+
+  @Test
+  void updateComment_nonOwnerIsForbidden() {
+    UUID commentId = UUID.randomUUID();
+    UUID ownerId = UUID.randomUUID();
+    Comment existing =
+        Comment.builder().id(commentId).userId(ownerId).postId(postId).content("Mine").build();
+    when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(commentId, postId))
+        .thenReturn(Optional.of(existing));
+
+    assertThatThrownBy(
+            () ->
+                commentService.updateComment(
+                    userId,
+                    postId,
+                    commentId,
+                    CommentUpdateRequest.builder().content("Hijack").build()))
+        .isInstanceOf(ForbiddenException.class);
+  }
+
+  @Test
+  void updateComment_missingCommentReturnsNotFound() {
+    UUID commentId = UUID.randomUUID();
+    when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(commentId, postId))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                commentService.updateComment(
+                    userId,
+                    postId,
+                    commentId,
+                    CommentUpdateRequest.builder().content("Hello").build()))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Comment not found");
   }
 }

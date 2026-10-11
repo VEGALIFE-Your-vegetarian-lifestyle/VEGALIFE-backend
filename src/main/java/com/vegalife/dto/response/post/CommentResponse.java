@@ -14,6 +14,7 @@ public class CommentResponse {
   UUID parentId;
   UUID userId;
   String content;
+  boolean edited;
   Instant createdAt;
   Instant updatedAt;
 }

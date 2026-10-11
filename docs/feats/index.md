@@ -28,6 +28,7 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `list-all-posts-admin-api.md`       | List All Posts API (Admin)                | In progress | 2026-09-30 |
 | `list-comments-admin-api.md`        | List All Comments API (Admin)             | In progress | 2026-09-30 |
 | `create-comments-api.md`             | Create Comments API                       | In progress | 2026-10-10 |
+| `edit-comments-api.md`               | Edit Comments API                         | In progress | 2026-10-11 |
 | `list-all-recipes-admin-api.md`     | List All Recipes API (Admin)              | Draft       | 2026-10-01 |
 | `list-all-videos-admin-api.md`      | List All User Videos API (Admin)          | In progress | 2026-10-01 |
 | `create-recipe-api.md`              | Create Recipe API                         | Draft       | 2026-10-01 |

@@ -1,6 +1,7 @@
 package com.vegalife.integration.controller.post;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -13,6 +14,7 @@ import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -190,6 +192,142 @@ class CommentControllerIntegrationTest {
                 .content("{\"content\":\"Reply\",\"parentId\":\"%s\"}".formatted(parent.getId())))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.message").value("Parent comment not found"));
+  }
+
+  @Test
+  void updateComment_ownerEditsContentAndMarksEdited() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    Comment comment =
+        commentRepository.saveAndFlush(
+            Comment.builder().postId(post.getId()).userId(user.getId()).content("Typo").build());
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/comments/{commentId}", post.getId(), comment.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"  Fixed  \"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Comment updated successfully"))
+        .andExpect(jsonPath("$.data.content").value("Fixed"))
+        .andExpect(jsonPath("$.data.edited").value(true));
+
+    assertThat(commentRepository.findById(comment.getId()).orElseThrow().getContent())
+        .isEqualTo("Fixed");
+  }
+
+  @Test
+  void updateComment_secondEditStaysMarkedEdited() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    Comment comment =
+        commentRepository.saveAndFlush(
+            Comment.builder()
+                .postId(post.getId())
+                .userId(user.getId())
+                .content("Already edited")
+                .isEdited(true)
+                .build());
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/comments/{commentId}", post.getId(), comment.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"Edited again\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.edited").value(true));
+  }
+
+  @Test
+  void updateComment_nonOwnerReturns403() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    Comment comment =
+        commentRepository.saveAndFlush(
+            Comment.builder()
+                .postId(post.getId())
+                .userId(otherUser.getId())
+                .content("Not yours")
+                .build());
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/comments/{commentId}", post.getId(), comment.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"Hijack\"}"))
+        .andExpect(status().isForbidden());
+
+    assertThat(commentRepository.findById(comment.getId()).orElseThrow().getContent())
+        .isEqualTo("Not yours");
+  }
+
+  @Test
+  void updateComment_withoutAuthenticationReturns401() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    Comment comment =
+        commentRepository.saveAndFlush(
+            Comment.builder().postId(post.getId()).userId(user.getId()).content("Mine").build());
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/comments/{commentId}", post.getId(), comment.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"Edited\"}"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void updateComment_blankContentReturns400() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    Comment comment =
+        commentRepository.saveAndFlush(
+            Comment.builder().postId(post.getId()).userId(user.getId()).content("Mine").build());
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/comments/{commentId}", post.getId(), comment.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"   \"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+  }
+
+  @Test
+  void updateComment_missingCommentReturns404() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/comments/{commentId}", post.getId(), UUID.randomUUID())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"Hello\"}"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Comment not found"));
+  }
+
+  @Test
+  void updateComment_commentFromAnotherPostReturns404() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    Post differentPost = savePost(otherUser, Post.Status.published);
+    Comment comment =
+        commentRepository.saveAndFlush(
+            Comment.builder()
+                .postId(differentPost.getId())
+                .userId(user.getId())
+                .content("Wrong thread")
+                .build());
+
+    mockMvc
+        .perform(
+            patch("/api/posts/{postId}/comments/{commentId}", post.getId(), comment.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"Hello\"}"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Comment not found"));
   }
 
   private User saveUser(String username, String email) {

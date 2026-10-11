@@ -1,6 +1,7 @@
 package com.vegalife.controller.post;
 
 import com.vegalife.dto.request.post.CommentCreateRequest;
+import com.vegalife.dto.request.post.CommentUpdateRequest;
 import com.vegalife.dto.response.post.CommentResponse;
 import com.vegalife.service.post.CommentService;
 import com.vegalife.shared.config.OpenApiConfig;
@@ -13,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,5 +39,17 @@ public class CommentController {
     CommentResponse comment = commentService.createComment(userId, postId, request);
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(ApiResponse.success(comment, "Comment created successfully"));
+  }
+
+  @PatchMapping("/{commentId}")
+  @PreAuthorize("isAuthenticated()")
+  public ResponseEntity<ApiResponse<CommentResponse>> updateComment(
+      Authentication authentication,
+      @PathVariable UUID postId,
+      @PathVariable UUID commentId,
+      @Valid @RequestBody CommentUpdateRequest request) {
+    UUID userId = (UUID) authentication.getPrincipal();
+    CommentResponse comment = commentService.updateComment(userId, postId, commentId, request);
+    return ResponseEntity.ok(ApiResponse.success(comment, "Comment updated successfully"));
   }
 }
