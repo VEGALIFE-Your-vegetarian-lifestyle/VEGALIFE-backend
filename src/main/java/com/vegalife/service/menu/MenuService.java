@@ -116,6 +116,9 @@ public class MenuService {
     }
     menuRepository.save(menu);
     menuDetailRepository.deleteByMenuId(menuId);
+    // Hibernate flushes INSERTs before DELETEs otherwise; the unique (menu_id, date, meal_type)
+    // constraint would see the old rows still present.
+    menuDetailRepository.flush();
     List<MenuDetail> details = persistDays(menuId, request.getDays());
     log.info(
         "Updated {} menu {} for user {} with {} meals",
