@@ -4,7 +4,7 @@
 
 | Rule ID | Title | Status | Last Reviewed |
 |---------|-------|--------|---------------|
-| BR-COMMENT-001 | Comment Creation Requires Authentication; Reading Is Public | Active | 2026-10-10 |
+| BR-COMMENT-001 | Comment Creation Requires Authentication; Reading Is Public | Active | 2026-10-11 |
 | BR-COMMENT-002 | Only the Owner May Edit a Comment | Active | 2026-10-11 |
 | BR-COMMENT-003 | Comment Deletion Is Owner-or-Admin and Soft | Active | 2026-10-11 |
 
@@ -30,17 +30,17 @@ Authentication ties new comments to accountable authors, while public reading le
 
 ## Scope & Exceptions
 
-Applies to comment creation and comment reads. Issue #41 implements comment creation only. The rule's public-read behavior requires a public retrieval endpoint, which is not currently available; `GET /api/admin/comments` is restricted to Administrators and is not a public read path.
+Applies to comment creation and comment reads. Issue #41 implemented comment creation; issue #44 implements the public-read side via `GET /api/posts/{postId}/comments`. `GET /api/admin/comments` remains a separate, Administrator-only surface and is not this rule's public read path.
 
 ## Enforcement
 
 - Comment creation derives the author from a valid JWT principal and is protected by the default authenticated route policy.
-- Public read enforcement is pending a public comment retrieval API.
-- API reference for creation: `docs/apis/post/post-posts-postid-comments.md`.
+- Public read: `GET /api/posts/{postId}/comments` carries no `@PreAuthorize` and is allowlisted as `permitAll` in `SecurityConfig`, per ADR-009's model; `EndpointAuthorizationGuardTest` enforces that every handler is either annotated or on that allowlist.
+- API reference for creation: `docs/apis/post/post-posts-postid-comments.md`; for reading: `docs/apis/post/get-posts-postid-comments.md`.
 
 ## Last Reviewed
 
-2026-10-10, by Vegalife backend team
+2026-10-11, by Vegalife backend team
 
 ---
 

@@ -9,18 +9,28 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.request.post.CommentCreateRequest;
+import com.vegalife.dto.request.post.CommentListRequest;
 import com.vegalife.dto.request.post.CommentUpdateRequest;
 import com.vegalife.dto.response.post.CommentResponse;
+import com.vegalife.dto.response.post.CommentThreadResponse;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.user.User;
+import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.user.UserProfileRepository;
+import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.post.CommentService;
+import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ForbiddenException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +46,10 @@ class CommentServiceTest {
   @Mock private PostRepository postRepository;
 
   @Mock private ModerationLogRepository moderationLogRepository;
+
+  @Mock private UserRepository userRepository;
+
+  @Mock private UserProfileRepository userProfileRepository;
 
   @InjectMocks private CommentService commentService;
 
@@ -288,5 +302,121 @@ class CommentServiceTest {
     assertThatThrownBy(() -> commentService.deleteComment(userId, true, postId, commentId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Comment not found");
+  }
+
+  @Test
+  void getComments_returnsNestedTreeWithUserInfo() {
+    UUID rootId = UUID.randomUUID();
+    UUID replyId = UUID.randomUUID();
+    User author = User.builder().id(userId).username("veganchef").build();
+    UserProfile profile =
+        UserProfile.builder().user(author).avatarUrl("https://example.com/a.png").build();
+    Comment root =
+        Comment.builder().id(rootId).postId(postId).userId(userId).content("Root").build();
+    Comment reply =
+        Comment.builder()
+            .id(replyId)
+            .postId(postId)
+            .userId(userId)
+            .parentId(rootId)
+            .content("Reply")
+            .build();
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+        .thenReturn(Optional.of(post));
+    when(commentRepository.findByPostIdOrderByCreatedAtAsc(postId))
+        .thenReturn(List.of(root, reply));
+    when(userRepository.findAllById(any())).thenReturn(List.of(author));
+    when(userProfileRepository.findByUserIdIn(any())).thenReturn(List.of(profile));
+
+    PageResponse<CommentThreadResponse> response =
+        commentService.getComments(postId, CommentListRequest.builder().build());
+
+    assertThat(response.getContent()).hasSize(1);
+    CommentThreadResponse rootResponse = response.getContent().get(0);
+    assertThat(rootResponse.getId()).isEqualTo(rootId);
+    assertThat(rootResponse.getUsername()).isEqualTo("veganchef");
+    assertThat(rootResponse.getAvatarUrl()).isEqualTo("https://example.com/a.png");
+    assertThat(rootResponse.isDeleted()).isFalse();
+    assertThat(rootResponse.getReplies()).hasSize(1);
+    assertThat(rootResponse.getReplies().get(0).getId()).isEqualTo(replyId);
+  }
+
+  @Test
+  void getComments_deletedCommentShowsPlaceholderButKeepsReplies() {
+    UUID rootId = UUID.randomUUID();
+    UUID replyId = UUID.randomUUID();
+    Comment deletedRoot =
+        Comment.builder()
+            .id(rootId)
+            .postId(postId)
+            .userId(userId)
+            .content("Original content")
+            .deletedAt(Instant.now())
+            .build();
+    Comment reply =
+        Comment.builder()
+            .id(replyId)
+            .postId(postId)
+            .userId(userId)
+            .parentId(rootId)
+            .content("Still here")
+            .build();
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+        .thenReturn(Optional.of(post));
+    when(commentRepository.findByPostIdOrderByCreatedAtAsc(postId))
+        .thenReturn(List.of(deletedRoot, reply));
+    when(userRepository.findAllById(any())).thenReturn(List.of());
+    when(userProfileRepository.findByUserIdIn(any())).thenReturn(List.of());
+
+    PageResponse<CommentThreadResponse> response =
+        commentService.getComments(postId, CommentListRequest.builder().build());
+
+    CommentThreadResponse rootResponse = response.getContent().get(0);
+    assertThat(rootResponse.isDeleted()).isTrue();
+    assertThat(rootResponse.getContent()).isEqualTo("[deleted]");
+    assertThat(rootResponse.getUserId()).isNull();
+    assertThat(rootResponse.getUsername()).isNull();
+    assertThat(rootResponse.getReplies()).hasSize(1);
+    assertThat(rootResponse.getReplies().get(0).getContent()).isEqualTo("Still here");
+  }
+
+  @Test
+  void getComments_paginatesRootCommentsOnly() {
+    List<Comment> roots =
+        IntStream.range(0, 3)
+            .mapToObj(
+                i ->
+                    Comment.builder()
+                        .id(UUID.randomUUID())
+                        .postId(postId)
+                        .userId(userId)
+                        .content("Root " + i)
+                        .build())
+            .toList();
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+        .thenReturn(Optional.of(post));
+    when(commentRepository.findByPostIdOrderByCreatedAtAsc(postId)).thenReturn(roots);
+    when(userRepository.findAllById(any())).thenReturn(List.of());
+    when(userProfileRepository.findByUserIdIn(any())).thenReturn(List.of());
+
+    PageResponse<CommentThreadResponse> response =
+        commentService.getComments(postId, CommentListRequest.builder().page(0).size(2).build());
+
+    assertThat(response.getContent()).hasSize(2);
+    assertThat(response.getTotalElements()).isEqualTo(3);
+    assertThat(response.getTotalPages()).isEqualTo(2);
+    assertThat(response.isFirst()).isTrue();
+    assertThat(response.isLast()).isFalse();
+  }
+
+  @Test
+  void getComments_missingOrUnpublishedPostReturnsNotFound() {
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () -> commentService.getComments(postId, CommentListRequest.builder().build()))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Post not found");
   }
 }

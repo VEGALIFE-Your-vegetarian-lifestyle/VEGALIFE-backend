@@ -2,6 +2,7 @@ package com.vegalife.integration.controller.post;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -481,6 +482,104 @@ class CommentControllerIntegrationTest {
     Comment reloadedReply = commentRepository.findById(reply.getId()).orElseThrow();
     assertThat(reloadedReply.getDeletedAt()).isNull();
     assertThat(reloadedReply.getParentId()).isEqualTo(parent.getId());
+  }
+
+  @Test
+  void listComments_returnsNestedThreadWithoutAuthentication() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    Comment root =
+        commentRepository.saveAndFlush(
+            Comment.builder().postId(post.getId()).userId(user.getId()).content("Root").build());
+    commentRepository.saveAndFlush(
+        Comment.builder()
+            .postId(post.getId())
+            .userId(otherUser.getId())
+            .parentId(root.getId())
+            .content("Reply")
+            .build());
+
+    mockMvc
+        .perform(get("/api/posts/{postId}/comments", post.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.content.length()").value(1))
+        .andExpect(jsonPath("$.data.content[0].id").value(root.getId().toString()))
+        .andExpect(jsonPath("$.data.content[0].username").value("commenter"))
+        .andExpect(jsonPath("$.data.content[0].deleted").value(false))
+        .andExpect(jsonPath("$.data.content[0].replies.length()").value(1))
+        .andExpect(jsonPath("$.data.content[0].replies[0].content").value("Reply"))
+        .andExpect(jsonPath("$.data.content[0].replies[0].username").value("postauthor"));
+  }
+
+  @Test
+  void listComments_deletedCommentShowsPlaceholderAndKeepsReplies() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    Comment root =
+        commentRepository.saveAndFlush(
+            Comment.builder()
+                .postId(post.getId())
+                .userId(user.getId())
+                .content("Will be deleted")
+                .build());
+    commentRepository.saveAndFlush(
+        Comment.builder()
+            .postId(post.getId())
+            .userId(otherUser.getId())
+            .parentId(root.getId())
+            .content("Still visible")
+            .build());
+
+    mockMvc
+        .perform(
+            delete("/api/posts/{postId}/comments/{commentId}", post.getId(), root.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(get("/api/posts/{postId}/comments", post.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content[0].deleted").value(true))
+        .andExpect(jsonPath("$.data.content[0].content").value("[deleted]"))
+        .andExpect(jsonPath("$.data.content[0].userId").doesNotExist())
+        .andExpect(jsonPath("$.data.content[0].username").doesNotExist())
+        .andExpect(jsonPath("$.data.content[0].replies[0].content").value("Still visible"));
+  }
+
+  @Test
+  void listComments_paginatesRootComments() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    for (int i = 0; i < 3; i++) {
+      commentRepository.saveAndFlush(
+          Comment.builder().postId(post.getId()).userId(user.getId()).content("Root " + i).build());
+    }
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}/comments", post.getId()).param("page", "0").param("size", "2"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content.length()").value(2))
+        .andExpect(jsonPath("$.data.totalElements").value(3))
+        .andExpect(jsonPath("$.data.totalPages").value(2))
+        .andExpect(jsonPath("$.data.first").value(true))
+        .andExpect(jsonPath("$.data.last").value(false));
+  }
+
+  @Test
+  void listComments_unpublishedPostReturns404() throws Exception {
+    Post post = savePost(otherUser, Post.Status.created);
+
+    mockMvc
+        .perform(get("/api/posts/{postId}/comments", post.getId()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Post not found"));
+  }
+
+  @Test
+  void listComments_missingPostReturns404() throws Exception {
+    mockMvc
+        .perform(get("/api/posts/{postId}/comments", UUID.randomUUID()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Post not found"));
   }
 
   private User saveUser(String username, String email) {
