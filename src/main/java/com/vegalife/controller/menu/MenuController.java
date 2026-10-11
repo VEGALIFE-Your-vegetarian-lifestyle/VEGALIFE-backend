@@ -1,5 +1,6 @@
 package com.vegalife.controller.menu;
 
+import com.vegalife.dto.request.menu.CreateMenuRequest;
 import com.vegalife.dto.request.menu.MenuQueryRequest;
 import com.vegalife.dto.response.menu.MenuDetailResponse;
 import com.vegalife.dto.response.menu.MenuSummaryResponse;
@@ -13,12 +14,15 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -56,5 +60,16 @@ public class MenuController {
       @AuthenticationPrincipal UUID userId, @PathVariable UUID menuId) {
     MenuDetailResponse menu = menuService.getMenu(userId, menuId);
     return ResponseEntity.ok(ApiResponse.success(menu, "Menu retrieved successfully"));
+  }
+
+  /** BR-MENU-005: creates a drafted weekly menu owned by the authenticated caller. */
+  @PostMapping
+  @PreAuthorize("isAuthenticated()")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<MenuDetailResponse>> createMenu(
+      @AuthenticationPrincipal UUID userId, @Valid @RequestBody CreateMenuRequest request) {
+    MenuDetailResponse created = menuService.createMenu(userId, request);
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(ApiResponse.success(created, "Menu created successfully"));
   }
 }
