@@ -12,6 +12,11 @@ spring:
         # Streamable HTTP transport on Spring MVC; the MCP endpoint is /mcp
         # (spring.ai.mcp.server.streamable-http.mcp-endpoint default).
         protocol: STREAMABLE
+        # The built-in ToolCallback converter drops the request _meta before the
+        # tool call, so caller identity would never reach the tools
+        # (spring-projects/spring-ai#4773). ToolSpecificationConfig registers
+        # meta-merging specifications instead (ADR-012).
+        tool-callback-converter: false
 
 management:
   endpoints:

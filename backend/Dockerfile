@@ -7,9 +7,12 @@ FROM maven:3.9-eclipse-temurin-21-alpine AS builder
 
 WORKDIR /app
 
-# Copy the parent and module pom.xml files first for dependency caching
+# Copy the parent and every module pom.xml first: Maven reads the whole
+# reactor (all <modules>) before applying -pl, and this keeps the
+# dependency cache keyed on the poms (ADR-012)
 COPY pom.xml .
 COPY backend/pom.xml backend/pom.xml
+COPY mcp-server/pom.xml mcp-server/pom.xml
 RUN mvn -pl backend -am dependency:go-offline -B
 
 # Copy source and build

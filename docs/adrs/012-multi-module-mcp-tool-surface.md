@@ -145,5 +145,26 @@ Source-verified Spring AI 1.1.8 / `main` facts (read 2026-10-12):
 
 Source-level verification completed 2026-10-12 (see Context): client-side
 `_meta` emission is present in v1.1.8; the server-side `meta` drop is present
-on `main`. Runtime confirmation against the running pair is performed in
-phase 3 and the result is recorded here in that commit.
+on `main`.
+
+**Runtime result (2026-10-12, phase 3): the primary chain works — Option A
+confirmed, no fallback needed.** Against a running pair (backend on 8080
+with its own database, mcp-server on 8081), a temporary probe tool invoked
+over Streamable HTTP with the caller's JWT in `_meta`:
+
+- called back into `GET /api/menus` with `Authorization: Bearer <jwt>` and
+  returned member A's menu, while the same call carrying member B's JWT
+  returned B's empty list — ownership is enforced by the backend, not by the
+  MCP server;
+- with no identity in `_meta`, returned a readable "caller identity missing"
+  tool result and never called the backend unauthenticated;
+- left the JWT out of both servers' logs at default levels;
+- appeared exactly once in `tools/list`.
+
+Two findings from the run are encoded in the implementation: Spring AI's
+`MethodToolCallback` JSON-encodes `String` results, so the wrapper unwraps a
+JSON string literal once to keep the documented response envelope verbatim;
+and a `List<ToolCallback>` contribution can be resolved both directly and
+through the grouped `ObjectProvider`, so registration de-duplicates by tool
+name. The probe tool was temporary; phase 7's Docker end-to-end test
+re-proves this chain in CI.
