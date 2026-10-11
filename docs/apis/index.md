@@ -71,3 +71,4 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `menus/get-menus-menuid.md` | `GET /api/menus/{menuId}` | Read one owned menu with its days and meals (authenticated) |
 | `menus/post-menus.md` | `POST /api/menus` | Create a drafted weekly menu with its 7 days of meals (authenticated) |
 | `menus/patch-menus.md` | `PATCH /api/menus/{menuId}` | Update an owned drafted or scheduled menu's meals and preferences (authenticated) |
+| `menus/post-menu-status.md` | `POST /api/menus/{menuId}/status` | Transition an owned menu's status: schedule, cancel, or complete (authenticated) |

@@ -93,3 +93,4 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MENU-004 | Menu Windows Are Evaluated in Server (UTC) Time | Active | 2026-10-10 |
 | BR-MENU-005 | New Menus Are Drafts and Must Cover a Valid, Varied Week | Active | 2026-10-12 |
 | BR-MENU-006 | Menus Are Editable Only While Drafted or Scheduled | Active | 2026-10-12 |
+| BR-MENU-007 | Menu Status Changes Are Explicit, Legal Transitions | Active | 2026-10-12 |
