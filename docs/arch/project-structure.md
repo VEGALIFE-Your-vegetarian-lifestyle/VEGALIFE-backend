@@ -16,21 +16,24 @@ VEGALIFE-backend/
 │   ├── apis/               #   API reference docs
 │   ├── brs/                #   Business constraints
 │   └── feats/              #   Feature specifications
-├── src/
-│   ├── main/
-│   │   ├── java/           # Application source code
-│   │   └── resources/      # Config: application.properties, Flyway migrations
-│   └── test/
-│       └── java/           # Tests mirroring src/main structure
+├── backend/                # The Spring Boot application module
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/       # Application source code
+│   │   │   └── resources/  # Config: application.properties, Flyway migrations
+│   │   └── test/
+│   │       └── java/       # Tests mirroring src/main structure
+│   ├── Dockerfile          # Backend image (build context = repo root)
+│   └── pom.xml             # Module build config + dependencies
 ├── AGENTS.md               # Entry point for AI agents
-├── pom.xml                 # Maven build config + dependency management
+├── pom.xml                 # Maven parent pom (multi-module reactor + shared plugin config)
 └── README.md               # Human-facing project README
 ```
 
 ## Source tree
 
 ```
-src/main/java/com/vegalife/
+backend/src/main/java/com/vegalife/
 ├── VegalifeApplication.java          # Spring Boot entry point
 │
 ├── controller/                       # REST API layer — thin, no business logic
@@ -69,7 +72,7 @@ src/main/java/com/vegalife/
 ## Test tree
 
 ```
-src/test/java/com/vegalife/
+backend/src/test/java/com/vegalife/
 ├── VegalifeApplicationTest.java          # Context load test (unit)
 │
 ├── unit/                                 # mvn test (Surefire, H2)
@@ -128,7 +131,7 @@ When building a new feature (e.g., "recipes"):
 3. Add `dto/request/CreateRecipeRequest.java` and `dto/response/RecipeResponse.java`.
 4. Add `service/recipe/RecipeService.java` — business logic.
 5. Add `controller/recipe/RecipeController.java` — REST endpoints.
-6. Add matching test classes under `src/test/java/com/vegalife/`.
-7. Add a Flyway migration in `src/main/resources/db/migration/` for the table.
+6. Add matching test classes under `backend/src/test/java/com/vegalife/`.
+7. Add a Flyway migration in `backend/src/main/resources/db/migration/` for the table.
 
 Each layer can be built and tested independently before wiring them together.
