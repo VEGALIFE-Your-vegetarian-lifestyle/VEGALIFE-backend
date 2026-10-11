@@ -20,6 +20,7 @@
 
     <modules>
         <module>backend</module>
+        <module>mcp-server</module>
     </modules>
 
     <properties>

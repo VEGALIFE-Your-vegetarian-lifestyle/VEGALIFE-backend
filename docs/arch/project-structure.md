@@ -25,6 +25,10 @@ VEGALIFE-backend/
 │   │       └── java/       # Tests mirroring src/main structure
 │   ├── Dockerfile          # Backend image (build context = repo root)
 │   └── pom.xml             # Module build config + dependencies
+├── mcp-server/             # MCP server module (thin tool adapter, ADR-012)
+│   ├── src/main/java/      # Tool + client code, internal network only
+│   ├── Dockerfile          # MCP image (build context = repo root)
+│   └── pom.xml             # Module build config (Spring AI MCP starter)
 ├── AGENTS.md               # Entry point for AI agents
 ├── pom.xml                 # Maven parent pom (multi-module reactor + shared plugin config)
 └── README.md               # Human-facing project README
