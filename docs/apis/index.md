@@ -70,3 +70,4 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `menus/get-menus.md` | `GET /api/menus` | List own menus filtered by week, month, or date range, plus status (authenticated) |
 | `menus/get-menus-menuid.md` | `GET /api/menus/{menuId}` | Read one owned menu with its days and meals (authenticated) |
 | `menus/post-menus.md` | `POST /api/menus` | Create a drafted weekly menu with its 7 days of meals (authenticated) |
+| `menus/patch-menus.md` | `PATCH /api/menus/{menuId}` | Update an owned drafted or scheduled menu's meals and preferences (authenticated) |

@@ -11,4 +11,7 @@ public interface MenuDetailRepository extends JpaRepository<MenuDetail, UUID> {
 
   /** A menu's days, earliest first, for the detail view. */
   List<MenuDetail> findByMenuIdOrderByDateAscMealTypeAsc(UUID menuId);
+
+  /** An update replaces the whole day set in one transaction (BR-MENU-006). */
+  void deleteByMenuId(UUID menuId);
 }

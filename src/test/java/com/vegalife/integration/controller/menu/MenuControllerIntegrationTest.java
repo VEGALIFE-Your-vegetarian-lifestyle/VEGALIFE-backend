@@ -2,7 +2,9 @@ package com.vegalife.integration.controller.menu;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -494,10 +496,153 @@ class MenuControllerIntegrationTest {
         .andExpect(status().isUnauthorized());
   }
 
+  @Test
+  void updateMenu_onScheduledMenuReturns200AndPersistsChanges() throws Exception {
+    Menu menu = createMenu(user, MONDAY, MenuStatus.scheduled);
+    List<UUID> dishes = createDishes(8);
+
+    mockMvc
+        .perform(
+            patch("/api/menus/{menuId}", menu.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(patchMenuJson(oneBreakfastPerDay(dishes.subList(0, 7)), "soy-free", null)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Menu updated successfully"))
+        .andExpect(jsonPath("$.data.status").value("scheduled"))
+        .andExpect(jsonPath("$.data.startDate").value("2026-10-05"))
+        .andExpect(jsonPath("$.data.endDate").value("2026-10-11"))
+        .andExpect(jsonPath("$.data.dietaryPreferences").value("soy-free"))
+        .andExpect(jsonPath("$.data.days.length()").value(7));
+
+    assertThat(menuDetailRepository.findAll()).hasSize(7);
+  }
+
+  @Test
+  void updateMenu_replacesExistingDaysWholesale() throws Exception {
+    Menu menu = createMenu(user, MONDAY, MenuStatus.drafted);
+    Dish oldDish = dishRepository.save(Dish.builder().name("Old dish").build());
+    menuDetailRepository.save(
+        MenuDetail.builder()
+            .menuId(menu.getId())
+            .dish(oldDish)
+            .date(MONDAY)
+            .mealType(MealType.BREAKFAST)
+            .servings(1)
+            .build());
+    List<UUID> dishes = createDishes(7);
+
+    mockMvc
+        .perform(
+            patch("/api/menus/{menuId}", menu.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(patchMenuJson(oneBreakfastPerDay(dishes), null, "new notes")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.notes").value("new notes"))
+        .andExpect(jsonPath("$.data.dietaryPreferences").value(nullValue()))
+        .andExpect(jsonPath("$.data.days.length()").value(7));
+
+    assertThat(menuDetailRepository.findAll()).hasSize(7);
+  }
+
+  @Test
+  void updateMenu_cancelledOrCompletedReturns409() throws Exception {
+    for (MenuStatus status : List.of(MenuStatus.cancelled, MenuStatus.completed)) {
+      Menu menu = createMenu(user, MONDAY, status);
+
+      mockMvc
+          .perform(
+              patch("/api/menus/{menuId}", menu.getId())
+                  .header("Authorization", "Bearer " + accessToken)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(patchMenuJson(oneBreakfastPerDay(createDishes(7)), null, null)))
+          .andExpect(status().isConflict())
+          .andExpect(jsonPath("$.message").value("Only drafted or scheduled menus can be updated"));
+    }
+  }
+
+  @Test
+  void updateMenu_foreignMenuReturns404() throws Exception {
+    Menu menu = createMenu(otherUser, MONDAY, MenuStatus.drafted);
+
+    mockMvc
+        .perform(
+            patch("/api/menus/{menuId}", menu.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(patchMenuJson(oneBreakfastPerDay(createDishes(7)), null, null)))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Menu not found"));
+  }
+
+  @Test
+  void updateMenu_invalidResultingWeekReturns400AndKeepsExistingDays() throws Exception {
+    Menu menu = createMenu(user, MONDAY, MenuStatus.drafted);
+    Dish oldDish = dishRepository.save(Dish.builder().name("Kept dish").build());
+    menuDetailRepository.save(
+        MenuDetail.builder()
+            .menuId(menu.getId())
+            .dish(oldDish)
+            .date(MONDAY)
+            .mealType(MealType.BREAKFAST)
+            .servings(1)
+            .build());
+    UUID favourite = createDishes(1).get(0);
+    List<Map<String, Object>> days = new ArrayList<>();
+    for (int i = 0; i < 7; i++) {
+      days.add(day(dateOf(i), List.of(meal("BREAKFAST", favourite, 2))));
+    }
+
+    mockMvc
+        .perform(
+            patch("/api/menus/{menuId}", menu.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(patchMenuJson(days, null, null)))
+        .andExpect(status().isBadRequest())
+        .andExpect(
+            jsonPath("$.message").value("the same dish may appear at most 3 times in a menu"));
+
+    assertThat(menuDetailRepository.findAll()).hasSize(1);
+  }
+
+  @Test
+  void updateMenu_missingDaysReturns400() throws Exception {
+    Menu menu = createMenu(user, MONDAY, MenuStatus.drafted);
+
+    mockMvc
+        .perform(
+            patch("/api/menus/{menuId}", menu.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"dietaryPreferences\": \"vegan\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void updateMenu_withoutJwtReturns401() throws Exception {
+    Menu menu = createMenu(user, MONDAY, MenuStatus.drafted);
+
+    mockMvc
+        .perform(
+            patch("/api/menus/{menuId}", menu.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(patchMenuJson(oneBreakfastPerDay(createDishes(7)), null, null)))
+        .andExpect(status().isUnauthorized());
+  }
+
+  private int dishSequence;
+
   private List<UUID> createDishes(int count) {
     List<UUID> ids = new ArrayList<>();
     for (int i = 0; i < count; i++) {
-      ids.add(dishRepository.save(Dish.builder().name("Menu dish " + i).build()).getId());
+      // Active dish names are unique (V22); every dish needs its own name.
+      ids.add(
+          dishRepository
+              .save(Dish.builder().name("Menu dish " + (++dishSequence)).build())
+              .getId());
     }
     return ids;
   }
@@ -535,6 +680,20 @@ class MenuControllerIntegrationTest {
     Map<String, Object> body = new LinkedHashMap<>();
     body.put("startDate", startDate.toString());
     body.put("days", days);
+    return objectMapper.writeValueAsString(body);
+  }
+
+  private String patchMenuJson(
+      List<Map<String, Object>> days, String dietaryPreferences, String notes)
+      throws JsonProcessingException {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("days", days);
+    if (dietaryPreferences != null) {
+      body.put("dietaryPreferences", dietaryPreferences);
+    }
+    if (notes != null) {
+      body.put("notes", notes);
+    }
     return objectMapper.writeValueAsString(body);
   }
 

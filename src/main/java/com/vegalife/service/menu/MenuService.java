@@ -3,6 +3,7 @@ package com.vegalife.service.menu;
 import com.vegalife.dto.request.menu.CreateMenuRequest;
 import com.vegalife.dto.request.menu.MealRequest;
 import com.vegalife.dto.request.menu.MenuDayRequest;
+import com.vegalife.dto.request.menu.UpdateMenuRequest;
 import com.vegalife.dto.response.menu.MealResponse;
 import com.vegalife.dto.response.menu.MenuDayResponse;
 import com.vegalife.dto.response.menu.MenuDetailResponse;
@@ -16,6 +17,7 @@ import com.vegalife.repository.menu.MenuRepository;
 import com.vegalife.repository.menu.MenuSpecifications;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.MenuNotEditableException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.LocalDate;
@@ -37,7 +39,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Menu reads (windows and detail) and the create path: the caller's own menus, always scoped to the
+ * Menu reads (windows and detail) plus the write paths — create and update — always scoped to the
  * authenticated owner.
  */
 @Service
@@ -75,6 +77,55 @@ public class MenuService {
     List<MenuDetail> details = persistDays(menu.getId(), request.getDays());
     log.info(
         "Created drafted menu {} for user {} with {} meals", menu.getId(), userId, details.size());
+    return toDetail(menu, details);
+  }
+
+  /**
+   * BR-MENU-006: replaces the meals of an owned {@code drafted}/{@code scheduled} menu and updates
+   * its free-text fields, re-validating the whole resulting week (BR-MENU-005). The window is
+   * immutable, so a scheduled menu cannot gain an overlap through an update — V30's exclusion
+   * constraint stays the database backstop.
+   */
+  @Transactional
+  public MenuDetailResponse updateMenu(UUID userId, UUID menuId, UpdateMenuRequest request) {
+    Menu menu =
+        menuRepository
+            .findByIdAndUserId(menuId, userId)
+            .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
+    if (menu.getStatus() == MenuStatus.cancelled || menu.getStatus() == MenuStatus.completed) {
+      throw new MenuNotEditableException("Only drafted or scheduled menus can be updated");
+    }
+
+    // The same validator as create, run against the existing window: same rules, same messages.
+    menuValidator.validate(
+        CreateMenuRequest.builder()
+            .startDate(menu.getStartDate())
+            .dietaryPreferences(
+                request.getDietaryPreferences() != null
+                    ? request.getDietaryPreferences()
+                    : menu.getDietaryPreferences())
+            .notes(request.getNotes() != null ? request.getNotes() : menu.getNotes())
+            .days(request.getDays())
+            .build());
+
+    if (request.getDietaryPreferences() != null) {
+      menu.setDietaryPreferences(request.getDietaryPreferences());
+    }
+    if (request.getNotes() != null) {
+      menu.setNotes(request.getNotes());
+    }
+    menuRepository.save(menu);
+    menuDetailRepository.deleteByMenuId(menuId);
+    // Hibernate flushes INSERTs before DELETEs otherwise; the unique (menu_id, date, meal_type)
+    // constraint would see the old rows still present.
+    menuDetailRepository.flush();
+    List<MenuDetail> details = persistDays(menuId, request.getDays());
+    log.info(
+        "Updated {} menu {} for user {} with {} meals",
+        menu.getStatus(),
+        menuId,
+        userId,
+        details.size());
     return toDetail(menu, details);
   }
 

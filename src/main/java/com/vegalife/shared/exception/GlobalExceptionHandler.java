@@ -130,6 +130,12 @@ public class GlobalExceptionHandler {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.failure(ex.getMessage()));
   }
 
+  @ExceptionHandler(MenuNotEditableException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMenuNotEditable(
+      MenuNotEditableException ex, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.failure(ex.getMessage()));
+  }
+
   @ExceptionHandler(DuplicateResourceException.class)
   public ResponseEntity<ApiResponse<Void>> handleDuplicateResource(
       DuplicateResourceException ex, HttpServletRequest request) {
