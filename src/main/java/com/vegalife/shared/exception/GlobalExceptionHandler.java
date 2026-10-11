@@ -136,6 +136,18 @@ public class GlobalExceptionHandler {
     return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.failure(ex.getMessage()));
   }
 
+  @ExceptionHandler(InvalidMenuTransitionException.class)
+  public ResponseEntity<ApiResponse<Void>> handleInvalidMenuTransition(
+      InvalidMenuTransitionException ex, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.failure(ex.getMessage()));
+  }
+
+  @ExceptionHandler(MenuOverlapException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMenuOverlap(
+      MenuOverlapException ex, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.failure(ex.getMessage()));
+  }
+
   @ExceptionHandler(DuplicateResourceException.class)
   public ResponseEntity<ApiResponse<Void>> handleDuplicateResource(
       DuplicateResourceException ex, HttpServletRequest request) {
