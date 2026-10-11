@@ -11,4 +11,7 @@ import org.springframework.stereotype.Repository;
 public interface DishRepository extends JpaRepository<Dish, UUID>, JpaSpecificationExecutor<Dish> {
 
   Optional<Dish> findByNameIgnoreCaseAndDeletedAtIsNull(String name);
+
+  /** A dish is usable in a menu only while it exists and is not soft-deleted (BR-MENU-005). */
+  Optional<Dish> findByIdAndDeletedAtIsNull(UUID id);
 }

@@ -1,23 +1,32 @@
 package com.vegalife.service.menu;
 
+import com.vegalife.dto.request.menu.CreateMenuRequest;
+import com.vegalife.dto.request.menu.MealRequest;
+import com.vegalife.dto.request.menu.MenuDayRequest;
 import com.vegalife.dto.response.menu.MealResponse;
 import com.vegalife.dto.response.menu.MenuDayResponse;
 import com.vegalife.dto.response.menu.MenuDetailResponse;
 import com.vegalife.dto.response.menu.MenuSummaryResponse;
 import com.vegalife.model.menu.Menu;
 import com.vegalife.model.menu.MenuDetail;
+import com.vegalife.model.menu.MenuStatus;
+import com.vegalife.model.recipe.Dish;
 import com.vegalife.repository.menu.MenuDetailRepository;
 import com.vegalife.repository.menu.MenuRepository;
 import com.vegalife.repository.menu.MenuSpecifications;
+import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -28,7 +37,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Read-only menu queries: the caller's own menus filtered by a time window, and one menu detail.
+ * Menu reads (windows and detail) and the create path: the caller's own menus, always scoped to the
+ * authenticated owner.
  */
 @Service
 @RequiredArgsConstructor
@@ -39,6 +49,34 @@ public class MenuService {
 
   private final MenuRepository menuRepository;
   private final MenuDetailRepository menuDetailRepository;
+  private final MenuValidator menuValidator;
+  private final DishRepository dishRepository;
+
+  /**
+   * BR-MENU-005: validates the week payload and persists a new {@code drafted} menu with its days
+   * in one transaction. The owner is the authenticated caller; {@code endDate} is derived.
+   */
+  @Transactional
+  public MenuDetailResponse createMenu(UUID userId, CreateMenuRequest request) {
+    menuValidator.validate(request);
+
+    LocalDate startDate = request.getStartDate();
+    Menu menu =
+        menuRepository.save(
+            Menu.builder()
+                .userId(userId)
+                .startDate(startDate)
+                .endDate(startDate.plusDays(MenuValidator.DAYS_PER_WEEK - 1))
+                .status(MenuStatus.drafted)
+                .notes(request.getNotes())
+                .dietaryPreferences(request.getDietaryPreferences())
+                .build());
+
+    List<MenuDetail> details = persistDays(menu.getId(), request.getDays());
+    log.info(
+        "Created drafted menu {} for user {} with {} meals", menu.getId(), userId, details.size());
+    return toDetail(menu, details);
+  }
 
   /**
    * BR-MENU-001 / BR-MENU-002: the caller's own menus intersecting the filter window, optionally by
@@ -69,6 +107,38 @@ public class MenuService {
 
     List<MenuDetail> details = menuDetailRepository.findByMenuIdOrderByDateAscMealTypeAsc(menuId);
     return toDetail(menu, details);
+  }
+
+  /**
+   * Materialises the validated days into {@code menu_detail} rows, ordered by date then meal type
+   * so the persisted order matches the read order.
+   */
+  private List<MenuDetail> persistDays(UUID menuId, List<MenuDayRequest> days) {
+    List<UUID> dishIds =
+        days.stream()
+            .flatMap(day -> day.getMeals().stream())
+            .map(MealRequest::getDishId)
+            .distinct()
+            .toList();
+    Map<UUID, Dish> dishes =
+        dishRepository.findAllById(dishIds).stream()
+            .collect(Collectors.toMap(Dish::getId, Function.identity()));
+
+    List<MenuDetail> details = new ArrayList<>();
+    for (MenuDayRequest day : days) {
+      for (MealRequest meal : day.getMeals()) {
+        details.add(
+            MenuDetail.builder()
+                .menuId(menuId)
+                .dish(dishes.get(meal.getDishId()))
+                .date(day.getDate())
+                .mealType(MenuValidator.parseMealType(meal.getMealType()))
+                .servings(meal.getServings())
+                .build());
+      }
+    }
+    details.sort(Comparator.comparing(MenuDetail::getDate).thenComparing(MenuDetail::getMealType));
+    return menuDetailRepository.saveAll(details);
   }
 
   private MenuSummaryResponse toSummary(Menu menu) {

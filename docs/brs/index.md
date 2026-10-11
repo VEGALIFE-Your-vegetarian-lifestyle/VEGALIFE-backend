@@ -91,3 +91,4 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MENU-002 | Menu Read Windows Are Intersections | Active | 2026-10-10 |
 | BR-MENU-003 | One Scheduled Week per User, No Overlap | Active | 2026-10-10 |
 | BR-MENU-004 | Menu Windows Are Evaluated in Server (UTC) Time | Active | 2026-10-10 |
+| BR-MENU-005 | New Menus Are Drafts and Must Cover a Valid, Varied Week | Active | 2026-10-12 |

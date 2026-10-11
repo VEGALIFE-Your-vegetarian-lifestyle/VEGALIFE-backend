@@ -1,10 +1,14 @@
 package com.vegalife.integration.controller.menu;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.model.menu.MealType;
 import com.vegalife.model.menu.Menu;
 import com.vegalife.model.menu.MenuDetail;
@@ -17,12 +21,17 @@ import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -59,6 +68,10 @@ class MenuControllerIntegrationTest {
   }
 
   @Autowired private MockMvc mockMvc;
+
+  @Autowired private ObjectMapper objectMapper;
+
+  private static final LocalDate MONDAY = LocalDate.of(2026, 10, 5);
 
   @Autowired private UserRepository userRepository;
 
@@ -330,6 +343,199 @@ class MenuControllerIntegrationTest {
                 .header("Authorization", "Bearer " + accessToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.days.length()").value(0));
+  }
+
+  @Test
+  void createMenu_returns201WithDraftedMenuAndPersistsDays() throws Exception {
+    List<UUID> dishes = createDishes(7);
+
+    mockMvc
+        .perform(
+            post("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createMenuJson(MONDAY, oneBreakfastPerDay(dishes))))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Menu created successfully"))
+        .andExpect(jsonPath("$.data.status").value("drafted"))
+        .andExpect(jsonPath("$.data.startDate").value("2026-10-05"))
+        .andExpect(jsonPath("$.data.endDate").value("2026-10-11"))
+        .andExpect(jsonPath("$.data.days.length()").value(7))
+        .andExpect(jsonPath("$.data.days[0].meals[0].mealType").value("BREAKFAST"))
+        .andExpect(jsonPath("$.data.days[0].meals[0].servings").value(2));
+
+    assertThat(menuRepository.count()).isEqualTo(1);
+    assertThat(menuDetailRepository.findAll()).hasSize(7);
+  }
+
+  @Test
+  void createMenu_isOwnedByTheAuthenticatedCallerOnly() throws Exception {
+    List<UUID> dishes = createDishes(7);
+
+    mockMvc
+        .perform(
+            post("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createMenuJson(MONDAY, oneBreakfastPerDay(dishes))))
+        .andExpect(status().isCreated());
+
+    Menu created = menuRepository.findAll().get(0);
+    assertThat(created.getUserId()).isEqualTo(user.getId());
+    assertThat(created.getUserId()).isNotEqualTo(otherUser.getId());
+  }
+
+  @Test
+  void createMenu_duplicateMealTypeReturns400AndPersistsNothing() throws Exception {
+    List<UUID> dishes = createDishes(7);
+    List<Map<String, Object>> days = new ArrayList<>(oneBreakfastPerDay(dishes));
+    days.set(
+        0,
+        day(
+            "2026-10-05",
+            List.of(meal("BREAKFAST", dishes.get(0), 2), meal("BREAKFAST", dishes.get(1), 1))));
+
+    mockMvc
+        .perform(
+            post("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createMenuJson(MONDAY, days)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("a date may have at most one meal per mealType"));
+
+    assertThat(menuRepository.count()).isZero();
+  }
+
+  @Test
+  void createMenu_unknownDishReturns400() throws Exception {
+    List<Map<String, Object>> days = new ArrayList<>();
+    for (int i = 0; i < 7; i++) {
+      days.add(day(dateOf(i), List.of(meal("BREAKFAST", UUID.randomUUID(), 2))));
+    }
+
+    mockMvc
+        .perform(
+            post("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createMenuJson(MONDAY, days)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value(containsString("dish not found or deleted")));
+
+    assertThat(menuRepository.count()).isZero();
+  }
+
+  @Test
+  void createMenu_dishRepeatedTooOftenReturns400() throws Exception {
+    List<UUID> dishes = createDishes(7);
+    UUID favourite = dishes.get(0);
+    List<Map<String, Object>> days = new ArrayList<>();
+    for (int i = 0; i < 7; i++) {
+      days.add(day(dateOf(i), List.of(meal("BREAKFAST", favourite, 2))));
+    }
+
+    mockMvc
+        .perform(
+            post("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createMenuJson(MONDAY, days)))
+        .andExpect(status().isBadRequest())
+        .andExpect(
+            jsonPath("$.message").value("the same dish may appear at most 3 times in a menu"));
+
+    assertThat(menuRepository.count()).isZero();
+  }
+
+  @Test
+  void createMenu_tooFewDistinctDishesReturns400() throws Exception {
+    List<UUID> dishes = createDishes(4);
+    List<Map<String, Object>> days = new ArrayList<>();
+    for (int i = 0; i < 7; i++) {
+      days.add(day(dateOf(i), List.of(meal("BREAKFAST", dishes.get(i % 4), 2))));
+    }
+
+    mockMvc
+        .perform(
+            post("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createMenuJson(MONDAY, days)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("a menu must reference at least 5 distinct dishes"));
+  }
+
+  @Test
+  void createMenu_missingStartDateReturns400() throws Exception {
+    List<UUID> dishes = createDishes(7);
+    Map<String, Object> body = Map.of("days", oneBreakfastPerDay(dishes));
+
+    mockMvc
+        .perform(
+            post("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)))
+        .andExpect(status().isBadRequest());
+
+    assertThat(menuRepository.count()).isZero();
+  }
+
+  @Test
+  void createMenu_withoutJwtReturns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/menus")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createMenuJson(MONDAY, oneBreakfastPerDay(createDishes(7)))))
+        .andExpect(status().isUnauthorized());
+  }
+
+  private List<UUID> createDishes(int count) {
+    List<UUID> ids = new ArrayList<>();
+    for (int i = 0; i < count; i++) {
+      ids.add(dishRepository.save(Dish.builder().name("Menu dish " + i).build()).getId());
+    }
+    return ids;
+  }
+
+  private static String dateOf(int dayOffset) {
+    return MONDAY.plusDays(dayOffset).toString();
+  }
+
+  /** One BREAKFAST meal per day, each with its own dish — the minimal valid week. */
+  private static List<Map<String, Object>> oneBreakfastPerDay(List<UUID> dishes) {
+    List<Map<String, Object>> days = new ArrayList<>();
+    for (int i = 0; i < 7; i++) {
+      days.add(day(dateOf(i), List.of(meal("BREAKFAST", dishes.get(i), 2))));
+    }
+    return days;
+  }
+
+  private static Map<String, Object> day(String date, List<Map<String, Object>> meals) {
+    Map<String, Object> day = new LinkedHashMap<>();
+    day.put("date", date);
+    day.put("meals", meals);
+    return day;
+  }
+
+  private static Map<String, Object> meal(String mealType, UUID dishId, int servings) {
+    Map<String, Object> meal = new LinkedHashMap<>();
+    meal.put("mealType", mealType);
+    meal.put("dishId", dishId.toString());
+    meal.put("servings", servings);
+    return meal;
+  }
+
+  private String createMenuJson(LocalDate startDate, List<Map<String, Object>> days)
+      throws JsonProcessingException {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("startDate", startDate.toString());
+    body.put("days", days);
+    return objectMapper.writeValueAsString(body);
   }
 
   private User createUser(String username, String email) {
