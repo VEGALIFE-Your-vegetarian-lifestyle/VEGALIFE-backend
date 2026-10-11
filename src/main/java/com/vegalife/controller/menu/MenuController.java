@@ -2,6 +2,7 @@ package com.vegalife.controller.menu;
 
 import com.vegalife.dto.request.menu.CreateMenuRequest;
 import com.vegalife.dto.request.menu.MenuQueryRequest;
+import com.vegalife.dto.request.menu.UpdateMenuRequest;
 import com.vegalife.dto.response.menu.MenuDetailResponse;
 import com.vegalife.dto.response.menu.MenuSummaryResponse;
 import com.vegalife.service.menu.MenuQueryFilter;
@@ -20,6 +21,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -71,5 +73,17 @@ public class MenuController {
     MenuDetailResponse created = menuService.createMenu(userId, request);
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(ApiResponse.success(created, "Menu created successfully"));
+  }
+
+  /** BR-MENU-006: updates an owned drafted or scheduled menu; cancelled/completed return 409. */
+  @PatchMapping("/{menuId}")
+  @PreAuthorize("isAuthenticated()")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<MenuDetailResponse>> updateMenu(
+      @AuthenticationPrincipal UUID userId,
+      @PathVariable UUID menuId,
+      @Valid @RequestBody UpdateMenuRequest request) {
+    MenuDetailResponse updated = menuService.updateMenu(userId, menuId, request);
+    return ResponseEntity.ok(ApiResponse.success(updated, "Menu updated successfully"));
   }
 }
