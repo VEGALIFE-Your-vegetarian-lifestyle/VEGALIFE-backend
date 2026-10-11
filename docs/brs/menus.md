@@ -1,8 +1,8 @@
 # Business Rules: Menus
 
 Business rules for the weekly menu domain. These constrain the menu read
-paths and the create path; rules for the update and status paths land with
-the issues that add them (#18/#19).
+paths and the create/update paths; rules for the status transitions land
+with the issue that adds them (#19).
 
 ---
 
@@ -182,6 +182,49 @@ tuned without breaking this rule's shape.
   `MenuService.createMenu` persists menu + days in one transaction.
 - API: 400 with a message naming the violated rule; nothing is persisted when
   validation fails.
+
+## Last Reviewed
+2026-10-12, by zuyzz (backend)
+
+---
+
+# Business Rule: Menus Are Editable Only While Drafted or Scheduled
+
+## Rule ID
+`BR-MENU-006`
+
+## Status
+Active
+
+## Statement
+`PATCH /api/menus/{menuId}` may update a `drafted` or a `scheduled` menu.
+A `cancelled` or `completed` menu is never editable and returns 409. An
+update replaces the menu's meals wholesale (the new `days` must form a
+complete, valid week under BR-MENU-005 — there is no partial meal edit)
+and may change `dietaryPreferences` and `notes`. The menu's window
+(`startDate`/`endDate`) is immutable, so editing can never introduce a
+scheduled-overlap violation (BR-MENU-003).
+
+## Rationale
+A member finalising or having finalised a plan (cancelled/completed)
+must not have it silently rewritten; drafts and scheduled plans are the
+states where adjusting meals is expected behaviour. Re-validating the
+whole week keeps the invariant simple: any stored menu is a complete,
+valid week.
+
+## Scope & Exceptions
+Applies to the update path. The window is never editable, so the
+overlap constraint is unaffected by updates; V30's exclusion constraint
+remains the database backstop. The "current week only" restriction from
+the issue is enforced at the MCP tool layer, not here — the REST API
+stays general.
+
+## Enforcement
+- `MenuService.updateMenu` loads the menu by id **and** owner, rejects
+  non-editable statuses, re-validates via `MenuValidator`, and replaces
+  the days in one transaction.
+- API: 404 for a foreign/absent id, 409 for `cancelled`/`completed`, 400
+  for an invalid resulting week.
 
 ## Last Reviewed
 2026-10-12, by zuyzz (backend)
