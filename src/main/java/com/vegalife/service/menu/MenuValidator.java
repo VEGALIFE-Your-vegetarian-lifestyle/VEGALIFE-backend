@@ -93,7 +93,8 @@ public class MenuValidator {
     }
   }
 
-  private MealType parseMealType(String raw) {
+  /** Normalizes and parses a raw meal type; shared with the service for persistence. */
+  static MealType parseMealType(String raw) {
     if (raw == null || raw.isBlank()) {
       throw new MenuValidationException("mealType is required");
     }
