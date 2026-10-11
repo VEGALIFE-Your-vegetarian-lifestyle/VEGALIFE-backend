@@ -633,6 +633,189 @@ class MenuControllerIntegrationTest {
         .andExpect(status().isUnauthorized());
   }
 
+  @Test
+  void changeMenuStatus_draftToScheduledReturns200DetailAndPersists() throws Exception {
+    Menu menu = createMenu(user, MONDAY, MenuStatus.drafted);
+
+    mockMvc
+        .perform(
+            post("/api/menus/{menuId}/status", menu.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(statusJson("scheduled")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Menu status updated successfully"))
+        .andExpect(jsonPath("$.data.id").value(menu.getId().toString()))
+        .andExpect(jsonPath("$.data.status").value("scheduled"))
+        .andExpect(jsonPath("$.data.startDate").value("2026-10-05"))
+        .andExpect(jsonPath("$.data.endDate").value("2026-10-11"))
+        .andExpect(jsonPath("$.data.days.length()").value(0));
+
+    assertThat(menuRepository.findById(menu.getId()).orElseThrow().getStatus())
+        .isEqualTo(MenuStatus.scheduled);
+  }
+
+  @Test
+  void changeMenuStatus_scheduledToCompletedReturns200() throws Exception {
+    Menu menu = createMenu(user, MONDAY, MenuStatus.scheduled);
+
+    mockMvc
+        .perform(
+            post("/api/menus/{menuId}/status", menu.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(statusJson("completed")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("completed"));
+
+    assertThat(menuRepository.findById(menu.getId()).orElseThrow().getStatus())
+        .isEqualTo(MenuStatus.completed);
+  }
+
+  @Test
+  void changeMenuStatus_cancellingFromDraftOrScheduledReturns200() throws Exception {
+    for (MenuStatus from : List.of(MenuStatus.drafted, MenuStatus.scheduled)) {
+      Menu menu = createMenu(user, MONDAY.plusWeeks(from.ordinal()), from);
+
+      mockMvc
+          .perform(
+              post("/api/menus/{menuId}/status", menu.getId())
+                  .header("Authorization", "Bearer " + accessToken)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(statusJson("cancelled")))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.status").value("cancelled"));
+    }
+  }
+
+  @Test
+  void changeMenuStatus_illegalTransitionsReturn409AndChangeNothing() throws Exception {
+    record Case(MenuStatus from, String target) {}
+    List<Case> illegal =
+        List.of(
+            new Case(MenuStatus.drafted, "completed"),
+            new Case(MenuStatus.scheduled, "scheduled"),
+            new Case(MenuStatus.cancelled, "scheduled"),
+            new Case(MenuStatus.completed, "cancelled"));
+    for (Case c : illegal) {
+      Menu menu = createMenu(user, MONDAY, c.from());
+
+      mockMvc
+          .perform(
+              post("/api/menus/{menuId}/status", menu.getId())
+                  .header("Authorization", "Bearer " + accessToken)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(statusJson(c.target())))
+          .andExpect(status().isConflict())
+          .andExpect(jsonPath("$.success").value(false))
+          .andExpect(jsonPath("$.message").value(containsString("Cannot transition a")));
+
+      assertThat(menuRepository.findById(menu.getId()).orElseThrow().getStatus())
+          .isEqualTo(c.from());
+    }
+  }
+
+  @Test
+  void changeMenuStatus_schedulingAnOverlappingWeekReturns409AndKeepsDrafted() throws Exception {
+    createMenu(user, MONDAY, MenuStatus.scheduled);
+    Menu draft = createMenu(user, MONDAY, MenuStatus.drafted);
+
+    mockMvc
+        .perform(
+            post("/api/menus/{menuId}/status", draft.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(statusJson("scheduled")))
+        .andExpect(status().isConflict())
+        .andExpect(
+            jsonPath("$.message").value("Another scheduled menu already overlaps this week"));
+
+    assertThat(menuRepository.findById(draft.getId()).orElseThrow().getStatus())
+        .isEqualTo(MenuStatus.drafted);
+  }
+
+  @Test
+  void changeMenuStatus_schedulingAnAdjacentWeekIsAllowed() throws Exception {
+    createMenu(user, MONDAY, MenuStatus.scheduled);
+    Menu adjacent = createMenu(user, MONDAY.plusWeeks(1), MenuStatus.drafted);
+
+    mockMvc
+        .perform(
+            post("/api/menus/{menuId}/status", adjacent.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(statusJson("scheduled")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("scheduled"));
+  }
+
+  @Test
+  void changeMenuStatus_foreignMenuReturns404() throws Exception {
+    Menu menu = createMenu(otherUser, MONDAY, MenuStatus.drafted);
+
+    mockMvc
+        .perform(
+            post("/api/menus/{menuId}/status", menu.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(statusJson("cancelled")))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Menu not found"));
+
+    assertThat(menuRepository.findById(menu.getId()).orElseThrow().getStatus())
+        .isEqualTo(MenuStatus.drafted);
+  }
+
+  @Test
+  void changeMenuStatus_unknownOrDraftedTargetReturns400() throws Exception {
+    Menu menu = createMenu(user, MONDAY, MenuStatus.drafted);
+
+    for (String target : List.of("archived", "drafted")) {
+      mockMvc
+          .perform(
+              post("/api/menus/{menuId}/status", menu.getId())
+                  .header("Authorization", "Bearer " + accessToken)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(statusJson(target)))
+          .andExpect(status().isBadRequest())
+          .andExpect(
+              jsonPath("$.message").value(containsString("scheduled, cancelled, completed")));
+    }
+    assertThat(menuRepository.findById(menu.getId()).orElseThrow().getStatus())
+        .isEqualTo(MenuStatus.drafted);
+  }
+
+  @Test
+  void changeMenuStatus_missingOrBlankStatusReturns400() throws Exception {
+    Menu menu = createMenu(user, MONDAY, MenuStatus.drafted);
+
+    mockMvc
+        .perform(
+            post("/api/menus/{menuId}/status", menu.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isBadRequest());
+    mockMvc
+        .perform(
+            post("/api/menus/{menuId}/status", menu.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\": \"  \"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void changeMenuStatus_withoutJwtReturns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/menus/{menuId}/status", UUID.randomUUID())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(statusJson("scheduled")))
+        .andExpect(status().isUnauthorized());
+  }
+
   private int dishSequence;
 
   private List<UUID> createDishes(int count) {
@@ -695,6 +878,10 @@ class MenuControllerIntegrationTest {
       body.put("notes", notes);
     }
     return objectMapper.writeValueAsString(body);
+  }
+
+  private String statusJson(String status) throws JsonProcessingException {
+    return objectMapper.writeValueAsString(Map.of("status", status));
   }
 
   private User createUser(String username, String email) {

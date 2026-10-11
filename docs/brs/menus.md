@@ -1,8 +1,8 @@
 # Business Rules: Menus
 
 Business rules for the weekly menu domain. These constrain the menu read
-paths and the create/update paths; rules for the status transitions land
-with the issue that adds them (#19).
+paths and the create/update paths, plus the status transitions of
+`POST /api/menus/{menuId}/status`.
 
 ---
 
@@ -100,9 +100,11 @@ anything, and drafts are unrestricted.
   (`EXCLUDE USING gist (user_id WITH =, daterange(start_date, end_date, '[]')
   WITH &&) WHERE (status = 'scheduled')`) added in
   `V30__menu_servings_preferences_and_scheduled_guard.sql`.
-- Written here; the write-time app-level guard is added by the update/status
-  issues (#18/#19). The create path (#17) only ever produces `drafted` menus,
-  which this rule does not constrain.
+- Written here; the write-time app-level guard runs on the status path:
+  scheduling a menu (`POST /api/menus/{menuId}/status`) pre-checks for an
+  overlapping scheduled menu (BR-MENU-007). The create path (#17) only ever
+  produces `drafted` menus, which this rule does not constrain, and updates
+  never change the window.
 
 ## Last Reviewed
 2026-10-10, by zuyzz (backend)
@@ -225,6 +227,59 @@ stays general.
   the days in one transaction.
 - API: 404 for a foreign/absent id, 409 for `cancelled`/`completed`, 400
   for an invalid resulting week.
+
+## Last Reviewed
+2026-10-12, by zuyzz (backend)
+
+---
+
+# Business Rule: Menu Status Changes Are Explicit, Legal Transitions
+
+## Rule ID
+`BR-MENU-007`
+
+## Status
+Active
+
+## Statement
+A menu's status changes only through
+`POST /api/menus/{menuId}/status` with a target from the vocabulary
+`scheduled|cancelled|completed` (a `drafted` target is never accepted —
+menus are born drafted, BR-MENU-005). The allowed transitions are:
+
+| From | Allowed targets |
+|------|-----------------|
+| `drafted` | `scheduled`, `cancelled` |
+| `scheduled` | `cancelled`, `completed` |
+| `cancelled` | *(none)* |
+| `completed` | *(none)* |
+
+Any other combination — including a no-op (target equals current status)
+and both terminal states (`cancelled`, `completed`) — returns 409. When
+the target is `scheduled`, the menu's `[start_date, end_date]` window must
+not overlap any other `scheduled` menu of the same user (BR-MENU-003);
+a violating scheduling attempt returns 409 and changes nothing.
+
+## Rationale
+The status field drives what a member can do with a plan (BR-MENU-006) and
+whether the week is "in effect"; letting it be set arbitrarily would let a
+member resurrect a cancelled week or oscillate a completed plan. A single
+stated transition table is auditable and testable. The overlap pre-check
+gives a clear 409 instead of surfacing the V30 exclusion constraint as a
+raw persistence error.
+
+## Scope & Exceptions
+Applies to the status-transition path only. The window is never changed by
+a transition, so overlap can only be introduced by scheduling. V30's
+exclusion constraint remains the database backstop under races; the
+service pre-check is the caller-facing guard.
+
+## Enforcement
+- `MenuService.changeStatus` loads the menu by id **and** owner, validates
+  the transition against the table, runs the overlap pre-check when
+  scheduling, and persists the new status in one transaction.
+- API: 404 for a foreign/absent id, 409 for an illegal transition or a
+  scheduled overlap, 400 for a target outside the vocabulary.
 
 ## Last Reviewed
 2026-10-12, by zuyzz (backend)

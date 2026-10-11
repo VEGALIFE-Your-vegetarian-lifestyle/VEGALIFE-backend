@@ -17,7 +17,9 @@ import com.vegalife.repository.menu.MenuRepository;
 import com.vegalife.repository.menu.MenuSpecifications;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.InvalidMenuTransitionException;
 import com.vegalife.shared.exception.MenuNotEditableException;
+import com.vegalife.shared.exception.MenuOverlapException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.LocalDate;
@@ -39,8 +41,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Menu reads (windows and detail) plus the write paths — create and update — always scoped to the
- * authenticated owner.
+ * Menu reads (windows and detail) plus the write paths — create, update, and status transitions —
+ * always scoped to the authenticated owner.
  */
 @Service
 @RequiredArgsConstructor
@@ -158,6 +160,69 @@ public class MenuService {
 
     List<MenuDetail> details = menuDetailRepository.findByMenuIdOrderByDateAscMealTypeAsc(menuId);
     return toDetail(menu, details);
+  }
+
+  /**
+   * BR-MENU-007: transitions an owned menu through the legal table — {@code drafted} to {@code
+   * scheduled}/{@code cancelled}, {@code scheduled} to {@code cancelled}/{@code completed}, both
+   * terminal states final. Scheduling first pre-checks the overlap rule (BR-MENU-003); a violation
+   * changes nothing. The target vocabulary excludes {@code drafted}.
+   */
+  @Transactional
+  public MenuDetailResponse changeStatus(UUID userId, UUID menuId, String targetStatus) {
+    MenuStatus target = parseTargetStatus(targetStatus);
+    Menu menu =
+        menuRepository
+            .findByIdAndUserId(menuId, userId)
+            .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
+    if (!isLegalTransition(menu.getStatus(), target)) {
+      throw new InvalidMenuTransitionException(
+          "Cannot transition a " + menu.getStatus() + " menu to " + target);
+    }
+    if (target == MenuStatus.scheduled
+        && menuRepository
+            .existsByUserIdAndStatusAndIdNotAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+                userId, MenuStatus.scheduled, menuId, menu.getStartDate(), menu.getEndDate())) {
+      throw new MenuOverlapException("Another scheduled menu already overlaps this week");
+    }
+
+    MenuStatus previous = menu.getStatus();
+    menu.setStatus(target);
+    menuRepository.save(menu);
+    log.info("Changed menu {} for user {} from {} to {}", menuId, userId, previous, target);
+
+    List<MenuDetail> details = menuDetailRepository.findByMenuIdOrderByDateAscMealTypeAsc(menuId);
+    return toDetail(menu, details);
+  }
+
+  /**
+   * BR-MENU-007's transition table: {@code drafted} may be scheduled or cancelled, {@code
+   * scheduled} may be cancelled or completed, and the two terminal states allow nothing (including
+   * no-ops).
+   */
+  private boolean isLegalTransition(MenuStatus from, MenuStatus to) {
+    return switch (from) {
+      case drafted -> to == MenuStatus.scheduled || to == MenuStatus.cancelled;
+      case scheduled -> to == MenuStatus.cancelled || to == MenuStatus.completed;
+      case cancelled, completed -> false;
+    };
+  }
+
+  /**
+   * BR-MENU-007: the target must be exactly {@code scheduled}, {@code cancelled}, or {@code
+   * completed}. {@code drafted} is never a target and anything else is a 400.
+   */
+  private MenuStatus parseTargetStatus(String raw) {
+    if (raw == null) {
+      throw new ValidationException("status must be one of scheduled, cancelled, completed");
+    }
+    return switch (raw.trim()) {
+      case "scheduled" -> MenuStatus.scheduled;
+      case "cancelled" -> MenuStatus.cancelled;
+      case "completed" -> MenuStatus.completed;
+      default ->
+          throw new ValidationException("status must be one of scheduled, cancelled, completed");
+    };
   }
 
   /**
