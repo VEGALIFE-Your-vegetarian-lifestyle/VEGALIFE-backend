@@ -40,7 +40,7 @@ standard `{success, message, data}` envelopes, relayed as tool result text.
 |-----------|------|----------|-------------|
 | week | date `YYYY-MM-DD` | No | Any day in the target ISO week. Omit for the current week (server UTC). |
 | status | string | No | `drafted`, `scheduled`, `cancelled`, or `completed`. Omit for any status. |
-| menu_id | uuid | No | Read one specific owned menu directly (`GET /api/menus/{menuId}`), skipping discovery. |
+| menuId | uuid | No | Read one specific owned menu directly (`GET /api/menus/{menuId}`), skipping discovery. |
 
 Behavior: resolves the week window server-side, calls
 `GET /api/menus?period=week&date=...&status=...`, and — when exactly one menu
@@ -53,9 +53,9 @@ payload: days, meals, dish names, servings). Zero matches returns an explicit
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| start_date | date `YYYY-MM-DD` | Yes | First day of the week (a Monday by convention). `endDate` is derived as `+6`. |
+| startDate | date `YYYY-MM-DD` | Yes | First day of the week (a Monday by convention). `endDate` is derived as `+6`. |
 | days | array | Yes | Exactly 7 day objects, each `{date, meals[]}`; meal = `{mealType, dishId, servings}` with `mealType` ∈ `BREAKFAST`/`LUNCH`/`DINNER`, `servings ≥ 1`. |
-| dietary_preferences | string | No | Free-text dietary preference for the week. |
+| dietaryPreferences | string | No | Free-text dietary preference for the week. |
 | notes | string | No | Free-text note. |
 
 Forwards to `POST /api/menus`. Always creates `drafted` (BR-MENU-005); all
@@ -67,9 +67,9 @@ with the new `id`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| menu_id | uuid | Yes | The menu to replace. |
+| menuId | uuid | Yes | The menu to replace. |
 | days | array | Yes | The complete new week (same shape as `create_menu`); meals are replaced wholesale. |
-| dietary_preferences | string | No | New value; omit to keep. |
+| dietaryPreferences | string | No | New value; omit to keep. |
 | notes | string | No | New value; omit to keep. |
 
 **Tool-layer pre-check (BR-MCP-005):** refused with a readable message unless
@@ -82,7 +82,7 @@ week (BR-MENU-005) and ownership (BR-MENU-001).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| menu_id | uuid | Yes | The drafted menu to schedule. |
+| menuId | uuid | Yes | The drafted menu to schedule. |
 
 Forwards to `POST /api/menus/{menuId}/status` with `{"status":"scheduled"}`.
 Per BR-MCP-006 the assistant confirms the exact week with the user before
@@ -108,7 +108,7 @@ transport failures:
 | Tool-visible result | Condition | Source |
 |---------------------|-----------|--------|
 | `days must contain exactly the 7 dates...` (or any BR-MENU-005 message) | Structural validation failed | 400 from `POST/PATCH /api/menus` |
-| `Menu not found` | Unknown `menu_id` or another user's menu | 404 |
+| `Menu not found` | Unknown `menuId` or another user's menu | 404 |
 | `Cannot transition a drafted menu to completed` | Illegal status transition | 409 |
 | `Another scheduled menu already overlaps this week` | Scheduling conflict | 409 (V30 GiST, ADR-010) |
 | `update_menu refused: only your current week's drafted menu can be edited in chat` | Tool-layer pre-check failed | BR-MCP-005 |
@@ -132,10 +132,10 @@ A chat turn (server-side flow, JWT omitted for brevity):
 
 ```text
 user: "Draft next week with tofu scramble for breakfasts and schedule it"
-  → assistant calls create_menu(start_date=2026-10-19, days=[...])
+  → assistant calls create_menu(startDate=2026-10-19, days=[...])
   → 201 drafted menu, id 7c1f2b90-...
 user: "Yes, schedule it"
-  → assistant calls schedule_menu(menu_id=7c1f2b90-...)
+  → assistant calls schedule_menu(menuId=7c1f2b90-...)
   → 200 status=scheduled
 ```
 
