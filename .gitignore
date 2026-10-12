@@ -18,6 +18,12 @@ buildNumber.properties
 # Eclipse m2e-apt annotation processor config
 .factorypath
 
+# IDE / tooling state (regenerated locally by each IDE; never commit)
+.idea/
+.settings/
+.postman/
+postman/globals/
+
 # Agent ephemeral plans (never committed)
 .agents/plans/
 

@@ -16,7 +16,7 @@ services:
     plan: free
     branch: main
     autoDeploy: false
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./api-server/Dockerfile
     dockerContext: .
     dockerPort: 8080
     healthCheckPath: /actuator/health
@@ -54,7 +54,7 @@ services:
     plan: free
     branch: main
     autoDeploy: false
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./api-server/Dockerfile
     dockerContext: .
     dockerPort: 8080
     healthCheckPath: /actuator/health

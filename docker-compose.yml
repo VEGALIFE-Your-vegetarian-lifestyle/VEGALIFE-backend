@@ -10,7 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./src/main/resources/db/migration:/docker-entrypoint-initdb.d:ro
+      - ./api-server/src/main/resources/db/migration:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-vegalife} -d vegalife"]
       interval: 10s
@@ -26,6 +26,46 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
+    networks:
+      - vegalife
+
+  # MCP server: thin tool adapter over the backend REST API (ADR-012).
+  # Internal-only — the only published port is loopback, for local debugging.
+  mcp-server:
+    build:
+      context: .
+      dockerfile: mcp-server/Dockerfile
+    image: vegalife-mcp-server
+    container_name: vegalife-mcp-server
+    environment:
+      # Targets a backend run on the host during local development; override
+      # BACKEND_URL when the backend runs in a container.
+      BACKEND_URL: ${BACKEND_URL:-http://host.docker.internal:8080}
+    ports:
+      - "127.0.0.1:8081:8081"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8081/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    networks:
+      - vegalife
+
+networks:
+  vegalife:
+    driver: bridge
 
 volumes:
   postgres_data:

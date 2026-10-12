@@ -94,3 +94,10 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MENU-005 | New Menus Are Drafts and Must Cover a Valid, Varied Week | Active | 2026-10-12 |
 | BR-MENU-006 | Menus Are Editable Only While Drafted or Scheduled | Active | 2026-10-12 |
 | BR-MENU-007 | Menu Status Changes Are Explicit, Legal Transitions | Active | 2026-10-12 |
+| BR-MCP-001 | Tool Calls Act as the Authenticated Caller | Active | 2026-10-12 |
+| BR-MCP-002 | Exactly Four Menu Tools Are Exposed | Active | 2026-10-12 |
+| BR-MCP-003 | Tool Calls Consume No AI Quota | Active | 2026-10-12 |
+| BR-MCP-004 | Credentials Are Never Model-Visible or Logged | Active | 2026-10-12 |
+| BR-MCP-005 | Chat Edits Only the Caller's Current-Week Draft | Active | 2026-10-12 |
+| BR-MCP-006 | Scheduling Happens Only After Explicit User Confirmation | Active | 2026-10-12 |
+| BR-MCP-007 | Tool Failures Are Model-Readable Results, Not Transport Errors | Active | 2026-10-12 |

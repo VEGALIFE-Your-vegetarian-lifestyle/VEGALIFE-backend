@@ -72,3 +72,4 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `menus/post-menus.md` | `POST /api/menus` | Create a drafted weekly menu with its 7 days of meals (authenticated) |
 | `menus/patch-menus.md` | `PATCH /api/menus/{menuId}` | Update an owned drafted or scheduled menu's meals and preferences (authenticated) |
 | `menus/post-menu-status.md` | `POST /api/menus/{menuId}/status` | Transition an owned menu's status: schedule, cancel, or complete (authenticated) |
+| `mcp/post-mcp.md` | `POST /mcp` (MCP tool surface) | Four menu tools — get_menu, create_menu, update_menu, schedule_menu — for the AI chat (internal service) |
