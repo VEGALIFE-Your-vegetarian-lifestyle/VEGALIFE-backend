@@ -10,8 +10,8 @@ import lombok.NoArgsConstructor;
 /**
  * Raw query parameters for {@code GET /api/menus}. These are resolved into a {@link
  * com.vegalife.service.menu.MenuQueryFilter} by the resolver; validation here covers only the
- * pagination bounds, while period/date/month/from/to rules live in the resolver so one place owns
- * the filter semantics.
+ * pagination bounds, while the from/to/status rules live in the resolver so one place owns the
+ * filter semantics.
  */
 @Data
 @Builder
@@ -19,9 +19,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class MenuQueryRequest {
 
-  private String period;
-  private String date;
-  private String month;
   private String from;
   private String to;
   private String status;

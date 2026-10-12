@@ -3,17 +3,21 @@ package com.vegalife.mcp.tool;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.http.Fault;
+import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import com.vegalife.mcp.client.BackendClient;
 import com.vegalife.mcp.identity.CallerContext;
 import java.io.IOException;
@@ -40,10 +44,6 @@ class MenuToolsHttpTest {
           + "[{\"id\":\"11111111-1111-1111-1111-111111111111\",\"startDate\":\"2026-10-19\","
           + "\"endDate\":\"2026-10-25\",\"status\":\"drafted\"}],\"totalElements\":1}}";
 
-  private static final String DETAIL =
-      "{\"success\":true,\"message\":\"Menu retrieved successfully\",\"data\":"
-          + "{\"id\":\"11111111-1111-1111-1111-111111111111\",\"days\":[]}}";
-
   private WireMockServer backend;
   private MenuTools menuTools;
 
@@ -63,21 +63,27 @@ class MenuToolsHttpTest {
   }
 
   @Test
-  void getMenuDeepensUniqueWeekMatchOverTheWire() {
+  void getMenuRelaysTheListPayloadOverTheWire() {
     backend.stubFor(
         get(urlPathEqualTo("/api/menus"))
-            .withQueryParam("period", equalTo("week"))
-            .withQueryParam("date", equalTo("2026-10-19"))
+            .withQueryParam("from", equalTo("2026-10-19"))
+            .withQueryParam("to", equalTo("2026-10-25"))
             .withHeader("Authorization", equalTo("Bearer " + CALLER.jwt()))
             .willReturn(okJson(LIST_ONE)));
-    backend.stubFor(
-        get(urlPathEqualTo("/api/menus/11111111-1111-1111-1111-111111111111"))
-            .withHeader("Authorization", equalTo("Bearer " + CALLER.jwt()))
-            .willReturn(okJson(DETAIL)));
 
-    String result = menuTools.getMenu("2026-10-19", null, null, contextWithIdentity());
+    String result =
+        menuTools.getMenu(
+            "2026-10-19", "2026-10-25", null, null, null, null, contextWithIdentity());
 
-    assertEquals(DETAIL, result);
+    assertEquals(LIST_ONE, result);
+    // One call only: the list endpoint, with the new bounds and no leftover period/date params.
+    backend.verify(1, getRequestedFor(urlPathEqualTo("/api/menus")));
+    backend.verify(0, getRequestedFor(urlPathMatching("/api/menus/.*")));
+    LoggedRequest request = backend.getAllServeEvents().get(0).getRequest();
+    assertEquals(List.of("2026-10-19"), request.queryParameter("from").values());
+    assertEquals(List.of("2026-10-25"), request.queryParameter("to").values());
+    assertFalse(request.getQueryParams().containsKey("period"));
+    assertFalse(request.getQueryParams().containsKey("date"));
   }
 
   @Test
@@ -130,7 +136,7 @@ class MenuToolsHttpTest {
         get(urlPathEqualTo("/api/menus"))
             .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
 
-    String result = menuTools.getMenu(null, null, null, contextWithIdentity());
+    String result = menuTools.getMenu(null, null, null, null, null, null, contextWithIdentity());
 
     assertTrue(result.startsWith("backend is unreachable"), result);
   }

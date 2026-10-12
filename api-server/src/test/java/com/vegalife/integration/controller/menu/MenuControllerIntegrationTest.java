@@ -97,7 +97,7 @@ class MenuControllerIntegrationTest {
   }
 
   @Test
-  void listMenus_monthReturnsMenusIntersectingThatMonth() throws Exception {
+  void listMenus_rangeReturnsMenusIntersectingThatRange() throws Exception {
     createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.scheduled);
     createMenu(user, LocalDate.of(2026, 11, 2), MenuStatus.drafted);
 
@@ -105,8 +105,8 @@ class MenuControllerIntegrationTest {
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "month")
-                .param("month", "2026-10"))
+                .param("from", "2026-10-01")
+                .param("to", "2026-10-31"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Menus retrieved successfully"))
@@ -115,7 +115,7 @@ class MenuControllerIntegrationTest {
   }
 
   @Test
-  void listMenus_weekReturnsMenusIntersectingThatIsoWeek() throws Exception {
+  void listMenus_oneWeekRangeReturnsMenusIntersectingThatWeek() throws Exception {
     createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.scheduled);
     createMenu(user, LocalDate.of(2026, 10, 12), MenuStatus.scheduled);
 
@@ -123,8 +123,8 @@ class MenuControllerIntegrationTest {
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "week")
-                .param("date", "2026-10-07"))
+                .param("from", "2026-10-05")
+                .param("to", "2026-10-11"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(1))
         .andExpect(jsonPath("$.data.content[0].startDate").value("2026-10-05"));
@@ -139,7 +139,6 @@ class MenuControllerIntegrationTest {
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "custom")
                 .param("from", "2026-09-01")
                 .param("to", "2026-10-15"))
         .andExpect(status().isOk())
@@ -154,15 +153,15 @@ class MenuControllerIntegrationTest {
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "month")
-                .param("month", "2026-09"))
+                .param("from", "2026-09-01")
+                .param("to", "2026-09-30"))
         .andExpect(jsonPath("$.data.totalElements").value(1));
     mockMvc
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "month")
-                .param("month", "2026-10"))
+                .param("from", "2026-10-01")
+                .param("to", "2026-10-31"))
         .andExpect(jsonPath("$.data.totalElements").value(1));
   }
 
@@ -175,8 +174,8 @@ class MenuControllerIntegrationTest {
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "month")
-                .param("month", "2026-10")
+                .param("from", "2026-10-01")
+                .param("to", "2026-10-31")
                 .param("status", "scheduled"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(1))
@@ -192,8 +191,8 @@ class MenuControllerIntegrationTest {
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "month")
-                .param("month", "2026-10"))
+                .param("from", "2026-10-01")
+                .param("to", "2026-10-31"))
         .andExpect(jsonPath("$.data.totalElements").value(1))
         .andExpect(jsonPath("$.data.content[0].startDate").value("2026-10-05"));
   }
@@ -207,15 +206,15 @@ class MenuControllerIntegrationTest {
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "month")
-                .param("month", "2026-10"))
+                .param("from", "2026-10-01")
+                .param("to", "2026-10-31"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.content[0].startDate").value("2026-10-12"))
         .andExpect(jsonPath("$.data.content[1].startDate").value("2026-10-05"));
   }
 
   @Test
-  void listMenus_withoutPeriodReturnsEverything() throws Exception {
+  void listMenus_withoutBoundsReturnsEverything() throws Exception {
     createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.scheduled);
     createMenu(user, LocalDate.of(2025, 1, 6), MenuStatus.completed);
 
@@ -226,48 +225,137 @@ class MenuControllerIntegrationTest {
   }
 
   @Test
+  void listMenus_fromAloneBoundsOnlyFromBelow() throws Exception {
+    createMenu(user, LocalDate.of(2026, 9, 7), MenuStatus.scheduled);
+    createMenu(user, LocalDate.of(2026, 11, 2), MenuStatus.scheduled);
+
+    mockMvc
+        .perform(
+            get("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("from", "2026-10-01"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].startDate").value("2026-11-02"));
+  }
+
+  @Test
+  void listMenus_toAloneBoundsOnlyFromAbove() throws Exception {
+    createMenu(user, LocalDate.of(2026, 9, 7), MenuStatus.scheduled);
+    createMenu(user, LocalDate.of(2026, 11, 2), MenuStatus.scheduled);
+
+    mockMvc
+        .perform(
+            get("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("to", "2026-10-31"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].startDate").value("2026-09-07"));
+  }
+
+  @Test
+  void listMenus_legacyPeriodDateAndMonthParamsAreIgnored() throws Exception {
+    createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.scheduled);
+    createMenu(user, LocalDate.of(2026, 11, 2), MenuStatus.drafted);
+
+    mockMvc
+        .perform(
+            get("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("period", "month")
+                .param("month", "2026-10")
+                .param("date", "2026-10-07"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(2));
+  }
+
+  @Test
   void listMenus_customFromAfterToReturns400() throws Exception {
     mockMvc
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "custom")
                 .param("from", "2026-10-15")
                 .param("to", "2026-09-01"))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.success").value(false));
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value(containsString("from must be on or before to")));
   }
 
   @Test
-  void listMenus_customWithoutBoundsReturns400() throws Exception {
+  void listMenus_malformedFromReturns400() throws Exception {
     mockMvc
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "custom")
-                .param("from", "2026-09-01"))
-        .andExpect(status().isBadRequest());
+                .param("from", "2026-13-01"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value(containsString("Invalid from")));
   }
 
   @Test
-  void listMenus_malformedDateReturns400() throws Exception {
+  void listMenus_malformedToReturns400() throws Exception {
     mockMvc
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "week")
-                .param("date", "2026-13-40"))
-        .andExpect(status().isBadRequest());
+                .param("to", "2026-13-40"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value(containsString("Invalid to")));
   }
 
   @Test
-  void listMenus_unknownPeriodReturns400() throws Exception {
+  void listMenus_rangeLongerThan366DaysReturns400() throws Exception {
     mockMvc
         .perform(
             get("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
-                .param("period", "quarter"))
-        .andExpect(status().isBadRequest());
+                .param("from", "2026-01-01")
+                .param("to", "2027-01-03"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value(containsString("must not exceed 366 days")));
+  }
+
+  @Test
+  void listMenus_rangeOfExactly366DaysIsAccepted() throws Exception {
+    createMenu(user, LocalDate.of(2026, 1, 5), MenuStatus.scheduled);
+
+    mockMvc
+        .perform(
+            get("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("from", "2026-01-01")
+                .param("to", "2027-01-02"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].startDate").value("2026-01-05"));
+  }
+
+  @Test
+  void listMenus_oneSidedWindowIsNeverLengthChecked() throws Exception {
+    createMenu(user, LocalDate.of(2026, 1, 5), MenuStatus.scheduled);
+
+    mockMvc
+        .perform(
+            get("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("from", "2015-01-01"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1));
+  }
+
+  @Test
+  void listMenus_unknownStatusReturns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("status", "archived"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value(containsString("Unknown status")));
   }
 
   @Test

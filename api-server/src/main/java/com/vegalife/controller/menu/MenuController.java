@@ -43,13 +43,7 @@ public class MenuController {
   public ResponseEntity<ApiResponse<PageResponse<MenuSummaryResponse>>> listMenus(
       @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute MenuQueryRequest request) {
     MenuQueryFilter filter =
-        filterResolver.resolve(
-            request.getPeriod(),
-            request.getDate(),
-            request.getMonth(),
-            request.getFrom(),
-            request.getTo(),
-            request.getStatus());
+        filterResolver.resolve(request.getFrom(), request.getTo(), request.getStatus());
     PageResponse<MenuSummaryResponse> menus =
         menuService.listMenus(
             userId, filter, request.getPage(), request.getSize(), request.getSort());

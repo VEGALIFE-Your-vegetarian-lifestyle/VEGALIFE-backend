@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -18,6 +19,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.mcp.client.BackendCallException;
 import com.vegalife.mcp.client.BackendClient;
 import com.vegalife.mcp.identity.CallerContext;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,8 +31,9 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.model.ToolContext;
 
 /**
- * Behavioral tests for the four menu tools against the contract in docs/apis/mcp/post-mcp.md: deep
- * mode, parameter validation, the update pre-check, identity errors, and error relay.
+ * Behavioral tests for the four menu tools against the contract in docs/apis/mcp/post-mcp.md:
+ * get_menu as a straight mirror of GET /api/menus (no deepening, no menuId), parameter validation,
+ * the update pre-check, identity errors, and error relay.
  */
 class MenuToolsTest {
 
@@ -46,10 +52,6 @@ class MenuToolsTest {
           + "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"status\":\"scheduled\"}],"
           + "\"totalElements\":2}}";
 
-  private static final String DETAIL =
-      "{\"success\":true,\"message\":\"Menu retrieved successfully\",\"data\":"
-          + "{\"id\":\"11111111-1111-1111-1111-111111111111\",\"days\":[]}}";
-
   private static final CallerContext CALLER = new CallerContext("test-jwt");
 
   private BackendClient backendClient;
@@ -62,79 +64,132 @@ class MenuToolsTest {
   }
 
   @Test
-  void uniqueListMatchIsDeepenedIntoDetail() {
+  void singleMatchIsRelayedAsTheListPayload() {
     when(backendClient.getMenus(eq(CALLER), anyMap())).thenReturn(LIST_ONE);
-    when(backendClient.getMenuById(CALLER, "11111111-1111-1111-1111-111111111111"))
-        .thenReturn(DETAIL);
 
-    String result = menuTools.getMenu(null, null, null, contextWithIdentity());
+    String result = menuTools.getMenu(null, null, null, null, null, null, contextWithIdentity());
 
-    assertEquals(DETAIL, result);
-    verify(backendClient).getMenuById(CALLER, "11111111-1111-1111-1111-111111111111");
-  }
-
-  @Test
-  void emptyListBecomesExplicitNoMenuResult() {
-    when(backendClient.getMenus(eq(CALLER), anyMap())).thenReturn(LIST_EMPTY);
-
-    String result = menuTools.getMenu(null, null, null, contextWithIdentity());
-
-    assertEquals(MenuTools.NO_MENU_RESULT, result);
+    assertEquals(LIST_ONE, result);
     verify(backendClient, never()).getMenuById(any(), any());
   }
 
   @Test
-  void multipleMatchesKeepTheListSummary() {
+  void emptyListIsRelayedAsTheListPayload() {
+    when(backendClient.getMenus(eq(CALLER), anyMap())).thenReturn(LIST_EMPTY);
+
+    String result = menuTools.getMenu(null, null, null, null, null, null, contextWithIdentity());
+
+    assertEquals(LIST_EMPTY, result);
+    verify(backendClient, never()).getMenuById(any(), any());
+  }
+
+  @Test
+  void multipleMatchesAreRelayedAsTheListPayload() {
     when(backendClient.getMenus(eq(CALLER), anyMap())).thenReturn(LIST_TWO);
 
-    String result = menuTools.getMenu(null, null, null, contextWithIdentity());
+    String result = menuTools.getMenu(null, null, null, null, null, null, contextWithIdentity());
 
     assertEquals(LIST_TWO, result);
     verify(backendClient, never()).getMenuById(any(), any());
   }
 
   @Test
-  void weekAndStatusAreForwardedAsQueryParameters() {
+  void boundsStatusAndPaginationAreForwardedAsQueryParameters() {
     when(backendClient.getMenus(eq(CALLER), anyMap())).thenReturn(LIST_EMPTY);
 
-    menuTools.getMenu("2026-10-05", "drafted", null, contextWithIdentity());
+    menuTools.getMenu(
+        " 2026-10-05 ", "2026-10-11", " scheduled ", 2, 50, "startDate,asc", contextWithIdentity());
 
     verify(backendClient)
-        .getMenus(CALLER, Map.of("period", "week", "date", "2026-10-05", "status", "drafted"));
+        .getMenus(
+            CALLER,
+            Map.of(
+                "from", "2026-10-05",
+                "to", "2026-10-11",
+                "status", "scheduled",
+                "page", "2",
+                "size", "50",
+                "sort", "startDate,asc"));
   }
 
   @Test
-  void menuIdSkipsDiscovery() {
-    when(backendClient.getMenuById(CALLER, "33333333-3333-3333-3333-333333333333"))
-        .thenReturn(DETAIL);
+  void propertyOnlySortIsAcceptedAndForwarded() {
+    when(backendClient.getMenus(eq(CALLER), anyMap())).thenReturn(LIST_EMPTY);
 
+    menuTools.getMenu(null, null, null, null, null, "startDate", contextWithIdentity());
+
+    verify(backendClient).getMenus(CALLER, Map.of("sort", "startDate"));
+  }
+
+  @Test
+  void blankBoundsAndAbsentPaginationAreOmittedFromTheQuery() {
+    when(backendClient.getMenus(eq(CALLER), anyMap())).thenReturn(LIST_EMPTY);
+
+    menuTools.getMenu("  ", "", null, null, null, "   ", contextWithIdentity());
+
+    verify(backendClient).getMenus(CALLER, Map.of());
+  }
+
+  @Test
+  void pageAndSizeAreClampedIntoTheirValidBounds() {
+    when(backendClient.getMenus(eq(CALLER), anyMap())).thenReturn(LIST_EMPTY);
+
+    menuTools.getMenu(null, null, null, -3, 500, null, contextWithIdentity());
+    verify(backendClient).getMenus(CALLER, Map.of("page", "0", "size", "100"));
+
+    menuTools.getMenu(null, null, null, 4, 0, null, contextWithIdentity());
+    verify(backendClient).getMenus(CALLER, Map.of("page", "4", "size", "1"));
+  }
+
+  @Test
+  void malformedFromIsRefusedBeforeAnyBackendCall() {
     String result =
-        menuTools.getMenu(
-            "not-a-date", "bogus", " 33333333-3333-3333-3333-333333333333 ", contextWithIdentity());
+        menuTools.getMenu("05-10-2026", null, null, null, null, null, contextWithIdentity());
 
-    assertEquals(DETAIL, result);
+    assertEquals("error: from must be a date in YYYY-MM-DD format", result);
     verify(backendClient, never()).getMenus(any(), anyMap());
   }
 
   @Test
-  void malformedWeekIsRefusedBeforeAnyBackendCall() {
-    String result = menuTools.getMenu("05-10-2026", null, null, contextWithIdentity());
+  void malformedToIsRefusedBeforeAnyBackendCall() {
+    String result =
+        menuTools.getMenu(null, "not-a-date", null, null, null, null, contextWithIdentity());
 
-    assertEquals("error: week must be a date in YYYY-MM-DD format", result);
+    assertEquals("error: to must be a date in YYYY-MM-DD format", result);
     verify(backendClient, never()).getMenus(any(), anyMap());
   }
 
   @Test
   void unknownStatusIsRefusedBeforeAnyBackendCall() {
-    String result = menuTools.getMenu(null, "paused", null, contextWithIdentity());
+    String result =
+        menuTools.getMenu(null, null, "paused", null, null, null, contextWithIdentity());
 
     assertEquals("error: status must be one of drafted, scheduled, cancelled, completed", result);
     verify(backendClient, never()).getMenus(any(), anyMap());
   }
 
   @Test
+  void sortInWrongFormIsRefusedBeforeAnyBackendCall() {
+    String result = menuTools.getMenu(null, null, null, null, null, ",asc", contextWithIdentity());
+
+    assertEquals("error: sort must be in the form 'property,asc|desc'", result);
+    verify(backendClient, never()).getMenus(any(), anyMap());
+  }
+
+  @Test
+  void sortWithUnknownDirectionIsRefusedBeforeAnyBackendCall() {
+    String result =
+        menuTools.getMenu(
+            null, null, null, null, null, "startDate,sideways", contextWithIdentity());
+
+    assertEquals("error: sort direction must be 'asc' or 'desc'", result);
+    verify(backendClient, never()).getMenus(any(), anyMap());
+  }
+
+  @Test
   void missingIdentityIsAReadableResultWithoutBackendCall() {
-    String result = menuTools.getMenu(null, null, null, new ToolContext(Map.of()));
+    String result =
+        menuTools.getMenu(null, null, null, null, null, null, new ToolContext(Map.of()));
 
     assertTrue(result.startsWith("error: caller identity missing"), result);
     verify(backendClient, never()).getMenus(any(), anyMap());
@@ -145,7 +200,7 @@ class MenuToolsTest {
     when(backendClient.getMenus(eq(CALLER), anyMap()))
         .thenThrow(new BackendCallException(401, "Unauthorized"));
 
-    String result = menuTools.getMenu(null, null, null, contextWithIdentity());
+    String result = menuTools.getMenu(null, null, null, null, null, null, contextWithIdentity());
 
     assertEquals("backend call failed with HTTP 401: Unauthorized", result);
   }
@@ -154,11 +209,9 @@ class MenuToolsTest {
   void unparseableListPayloadIsRelayedUnchanged() {
     when(backendClient.getMenus(eq(CALLER), anyMap())).thenReturn("<html>502</html>");
 
-    String result = menuTools.getMenu(null, null, null, contextWithIdentity());
+    String result = menuTools.getMenu(null, null, null, null, null, null, contextWithIdentity());
 
     assertEquals("<html>502</html>", result);
-    verify(backendClient, never()).getMenuById(any(), any());
-    assertFalse(result.isEmpty());
   }
 
   @Test
@@ -233,6 +286,10 @@ class MenuToolsTest {
     when(backendClient.updateMenu(eq(CALLER), anyString(), anyString()))
         .thenReturn("{\"success\":true}");
 
+    LocalDate today = LocalDate.now(ZoneOffset.UTC);
+    LocalDate monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+    LocalDate sunday = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
+
     String result =
         menuTools.updateMenu(
             "11111111-1111-1111-1111-111111111111",
@@ -243,7 +300,10 @@ class MenuToolsTest {
             contextWithIdentity());
 
     assertEquals("{\"success\":true}", result);
-    verify(backendClient).getMenus(CALLER, Map.of("period", "week", "status", "drafted"));
+    verify(backendClient)
+        .getMenus(
+            CALLER,
+            Map.of("from", monday.toString(), "to", sunday.toString(), "status", "drafted"));
     ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
     verify(backendClient)
         .updateMenu(eq(CALLER), eq("11111111-1111-1111-1111-111111111111"), body.capture());
@@ -267,6 +327,7 @@ class MenuToolsTest {
             "99999999-9999-9999-9999-999999999999", List.of(), null, null, contextWithIdentity());
 
     assertEquals(MenuTools.UPDATE_REFUSED, result);
+    verify(backendClient).getMenus(eq(CALLER), argThat(MenuToolsTest::fromToDraftPreCheck));
     verify(backendClient, never()).updateMenu(any(), any(), any());
   }
 
@@ -280,6 +341,7 @@ class MenuToolsTest {
 
     assertEquals(
         MenuTools.UPDATE_REFUSED + " (the current-week draft could not be verified)", result);
+    verify(backendClient).getMenus(eq(CALLER), argThat(MenuToolsTest::fromToDraftPreCheck));
     verify(backendClient, never()).updateMenu(any(), any(), any());
   }
 
@@ -309,6 +371,15 @@ class MenuToolsTest {
     verify(backendClient, never()).updateMenu(any(), any(), any());
     verify(backendClient, never()).updateMenuStatus(any(), any(), any());
     verify(backendClient, never()).createMenu(any(), any());
+  }
+
+  /** BR-MCP-005 pre-check shape: an explicit from/to window over drafted menus, never a period. */
+  private static boolean fromToDraftPreCheck(Map<String, String> query) {
+    return "drafted".equals(query.get("status"))
+        && query.get("from") != null
+        && query.get("to") != null
+        && !query.containsKey("period")
+        && !query.containsKey("date");
   }
 
   private static ToolContext contextWithIdentity() {

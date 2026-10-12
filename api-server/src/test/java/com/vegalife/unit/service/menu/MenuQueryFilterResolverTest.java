@@ -15,53 +15,56 @@ class MenuQueryFilterResolverTest {
   private final MenuQueryFilterResolver resolver = new MenuQueryFilterResolver();
 
   @Test
-  void noPeriodResolvesUnboundedFilter() {
-    MenuQueryFilter filter = resolver.resolve(null, null, null, null, null, null);
+  void noBoundsResolvesUnboundedFilter() {
+    MenuQueryFilter filter = resolver.resolve(null, null, null);
 
     assertThat(filter.hasWindow()).isFalse();
     assertThat(filter.getStatus()).isNull();
   }
 
   @Test
-  void weekResolvesToMondayThroughSundayOfTheGivenDate() {
-    MenuQueryFilter filter = resolver.resolve("week", "2026-10-07", null, null, null, null);
-
-    assertThat(filter.getFrom()).isEqualTo(LocalDate.of(2026, 10, 5));
-    assertThat(filter.getTo()).isEqualTo(LocalDate.of(2026, 10, 11));
-  }
-
-  @Test
-  void weekOnAWeekBoundaryStaysWithinThatWeek() {
-    MenuQueryFilter monday = resolver.resolve("week", "2026-10-05", null, null, null, null);
-    MenuQueryFilter sunday = resolver.resolve("week", "2026-10-11", null, null, null, null);
-
-    assertThat(monday.getFrom()).isEqualTo(LocalDate.of(2026, 10, 5));
-    assertThat(monday.getTo()).isEqualTo(LocalDate.of(2026, 10, 11));
-    assertThat(sunday.getFrom()).isEqualTo(LocalDate.of(2026, 10, 5));
-    assertThat(sunday.getTo()).isEqualTo(LocalDate.of(2026, 10, 11));
-  }
-
-  @Test
-  void monthResolvesToFirstAndLastDay() {
-    MenuQueryFilter filter = resolver.resolve("month", null, "2026-02", null, null, null);
-
-    assertThat(filter.getFrom()).isEqualTo(LocalDate.of(2026, 2, 1));
-    assertThat(filter.getTo()).isEqualTo(LocalDate.of(2026, 2, 28));
-  }
-
-  @Test
-  void customResolvesTheGivenInclusiveRange() {
-    MenuQueryFilter filter =
-        resolver.resolve("custom", null, null, "2026-09-01", "2026-10-15", null);
+  void fromAloneBoundsOnlyFromBelow() {
+    MenuQueryFilter filter = resolver.resolve("2026-09-01", null, null);
 
     assertThat(filter.getFrom()).isEqualTo(LocalDate.of(2026, 9, 1));
+    assertThat(filter.getTo()).isNull();
+  }
+
+  @Test
+  void toAloneBoundsOnlyFromAbove() {
+    MenuQueryFilter filter = resolver.resolve(null, "2026-10-15", null);
+
+    assertThat(filter.getFrom()).isNull();
     assertThat(filter.getTo()).isEqualTo(LocalDate.of(2026, 10, 15));
   }
 
   @Test
-  void customAtThe366DayLimitIsAccepted() {
-    MenuQueryFilter filter =
-        resolver.resolve("custom", null, null, "2026-01-01", "2027-01-02", null);
+  void bothBoundsResolveTheGivenInclusiveRange() {
+    MenuQueryFilter filter = resolver.resolve("2026-09-01", "2026-10-15", null);
+
+    assertThat(filter.getFrom()).isEqualTo(LocalDate.of(2026, 9, 1));
+    assertThat(filter.getTo()).isEqualTo(LocalDate.of(2026, 10, 15));
+    assertThat(filter.hasWindow()).isTrue();
+  }
+
+  @Test
+  void blankBoundsAreTreatedAsAbsent() {
+    MenuQueryFilter filter = resolver.resolve("  ", "", null);
+
+    assertThat(filter.hasWindow()).isFalse();
+  }
+
+  @Test
+  void aSingleDayWindowIsAccepted() {
+    MenuQueryFilter filter = resolver.resolve("2026-10-05", "2026-10-05", null);
+
+    assertThat(filter.getFrom()).isEqualTo(LocalDate.of(2026, 10, 5));
+    assertThat(filter.getTo()).isEqualTo(LocalDate.of(2026, 10, 5));
+  }
+
+  @Test
+  void rangeAtThe366DayLimitIsAccepted() {
+    MenuQueryFilter filter = resolver.resolve("2026-01-01", "2027-01-02", null);
 
     assertThat(filter.getFrom()).isEqualTo(LocalDate.of(2026, 1, 1));
     assertThat(filter.getTo()).isEqualTo(LocalDate.of(2027, 1, 2));
@@ -69,66 +72,52 @@ class MenuQueryFilterResolverTest {
 
   @Test
   void statusIsParsedAndCombined() {
-    MenuQueryFilter filter = resolver.resolve("week", "2026-10-07", null, null, null, "scheduled");
+    MenuQueryFilter filter = resolver.resolve("2026-10-05", "2026-10-11", "scheduled");
 
     assertThat(filter.getStatus()).isEqualTo(MenuStatus.scheduled);
   }
 
   @Test
-  void customWithoutBoundsIsRejected() {
-    assertThatThrownBy(() -> resolver.resolve("custom", null, null, "2026-09-01", null, null))
-        .isInstanceOf(InvalidMenuFilterException.class)
-        .hasMessageContaining("from and to are required");
-  }
-
-  @Test
-  void customWithFromAfterToIsRejected() {
-    assertThatThrownBy(
-            () -> resolver.resolve("custom", null, null, "2026-10-15", "2026-09-01", null))
+  void fromAfterToIsRejected() {
+    assertThatThrownBy(() -> resolver.resolve("2026-10-15", "2026-09-01", null))
         .isInstanceOf(InvalidMenuFilterException.class)
         .hasMessageContaining("from must be on or before to");
   }
 
   @Test
-  void customRangeLongerThan366DaysIsRejected() {
-    assertThatThrownBy(
-            () -> resolver.resolve("custom", null, null, "2026-01-01", "2027-01-03", null))
+  void rangeLongerThan366DaysIsRejected() {
+    assertThatThrownBy(() -> resolver.resolve("2026-01-01", "2027-01-03", null))
         .isInstanceOf(InvalidMenuFilterException.class)
         .hasMessageContaining("must not exceed 366 days");
   }
 
   @Test
-  void malformedDateIsRejected() {
-    assertThatThrownBy(() -> resolver.resolve("week", "2026-13-01", null, null, null, null))
-        .isInstanceOf(InvalidMenuFilterException.class)
-        .hasMessageContaining("Invalid date");
+  void oneSidedWindowIsNeverLengthChecked() {
+    // An open-ended window has no length, so only order and length of a stated range are checkable.
+    MenuQueryFilter filter = resolver.resolve("2020-01-01", null, null);
+
+    assertThat(filter.getFrom()).isEqualTo(LocalDate.of(2020, 1, 1));
+    assertThat(filter.getTo()).isNull();
   }
 
   @Test
-  void malformedMonthIsRejected() {
-    assertThatThrownBy(() -> resolver.resolve("month", null, "2026-13", null, null, null))
+  void malformedFromIsRejected() {
+    assertThatThrownBy(() -> resolver.resolve("2026-13-01", null, null))
         .isInstanceOf(InvalidMenuFilterException.class)
-        .hasMessageContaining("Invalid month");
+        .hasMessageContaining("Invalid from");
   }
 
   @Test
-  void unknownPeriodIsRejected() {
-    assertThatThrownBy(() -> resolver.resolve("quarter", null, null, null, null, null))
+  void malformedToIsRejected() {
+    assertThatThrownBy(() -> resolver.resolve(null, "not-a-date", null))
         .isInstanceOf(InvalidMenuFilterException.class)
-        .hasMessageContaining("Unknown period");
+        .hasMessageContaining("Invalid to");
   }
 
   @Test
   void unknownStatusIsRejected() {
-    assertThatThrownBy(() -> resolver.resolve("week", "2026-10-07", null, null, null, "active"))
+    assertThatThrownBy(() -> resolver.resolve("2026-10-05", "2026-10-11", "active"))
         .isInstanceOf(InvalidMenuFilterException.class)
         .hasMessageContaining("Unknown status");
-  }
-
-  @Test
-  void explicitBoundsWithoutCustomPeriodAreRejected() {
-    assertThatThrownBy(() -> resolver.resolve(null, null, null, "2026-09-01", "2026-10-15", null))
-        .isInstanceOf(InvalidMenuFilterException.class)
-        .hasMessageContaining("only valid with period=custom");
   }
 }

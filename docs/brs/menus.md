@@ -60,8 +60,9 @@ appear under both adjacent periods, and a plan that ends exactly where a range
 begins still belongs to that range.
 
 ## Scope & Exceptions
-Applies to `period=week`, `period=month`, and `period=custom`. With no
-`period`, the window is unbounded and every own menu is returned.
+Applies to the `from`/`to` range on both menu reads (`GET /api/menus` and
+`GET /api/menus/details`). With neither bound supplied the window is
+unbounded on that side, so every own menu is a candidate.
 
 ## Enforcement
 - `MenuRepository` intersection query with each bound applied only when
@@ -120,25 +121,28 @@ anything, and drafts are unrestricted.
 Active
 
 ## Statement
-`period=week` resolves to the Monday–Sunday ISO week and `period=month` to the
-first/last calendar day of the requested month, both computed in server (UTC)
-time. The default for `date` is the current server date and for `month` the
-current server month.
+Menu read windows are stated by the caller as explicit dates; the server never
+expands a week or month selector for them. Where the server does default a
+window — `GET /api/menus/details` falling back to the current ISO week
+(Monday–Sunday) when neither `from` nor `to` is supplied — the current date is
+taken from the server (UTC) clock.
 
 ## Rationale
 There is no per-member timezone stored yet; a single, stated clock keeps
-results deterministic and testable.
+results deterministic and testable. Making the caller state dates rather than
+a period keeps the read surface flat and puts no date arithmetic on the
+server, which matters because the AI assistant is a first-class caller.
 
 ## Scope & Exceptions
-Applies to `period=week` and `period=month` defaulting and resolution. Revisit
-if per-member timezones are introduced.
+Applies to any server-side defaulting of a menu read window. Revisit if
+per-member timezones are introduced.
 
 ## Enforcement
-- `MenuQueryFilterResolver` resolves windows using `LocalDate.now(ZoneOffset.UTC)`
-  and ISO week rules.
+- Defaulted windows are resolved using `LocalDate.now(ZoneOffset.UTC)` and
+  ISO week rules.
 
 ## Last Reviewed
-2026-10-10, by zuyzz (backend)
+2026-10-12, by zuyzz (backend)
 
 ---
 

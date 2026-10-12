@@ -3,8 +3,7 @@
 ## Overview
 
 Return a paginated list of the authenticated member's weekly menus, optionally
-filtered by a time window (a week, a month, or an explicit date range) and by
-status.
+filtered by an inclusive date range and by status.
 
 ## Endpoint
 
@@ -28,23 +27,19 @@ No path parameters.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| period | string | No | Time filter selector: `week`, `month`, or `custom`. Omit for no time filter (all own menus). |
-| date | date (`YYYY-MM-DD`) | No | Only with `period=week`. Any day in the target ISO week (Monday–Sunday). Defaults to today. |
-| month | string (`YYYY-MM`) | No | Only with `period=month`. The target calendar month. Defaults to the current month. |
-| from | date (`YYYY-MM-DD`) | Yes when `period=custom` | Inclusive start of the requested range. |
-| to | date (`YYYY-MM-DD`) | Yes when `period=custom` | Inclusive end of the requested range; must be ≥ `from`. |
-| status | string | No | Filter by menu status: `drafted`, `scheduled`, `cancelled`, or `completed`. Combines with the time filter (AND). |
+| from | date (`YYYY-MM-DD`) | No | Inclusive start of the range. Supplying only `from` returns everything at or after it. |
+| to | date (`YYYY-MM-DD`) | No | Inclusive end of the range. Supplying only `to` returns everything at or before it. |
+| status | string | No | Filter by menu status: `drafted`, `scheduled`, `cancelled`, or `completed`. Combines with the range (AND). |
 | page | integer | No | Zero-based page index. Defaults to `0`; must be zero or greater. |
 | size | integer | No | Menus per page. Defaults to `20`; must be between `1` and `100`. |
 | sort | string | No | Sort as `field,direction`. Defaults to `startDate,desc`. |
 
 A menu is included when its `[startDate, endDate]` window intersects the
-requested window (any overlap, inclusive of touching endpoints). Weeks are
-resolved Monday–Sunday; both week and month windows are computed in server
-(UTC) time.
+requested range (any overlap, inclusive of touching endpoints). Each bound is
+applied only when supplied, so omitting both returns every own menu.
 
-`from` and `to` are only valid with `period=custom`; supplying them with any
-other `period` (or none) is rejected with 400.
+There is no `period`, `date` or `month` selector: a caller wanting a week or a
+month states the dates directly (e.g. `?from=2026-10-05&to=2026-10-11`).
 
 ### Request Body
 
@@ -103,7 +98,7 @@ No request body.
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | `period=custom` without `from`/`to`, malformed `date`/`month`, unknown `period`, `from` > `to`, range > 366 days, or `from`/`to` without `period=custom` | Clear message, e.g. `from and to are required when period=custom` |
+| 400 | Malformed `from`/`to`, `from` > `to`, range > 366 days | Clear message, e.g. `from must be on or before to` |
 | 400 | Invalid `status`, `sort`, `page`, or `size` | `Validation failed` |
 | 401 | JWT is missing, invalid, or the account is inactive | `Unauthorized` |
 | 500 | Unexpected server error | `Internal server error` |
@@ -113,15 +108,14 @@ No request body.
 - BR-MENU-001 — results are scoped to the authenticated user; no user ID is
   accepted as a parameter.
 - BR-MENU-002 — a menu is included when its window intersects the requested
-  window (touching endpoints included).
-- BR-MENU-004 — week/month windows are resolved in server (UTC) time.
+  range (touching endpoints included); each bound applies only when supplied.
 
 ## Example
 
 ### Request
 
 ```bash
-curl "/api/menus?period=custom&from=2026-09-01&to=2026-10-15&status=scheduled" \
+curl "/api/menus?from=2026-09-01&to=2026-10-15&status=scheduled" \
   -H "Authorization: Bearer <accessToken>"
 ```
 
