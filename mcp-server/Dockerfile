@@ -9,7 +9,7 @@ WORKDIR /app
 
 # Copy all pom.xml files first for dependency caching
 COPY pom.xml .
-COPY backend/pom.xml backend/pom.xml
+COPY api-server/pom.xml api-server/pom.xml
 COPY mcp-server/pom.xml mcp-server/pom.xml
 RUN mvn -pl mcp-server -am dependency:go-offline -B
 

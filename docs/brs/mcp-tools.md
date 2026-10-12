@@ -26,7 +26,7 @@ accepts a user id or any other identity input, and the backend continues to
 derive identity from the validated JWT (BR-MENU-001, BR-AI-003). A model
 cannot select whose data a tool reads by manipulating arguments.
 
-- Enforcement: `AiToolContext` (backend), allowlisting
+- Enforcement: `AiToolContext` (api-server), allowlisting
   `ToolContextToMcpMetaConverter` + `SyncToolSpecification` meta merge
   (mcp-server), `BackendClient` authorization header; backend JWT filter
   unchanged

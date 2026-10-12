@@ -26,11 +26,11 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * Both-servers end-to-end test (ADR-012): boots postgres + mcp-server + backend in Docker through
- * {@code docker-compose.it.yml}, registers a member through the backend REST API, and then drives
- * the MCP server's {@code /mcp} endpoint with that member's real JWT. The identity chain proven
- * here is the same one the AI chat uses: caller JWT in the request {@code _meta}, forwarded by the
- * MCP server as the Authorization header of the backend REST call.
+ * Both-servers end-to-end test (ADR-012): boots postgres + mcp-server + api-server in Docker
+ * through {@code docker-compose.it.yml}, registers a member through the backend REST API, and then
+ * drives the MCP server's {@code /mcp} endpoint with that member's real JWT. The identity chain
+ * proven here is the same one the AI chat uses: caller JWT in the request {@code _meta}, forwarded
+ * by the MCP server as the Authorization header of the backend REST call.
  */
 class McpMenuEndToEndIntegrationTest {
 
@@ -153,7 +153,7 @@ class McpMenuEndToEndIntegrationTest {
       }
       sleep(2000);
     }
-    throw new AssertionError("backend or mcp-server did not become healthy on the host ports");
+    throw new AssertionError("api-server or mcp-server did not become healthy on the host ports");
   }
 
   private static boolean isHealthy(String base) {

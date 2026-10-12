@@ -1,9 +1,9 @@
 # Both-servers end-to-end stack for McpMenuEndToEndIntegrationTest (ADR-012):
-# postgres + mcp-server + backend on one network. The backend reaches the MCP
-# server by service name through MCP_URL (dev profile, eager client init), and
-# the test drives the MCP server's published loopback port with a real JWT.
+# postgres + mcp-server + api-server on one network. The API server reaches the
+# MCP server by service name through MCP_URL (dev profile, eager client init),
+# and the test drives the MCP server's published loopback port with a real JWT.
 #
-# Build contexts are relative to this file (backend/src/test/resources), so
+# Build contexts are relative to this file (api-server/src/test/resources), so
 # "../../../.." is the repository root — both Dockerfiles need the full
 # multi-module reactor. Images carry their own healthchecks; they are repeated
 # here with a short interval so the test's --wait resolves quickly.
@@ -29,7 +29,7 @@ services:
       context: ../../../..
       dockerfile: mcp-server/Dockerfile
     environment:
-      BACKEND_URL: http://backend:8080
+      BACKEND_URL: http://api-server:8080
     ports:
       - "18081:8081"
     healthcheck:
@@ -47,17 +47,17 @@ services:
       retries: 30
       start_period: 45s
 
-  backend:
+  api-server:
     build:
       context: ../../../..
-      dockerfile: backend/Dockerfile
+      dockerfile: api-server/Dockerfile
     environment:
       SPRING_PROFILES_ACTIVE: dev
       DB_URL: jdbc:postgresql://postgres:5432/vegalife
       DB_USER: vegalife
       DB_PASSWORD: vegalife
-      # Eager MCP client init: the backend refuses to boot until mcp-server is
-      # healthy, which is exactly the production dev-profile contract.
+      # Eager MCP client init: the API server refuses to boot until mcp-server
+      # is healthy, which is exactly the production dev-profile contract.
       MCP_URL: http://mcp-server:8081/mcp
       AI_CHAT_API_KEY: mcp-it-dummy-key-not-a-secret
     ports:

@@ -19,7 +19,7 @@
     <description>Vegalife Project</description>
 
     <modules>
-        <module>backend</module>
+        <module>api-server</module>
         <module>mcp-server</module>
     </modules>
 

@@ -57,8 +57,9 @@ Source-verified Spring AI 1.1.8 / `main` facts (read 2026-10-12):
 ## Decision
 
 1. **Restructure into a multi-module Maven reactor**: a root parent pom
-   (packaging `pom`) with modules `backend` (the existing application,
-   behavior unchanged) and `mcp-server` (new). `mvnw`/`.mvn` stay at the root.
+   (packaging `pom`) with modules `api-server` (the existing application,
+   behavior unchanged, renamed from `backend` so it pairs with `mcp-server`)
+   and `mcp-server` (new). `mvnw`/`.mvn` stay at the root.
 2. **The MCP server is a thin REST adapter** over the backend (`BACKEND_URL`).
    It holds no business rules and no data access; every menu rule and
    ownership check stays in the backend, reached through the existing REST
@@ -121,7 +122,7 @@ Source-verified Spring AI 1.1.8 / `main` facts (read 2026-10-12):
 - ~30 lines of hand-rolled server-side glue (`meta` → `ToolContext`) diverge
   from Spring AI's auto-conversion. **Deletable** once #4773 is fixed upstream;
   noted in code comments.
-- The JWT crosses backend → mcp-server → backend, so a token leaked from the
+- The JWT crosses api-server → mcp-server → api-server, so a token leaked from the
   MCP server is replayable within its 15-minute lifetime (BR-AUTH-009) —
   mitigated by internal-only networking and never logging it.
 - Two services to build, run, and test; CI, Docker, Render, and compose paths
@@ -132,10 +133,10 @@ Source-verified Spring AI 1.1.8 / `main` facts (read 2026-10-12):
 
 ## Verification
 
-- **Phase 3 spike (runtime):** with `backend` + `mcp-server` running, a chat
+- **Phase 3 spike (runtime):** with `api-server` + `mcp-server` running, a chat
   turn carrying a real JWT invokes a tool and only that user's menu rows are
   returned; the token appears in no log line.
-- **Phase 7:** an end-to-end Docker test (postgres + backend + mcp-server)
+- **Phase 7:** an end-to-end Docker test (postgres + api-server + mcp-server)
   seeds a user, calls `/mcp` with a real JWT, and asserts the persisted menu.
 - **Revisit when:** Spring AI fixes #4773 (replace the wrapper with
   auto-configuration), on the Spring Boot 4 migration, or if the MCP server

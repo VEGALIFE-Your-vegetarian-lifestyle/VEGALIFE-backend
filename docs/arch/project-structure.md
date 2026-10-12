@@ -16,14 +16,14 @@ VEGALIFE-backend/
 │   ├── apis/               #   API reference docs
 │   ├── brs/                #   Business constraints
 │   └── feats/              #   Feature specifications
-├── backend/                # The Spring Boot application module
+├── api-server/             # The Spring Boot API application module
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── java/       # Application source code
 │   │   │   └── resources/  # Config: application.properties, Flyway migrations
 │   │   └── test/
 │   │       └── java/       # Tests mirroring src/main structure
-│   ├── Dockerfile          # Backend image (build context = repo root)
+│   ├── Dockerfile          # API image (build context = repo root)
 │   └── pom.xml             # Module build config + dependencies
 ├── mcp-server/             # MCP server module (thin tool adapter, ADR-012)
 │   ├── src/main/java/      # Tool + client code, internal network only
@@ -37,7 +37,7 @@ VEGALIFE-backend/
 ## Source tree
 
 ```
-backend/src/main/java/com/vegalife/
+api-server/src/main/java/com/vegalife/
 ├── VegalifeApplication.java          # Spring Boot entry point
 │
 ├── controller/                       # REST API layer — thin, no business logic
@@ -76,7 +76,7 @@ backend/src/main/java/com/vegalife/
 ## Test tree
 
 ```
-backend/src/test/java/com/vegalife/
+api-server/src/test/java/com/vegalife/
 ├── VegalifeApplicationTest.java          # Context load test (unit)
 │
 ├── unit/                                 # mvn test (Surefire, H2)
@@ -135,7 +135,7 @@ When building a new feature (e.g., "recipes"):
 3. Add `dto/request/CreateRecipeRequest.java` and `dto/response/RecipeResponse.java`.
 4. Add `service/recipe/RecipeService.java` — business logic.
 5. Add `controller/recipe/RecipeController.java` — REST endpoints.
-6. Add matching test classes under `backend/src/test/java/com/vegalife/`.
-7. Add a Flyway migration in `backend/src/main/resources/db/migration/` for the table.
+6. Add matching test classes under `api-server/src/test/java/com/vegalife/`.
+7. Add a Flyway migration in `api-server/src/main/resources/db/migration/` for the table.
 
 Each layer can be built and tested independently before wiring them together.

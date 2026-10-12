@@ -50,8 +50,8 @@ menus by hand.
 
 ### Functional Requirements
 
-- [ ] FR-001: A multi-module Maven reactor (`backend`, `mcp-server`) builds
-      from the root with `./mvnw clean verify`; `backend` behavior is
+- [ ] FR-001: A multi-module Maven reactor (`api-server`, `mcp-server`) builds
+      from the root with `./mvnw clean verify`; `api-server` behavior is
       unchanged.
 - [ ] FR-002: The MCP server exposes exactly four tools — `get_menu`,
       `create_menu`, `update_menu`, `schedule_menu` — over Streamable HTTP at
@@ -107,7 +107,7 @@ tool-by-tool contract is in `docs/apis/mcp/post-mcp.md`.
   real menu detail (or an honest "none for this week") in the deployed
   environment.
 - Issues #17/#18/#19 close with all four tools callable end to end.
-- The end-to-end Docker test (postgres + backend + mcp-server) is green in
+- The end-to-end Docker test (postgres + api-server + mcp-server) is green in
   the integration profile.
 
 ## Acceptance criteria

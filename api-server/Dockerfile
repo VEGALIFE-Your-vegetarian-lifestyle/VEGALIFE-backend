@@ -1,7 +1,7 @@
 # =============================================================================
 # Build Stage
 # Build context is the repository root: the multi-module reactor needs the
-# parent pom plus the backend module pom (ADR-012).
+# parent pom plus the api-server module pom (ADR-012).
 # =============================================================================
 FROM maven:3.9-eclipse-temurin-21-alpine AS builder
 
@@ -11,13 +11,13 @@ WORKDIR /app
 # reactor (all <modules>) before applying -pl, and this keeps the
 # dependency cache keyed on the poms (ADR-012)
 COPY pom.xml .
-COPY backend/pom.xml backend/pom.xml
+COPY api-server/pom.xml api-server/pom.xml
 COPY mcp-server/pom.xml mcp-server/pom.xml
-RUN mvn -pl backend -am dependency:go-offline -B
+RUN mvn -pl api-server -am dependency:go-offline -B
 
 # Copy source and build
-COPY backend/src backend/src
-RUN mvn -pl backend clean package -DskipTests -B
+COPY api-server/src api-server/src
+RUN mvn -pl api-server clean package -DskipTests -B
 
 # =============================================================================
 # Runtime Stage
@@ -34,7 +34,7 @@ RUN addgroup -g 1001 -S appgroup && \
 WORKDIR /app
 
 # Copy built jar from builder stage
-COPY --from=builder /app/backend/target/*.jar app.jar
+COPY --from=builder /app/api-server/target/*.jar app.jar
 
 # Change ownership
 RUN chown appuser:appgroup app.jar
