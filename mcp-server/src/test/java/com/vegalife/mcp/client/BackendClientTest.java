@@ -54,12 +54,12 @@ class BackendClientTest {
         "{\"success\":true,\"message\":\"Menus retrieved successfully\",\"data\":{\"content\":[]}}";
     backend.stubFor(
         get(urlPathEqualTo("/api/menus"))
-            .withQueryParam("period", equalTo("week"))
-            .withQueryParam("date", equalTo("2026-10-19"))
+            .withQueryParam("from", equalTo("2026-10-05"))
+            .withQueryParam("to", equalTo("2026-10-11"))
             .withHeader("Authorization", equalTo("Bearer jwt-abc"))
             .willReturn(okJson(envelope)));
 
-    String body = client.getMenus(CALLER, Map.of("period", "week", "date", "2026-10-19"));
+    String body = client.getMenus(CALLER, Map.of("from", "2026-10-05", "to", "2026-10-11"));
 
     assertEquals(envelope, body);
     // The JWT may only ever appear as the Authorization header, never in the URL.

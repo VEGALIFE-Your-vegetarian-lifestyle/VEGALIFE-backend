@@ -6,8 +6,10 @@ Return the authenticated member's menus intersecting a date range, each with
 its full day-by-day meal detail and embedded dish information, in a single
 call. Accepts a `menuId` to read exactly one menu's meals.
 
-This endpoint replaces `GET /api/menus/{menuId}`, which no longer exists, and
-is the backing endpoint for the MCP `get_meal_plan` tool.
+This endpoint replaces `GET /api/menus/{menuId}`, which no longer serves
+`GET` (the path still backs `PATCH /api/menus/{menuId}` and
+`POST /api/menus/{menuId}/status`, so a `GET` there returns `405 Method Not
+Allowed`), and is the backing endpoint for the MCP `get_meal_plan` tool.
 
 ## Endpoint
 
@@ -132,6 +134,7 @@ No request body.
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
 | 400 | Malformed `from`/`to`, `from` > `to`, range > 366 days | Clear message, e.g. `from must be on or before to` |
+| 400 | `menuId` present but not a valid UUID | `Validation failed` |
 | 401 | JWT is missing, invalid, or the account is inactive | `Unauthorized` |
 | 404 | `menuId` does not exist or belongs to another user | `Menu not found` |
 | 500 | Unexpected server error | `Internal server error` |

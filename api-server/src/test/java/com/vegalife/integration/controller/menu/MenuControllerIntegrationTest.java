@@ -446,6 +446,20 @@ class MenuControllerIntegrationTest {
   }
 
   @Test
+  void getIndividualMenuRouteHasNoGetHandler() throws Exception {
+    // FR-009: GET /api/menus/{menuId} was deleted; /details?menuId= is its replacement.
+    // The path itself stays registered for PATCH and POST .../status, so Spring answers
+    // 405 Method Not Allowed rather than 404 — the GET method is what's gone.
+    Menu menu = createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.drafted);
+
+    mockMvc
+        .perform(
+            get("/api/menus/{menuId}", menu.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isMethodNotAllowed());
+  }
+
+  @Test
   void getMealPlans_menuWithNoDetailsReturnsEmptyDays() throws Exception {
     Menu menu = createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.drafted);
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress
+Implemented
 
 ## Author / owner
 
@@ -62,58 +62,60 @@ request — "give me 2026-09-01 to 2026-10-15" — is exactly the one that fails
 
 ### Functional Requirements
 
-- [ ] FR-001: `GET /api/menus` accepts `from`, `to`, `status`, `page`, `size`
+- [x] FR-001: `GET /api/menus` accepts `from`, `to`, `status`, `page`, `size`
       and `sort`. The `period`, `date` and `month` parameters are removed.
-- [ ] FR-002: On `GET /api/menus`, `from` and `to` are each independently
+- [x] FR-002: On `GET /api/menus`, `from` and `to` are each independently
       optional: `from` alone bounds the range from below, `to` alone from
       above, and neither leaves the window unbounded. `from > to` and a range
       over 366 days are 400s, unchanged from #126.
-- [ ] FR-003: `GET /api/menus/details` accepts `from`, `to` and `menuId`, all
+- [x] FR-003: `GET /api/menus/details` accepts `from`, `to` and `menuId`, all
       optional.
-- [ ] FR-004: When `menuId` is supplied to `/details`, it alone selects the
+- [x] FR-004: When `menuId` is supplied to `/details`, it alone selects the
       menu — `from`, `to` and `status` are ignored — and the response is that
       one menu's detail. A missing or foreign id is a 404 (BR-MENU-001).
-- [ ] FR-005: When `menuId` is absent and neither `from` nor `to` is supplied,
+- [x] FR-005: When `menuId` is absent and neither `from` nor `to` is supplied,
       `/details` defaults to the current ISO week (Monday–Sunday, server UTC).
-- [ ] FR-006: When `from` and/or `to` is supplied to `/details`, the window is
+- [x] FR-006: When `from` and/or `to` is supplied to `/details`, the window is
       applied as in BR-MENU-002 (intersection, inclusive endpoints, each bound
       independently optional).
-- [ ] FR-007: `/details` returns every matching menu with its `days[]`, each
+- [x] FR-007: `/details` returns every matching menu with its `days[]`, each
       day carrying its `meals[]`, each meal carrying `mealType`, `servings`
       and an embedded `dish` object of `{id, name, description, imageUrl,
       cuisineType}`.
-- [ ] FR-008: `/details` returns `ApiResponse<List<MenuMealPlanResponse>>` —
+- [x] FR-008: `/details` returns `ApiResponse<List<MenuMealPlanResponse>>` —
       a plain list, no page metadata — ordered by `startDate` ascending.
-- [ ] FR-009: `GET /api/menus/{menuId}` is removed; `/details?menuId=` is its
-      only replacement.
-- [ ] FR-010: The MCP server exposes a fifth tool, `get_meal_plan(from, to,
+- [x] FR-009: `GET /api/menus/{menuId}` is removed; `/details?menuId=` is its
+      only replacement. The path stays registered for `PATCH` and
+      `POST .../status`, so a `GET` on it is `405 Method Not Allowed` rather
+      than `404` — what's gone is the method, not the route.
+- [x] FR-010: The MCP server exposes a fifth tool, `get_meal_plan(from, to,
       menuId)`, whose parameters map 1:1 onto `/details` with no defaults or
       translation applied at the tool layer.
-- [ ] FR-011: `get_menu(from, to, status, page, size, sort)` mirrors
+- [x] FR-011: `get_menu(from, to, status, page, size, sort)` mirrors
       `GET /api/menus` and nothing else. It takes no `menuId`, and its
       "deepen a single match into detail" step is removed — `get_meal_plan`
       owns detail.
-- [ ] FR-012: `get_menu` relays the backend's paginated
+- [x] FR-012: `get_menu` relays the backend's paginated
       `{success, message, data: {content[], totalElements, totalPages}}`
       envelope unchanged, so the tool result always says whether more menus
       exist beyond the returned page.
-- [ ] FR-013: `update_menu`'s BR-MCP-005 pre-check keeps working after
+- [x] FR-013: `update_menu`'s BR-MCP-005 pre-check keeps working after
       `period` is removed from the backend.
 
 ### Non-Functional Requirements
 
-- [ ] NFR-SEC-001: Every `/details` read is scoped to the JWT's user id; no
+- [x] NFR-SEC-001: Every `/details` read is scoped to the JWT's user id; no
       filter combination can reach another user's menus, and a foreign
       `menuId` is a 404 rather than a 403 (BR-MENU-001).
-- [ ] NFR-PERF-001: `/details` loads `menu_detail` with a fetch-join on
+- [x] NFR-PERF-001: `/details` loads `menu_detail` with a fetch-join on
       `dish`, so one call is a bounded number of queries rather than
       `1 + (7 × meals)` lazy loads. The same fix removes the N+1 from the
       write paths' detail assembly.
-- [ ] NFR-MAINT-001: Window resolution stays in `MenuQueryFilterResolver`;
+- [x] NFR-MAINT-001: Window resolution stays in `MenuQueryFilterResolver`;
       the controller only maps parameters to a filter object.
-- [ ] NFR-MAINT-002: `/details` and `GET /api/menus` share one resolver and
+- [x] NFR-MAINT-002: `/details` and `GET /api/menus` share one resolver and
       one specification, so the two reads cannot drift on window semantics.
-- [ ] NFR-TEST-001: Unit tests cover both bounds being optional on `/details`
+- [x] NFR-TEST-001: Unit tests cover both bounds being optional on `/details`
       and the default-week rule; integration tests cover `/details` by range,
       by `menuId`, and the 404 on a foreign id.
 
@@ -158,27 +160,28 @@ is replaced by the same flat `from`/`to` pair the backend now takes.
 full day-by-day plan for any date range in one call, **so that** the answer
 names real dishes instead of a list of opaque menu ids.
 
-- [ ] Given menus spanning several weeks, when I call `/details` with a range
+- [x] Given menus spanning several weeks, when I call `/details` with a range
       covering them, then every one arrives with `days[]` and `meals[]`
       populated, each meal carrying a full `dish` object.
-- [ ] Given no `from` and no `to`, when I call `/details`, then it returns the
+- [x] Given no `from` and no `to`, when I call `/details`, then it returns the
       current ISO week's menus.
-- [ ] Given a `menuId`, when I call `/details?menuId=`, then that menu's
+- [x] Given a `menuId`, when I call `/details?menuId=`, then that menu's
       detail is returned regardless of any `from`/`to` supplied alongside it.
-- [ ] Given another user's `menuId`, when I call `/details?menuId=`, then I
+- [x] Given another user's `menuId`, when I call `/details?menuId=`, then I
       get 404 and no data.
-- [ ] Given a menu whose week straddles a month boundary, when I request
+- [x] Given a menu whose week straddles a month boundary, when I request
       either adjacent month on `GET /api/menus?from&to`, then it appears in
       both.
-- [ ] Given the assistant asks about a week holding two menus, when it calls
+- [x] Given the assistant asks about a week holding two menus, when it calls
       `get_meal_plan`, then both arrive with meals — the case that today
       returns summaries only.
-- [ ] Given the assistant asks which menus exist, when it calls `get_menu`,
+- [x] Given the assistant asks which menus exist, when it calls `get_menu`,
       then it receives the paginated summary payload with `totalElements`, and
       no `menuId` parameter exists on the tool.
-- [ ] Given `GET /api/menus/{menuId}`, when any caller uses it, then it is
-      gone (404 from the routing layer) and `/details?menuId=` is the
-      documented replacement.
+- [x] Given `GET /api/menus/{menuId}`, when any caller uses it, then the method
+      is gone (`405 Method Not Allowed` — the path still serves `PATCH` and
+      `POST .../status`) and `/details?menuId=` is the documented
+      replacement.
 
 ## Risks / open questions
 
