@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-013](013-serve-ai-tools-in-process.md) on 2026-10-12.
+
+The tool surface and the tool-layer rules below survive unchanged; what was
+reversed is the separate `mcp-server` and the MCP transport. The body is left
+as written — the reasoning at the time is the record.
 
 ## Date
 
