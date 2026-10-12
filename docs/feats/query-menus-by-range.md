@@ -2,7 +2,25 @@
 
 ## Status
 
-Approved
+Superseded — see `docs/feats/meal-plan-detail-query.md`
+
+## What superseded it
+
+This spec shipped (`GET /api/menus` plus `GET /api/menus/{menuId}`), then was
+partially superseded by `docs/feats/meal-plan-detail-query.md` (#126's
+follow-up). That spec keeps this one's overlap predicate and range limits
+(BR-MENU-002, FR-005, FR-006) and supersedes:
+
+- the `period`/`date`/`month` selectors (FR-001, FR-002, FR-003, FR-009) —
+  replaced by a flat `from`/`to` pair where each bound is independently
+  optional, because the most natural request under this spec
+  (`?from=&to=` with no `period`) returned 400;
+- `GET /api/menus/{menuId}` (FR-010) — replaced by
+  `GET /api/menus/details?menuId=`.
+
+Its FRs are left below as written rather than rewritten, so this document
+continues to record what was actually specified and shipped in the first
+pass.
 
 ## Author / owner
 

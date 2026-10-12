@@ -4,9 +4,13 @@ import com.vegalife.dto.request.menu.CreateMenuRequest;
 import com.vegalife.dto.request.menu.MealRequest;
 import com.vegalife.dto.request.menu.MenuDayRequest;
 import com.vegalife.dto.request.menu.UpdateMenuRequest;
+import com.vegalife.dto.response.menu.DishResponse;
+import com.vegalife.dto.response.menu.MealDetailResponse;
 import com.vegalife.dto.response.menu.MealResponse;
 import com.vegalife.dto.response.menu.MenuDayResponse;
 import com.vegalife.dto.response.menu.MenuDetailResponse;
+import com.vegalife.dto.response.menu.MenuMealPlanDayResponse;
+import com.vegalife.dto.response.menu.MenuMealPlanResponse;
 import com.vegalife.dto.response.menu.MenuSummaryResponse;
 import com.vegalife.model.menu.Menu;
 import com.vegalife.model.menu.MenuDetail;
@@ -148,18 +152,50 @@ public class MenuService {
   }
 
   /**
-   * BR-MENU-001: one owned menu with its days, ordered by date and meal type. A missing or foreign
-   * id is a 404, never 403.
+   * BR-MENU-001 / BR-MENU-002: the caller's meal plan over the filter window — every intersecting
+   * menu with its days, meals and dishes, ordered by start date. A {@code menuId} selects exactly
+   * one menu and overrides the window entirely, so a caller holding an id never has to work out
+   * which range would contain it; a missing or foreign id is a 404, never a 403.
    */
   @Transactional(readOnly = true)
-  public MenuDetailResponse getMenu(UUID userId, UUID menuId) {
-    Menu menu =
-        menuRepository
-            .findByIdAndUserId(menuId, userId)
-            .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
+  public List<MenuMealPlanResponse> listMealPlans(
+      UUID userId, MenuQueryFilter filter, UUID menuId) {
+    if (menuId != null) {
+      Menu menu =
+          menuRepository
+              .findByIdAndUserId(menuId, userId)
+              .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
+      return List.of(toMealPlan(menu, detailsForMenus(List.of(menu))));
+    }
 
-    List<MenuDetail> details = menuDetailRepository.findByMenuIdOrderByDateAscMealTypeAsc(menuId);
-    return toDetail(menu, details);
+    List<Menu> menus =
+        menuRepository.findAll(
+            MenuSpecifications.ownedByWithinWindowAndStatus(
+                userId, filter.getFrom(), filter.getTo(), null),
+            Sort.by(Sort.Direction.ASC, "startDate"));
+    if (menus.isEmpty()) {
+      return List.of();
+    }
+
+    Map<UUID, List<MenuDetail>> byMenuId =
+        detailsForMenus(menus).stream()
+            .collect(
+                Collectors.groupingBy(
+                    MenuDetail::getMenuId, LinkedHashMap::new, Collectors.toList()));
+    return menus.stream()
+        .map(menu -> toMealPlan(menu, byMenuId.getOrDefault(menu.getId(), List.of())))
+        .toList();
+  }
+
+  /**
+   * Loads the days of the given menus with each dish already fetched, in one query. An empty set
+   * short-circuits because {@code IN ()} is not valid JPQL.
+   */
+  private List<MenuDetail> detailsForMenus(List<Menu> menus) {
+    if (menus.isEmpty()) {
+      return List.of();
+    }
+    return menuDetailRepository.findByMenuIdInWithDish(menus.stream().map(Menu::getId).toList());
   }
 
   /**
@@ -303,6 +339,51 @@ public class MenuService {
         .dishId(detail.getDish().getId())
         .dishName(detail.getDish().getName())
         .servings(detail.getServings())
+        .build();
+  }
+
+  private MenuMealPlanResponse toMealPlan(Menu menu, List<MenuDetail> details) {
+    Map<LocalDate, List<MenuDetail>> byDate = new LinkedHashMap<>();
+    for (MenuDetail detail : details) {
+      byDate.computeIfAbsent(detail.getDate(), key -> new ArrayList<>()).add(detail);
+    }
+    List<MenuMealPlanDayResponse> days =
+        byDate.entrySet().stream()
+            .map(
+                entry ->
+                    MenuMealPlanDayResponse.builder()
+                        .date(entry.getKey())
+                        .meals(entry.getValue().stream().map(this::toMealDetail).toList())
+                        .build())
+            .toList();
+
+    return MenuMealPlanResponse.builder()
+        .id(menu.getId())
+        .startDate(menu.getStartDate())
+        .endDate(menu.getEndDate())
+        .status(menu.getStatus().name())
+        .notes(menu.getNotes())
+        .dietaryPreferences(menu.getDietaryPreferences())
+        .createdAt(menu.getCreatedAt())
+        .updatedAt(menu.getUpdatedAt())
+        .days(days)
+        .build();
+  }
+
+  /** The dish is embedded in full rather than referenced by id, so a plan can be read aloud. */
+  private MealDetailResponse toMealDetail(MenuDetail detail) {
+    Dish dish = detail.getDish();
+    return MealDetailResponse.builder()
+        .mealType(detail.getMealType().name())
+        .servings(detail.getServings())
+        .dish(
+            DishResponse.builder()
+                .id(dish.getId())
+                .name(dish.getName())
+                .description(dish.getDescription())
+                .imageUrl(dish.getImageUrl())
+                .cuisineType(dish.getCuisineType())
+                .build())
         .build();
   }
 

@@ -54,12 +54,12 @@ class BackendClientTest {
         "{\"success\":true,\"message\":\"Menus retrieved successfully\",\"data\":{\"content\":[]}}";
     backend.stubFor(
         get(urlPathEqualTo("/api/menus"))
-            .withQueryParam("period", equalTo("week"))
-            .withQueryParam("date", equalTo("2026-10-19"))
+            .withQueryParam("from", equalTo("2026-10-05"))
+            .withQueryParam("to", equalTo("2026-10-11"))
             .withHeader("Authorization", equalTo("Bearer jwt-abc"))
             .willReturn(okJson(envelope)));
 
-    String body = client.getMenus(CALLER, Map.of("period", "week", "date", "2026-10-19"));
+    String body = client.getMenus(CALLER, Map.of("from", "2026-10-05", "to", "2026-10-11"));
 
     assertEquals(envelope, body);
     // The JWT may only ever appear as the Authorization header, never in the URL.
@@ -69,15 +69,17 @@ class BackendClientTest {
   }
 
   @Test
-  void getMenuByIdTargetsTheMenuPath() {
+  void getMealPlanTargetsTheDetailsPath() {
     backend.stubFor(
-        get(urlPathEqualTo("/api/menus/11111111-1111-1111-1111-111111111111"))
+        get(urlPathEqualTo("/api/menus/details"))
+            .withQueryParam("menuId", equalTo("11111111-1111-1111-1111-111111111111"))
             .withHeader("Authorization", equalTo("Bearer jwt-abc"))
-            .willReturn(okJson("{\"success\":true,\"data\":{}}")));
+            .willReturn(okJson("{\"success\":true,\"data\":[]}")));
 
-    String body = client.getMenuById(CALLER, "11111111-1111-1111-1111-111111111111");
+    String body =
+        client.getMealPlan(CALLER, Map.of("menuId", "11111111-1111-1111-1111-111111111111"));
 
-    assertEquals("{\"success\":true,\"data\":{}}", body);
+    assertEquals("{\"success\":true,\"data\":[]}", body);
   }
 
   @Test

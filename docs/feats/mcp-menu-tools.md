@@ -7,14 +7,16 @@ Approved
 ## Author / owner
 
 Backend team; scope confirmed with the product owner (2026-10-12): four menu
-tools, JWT-based identity, thin adapters over REST.
+tools, JWT-based identity, thin adapters over REST. Extended 2026-10-12 by
+`docs/feats/meal-plan-detail-query.md`, which adds `get_meal_plan` (five
+tools) and narrows `get_menu`.
 
 ## Summary
 
-Expose the four weekly-menu operations (`get_menu`, `create_menu`,
-`update_menu`, `schedule_menu`) as MCP tools on an internal MCP server, and
-wire the existing AI chat so both its JSON and SSE paths can call them while
-acting as the logged-in user.
+Expose the weekly-menu operations (`get_menu`, `get_meal_plan`,
+`create_menu`, `update_menu`, `schedule_menu`) as MCP tools on an internal MCP
+server, and wire the existing AI chat so both its JSON and SSE paths can call
+them while acting as the logged-in user.
 
 ## Problem / motivation
 
@@ -53,12 +55,15 @@ menus by hand.
 - [ ] FR-001: A multi-module Maven reactor (`api-server`, `mcp-server`) builds
       from the root with `./mvnw clean verify`; `api-server` behavior is
       unchanged.
-- [ ] FR-002: The MCP server exposes exactly four tools — `get_menu`,
-      `create_menu`, `update_menu`, `schedule_menu` — over Streamable HTTP at
-      `/mcp`, port 8081, internal network only.
-- [ ] FR-003: `get_menu` returns the caller's matching menu(s); for the
-      default (current week) it returns the full 7-day meal detail of the
-      best match, not just the list summary.
+- [ ] FR-002: The MCP server exposes exactly five tools — `get_menu`,
+      `get_meal_plan`, `create_menu`, `update_menu`, `schedule_menu` — over
+      Streamable HTTP at `/mcp`, port 8081, internal network only.
+      (`get_meal_plan` was added by `docs/feats/meal-plan-detail-query.md`,
+      which also narrowed `get_menu`; see FR-003.)
+- [ ] FR-003: `get_menu` mirrors `GET /api/menus` and nothing else: a
+      paginated list of menu summaries with `totalElements`/`totalPages`
+      relayed unchanged. It takes no `menuId` and performs no second detail
+      call — day-by-day meal detail is `get_meal_plan`'s sole job.
 - [ ] FR-004: `create_menu` and `update_menu` forward an LLM-composed 7-day
       `days[]` payload to `POST /api/menus` / `PATCH /api/menus/{menuId}`;
       all BR-MENU-005 structural validation stays in the backend.
@@ -131,7 +136,7 @@ chat — as myself, with no one else's data reachable.
       menu is ever touched.
 - [ ] Given a chat turn with 3 tool calls, when it completes, then quota
       increased by exactly 1 (BR-MCP-003).
-- [ ] Given the tool registry, when listed, then exactly four tools exist
+- [ ] Given the tool registry, when listed, then exactly five tools exist
       (BR-MCP-002).
 
 ## Risks / open questions

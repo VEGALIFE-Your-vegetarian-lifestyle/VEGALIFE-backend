@@ -74,9 +74,12 @@ Source-verified Spring AI 1.1.8 / `main` facts (read 2026-10-12):
    attaches `Authorization: Bearer <jwt>` to the backend REST call. Identity
    is never a tool parameter and never model-visible.
 4. **Stay on Spring AI 1.1.8.**
-5. **Expose exactly four tools**: `get_menu`, `create_menu`, `update_menu`,
-   `schedule_menu` (BR-MCP-002). Dish/recipe/shop discovery is out of scope
-   for this branch.
+5. **Expose exactly five tools**: `get_menu`, `get_meal_plan`, `create_menu`,
+   `update_menu`, `schedule_menu` (BR-MCP-002). Dish/recipe/shop discovery is
+   out of scope for this branch. Amended 2026-10-12: originally four;
+   `get_meal_plan` was added and `get_menu` narrowed by
+   `docs/feats/meal-plan-detail-query.md` (#126), because a list-only
+   `get_menu` could not answer "what am I eating this week?" with dishes.
 6. **Fallback, only if the runtime spike disproves the chain**: an internal
    service credential plus a trusted `X-User-Id` header, permitted only
    because the backend still derives and enforces ownership server-side

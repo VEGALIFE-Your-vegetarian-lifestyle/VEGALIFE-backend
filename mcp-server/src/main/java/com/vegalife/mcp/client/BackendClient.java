@@ -51,17 +51,26 @@ public class BackendClient {
         "list menus");
   }
 
-  /** {@code GET /api/menus/{menuId}}. */
-  public String getMenuById(CallerContext caller, String menuId) {
+  /**
+   * {@code GET /api/menus/details} with the given (from/to/menuId) query parameters. Unlike the
+   * list, this returns every matching menu with its full day-by-day meal detail, so the backend
+   * does the assembling rather than the caller making one call per menu.
+   */
+  public String getMealPlan(CallerContext caller, Map<String, String> query) {
     return execute(
         () ->
             restClient
                 .get()
-                .uri("/api/menus/{menuId}", menuId)
+                .uri(
+                    uriBuilder -> {
+                      uriBuilder.path("/api/menus/details");
+                      query.forEach(uriBuilder::queryParam);
+                      return uriBuilder.build();
+                    })
                 .headers(headers -> headers.setBearerAuth(caller.jwt()))
                 .retrieve()
                 .body(String.class),
-        "get menu " + menuId);
+        "get meal plan");
   }
 
   /** {@code POST /api/menus} with a JSON request body. */

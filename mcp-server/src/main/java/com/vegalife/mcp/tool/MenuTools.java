@@ -8,12 +8,16 @@ import com.vegalife.mcp.client.BackendCallException;
 import com.vegalife.mcp.client.BackendClient;
 import com.vegalife.mcp.identity.CallerContext;
 import com.vegalife.mcp.identity.MissingCallerIdentityException;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.TemporalAdjusters;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -28,11 +32,10 @@ import org.springframework.ai.tool.annotation.ToolParam;
  */
 public class MenuTools {
 
-  /** Result text for an empty week, as promised by the tool contract. */
-  static final String NO_MENU_RESULT = "no menu for that week";
-
   private static final Set<String> STATUSES =
       Set.of("drafted", "scheduled", "cancelled", "completed");
+
+  private static final Set<String> SORT_DIRECTIONS = Set.of("asc", "desc");
 
   /** Refusal text of the update_menu pre-check (BR-MCP-005). */
   static final String UPDATE_REFUSED =
@@ -49,39 +52,42 @@ public class MenuTools {
   @Tool(
       name = "get_menu",
       description =
-          "Read the caller's weekly meal menu(s). Without menuId, lists the menus of one week"
-              + " (the week containing the given date, or the current week in server UTC) and"
-              + " returns the full 7-day detail when exactly one menu matches; zero matches"
-              + " returns an explicit no-menu result, several matches return the list summary."
-              + " With menuId, returns that menu's 7-day detail directly. The caller's identity"
-              + " comes from their session and is never a parameter.")
+          "List the caller's weekly menus over a date range. Mirrors GET /api/menus exactly:"
+              + " from/to are inclusive bounds and either may be supplied alone, status filters by"
+              + " drafted, scheduled, cancelled or completed, and the result is a paginated list of"
+              + " menu summaries ordered by startDate descending. Each summary carries the menu's"
+              + " id, window, status and notes but not its meals — call get_meal_plan for the"
+              + " day-by-day dishes. The caller's identity comes from their session and is never a"
+              + " parameter.")
   public String getMenu(
       @ToolParam(
               required = false,
-              description =
-                  "Any date in the target week, format YYYY-MM-DD. Omit for the current"
-                      + " week (server UTC).")
-          String week,
+              description = "Inclusive start of the range, format YYYY-MM-DD. Omit for unbounded.")
+          String from,
+      @ToolParam(
+              required = false,
+              description = "Inclusive end of the range, format YYYY-MM-DD. Omit for unbounded.")
+          String to,
       @ToolParam(
               required = false,
               description =
-                  "Filter by status: drafted, scheduled, cancelled or completed. Omit"
-                      + " for any status.")
+                  "Filter by menu status: drafted, scheduled, cancelled or completed. Omit for"
+                      + " any status.")
           String status,
+      @ToolParam(required = false, description = "Zero-based page index. Omit for 0.") Integer page,
+      @ToolParam(required = false, description = "Menus per page, 1 to 100. Omit for 20.")
+          Integer size,
       @ToolParam(
               required = false,
-              description = "UUID of a specific owned menu to read directly, skipping discovery.")
-          String menuId,
+              description = "Sort as 'field,direction', e.g. 'startDate,desc'.")
+          String sort,
       ToolContext toolContext) {
     try {
       CallerContext caller = CallerContext.require(toolContext);
 
-      if (menuId != null && !menuId.isBlank()) {
-        return backendClient.getMenuById(caller, menuId.trim());
-      }
-
-      if (week != null && !week.isBlank() && !isIsoDate(week.trim())) {
-        return "error: week must be a date in YYYY-MM-DD format";
+      String badDate = firstMalformedDate(from, to);
+      if (badDate != null) {
+        return "error: " + badDate + " must be a date in YYYY-MM-DD format";
       }
 
       String statusFilter = (status == null || status.isBlank()) ? null : status.trim();
@@ -89,17 +95,79 @@ public class MenuTools {
         return "error: status must be one of drafted, scheduled, cancelled, completed";
       }
 
-      Map<String, String> query = new LinkedHashMap<>();
-      query.put("period", "week");
-      if (week != null && !week.isBlank()) {
-        query.put("date", week.trim());
-      }
-      if (statusFilter != null) {
-        query.put("status", statusFilter);
+      String badSort = checkSort(sort);
+      if (badSort != null) {
+        return "error: " + badSort;
       }
 
-      String listJson = backendClient.getMenus(caller, query);
-      return deepenUniqueMatch(caller, listJson);
+      Map<String, String> query = new LinkedHashMap<>();
+      putIfPresent(query, "from", from);
+      putIfPresent(query, "to", to);
+      putIfPresent(query, "status", statusFilter);
+      if (page != null) {
+        query.put("page", Integer.toString(Math.max(0, page)));
+      }
+      if (size != null) {
+        query.put("size", Integer.toString(Math.min(100, Math.max(1, size))));
+      }
+      putIfPresent(query, "sort", sort);
+
+      return backendClient.getMenus(caller, query);
+    } catch (MissingCallerIdentityException e) {
+      return "error: caller identity missing (" + e.getMessage() + ")";
+    } catch (BackendCallException e) {
+      return e.asToolMessage();
+    }
+  }
+
+  @Tool(
+      name = "get_meal_plan",
+      description =
+          "Read the caller's meal plan over a date range: every menu intersecting the range, each"
+              + " with its days, meals and the full dish behind each meal (name, description,"
+              + " image, cuisine). from/to are inclusive bounds and either may be supplied alone;"
+              + " with neither, the range defaults to the current week (Monday to Sunday, server"
+              + " UTC). menuId reads exactly one menu's meals and overrides any range supplied"
+              + " with it. There is no status filter — every returned menu carries its own status."
+              + " Use get_menu instead for a paginated list of menu summaries without meals. The"
+              + " caller's identity comes from their session and is never a parameter.")
+  public String getMealPlan(
+      @ToolParam(
+              required = false,
+              description =
+                  "Inclusive start of the range, format YYYY-MM-DD. Omit for the current"
+                      + " week when to is also omitted.")
+          String from,
+      @ToolParam(
+              required = false,
+              description =
+                  "Inclusive end of the range, format YYYY-MM-DD. Omit for the current"
+                      + " week when from is also omitted.")
+          String to,
+      @ToolParam(
+              required = false,
+              description = "UUID of one specific owned menu to read directly. Overrides from/to.")
+          String menuId,
+      ToolContext toolContext) {
+    try {
+      CallerContext caller = CallerContext.require(toolContext);
+
+      String badDate = firstMalformedDate(from, to);
+      if (badDate != null) {
+        return "error: " + badDate + " must be a date in YYYY-MM-DD format";
+      }
+
+      String id = menuId == null ? "" : menuId.trim();
+      if (!id.isEmpty() && !isUuid(id)) {
+        return "error: menuId must be a UUID";
+      }
+
+      Map<String, String> query = new LinkedHashMap<>();
+      putIfPresent(query, "from", from);
+      putIfPresent(query, "to", to);
+      putIfPresent(query, "menuId", id);
+
+      return backendClient.getMealPlan(caller, query);
     } catch (MissingCallerIdentityException e) {
       return "error: caller identity missing (" + e.getMessage() + ")";
     } catch (BackendCallException e) {
@@ -239,12 +307,19 @@ public class MenuTools {
 
   /**
    * BR-MCP-005 pre-check: update_menu may target only the caller's own current-week drafted menu.
-   * The current-week window is whatever the backend returns for {@code period=week} — server UTC
-   * stays the single time authority; this method only compares membership and status. Returns null
-   * when the pre-check passes, or the refusal message.
+   * The backend no longer resolves a week for us (BR-MENU-002 is a flat from/to pair), so this
+   * method computes the Monday–Sunday window of the current server-UTC day and asks for that range;
+   * it only compares membership and status. Returns null when the pre-check passes, or the refusal
+   * message.
    */
   private String preCheckCurrentWeekDraft(CallerContext caller, String menuId) {
-    String listJson = backendClient.getMenus(caller, Map.of("period", "week", "status", "drafted"));
+    LocalDate today = LocalDate.now(ZoneOffset.UTC);
+    Map<String, String> query = new LinkedHashMap<>();
+    query.put("from", iso(today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))));
+    query.put("to", iso(today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY))));
+    query.put("status", "drafted");
+
+    String listJson = backendClient.getMenus(caller, query);
     JsonNode content = listContent(listJson);
     if (content == null) {
       return UPDATE_REFUSED + " (the current-week draft could not be verified)";
@@ -255,6 +330,41 @@ public class MenuTools {
       }
     }
     return UPDATE_REFUSED;
+  }
+
+  /** Returns the name of the first bound that is present but not an ISO date, else null. */
+  private static String firstMalformedDate(String from, String to) {
+    if (from != null && !from.isBlank() && !isIsoDate(from.trim())) {
+      return "from";
+    }
+    if (to != null && !to.isBlank() && !isIsoDate(to.trim())) {
+      return "to";
+    }
+    return null;
+  }
+
+  /**
+   * Mirrors the backend's sort parsing closely enough to fail fast: {@code property} or {@code
+   * property,asc|desc}, nothing else. Returns an error message, or null when acceptable.
+   */
+  private static String checkSort(String sort) {
+    if (sort == null || sort.isBlank()) {
+      return null;
+    }
+    String[] parts = sort.split(",");
+    if (parts.length == 0 || parts.length > 2 || parts[0].trim().isEmpty()) {
+      return "sort must be in the form 'property,asc|desc'";
+    }
+    if (parts.length == 2 && !SORT_DIRECTIONS.contains(parts[1].trim().toLowerCase())) {
+      return "sort direction must be 'asc' or 'desc'";
+    }
+    return null;
+  }
+
+  private static void putIfPresent(Map<String, String> query, String key, String value) {
+    if (value != null && !value.isBlank()) {
+      query.put(key, value.trim());
+    }
   }
 
   private static void putIfPresent(ObjectNode body, String field, String value) {
@@ -272,25 +382,6 @@ public class MenuTools {
     }
   }
 
-  /**
-   * Deep mode (FR-003): a list with exactly one match is replaced by that menu's full 7-day detail;
-   * zero matches becomes an explicit result; several matches keep the list summary. An
-   * unrecognizable payload is relayed unchanged rather than dropped.
-   */
-  private String deepenUniqueMatch(CallerContext caller, String listJson) {
-    JsonNode content = listContent(listJson);
-    if (content == null) {
-      return listJson;
-    }
-    if (content.isEmpty()) {
-      return NO_MENU_RESULT;
-    }
-    if (content.size() == 1 && content.get(0).hasNonNull("id")) {
-      return backendClient.getMenuById(caller, content.get(0).get("id").asText());
-    }
-    return listJson;
-  }
-
   /** Returns {@code data.content} of a list envelope, or null when the shape is unexpected. */
   private JsonNode listContent(String listJson) {
     try {
@@ -303,11 +394,24 @@ public class MenuTools {
     }
   }
 
+  private static String iso(LocalDate date) {
+    return date.toString();
+  }
+
   private static boolean isIsoDate(String value) {
     try {
       LocalDate.parse(value);
       return true;
     } catch (DateTimeParseException e) {
+      return false;
+    }
+  }
+
+  private static boolean isUuid(String value) {
+    try {
+      UUID.fromString(value);
+      return true;
+    } catch (IllegalArgumentException e) {
       return false;
     }
   }
