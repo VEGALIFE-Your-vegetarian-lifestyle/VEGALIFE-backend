@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -21,10 +22,12 @@ import com.vegalife.repository.ai.AiMessageRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.service.ai.AiChatService;
 import com.vegalife.service.ai.AiQuotaGuard;
+import com.vegalife.service.ai.AiToolContext;
 import com.vegalife.shared.exception.AiProviderException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +41,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.mcp.AsyncMcpToolCallbackProvider;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -51,6 +56,7 @@ class AiChatServiceTest {
   @Mock private UserProfileRepository userProfileRepository;
   @Mock private AiQuotaGuard quotaGuard;
   @Mock private TransactionTemplate transactionTemplate;
+  @Mock private AsyncMcpToolCallbackProvider menuToolProvider;
 
   @InjectMocks private AiChatService aiChatService;
 
@@ -74,12 +80,15 @@ class AiChatServiceTest {
   }
 
   private void stubClient() {
+    when(menuToolProvider.getToolCallbacks()).thenReturn(new ToolCallback[0]);
+    when(chatClientBuilder.defaultToolCallbacks(new ToolCallback[0])).thenReturn(chatClientBuilder);
     when(chatClientBuilder.build()).thenReturn(chatClient);
     // @InjectMocks does not run @PostConstruct, so build the client the way startup would.
     aiChatService.initChatClient();
     when(chatClient.prompt()).thenReturn(spec);
     when(spec.system(anyString())).thenReturn(spec);
     when(spec.messages(anyList())).thenReturn(spec);
+    when(spec.toolContext(anyMap())).thenReturn(spec);
     when(spec.call()).thenReturn(callSpec);
   }
 
@@ -109,7 +118,8 @@ class AiChatServiceTest {
             });
 
     SendMessageResponse response =
-        aiChatService.send(userId, SendMessageRequest.builder().message("What for lunch?").build());
+        aiChatService.send(
+            userId, "test-jwt", SendMessageRequest.builder().message("What for lunch?").build());
 
     assertThat(response.getReply()).isEqualTo("Try a tofu scramble.");
     assertThat(response.getConversationId()).isNotNull();
@@ -140,7 +150,8 @@ class AiChatServiceTest {
             });
     String longMessage = "x".repeat(100);
 
-    aiChatService.send(userId, SendMessageRequest.builder().message(longMessage).build());
+    aiChatService.send(
+        userId, "test-jwt", SendMessageRequest.builder().message(longMessage).build());
 
     ArgumentCaptor<AiConversation> captor = ArgumentCaptor.forClass(AiConversation.class);
     verify(conversationRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
@@ -157,6 +168,7 @@ class AiChatServiceTest {
             () ->
                 aiChatService.send(
                     userId,
+                    "test-jwt",
                     SendMessageRequest.builder()
                         .message("hi")
                         .conversationId(conversationId)
@@ -176,7 +188,9 @@ class AiChatServiceTest {
     when(callSpec.content()).thenReturn("  ");
 
     assertThatThrownBy(
-            () -> aiChatService.send(userId, SendMessageRequest.builder().message("hi").build()))
+            () ->
+                aiChatService.send(
+                    userId, "test-jwt", SendMessageRequest.builder().message("hi").build()))
         .isInstanceOf(AiProviderException.class);
 
     verify(conversationRepository, never()).save(any());
@@ -219,6 +233,7 @@ class AiChatServiceTest {
 
     aiChatService.send(
         userId,
+        "test-jwt",
         SendMessageRequest.builder()
             .message("new question")
             .conversationId(conversationId)
@@ -235,5 +250,35 @@ class AiChatServiceTest {
     assertThat(messages.getValue().get(0).getText()).isEqualTo("earlier question");
     assertThat(messages.getValue().get(1)).isInstanceOf(AssistantMessage.class);
     assertThat(messages.getValue().get(2).getText()).isEqualTo("new question");
+  }
+
+  @Test
+  void send_passesCallerJwtAsToolContext() {
+    stubClient();
+    stubTransactionTemplate();
+    when(quotaGuard.requireAllowance(userId)).thenReturn(window);
+    when(callSpec.content()).thenReturn("ok");
+    when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.empty());
+    when(conversationRepository.save(any(AiConversation.class)))
+        .thenAnswer(inv -> inv.getArgument(0));
+
+    aiChatService.send(userId, "raw-jwt-token", SendMessageRequest.builder().message("hi").build());
+
+    ArgumentCaptor<Map<String, Object>> toolContext = ArgumentCaptor.forClass(Map.class);
+    verify(spec).toolContext(toolContext.capture());
+    assertThat(toolContext.getValue())
+        .containsExactly(Map.entry(AiToolContext.CALLER_JWT_KEY, "raw-jwt-token"));
+  }
+
+  @Test
+  void initChatClient_attachesMcpMenuTools() {
+    ToolCallback menuTool = mock(ToolCallback.class);
+    when(menuToolProvider.getToolCallbacks()).thenReturn(new ToolCallback[] {menuTool});
+    when(chatClientBuilder.defaultToolCallbacks(menuTool)).thenReturn(chatClientBuilder);
+    when(chatClientBuilder.build()).thenReturn(chatClient);
+
+    aiChatService.initChatClient();
+
+    verify(chatClientBuilder).defaultToolCallbacks(menuTool);
   }
 }

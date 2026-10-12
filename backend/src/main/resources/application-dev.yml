@@ -10,6 +10,18 @@ spring:
       # at request time.
       api-key: ${AI_CHAT_API_KEY:${HF_TOKEN:dev-dummy-key-not-a-secret}}
 
+    mcp:
+      client:
+        streamable-http:
+          connections:
+            menu:
+              # The MCP server publishes 127.0.0.1:8081 on the host (compose),
+              # which is what a host-run backend targets by default; a
+              # containerized backend overrides MCP_URL to the compose service
+              # name. Clients initialize eagerly, so the MCP server must be up
+              # before the backend boots in dev.
+              url: ${MCP_URL:http://localhost:8081/mcp}
+
   datasource:
     url: jdbc:postgresql://localhost:5432/vegalife
     username: vegalife

@@ -26,6 +26,8 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.mcp.AsyncMcpToolCallbackProvider;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -52,17 +54,24 @@ public class AiChatService {
   private final UserProfileRepository userProfileRepository;
   private final AiQuotaGuard quotaGuard;
   private final TransactionTemplate transactionTemplate;
+  private final AsyncMcpToolCallbackProvider menuToolProvider;
 
   private ChatClient chatClient;
 
-  /** Built once at startup so the streaming path never races to initialise a shared field. */
+  /**
+   * Built once at startup so the streaming path never races to initialise a shared field. The menu
+   * tools come from the connected MCP server (ADR-012); environments without one start the chat
+   * with no tools.
+   */
   @PostConstruct
   public void initChatClient() {
-    this.chatClient = chatClientBuilder.build();
+    ToolCallback[] menuTools = menuToolProvider.getToolCallbacks();
+    log.info("chat client initialising with {} menu tool(s)", menuTools.length);
+    this.chatClient = chatClientBuilder.defaultToolCallbacks(menuTools).build();
   }
 
   /** Blocking turn for {@code POST /api/ai/messages}. */
-  public SendMessageResponse send(UUID userId, SendMessageRequest request) {
+  public SendMessageResponse send(UUID userId, String callerJwt, SendMessageRequest request) {
     Optional<AiConversation> existing = resolveConversation(userId, request.getConversationId());
     AiQuotaGuard.QuotaWindow window = quotaGuard.requireAllowance(userId);
 
@@ -73,6 +82,7 @@ public class AiChatService {
               .prompt()
               .system(buildSystemPrompt(userId))
               .messages(buildContext(existing, request.getMessage()))
+              .toolContext(AiToolContext.forCaller(callerJwt))
               .call()
               .content();
     } catch (RuntimeException ex) {
@@ -97,7 +107,7 @@ public class AiChatService {
    * are raised before the emitter is returned so they still produce a JSON error response; a
    * failure after the stream opens is delivered as an {@code error} event.
    */
-  public SseEmitter stream(UUID userId, SendMessageRequest request) {
+  public SseEmitter stream(UUID userId, String callerJwt, SendMessageRequest request) {
     Optional<AiConversation> existing = resolveConversation(userId, request.getConversationId());
     AiQuotaGuard.QuotaWindow window = quotaGuard.requireAllowance(userId);
     List<Message> context = buildContext(existing, request.getMessage());
@@ -107,7 +117,12 @@ public class AiChatService {
     StringBuilder fullReply = new StringBuilder();
 
     Disposable subscription =
-        chatClient.prompt().system(systemPrompt).messages(context).stream()
+        chatClient
+            .prompt()
+            .system(systemPrompt)
+            .messages(context)
+            .toolContext(AiToolContext.forCaller(callerJwt))
+            .stream()
             .content()
             .subscribe(
                 delta -> {
@@ -212,7 +227,27 @@ public class AiChatService {
         prompt.append("- About: ").append(profile.getDescription()).append('\n');
       }
     }
+    appendWeeklyMenuTools(prompt);
     return prompt.toString();
+  }
+
+  /**
+   * Prompt guidance for the menu tools (ADR-012, BR-MCP-006): plan with tools, confirm before
+   * scheduling, and relay tool failures honestly.
+   */
+  private static void appendWeeklyMenuTools(StringBuilder prompt) {
+    prompt.append(
+        "\nWeekly menu tools are available:\n"
+            + "- get_menu reads the member's menu for a week (pass any date of that week, or"
+            + " nothing for the current week).\n"
+            + "- create_menu plans a new drafted week: a start date plus seven days of meals."
+            + " Use dish ids the member has given or that appear in menus you have read; never"
+            + " invent ids.\n"
+            + "- update_menu rewrites their current-week draft.\n"
+            + "- schedule_menu activates a drafted week. Ask the member to confirm the exact"
+            + " week first and call it only after they clearly agree.\n"
+            + "If a tool returns an error or an empty result, say plainly what happened and"
+            + " never invent menu data.\n");
   }
 
   /**
