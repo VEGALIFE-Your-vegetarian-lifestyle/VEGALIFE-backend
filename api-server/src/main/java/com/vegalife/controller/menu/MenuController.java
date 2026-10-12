@@ -1,10 +1,12 @@
 package com.vegalife.controller.menu;
 
 import com.vegalife.dto.request.menu.CreateMenuRequest;
+import com.vegalife.dto.request.menu.MenuMealPlanQueryRequest;
 import com.vegalife.dto.request.menu.MenuQueryRequest;
 import com.vegalife.dto.request.menu.UpdateMenuRequest;
 import com.vegalife.dto.request.menu.UpdateMenuStatusRequest;
 import com.vegalife.dto.response.menu.MenuDetailResponse;
+import com.vegalife.dto.response.menu.MenuMealPlanResponse;
 import com.vegalife.dto.response.menu.MenuSummaryResponse;
 import com.vegalife.service.menu.MenuQueryFilter;
 import com.vegalife.service.menu.MenuQueryFilterResolver;
@@ -14,6 +16,7 @@ import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -50,13 +53,22 @@ public class MenuController {
     return ResponseEntity.ok(ApiResponse.success(menus, "Menus retrieved successfully"));
   }
 
-  @GetMapping("/{menuId}")
+  /**
+   * BR-MENU-001 / BR-MENU-002: the caller's meal plan over the requested range, each menu carrying
+   * its days, meals and dishes. With no bounds this is the current ISO week; with a {@code menuId}
+   * it is that one menu's meals, regardless of any range alongside it. This replaces the removed
+   * {@code GET /api/menus/{menuId}}.
+   */
+  @GetMapping("/details")
   @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
-  public ResponseEntity<ApiResponse<MenuDetailResponse>> getMenu(
-      @AuthenticationPrincipal UUID userId, @PathVariable UUID menuId) {
-    MenuDetailResponse menu = menuService.getMenu(userId, menuId);
-    return ResponseEntity.ok(ApiResponse.success(menu, "Menu retrieved successfully"));
+  public ResponseEntity<ApiResponse<List<MenuMealPlanResponse>>> getMealPlans(
+      @AuthenticationPrincipal UUID userId,
+      @Valid @ModelAttribute MenuMealPlanQueryRequest request) {
+    MenuQueryFilter filter = filterResolver.resolveMealPlan(request.getFrom(), request.getTo());
+    List<MenuMealPlanResponse> plans =
+        menuService.listMealPlans(userId, filter, request.getMenuId());
+    return ResponseEntity.ok(ApiResponse.success(plans, "Meal plan retrieved successfully"));
   }
 
   /** BR-MENU-005: creates a drafted weekly menu owned by the authenticated caller. */

@@ -3,10 +3,12 @@ package com.vegalife.unit.service.menu;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.vegalife.dto.response.menu.MenuDetailResponse;
+import com.vegalife.dto.response.menu.DishResponse;
+import com.vegalife.dto.response.menu.MenuMealPlanResponse;
 import com.vegalife.dto.response.menu.MenuSummaryResponse;
 import com.vegalife.model.menu.MealType;
 import com.vegalife.model.menu.Menu;
@@ -88,11 +90,18 @@ class MenuServiceQueryTest {
   }
 
   @Test
-  void getMenuReturnsDaysGroupedAndMealsOrdered() {
+  void listMealPlansByMenuIdReturnsDaysGroupedAndMealsOrdered() {
     UUID menuId = UUID.randomUUID();
     Menu menu = menu(MONDAY, SUNDAY, MenuStatus.scheduled);
     menu.setId(menuId);
-    Dish dish = Dish.builder().id(UUID.randomUUID()).name("Tofu scramble").build();
+    Dish dish =
+        Dish.builder()
+            .id(UUID.randomUUID())
+            .name("Tofu scramble")
+            .description("Crumbed firm tofu")
+            .imageUrl("https://cdn.example.com/tofu.jpg")
+            .cuisineType("Asian")
+            .build();
     MenuDetail breakfast =
         MenuDetail.builder()
             .menuId(menuId)
@@ -110,26 +119,117 @@ class MenuServiceQueryTest {
             .servings(1)
             .build();
     when(menuRepository.findByIdAndUserId(menuId, USER)).thenReturn(Optional.of(menu));
-    when(menuDetailRepository.findByMenuIdOrderByDateAscMealTypeAsc(menuId))
+    when(menuDetailRepository.findByMenuIdInWithDish(List.of(menuId)))
         .thenReturn(List.of(breakfast, lunch));
 
-    MenuDetailResponse response = menuService.getMenu(USER, menuId);
+    List<MenuMealPlanResponse> response =
+        menuService.listMealPlans(USER, MenuQueryFilter.builder().build(), menuId);
 
-    assertThat(response.getDays()).hasSize(1);
-    assertThat(response.getDays().get(0).getDate()).isEqualTo(MONDAY);
-    assertThat(response.getDays().get(0).getMeals()).hasSize(2);
-    assertThat(response.getDays().get(0).getMeals().get(0).getMealType()).isEqualTo("BREAKFAST");
-    assertThat(response.getDays().get(0).getMeals().get(0).getDishName())
-        .isEqualTo("Tofu scramble");
-    assertThat(response.getDays().get(0).getMeals().get(0).getServings()).isEqualTo(2);
+    assertThat(response).hasSize(1);
+    MenuMealPlanResponse plan = response.get(0);
+    assertThat(plan.getId()).isEqualTo(menuId);
+    assertThat(plan.getStatus()).isEqualTo("scheduled");
+    assertThat(plan.getDays()).hasSize(1);
+    assertThat(plan.getDays().get(0).getDate()).isEqualTo(MONDAY);
+    assertThat(plan.getDays().get(0).getMeals()).hasSize(2);
+    assertThat(plan.getDays().get(0).getMeals().get(0).getMealType()).isEqualTo("BREAKFAST");
+    assertThat(plan.getDays().get(0).getMeals().get(0).getServings()).isEqualTo(2);
   }
 
   @Test
-  void getMenuOfForeignOrMissingIdIsNotFound() {
+  void listMealPlansEmbedsTheFullDishRatherThanAnId() {
+    UUID menuId = UUID.randomUUID();
+    Menu menu = menu(MONDAY, SUNDAY, MenuStatus.drafted);
+    menu.setId(menuId);
+    Dish dish =
+        Dish.builder()
+            .id(UUID.randomUUID())
+            .name("Chickpea salad")
+            .description("Chickpeas, cucumber, lemon and dill")
+            .cuisineType("Mediterranean")
+            .build();
+    when(menuRepository.findByIdAndUserId(menuId, USER)).thenReturn(Optional.of(menu));
+    when(menuDetailRepository.findByMenuIdInWithDish(List.of(menuId)))
+        .thenReturn(
+            List.of(
+                MenuDetail.builder()
+                    .menuId(menuId)
+                    .date(MONDAY)
+                    .mealType(MealType.LUNCH)
+                    .dish(dish)
+                    .servings(1)
+                    .build()));
+
+    DishResponse embedded =
+        menuService
+            .listMealPlans(USER, MenuQueryFilter.builder().build(), menuId)
+            .get(0)
+            .getDays()
+            .get(0)
+            .getMeals()
+            .get(0)
+            .getDish();
+
+    assertThat(embedded.getId()).isEqualTo(dish.getId());
+    assertThat(embedded.getName()).isEqualTo("Chickpea salad");
+    assertThat(embedded.getDescription()).isEqualTo("Chickpeas, cucumber, lemon and dill");
+    assertThat(embedded.getCuisineType()).isEqualTo("Mediterranean");
+  }
+
+  @Test
+  void listMealPlansOrdersMenusByStartDateAscending() {
+    when(menuRepository.findAll(any(Specification.class), any(Sort.class))).thenReturn(List.of());
+
+    menuService.listMealPlans(
+        USER, MenuQueryFilter.builder().from(MONDAY).to(SUNDAY).build(), null);
+
+    ArgumentCaptor<Sort> captor = ArgumentCaptor.forClass(Sort.class);
+    verify(menuRepository).findAll(any(Specification.class), captor.capture());
+    Sort.Order order = captor.getValue().getOrderFor("startDate");
+    assertThat(order).isNotNull();
+    assertThat(order.getDirection()).isEqualTo(Sort.Direction.ASC);
+  }
+
+  @Test
+  void listMealPlansLoadsDetailsOnceForTheWholeWindow() {
+    UUID first = UUID.randomUUID();
+    UUID second = UUID.randomUUID();
+    Menu earlier = menu(MONDAY, SUNDAY, MenuStatus.scheduled);
+    earlier.setId(first);
+    Menu later = menu(MONDAY.plusDays(7), SUNDAY.plusDays(7), MenuStatus.drafted);
+    later.setId(second);
+    when(menuRepository.findAll(any(Specification.class), any(Sort.class)))
+        .thenReturn(List.of(earlier, later));
+    when(menuDetailRepository.findByMenuIdInWithDish(List.of(first, second)))
+        .thenReturn(
+            List.of(
+                MenuDetail.builder()
+                    .menuId(second)
+                    .date(MONDAY.plusDays(7))
+                    .mealType(MealType.DINNER)
+                    .dish(Dish.builder().id(UUID.randomUUID()).name("Lentil soup").build())
+                    .servings(1)
+                    .build()));
+
+    List<MenuMealPlanResponse> response =
+        menuService.listMealPlans(
+            USER, MenuQueryFilter.builder().from(MONDAY).to(SUNDAY).build(), null);
+
+    assertThat(response).hasSize(2);
+    // The second menu has a meal, the first has none — an absent day set must not be null.
+    assertThat(response.get(0).getDays()).isEmpty();
+    assertThat(response.get(1).getDays()).hasSize(1);
+    // Exactly one detail query for the whole window, not one per menu.
+    verify(menuDetailRepository, times(1)).findByMenuIdInWithDish(any());
+  }
+
+  @Test
+  void listMealPlansOfForeignOrMissingIdIsNotFound() {
     UUID menuId = UUID.randomUUID();
     when(menuRepository.findByIdAndUserId(menuId, USER)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> menuService.getMenu(USER, menuId))
+    assertThatThrownBy(
+            () -> menuService.listMealPlans(USER, MenuQueryFilter.builder().build(), menuId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Menu not found");
   }

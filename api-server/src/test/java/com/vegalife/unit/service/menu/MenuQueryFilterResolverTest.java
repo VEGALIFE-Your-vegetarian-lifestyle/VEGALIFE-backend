@@ -7,7 +7,10 @@ import com.vegalife.model.menu.MenuStatus;
 import com.vegalife.service.menu.MenuQueryFilter;
 import com.vegalife.service.menu.MenuQueryFilterResolver;
 import com.vegalife.shared.exception.InvalidMenuFilterException;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
 import org.junit.jupiter.api.Test;
 
 class MenuQueryFilterResolverTest {
@@ -119,5 +122,63 @@ class MenuQueryFilterResolverTest {
     assertThatThrownBy(() -> resolver.resolve("2026-10-05", "2026-10-11", "active"))
         .isInstanceOf(InvalidMenuFilterException.class)
         .hasMessageContaining("Unknown status");
+  }
+
+  @Test
+  void mealPlanWithNoBoundsDefaultsToTheCurrentIsoWeek() {
+    MenuQueryFilter filter = resolver.resolveMealPlan(null, null);
+
+    LocalDate today = LocalDate.now(ZoneOffset.UTC);
+    assertThat(filter.getFrom())
+        .isEqualTo(today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)));
+    assertThat(filter.getTo())
+        .isEqualTo(today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)));
+    assertThat(filter.hasWindow()).isTrue();
+  }
+
+  @Test
+  void mealPlanWithBlankBoundsAlsoDefaultsToTheCurrentIsoWeek() {
+    MenuQueryFilter filter = resolver.resolveMealPlan(" ", "");
+
+    assertThat(filter.hasWindow()).isTrue();
+  }
+
+  @Test
+  void mealPlanWithFromAloneLeavesTheUpperBoundOpen() {
+    MenuQueryFilter filter = resolver.resolveMealPlan("2026-09-01", null);
+
+    assertThat(filter.getFrom()).isEqualTo(LocalDate.of(2026, 9, 1));
+    assertThat(filter.getTo()).isNull();
+  }
+
+  @Test
+  void mealPlanWithToAloneLeavesTheLowerBoundOpen() {
+    MenuQueryFilter filter = resolver.resolveMealPlan(null, "2026-10-15");
+
+    assertThat(filter.getFrom()).isNull();
+    assertThat(filter.getTo()).isEqualTo(LocalDate.of(2026, 10, 15));
+  }
+
+  @Test
+  void mealPlanKeepsTheListReadsValidation() {
+    assertThatThrownBy(() -> resolver.resolveMealPlan("2026-10-15", "2026-09-01"))
+        .isInstanceOf(InvalidMenuFilterException.class)
+        .hasMessageContaining("from must be on or before to");
+
+    assertThatThrownBy(() -> resolver.resolveMealPlan("2026-01-01", "2027-01-03"))
+        .isInstanceOf(InvalidMenuFilterException.class)
+        .hasMessageContaining("must not exceed 366 days");
+
+    assertThatThrownBy(() -> resolver.resolveMealPlan("not-a-date", null))
+        .isInstanceOf(InvalidMenuFilterException.class)
+        .hasMessageContaining("Invalid from");
+  }
+
+  @Test
+  void mealPlanCarriesNoStatusFilter() {
+    // /api/menus/details has no status parameter: every menu carries its own status in the payload.
+    MenuQueryFilter filter = resolver.resolveMealPlan("2026-10-05", "2026-10-11");
+
+    assertThat(filter.getStatus()).isNull();
   }
 }

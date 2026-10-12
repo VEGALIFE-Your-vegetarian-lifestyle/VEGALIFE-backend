@@ -152,7 +152,7 @@ curl "/api/menus?from=2026-09-01&to=2026-10-15&status=scheduled" \
 ## Related
 
 - Feature Spec: `docs/feats/query-menus-by-range.md`
-- Detail endpoint: `docs/apis/menus/get-menus-menuid.md`
+- Detail endpoint: `docs/apis/menus/get-menus-details.md`
 - Business Rules: `docs/brs/menus.md`
 - ADR: `docs/adrs/010-menu-scheduled-overlap-gist-constraint.md`
 - Shared error/response contract: `docs/apis/error-responses.md`

@@ -2,13 +2,16 @@ package com.vegalife.service.menu;
 
 import com.vegalife.model.menu.MenuStatus;
 import com.vegalife.shared.exception.InvalidMenuFilterException;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.TemporalAdjusters;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * Turns raw list-query parameters into a {@link MenuQueryFilter}, or fails with a 400. All parsing
+ * Turns raw menu read parameters into a {@link MenuQueryFilter}, or fails with a 400. All parsing
  * and range validation happens here so the service layer works only with resolved dates and the
  * controller stays a thin mapping layer (NFR-MAINT-001).
  *
@@ -16,6 +19,10 @@ import org.springframework.stereotype.Component;
  * either may be supplied alone, and neither leaves that side unbounded. There is no period or month
  * selector: a caller wanting a week or a month states the dates, which keeps the surface flat and
  * makes the most natural request ({@code ?from=&to=}) the valid one.
+ *
+ * <p>Both menu reads resolve through this class — {@link #resolve} for the paginated list and
+ * {@link #resolveMealPlan} for the detail query — so the two cannot drift on window semantics
+ * (NFR-MAINT-002).
  */
 @Component
 @Slf4j
@@ -28,6 +35,26 @@ public class MenuQueryFilterResolver {
     LocalDate end = parseBound(to, "to");
     validateRange(start, end);
     return MenuQueryFilter.builder().from(start).to(end).status(parseStatus(status)).build();
+  }
+
+  /**
+   * The meal-plan read's window: the same flat {@code from}/{@code to} pair, except that supplying
+   * neither means the current ISO week rather than an unbounded range. A meal plan is a thing a
+   * member looks at one week at a time, and the AI assistant calls this endpoint far more often
+   * with no arguments at all than with a range — so the default is the week the caller is living in
+   * (BR-MENU-004). An explicitly stated one-sided window is left open on the missing side, as on
+   * the list read.
+   */
+  public MenuQueryFilter resolveMealPlan(String from, String to) {
+    LocalDate start = parseBound(from, "from");
+    LocalDate end = parseBound(to, "to");
+    if (start == null && end == null) {
+      LocalDate today = LocalDate.now(ZoneOffset.UTC);
+      start = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+      end = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
+    }
+    validateRange(start, end);
+    return MenuQueryFilter.builder().from(start).to(end).build();
   }
 
   /** Parses one inclusive bound, treating null and blank alike as "not supplied". */

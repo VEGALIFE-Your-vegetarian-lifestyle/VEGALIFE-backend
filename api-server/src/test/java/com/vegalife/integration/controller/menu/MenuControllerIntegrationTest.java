@@ -23,6 +23,7 @@ import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -372,9 +373,16 @@ class MenuControllerIntegrationTest {
   }
 
   @Test
-  void getMenu_returnsOwnedMenuWithDaysAndMeals() throws Exception {
+  void getMealPlans_menuIdReturnsOwnedMenuWithDaysAndMeals() throws Exception {
     Menu menu = createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.scheduled);
-    Dish dish = dishRepository.save(Dish.builder().name("Tofu scramble").build());
+    Dish dish =
+        dishRepository.save(
+            Dish.builder()
+                .name("Tofu scramble")
+                .description("Crumble with turmeric and black salt")
+                .imageUrl("https://example.com/tofu-scramble.jpg")
+                .cuisineType("American")
+                .build());
     menuDetailRepository.save(
         MenuDetail.builder()
             .menuId(menu.getId())
@@ -386,53 +394,236 @@ class MenuControllerIntegrationTest {
 
     mockMvc
         .perform(
-            get("/api/menus/{menuId}", menu.getId())
-                .header("Authorization", "Bearer " + accessToken))
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("menuId", menu.getId().toString()))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.message").value("Menu retrieved successfully"))
-        .andExpect(jsonPath("$.data.id").value(menu.getId().toString()))
-        .andExpect(jsonPath("$.data.status").value("scheduled"))
-        .andExpect(jsonPath("$.data.days.length()").value(1))
-        .andExpect(jsonPath("$.data.days[0].date").value("2026-10-05"))
-        .andExpect(jsonPath("$.data.days[0].meals[0].mealType").value("BREAKFAST"))
-        .andExpect(jsonPath("$.data.days[0].meals[0].dishName").value("Tofu scramble"))
-        .andExpect(jsonPath("$.data.days[0].meals[0].servings").value(2));
+        .andExpect(jsonPath("$.message").value("Meal plan retrieved successfully"))
+        .andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].id").value(menu.getId().toString()))
+        .andExpect(jsonPath("$.data[0].startDate").value("2026-10-05"))
+        .andExpect(jsonPath("$.data[0].endDate").value("2026-10-11"))
+        .andExpect(jsonPath("$.data[0].status").value("scheduled"))
+        .andExpect(jsonPath("$.data[0].days.length()").value(1))
+        .andExpect(jsonPath("$.data[0].days[0].date").value("2026-10-05"))
+        .andExpect(jsonPath("$.data[0].days[0].meals[0].mealType").value("BREAKFAST"))
+        .andExpect(jsonPath("$.data[0].days[0].meals[0].servings").value(2))
+        .andExpect(jsonPath("$.data[0].days[0].meals[0].dish.id").value(dish.getId().toString()))
+        .andExpect(jsonPath("$.data[0].days[0].meals[0].dish.name").value("Tofu scramble"))
+        .andExpect(
+            jsonPath("$.data[0].days[0].meals[0].dish.description")
+                .value("Crumble with turmeric and black salt"))
+        .andExpect(
+            jsonPath("$.data[0].days[0].meals[0].dish.imageUrl")
+                .value("https://example.com/tofu-scramble.jpg"))
+        .andExpect(jsonPath("$.data[0].days[0].meals[0].dish.cuisineType").value("American"));
   }
 
   @Test
-  void getMenu_foreignOrUnknownIdReturns404() throws Exception {
+  void getMealPlans_foreignOrUnknownIdReturns404() throws Exception {
     Menu otherMenu = createMenu(otherUser, LocalDate.of(2026, 10, 5), MenuStatus.scheduled);
 
     mockMvc
         .perform(
-            get("/api/menus/{menuId}", otherMenu.getId())
-                .header("Authorization", "Bearer " + accessToken))
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("menuId", otherMenu.getId().toString()))
         .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.success").value(false))
         .andExpect(jsonPath("$.message").value("Menu not found"));
     mockMvc
         .perform(
-            get("/api/menus/{menuId}", UUID.randomUUID())
-                .header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isNotFound());
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("menuId", UUID.randomUUID().toString()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Menu not found"));
   }
 
   @Test
-  void getMenu_withoutJwtReturns401() throws Exception {
-    mockMvc
-        .perform(get("/api/menus/{menuId}", UUID.randomUUID()))
-        .andExpect(status().isUnauthorized());
+  void getMealPlans_withoutJwtReturns401() throws Exception {
+    mockMvc.perform(get("/api/menus/details")).andExpect(status().isUnauthorized());
   }
 
   @Test
-  void getMenu_ofMenuWithNoDetailsReturnsEmptyDays() throws Exception {
+  void getMealPlans_menuWithNoDetailsReturnsEmptyDays() throws Exception {
     Menu menu = createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.drafted);
 
     mockMvc
         .perform(
-            get("/api/menus/{menuId}", menu.getId())
-                .header("Authorization", "Bearer " + accessToken))
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("menuId", menu.getId().toString()))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.days.length()").value(0));
+        .andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].days").isArray())
+        .andExpect(jsonPath("$.data[0].days").isEmpty());
+  }
+
+  @Test
+  void getMealPlans_defaultsToTheCurrentIsoWeek() throws Exception {
+    LocalDate today = LocalDate.now(ZoneOffset.UTC);
+    Menu currentWeek = createMenu(user, today.minusDays(3), MenuStatus.scheduled);
+    createMenu(user, today.minusWeeks(20), MenuStatus.scheduled);
+
+    mockMvc
+        .perform(get("/api/menus/details").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].id").value(currentWeek.getId().toString()))
+        .andExpect(jsonPath("$.data[0].startDate").value(currentWeek.getStartDate().toString()));
+  }
+
+  @Test
+  void getMealPlans_fromAloneBoundsOnlyFromBelow() throws Exception {
+    createMenu(user, LocalDate.of(2026, 9, 7), MenuStatus.scheduled);
+    Menu afterFrom = createMenu(user, LocalDate.of(2026, 11, 2), MenuStatus.scheduled);
+
+    mockMvc
+        .perform(
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("from", "2026-10-01"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].id").value(afterFrom.getId().toString()))
+        .andExpect(jsonPath("$.data[0].startDate").value("2026-11-02"));
+  }
+
+  @Test
+  void getMealPlans_toAloneBoundsOnlyFromAbove() throws Exception {
+    Menu beforeTo = createMenu(user, LocalDate.of(2026, 9, 7), MenuStatus.scheduled);
+    createMenu(user, LocalDate.of(2026, 11, 2), MenuStatus.scheduled);
+
+    mockMvc
+        .perform(
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("to", "2026-10-31"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].id").value(beforeTo.getId().toString()))
+        .andExpect(jsonPath("$.data[0].startDate").value("2026-09-07"));
+  }
+
+  @Test
+  void getMealPlans_rangeReturnsEveryIntersectingMenuWithFullDetail() throws Exception {
+    Menu first = createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.scheduled);
+    Menu second = createMenu(user, LocalDate.of(2026, 10, 12), MenuStatus.scheduled);
+    Dish firstDish =
+        dishRepository.save(
+            Dish.builder()
+                .name("Early October bowl")
+                .description("Roasted squash and quinoa")
+                .imageUrl("https://example.com/early-october.jpg")
+                .cuisineType("Mexican")
+                .build());
+    Dish secondDish =
+        dishRepository.save(
+            Dish.builder()
+                .name("Late October bowl")
+                .description("Mushroom and barley")
+                .imageUrl("https://example.com/late-october.jpg")
+                .cuisineType("Italian")
+                .build());
+    menuDetailRepository.save(
+        MenuDetail.builder()
+            .menuId(first.getId())
+            .dish(firstDish)
+            .date(LocalDate.of(2026, 10, 5))
+            .mealType(MealType.LUNCH)
+            .servings(3)
+            .build());
+    menuDetailRepository.save(
+        MenuDetail.builder()
+            .menuId(second.getId())
+            .dish(secondDish)
+            .date(LocalDate.of(2026, 10, 12))
+            .mealType(MealType.DINNER)
+            .servings(1)
+            .build());
+
+    mockMvc
+        .perform(
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("from", "2026-10-01")
+                .param("to", "2026-10-31"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Meal plan retrieved successfully"))
+        .andExpect(jsonPath("$.data.length()").value(2))
+        .andExpect(jsonPath("$.data[0].id").value(first.getId().toString()))
+        .andExpect(jsonPath("$.data[0].startDate").value("2026-10-05"))
+        .andExpect(jsonPath("$.data[0].days.length()").value(1))
+        .andExpect(jsonPath("$.data[0].days[0].meals[0].mealType").value("LUNCH"))
+        .andExpect(jsonPath("$.data[0].days[0].meals[0].servings").value(3))
+        .andExpect(jsonPath("$.data[0].days[0].meals[0].dish.name").value("Early October bowl"))
+        .andExpect(jsonPath("$.data[1].id").value(second.getId().toString()))
+        .andExpect(jsonPath("$.data[1].startDate").value("2026-10-12"))
+        .andExpect(jsonPath("$.data[1].days.length()").value(1))
+        .andExpect(jsonPath("$.data[1].days[0].meals[0].mealType").value("DINNER"))
+        .andExpect(jsonPath("$.data[1].days[0].meals[0].servings").value(1))
+        .andExpect(jsonPath("$.data[1].days[0].meals[0].dish.name").value("Late October bowl"))
+        .andExpect(jsonPath("$.data[1].days[0].meals[0].dish.cuisineType").value("Italian"));
+  }
+
+  @Test
+  void getMealPlans_menuIdOverridesTheSuppliedRange() throws Exception {
+    Menu inRange = createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.scheduled);
+    Menu outsideRange = createMenu(user, LocalDate.of(2025, 1, 6), MenuStatus.scheduled);
+
+    mockMvc
+        .perform(
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("menuId", outsideRange.getId().toString())
+                .param("from", "2026-10-01")
+                .param("to", "2026-10-31"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].id").value(outsideRange.getId().toString()))
+        .andExpect(jsonPath("$.data[0].startDate").value("2025-01-06"));
+
+    assertThat(inRange.getStartDate()).isAfterOrEqualTo(LocalDate.of(2026, 10, 1));
+    assertThat(outsideRange.getEndDate()).isBefore(LocalDate.of(2026, 10, 1));
+  }
+
+  @Test
+  void getMealPlans_malformedMenuIdReturns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("menuId", "not-a-uuid"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+  }
+
+  @Test
+  void getMealPlans_isScopedToTheAuthenticatedUser() throws Exception {
+    Menu mine = createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.scheduled);
+    Menu theirs = createMenu(otherUser, LocalDate.of(2026, 10, 12), MenuStatus.scheduled);
+
+    mockMvc
+        .perform(
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("menuId", theirs.getId().toString()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Menu not found"));
+
+    mockMvc
+        .perform(
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("from", "2026-10-01")
+                .param("to", "2026-10-31"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].id").value(mine.getId().toString()))
+        .andExpect(jsonPath("$.data[0].startDate").value("2026-10-05"));
   }
 
   @Test

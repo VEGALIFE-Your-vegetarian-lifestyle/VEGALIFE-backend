@@ -79,8 +79,10 @@ meals — an update that would produce an invalid week is rejected whole.
 }
 ```
 
-The `data` payload is the same full-detail shape as
-`GET /api/menus/{menuId}` and `POST /api/menus`.
+The `data` payload is the menu-detail shape (`MenuDetailResponse`), the same as
+`POST /api/menus`; meals identify each dish by `dishId` and `dishName` only.
+Read the plan back with dishes embedded via `GET /api/menus/details`, which
+returns a richer and deliberately different meal shape.
 
 ### Error Responses
 
@@ -135,7 +137,7 @@ See the success response above.
 
 - Create endpoint: `docs/apis/menus/post-menus.md`
 - List endpoint: `docs/apis/menus/get-menus.md`
-- Detail endpoint: `docs/apis/menus/get-menus-menuid.md`
+- Detail endpoint: `docs/apis/menus/get-menus-details.md`
 - Status endpoint: `docs/apis/menus/post-menu-status.md`
 - Business Rules: `docs/brs/menus.md`
 - Shared error/response contract: `docs/apis/error-responses.md`

@@ -29,8 +29,8 @@ menu read in this scope.
 
 ## Enforcement
 - `MenuService` derives the owner from the authenticated principal and always
-  scopes queries by `user_id`; `GET /api/menus/{menuId}` returns 404 for a
-  foreign or absent id (never 403).
+  scopes queries by `user_id`; `GET /api/menus/details` returns 404 for a
+  foreign or absent `menuId` (never 403).
 - API: 404 `Menu not found`.
 
 ## Last Reviewed

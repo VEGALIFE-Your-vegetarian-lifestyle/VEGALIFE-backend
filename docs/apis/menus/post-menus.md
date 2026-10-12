@@ -101,9 +101,11 @@ Any violation returns 400 and persists nothing.
 }
 ```
 
-The `data` payload is the same shape returned by
-`GET /api/menus/{menuId}` (the full menu detail with days), so a caller can
-store the returned id and re-read the menu later.
+The `data` payload is the menu-detail shape (`MenuDetailResponse`), whose meals
+identify each dish by `dishId` and `dishName` only. To read a plan back with
+the dishes embedded in full, use `GET /api/menus/details`, which returns a
+richer and deliberately different meal shape. Store the returned id and re-read
+the menu later with either.
 
 ### Error Responses
 
@@ -158,7 +160,7 @@ See the success response above.
 ## Related
 
 - List endpoint: `docs/apis/menus/get-menus.md`
-- Detail endpoint: `docs/apis/menus/get-menus-menuid.md`
+- Detail endpoint: `docs/apis/menus/get-menus-details.md`
 - Business Rules: `docs/brs/menus.md`
 - ADR: `docs/adrs/010-menu-scheduled-overlap-gist-constraint.md`
 - Shared error/response contract: `docs/apis/error-responses.md`
