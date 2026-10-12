@@ -2,7 +2,7 @@
 
 ## Overview
 
-The MCP (Model Context Protocol) server exposes exactly four weekly-menu
+The MCP (Model Context Protocol) server exposes exactly five weekly-menu
 tools to the AI chat over Streamable HTTP. It is a separate internal service
 (ADR-012): each tool translates to a backend REST call made **as the calling
 user**. This document is the tool contract the chat and any future MCP client
@@ -31,23 +31,45 @@ supply the identity through the same `ToolContext`/`_meta` channel.
 
 ## Tools
 
-Exactly four tools exist (BR-MCP-002). Results and errors are the backend's
+Exactly five tools exist (BR-MCP-002). Results and errors are the backend's
 standard `{success, message, data}` envelopes, relayed as tool result text.
+Each read tool mirrors one backend endpoint with the same parameter names, so
+a tool call is a mapping rather than a translation.
 
-### `get_menu` — read the caller's menu(s)
+### `get_menu` — list the caller's menus
+
+Mirrors `GET /api/menus`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| week | date `YYYY-MM-DD` | No | Any day in the target ISO week. Omit for the current week (server UTC). |
+| from | date `YYYY-MM-DD` | No | Inclusive start of the range. Either bound may be supplied alone. |
+| to | date `YYYY-MM-DD` | No | Inclusive end of the range. |
 | status | string | No | `drafted`, `scheduled`, `cancelled`, or `completed`. Omit for any status. |
-| menuId | uuid | No | Read one specific owned menu directly (`GET /api/menus/{menuId}`), skipping discovery. |
+| page | integer | No | Zero-based page index. Omit for `0`. |
+| size | integer | No | Menus per page, 1–100. Omit for `20`. |
+| sort | string | No | `field,direction`, e.g. `startDate,desc`. |
 
-Behavior: resolves the week window server-side, calls
-`GET /api/menus?period=week&date=...&status=...`, and — when exactly one menu
-matches — returns its **full 7-day detail** (the `GET /api/menus/{menuId}`
-payload: days, meals, dish names, servings). Zero matches returns an explicit
-"no menu for that week" result; multiple matches returns the list summary
-(`id`, `startDate`, `endDate`, `status`, `notes`) so the caller can narrow.
+Behavior: relays the paginated list envelope unchanged, so the result always
+says how many menus exist (`totalElements`, `totalPages`) and never silently
+truncates. Each item is a **summary** — `id`, `startDate`, `endDate`, `status`,
+`notes` — with no meals. Use `get_meal_plan` for the day-by-day dishes.
+
+### `get_meal_plan` — read the caller's meal plan
+
+Mirrors `GET /api/menus/details`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| from | date `YYYY-MM-DD` | No | Inclusive start of the range. With neither bound, defaults to the current ISO week (server UTC). |
+| to | date `YYYY-MM-DD` | No | Inclusive end of the range. |
+| menuId | uuid | No | Read exactly one owned menu's meals. Overrides `from`/`to`. |
+
+Behavior: returns every menu intersecting the range, each with its `days[]`,
+`meals[]` and the **full dish behind each meal** (`id`, `name`, `description`,
+`imageUrl`, `cuisineType`), ordered by `startDate` ascending. There is no
+`status` parameter — each returned menu carries its own `status`, so the caller
+can tell a draft from a live plan without a second call. The result is a plain
+array, not a page object.
 
 ### `create_menu` — create a drafted week
 
@@ -118,7 +140,7 @@ transport failures:
 ## Business Rules
 
 - BR-MCP-001 — tool calls act as the authenticated caller
-- BR-MCP-002 — exactly four tools are exposed
+- BR-MCP-002 — exactly five tools are exposed
 - BR-MCP-003 — tool calls consume no AI quota
 - BR-MCP-004 — credentials are never model-visible or logged
 - BR-MCP-005 — chat edits only the caller's current-week draft
@@ -146,5 +168,5 @@ user: "Yes, schedule it"
 - Feature Spec: `docs/feats/mcp-menu-tools.md`
 - Business Rules: `docs/brs/mcp-tools.md`
 - Decision: `docs/adrs/012-multi-module-mcp-tool-surface.md`
-- Backend endpoints: `docs/apis/menus/` (`get-menus.md`, `get-menus-menuid.md`, `post-menus.md`, `patch-menus.md`, `post-menu-status.md`)
+- Backend endpoints: `docs/apis/menus/` (`get-menus.md`, `get-menus-details.md`, `post-menus.md`, `patch-menus.md`, `post-menu-status.md`)
 - Shared error/response contract: `docs/apis/error-responses.md`

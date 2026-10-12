@@ -31,9 +31,10 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.model.ToolContext;
 
 /**
- * Behavioral tests for the four menu tools against the contract in docs/apis/mcp/post-mcp.md:
- * get_menu as a straight mirror of GET /api/menus (no deepening, no menuId), parameter validation,
- * the update pre-check, identity errors, and error relay.
+ * Behavioral tests for the five menu tools against the contract in docs/apis/mcp/post-mcp.md:
+ * get_menu as a straight mirror of GET /api/menus (no deepening, no menuId), get_meal_plan as a
+ * straight mirror of GET /api/menus/details, parameter validation, the update pre-check, identity
+ * errors, and error relay.
  */
 class MenuToolsTest {
 
@@ -51,6 +52,17 @@ class MenuToolsTest {
           + "[{\"id\":\"11111111-1111-1111-1111-111111111111\",\"status\":\"drafted\"},"
           + "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"status\":\"scheduled\"}],"
           + "\"totalElements\":2}}";
+
+  private static final String PLAN_ONE =
+      "{\"success\":true,\"message\":\"Meal plan retrieved successfully\",\"data\":["
+          + "{\"id\":\"11111111-1111-1111-1111-111111111111\",\"status\":\"scheduled\","
+          + "\"days\":[{\"date\":\"2026-10-05\",\"meals\":[{\"mealType\":\"LUNCH\",\"servings\":1,"
+          + "\"dish\":{\"id\":\"d-1\",\"name\":\"Tofu scramble\"}}]}]}]}";
+
+  private static final String PLAN_EMPTY =
+      "{\"success\":true,\"message\":\"Meal plan retrieved successfully\",\"data\":[]}";
+
+  private static final String MENU_ID = "11111111-1111-1111-1111-111111111111";
 
   private static final CallerContext CALLER = new CallerContext("test-jwt");
 
@@ -70,7 +82,7 @@ class MenuToolsTest {
     String result = menuTools.getMenu(null, null, null, null, null, null, contextWithIdentity());
 
     assertEquals(LIST_ONE, result);
-    verify(backendClient, never()).getMenuById(any(), any());
+    verify(backendClient, never()).getMealPlan(any(), any());
   }
 
   @Test
@@ -80,7 +92,7 @@ class MenuToolsTest {
     String result = menuTools.getMenu(null, null, null, null, null, null, contextWithIdentity());
 
     assertEquals(LIST_EMPTY, result);
-    verify(backendClient, never()).getMenuById(any(), any());
+    verify(backendClient, never()).getMealPlan(any(), any());
   }
 
   @Test
@@ -90,7 +102,7 @@ class MenuToolsTest {
     String result = menuTools.getMenu(null, null, null, null, null, null, contextWithIdentity());
 
     assertEquals(LIST_TWO, result);
-    verify(backendClient, never()).getMenuById(any(), any());
+    verify(backendClient, never()).getMealPlan(any(), any());
   }
 
   @Test
@@ -371,6 +383,85 @@ class MenuToolsTest {
     verify(backendClient, never()).updateMenu(any(), any(), any());
     verify(backendClient, never()).updateMenuStatus(any(), any(), any());
     verify(backendClient, never()).createMenu(any(), any());
+  }
+
+  @Test
+  void mealPlanForwardsFromAndTo() {
+    when(backendClient.getMealPlan(eq(CALLER), anyMap())).thenReturn(PLAN_ONE);
+
+    String result =
+        menuTools.getMealPlan(" 2026-10-05 ", "2026-10-11", null, contextWithIdentity());
+
+    assertEquals(PLAN_ONE, result);
+    verify(backendClient).getMealPlan(CALLER, Map.of("from", "2026-10-05", "to", "2026-10-11"));
+  }
+
+  @Test
+  void mealPlanForwardsMenuId() {
+    when(backendClient.getMealPlan(eq(CALLER), anyMap())).thenReturn(PLAN_ONE);
+
+    String result =
+        menuTools.getMealPlan(
+            "2026-09-01",
+            "2026-09-07",
+            " 11111111-1111-1111-1111-111111111111 ",
+            contextWithIdentity());
+
+    assertEquals(PLAN_ONE, result);
+    verify(backendClient)
+        .getMealPlan(
+            CALLER,
+            Map.of(
+                "from", "2026-09-01",
+                "to", "2026-09-07",
+                "menuId", "11111111-1111-1111-1111-111111111111"));
+  }
+
+  @Test
+  void mealPlanWithNoArgumentsSendsNoQueryParameters() {
+    // The current-week default lives in the backend (BR-MENU-004), not in the tool.
+    when(backendClient.getMealPlan(eq(CALLER), anyMap())).thenReturn(PLAN_EMPTY);
+
+    String result = menuTools.getMealPlan(null, null, null, contextWithIdentity());
+
+    assertEquals(PLAN_EMPTY, result);
+    verify(backendClient).getMealPlan(CALLER, Map.of());
+  }
+
+  @Test
+  void mealPlanRejectsBadInputBeforeAnyBackendCall() {
+    assertEquals(
+        "error: from must be a date in YYYY-MM-DD format",
+        menuTools.getMealPlan("yesterday", null, null, contextWithIdentity()));
+    assertEquals(
+        "error: to must be a date in YYYY-MM-DD format",
+        menuTools.getMealPlan(null, "soon", null, contextWithIdentity()));
+    assertEquals(
+        "error: menuId must be a UUID",
+        menuTools.getMealPlan(null, null, "menu-1", contextWithIdentity()));
+
+    verify(backendClient, never()).getMealPlan(any(), any());
+  }
+
+  @Test
+  void mealPlanMissingIdentityIsAReadableResultWithoutBackendCall() {
+    ToolContext withoutIdentity = new ToolContext(Map.of());
+
+    String result = menuTools.getMealPlan("2026-10-05", "2026-10-11", null, withoutIdentity);
+
+    assertTrue(result.startsWith("error: caller identity missing"), result);
+    verify(backendClient, never()).getMealPlan(any(), any());
+  }
+
+  @Test
+  void mealPlanBackendFailureIsRelayedAsReadableMessage() {
+    when(backendClient.getMealPlan(eq(CALLER), anyMap()))
+        .thenThrow(new BackendCallException(404, "Menu not found"));
+
+    String result = menuTools.getMealPlan(null, null, MENU_ID, contextWithIdentity());
+
+    assertTrue(result.contains("404"), result);
+    assertTrue(result.contains("Menu not found"), result);
   }
 
   /** BR-MCP-005 pre-check shape: an explicit from/to window over drafted menus, never a period. */

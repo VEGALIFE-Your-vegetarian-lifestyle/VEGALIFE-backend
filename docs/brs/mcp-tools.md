@@ -11,7 +11,7 @@ request arrives.
 | Rule ID | Title | Status | Last Reviewed |
 |---------|-------|--------|---------------|
 | BR-MCP-001 | Tool calls act as the authenticated caller | Active | 2026-10-12 |
-| BR-MCP-002 | Exactly four menu tools are exposed | Active | 2026-10-12 |
+| BR-MCP-002 | Exactly five menu tools are exposed | Active | 2026-10-12 |
 | BR-MCP-003 | Tool calls consume no AI quota | Active | 2026-10-12 |
 | BR-MCP-004 | Credentials are never model-visible or logged | Active | 2026-10-12 |
 | BR-MCP-005 | Chat edits only the caller's current-week draft | Active | 2026-10-12 |
@@ -33,16 +33,23 @@ cannot select whose data a tool reads by manipulating arguments.
 - Related: BR-MENU-001, BR-AI-003, ADR-012
 - Added: 2026-10-12
 
-### BR-MCP-002 — Exactly four menu tools are exposed
-The MCP server publishes exactly `get_menu`, `create_menu`, `update_menu`, and
-`schedule_menu`. No other backend capability is reachable through the MCP
-surface; adding a tool is a reviewed change to the tool registry plus this
-rule's table, never an emergent consequence of the backend's endpoint count.
+### BR-MCP-002 — Exactly five menu tools are exposed
+The MCP server publishes exactly `get_menu`, `get_meal_plan`, `create_menu`,
+`update_menu`, and `schedule_menu`. No other backend capability is reachable
+through the MCP surface; adding a tool is a reviewed change to the tool
+registry plus this rule's table, never an emergent consequence of the backend's
+endpoint count. The two read tools each mirror one backend endpoint
+(`get_menu` → `GET /api/menus`, `get_meal_plan` → `GET /api/menus/details`)
+and deliberately do not overlap: one lists summaries, the other returns the
+day-by-day meal detail.
 
 - Enforcement: the tool registry in `mcp-server` (explicit registration, no
   endpoint reflection); asserted by test
 - Related: ADR-012, FR-002
 - Added: 2026-10-12
+- Amended: 2026-10-12 — count raised from four to five with `get_meal_plan`,
+  and `get_menu` narrowed to a pure list mirror (see
+  `docs/feats/meal-plan-detail-query.md`)
 
 ### BR-MCP-003 — Tool calls consume no AI quota
 Menu tool calls are steps inside one chat turn, not separate turns: they never

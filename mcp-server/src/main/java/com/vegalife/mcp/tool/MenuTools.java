@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -112,6 +113,61 @@ public class MenuTools {
       putIfPresent(query, "sort", sort);
 
       return backendClient.getMenus(caller, query);
+    } catch (MissingCallerIdentityException e) {
+      return "error: caller identity missing (" + e.getMessage() + ")";
+    } catch (BackendCallException e) {
+      return e.asToolMessage();
+    }
+  }
+
+  @Tool(
+      name = "get_meal_plan",
+      description =
+          "Read the caller's meal plan over a date range: every menu intersecting the range, each"
+              + " with its days, meals and the full dish behind each meal (name, description,"
+              + " image, cuisine). from/to are inclusive bounds and either may be supplied alone;"
+              + " with neither, the range defaults to the current week (Monday to Sunday, server"
+              + " UTC). menuId reads exactly one menu's meals and overrides any range supplied"
+              + " with it. There is no status filter — every returned menu carries its own status."
+              + " Use get_menu instead for a paginated list of menu summaries without meals. The"
+              + " caller's identity comes from their session and is never a parameter.")
+  public String getMealPlan(
+      @ToolParam(
+              required = false,
+              description =
+                  "Inclusive start of the range, format YYYY-MM-DD. Omit for the current"
+                      + " week when to is also omitted.")
+          String from,
+      @ToolParam(
+              required = false,
+              description =
+                  "Inclusive end of the range, format YYYY-MM-DD. Omit for the current"
+                      + " week when from is also omitted.")
+          String to,
+      @ToolParam(
+              required = false,
+              description = "UUID of one specific owned menu to read directly. Overrides from/to.")
+          String menuId,
+      ToolContext toolContext) {
+    try {
+      CallerContext caller = CallerContext.require(toolContext);
+
+      String badDate = firstMalformedDate(from, to);
+      if (badDate != null) {
+        return "error: " + badDate + " must be a date in YYYY-MM-DD format";
+      }
+
+      String id = menuId == null ? "" : menuId.trim();
+      if (!id.isEmpty() && !isUuid(id)) {
+        return "error: menuId must be a UUID";
+      }
+
+      Map<String, String> query = new LinkedHashMap<>();
+      putIfPresent(query, "from", from);
+      putIfPresent(query, "to", to);
+      putIfPresent(query, "menuId", id);
+
+      return backendClient.getMealPlan(caller, query);
     } catch (MissingCallerIdentityException e) {
       return "error: caller identity missing (" + e.getMessage() + ")";
     } catch (BackendCallException e) {
@@ -347,6 +403,15 @@ public class MenuTools {
       LocalDate.parse(value);
       return true;
     } catch (DateTimeParseException e) {
+      return false;
+    }
+  }
+
+  private static boolean isUuid(String value) {
+    try {
+      UUID.fromString(value);
+      return true;
+    } catch (IllegalArgumentException e) {
       return false;
     }
   }

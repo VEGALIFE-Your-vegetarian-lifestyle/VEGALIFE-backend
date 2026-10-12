@@ -69,15 +69,17 @@ class BackendClientTest {
   }
 
   @Test
-  void getMenuByIdTargetsTheMenuPath() {
+  void getMealPlanTargetsTheDetailsPath() {
     backend.stubFor(
-        get(urlPathEqualTo("/api/menus/11111111-1111-1111-1111-111111111111"))
+        get(urlPathEqualTo("/api/menus/details"))
+            .withQueryParam("menuId", equalTo("11111111-1111-1111-1111-111111111111"))
             .withHeader("Authorization", equalTo("Bearer jwt-abc"))
-            .willReturn(okJson("{\"success\":true,\"data\":{}}")));
+            .willReturn(okJson("{\"success\":true,\"data\":[]}")));
 
-    String body = client.getMenuById(CALLER, "11111111-1111-1111-1111-111111111111");
+    String body =
+        client.getMealPlan(CALLER, Map.of("menuId", "11111111-1111-1111-1111-111111111111"));
 
-    assertEquals("{\"success\":true,\"data\":{}}", body);
+    assertEquals("{\"success\":true,\"data\":[]}", body);
   }
 
   @Test
