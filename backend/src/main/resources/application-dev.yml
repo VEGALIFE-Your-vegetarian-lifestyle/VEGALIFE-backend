@@ -23,9 +23,12 @@ spring:
               url: ${MCP_URL:http://localhost:8081/mcp}
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/vegalife
-    username: vegalife
-    password: vegalife
+    # Env-overridable so the containerized E2E stack (McpMenuEndToEndIntegrationTest)
+    # can point the dev-profile backend at the compose postgres; the local default
+    # is unchanged.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/vegalife}
+    username: ${DB_USER:vegalife}
+    password: ${DB_PASSWORD:vegalife}
 
   jpa:
     show-sql: true

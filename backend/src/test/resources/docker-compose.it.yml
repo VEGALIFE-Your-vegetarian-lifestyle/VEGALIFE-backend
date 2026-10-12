@@ -1,0 +1,83 @@
+# Both-servers end-to-end stack for McpMenuEndToEndIntegrationTest (ADR-012):
+# postgres + mcp-server + backend on one network. The backend reaches the MCP
+# server by service name through MCP_URL (dev profile, eager client init), and
+# the test drives the MCP server's published loopback port with a real JWT.
+#
+# Build contexts are relative to this file (backend/src/test/resources), so
+# "../../../.." is the repository root — both Dockerfiles need the full
+# multi-module reactor. Images carry their own healthchecks; they are repeated
+# here with a short interval so the test's --wait resolves quickly.
+name: vegalife-mcp-it
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: vegalife
+      POSTGRES_USER: vegalife
+      POSTGRES_PASSWORD: vegalife
+    ports:
+      - "15433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vegalife -d vegalife"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mcp-server:
+    build:
+      context: ../../../..
+      dockerfile: mcp-server/Dockerfile
+    environment:
+      BACKEND_URL: http://backend:8080
+    ports:
+      - "18081:8081"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8081/actuator/health",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 45s
+
+  backend:
+    build:
+      context: ../../../..
+      dockerfile: backend/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://postgres:5432/vegalife
+      DB_USER: vegalife
+      DB_PASSWORD: vegalife
+      # Eager MCP client init: the backend refuses to boot until mcp-server is
+      # healthy, which is exactly the production dev-profile contract.
+      MCP_URL: http://mcp-server:8081/mcp
+      AI_CHAT_API_KEY: mcp-it-dummy-key-not-a-secret
+    ports:
+      - "18080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mcp-server:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/actuator/health",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 90s
