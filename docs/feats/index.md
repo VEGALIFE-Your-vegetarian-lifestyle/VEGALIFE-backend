@@ -49,3 +49,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `ai-chat-send.md`                   | AI Chat Send (JSON + SSE Streaming)      | Approved    | 2026-10-07 |
 | `query-menus-by-range.md`           | Query Menus by Week, Month, or Date Range | Approved    | 2026-10-10 |
 | `moderate-posts-admin-api.md`       | Moderate Posts API (Admin)                | Implemented | 2026-10-10 |
+| `attach-media-and-recipes-to-post.md` | Attach Media and Recipes to a Post | In progress | 2026-10-13 |

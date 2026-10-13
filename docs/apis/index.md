@@ -24,6 +24,8 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `post/get-posts.md` | `GET /api/posts` | List the authenticated user's posts |
 | `post/get-posts-postid.md` | `GET /api/posts/{postId}` | View a single non-deleted post by id (any status, any author, public) |
 | `post/post-posts-postid-comments.md` | `POST /api/posts/{postId}/comments` | Create a top-level comment or nested reply on a published post (authenticated) |
+| `post/post-posts-postid-media.md` | `POST /api/posts/{postId}/media` | Replace a post's media attachments (owner/Admin; authenticated) |
+| `post/post-posts-postid-recipes.md` | `POST /api/posts/{postId}/recipes` | Replace a post's recipe attachments (owner/Admin; authenticated) |
 | `post/get-posts-postid-comments.md` | `GET /api/posts/{postId}/comments` | List a post's comments as a paginated nested thread (public) |
 | `post/patch-posts-postid-comments-commentid.md` | `PATCH /api/posts/{postId}/comments/{commentId}` | Edit a comment's content, no time limit (owner only) |
 | `post/delete-posts-postid-comments-commentid.md` | `DELETE /api/posts/{postId}/comments/{commentId}` | Soft-delete a comment (owner or Admin) |
