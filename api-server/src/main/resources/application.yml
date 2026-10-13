@@ -20,16 +20,6 @@ spring:
         options:
           model: ${AI_CHAT_MODEL:gpt-4o-mini}
 
-    mcp:
-      client:
-        # Menu tools for the AI chat (ADR-012). ASYNC: the client is
-        # non-blocking; its tool callbacks block per call, which is fine on the
-        # servlet paths. Connections are declared per profile below, so
-        # environments without an MCP server (unit/integration tests, prod
-        # until mcp-server is deployed there) simply expose no menu tools
-        # instead of failing to boot.
-        type: ASYNC
-
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/vegalife}
     username: ${DB_USER:vegalife}

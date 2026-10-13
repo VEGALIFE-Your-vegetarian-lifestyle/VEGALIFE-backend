@@ -12,6 +12,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.request.ai.SendMessageRequest;
 import com.vegalife.dto.response.ai.SendMessageResponse;
 import com.vegalife.model.ai.AiConversation;
@@ -23,8 +24,12 @@ import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.service.ai.AiChatService;
 import com.vegalife.service.ai.AiQuotaGuard;
 import com.vegalife.service.ai.AiToolContext;
+import com.vegalife.service.ai.MenuTools;
+import com.vegalife.service.menu.MenuQueryFilterResolver;
+import com.vegalife.service.menu.MenuService;
 import com.vegalife.shared.exception.AiProviderException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
+import jakarta.validation.Validation;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -34,14 +39,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.mcp.AsyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
@@ -56,9 +59,8 @@ class AiChatServiceTest {
   @Mock private UserProfileRepository userProfileRepository;
   @Mock private AiQuotaGuard quotaGuard;
   @Mock private TransactionTemplate transactionTemplate;
-  @Mock private AsyncMcpToolCallbackProvider menuToolProvider;
 
-  @InjectMocks private AiChatService aiChatService;
+  private AiChatService aiChatService;
 
   private ChatClient chatClient;
   private ChatClient.ChatClientRequestSpec spec;
@@ -77,13 +79,32 @@ class AiChatServiceTest {
     chatClient = mock(ChatClient.class);
     spec = mock(ChatClient.ChatClientRequestSpec.class);
     callSpec = mock(ChatClient.CallResponseSpec.class);
+
+    // Built by hand rather than @InjectMocks: the tools now live in-process, so the service needs
+    // a real MenuTools for MethodToolCallbackProvider to reflect its @Tool methods over — a mock
+    // would report none and initChatClient would fail (ADR-013).
+    MenuTools menuTools =
+        new MenuTools(
+            mock(MenuService.class),
+            new MenuQueryFilterResolver(),
+            Validation.buildDefaultValidatorFactory().getValidator(),
+            new ObjectMapper());
+    aiChatService =
+        new AiChatService(
+            chatClientBuilder,
+            conversationRepository,
+            messageRepository,
+            userProfileRepository,
+            quotaGuard,
+            transactionTemplate,
+            menuTools);
   }
 
   private void stubClient() {
-    when(menuToolProvider.getToolCallbacks()).thenReturn(new ToolCallback[0]);
-    when(chatClientBuilder.defaultToolCallbacks(new ToolCallback[0])).thenReturn(chatClientBuilder);
+    when(chatClientBuilder.defaultToolCallbacks(any(ToolCallback[].class)))
+        .thenReturn(chatClientBuilder);
     when(chatClientBuilder.build()).thenReturn(chatClient);
-    // @InjectMocks does not run @PostConstruct, so build the client the way startup would.
+    // Not invoked by @PostConstruct, so build the client the way startup would.
     aiChatService.initChatClient();
     when(chatClient.prompt()).thenReturn(spec);
     when(spec.system(anyString())).thenReturn(spec);
@@ -118,8 +139,7 @@ class AiChatServiceTest {
             });
 
     SendMessageResponse response =
-        aiChatService.send(
-            userId, "test-jwt", SendMessageRequest.builder().message("What for lunch?").build());
+        aiChatService.send(userId, SendMessageRequest.builder().message("What for lunch?").build());
 
     assertThat(response.getReply()).isEqualTo("Try a tofu scramble.");
     assertThat(response.getConversationId()).isNotNull();
@@ -150,8 +170,7 @@ class AiChatServiceTest {
             });
     String longMessage = "x".repeat(100);
 
-    aiChatService.send(
-        userId, "test-jwt", SendMessageRequest.builder().message(longMessage).build());
+    aiChatService.send(userId, SendMessageRequest.builder().message(longMessage).build());
 
     ArgumentCaptor<AiConversation> captor = ArgumentCaptor.forClass(AiConversation.class);
     verify(conversationRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
@@ -168,7 +187,6 @@ class AiChatServiceTest {
             () ->
                 aiChatService.send(
                     userId,
-                    "test-jwt",
                     SendMessageRequest.builder()
                         .message("hi")
                         .conversationId(conversationId)
@@ -188,9 +206,7 @@ class AiChatServiceTest {
     when(callSpec.content()).thenReturn("  ");
 
     assertThatThrownBy(
-            () ->
-                aiChatService.send(
-                    userId, "test-jwt", SendMessageRequest.builder().message("hi").build()))
+            () -> aiChatService.send(userId, SendMessageRequest.builder().message("hi").build()))
         .isInstanceOf(AiProviderException.class);
 
     verify(conversationRepository, never()).save(any());
@@ -233,7 +249,6 @@ class AiChatServiceTest {
 
     aiChatService.send(
         userId,
-        "test-jwt",
         SendMessageRequest.builder()
             .message("new question")
             .conversationId(conversationId)
@@ -253,7 +268,7 @@ class AiChatServiceTest {
   }
 
   @Test
-  void send_passesCallerJwtAsToolContext() {
+  void send_carriesTheCallerUserIdAsToolContext() {
     stubClient();
     stubTransactionTemplate();
     when(quotaGuard.requireAllowance(userId)).thenReturn(window);
@@ -262,23 +277,11 @@ class AiChatServiceTest {
     when(conversationRepository.save(any(AiConversation.class)))
         .thenAnswer(inv -> inv.getArgument(0));
 
-    aiChatService.send(userId, "raw-jwt-token", SendMessageRequest.builder().message("hi").build());
+    aiChatService.send(userId, SendMessageRequest.builder().message("hi").build());
 
     ArgumentCaptor<Map<String, Object>> toolContext = ArgumentCaptor.forClass(Map.class);
     verify(spec).toolContext(toolContext.capture());
     assertThat(toolContext.getValue())
-        .containsExactly(Map.entry(AiToolContext.CALLER_JWT_KEY, "raw-jwt-token"));
-  }
-
-  @Test
-  void initChatClient_attachesMcpMenuTools() {
-    ToolCallback menuTool = mock(ToolCallback.class);
-    when(menuToolProvider.getToolCallbacks()).thenReturn(new ToolCallback[] {menuTool});
-    when(chatClientBuilder.defaultToolCallbacks(menuTool)).thenReturn(chatClientBuilder);
-    when(chatClientBuilder.build()).thenReturn(chatClient);
-
-    aiChatService.initChatClient();
-
-    verify(chatClientBuilder).defaultToolCallbacks(menuTool);
+        .containsExactly(Map.entry(AiToolContext.USER_ID_KEY, userId));
   }
 }

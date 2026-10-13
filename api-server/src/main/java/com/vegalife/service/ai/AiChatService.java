@@ -26,8 +26,8 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.mcp.AsyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -54,24 +54,26 @@ public class AiChatService {
   private final UserProfileRepository userProfileRepository;
   private final AiQuotaGuard quotaGuard;
   private final TransactionTemplate transactionTemplate;
-  private final AsyncMcpToolCallbackProvider menuToolProvider;
+  private final MenuTools menuTools;
 
   private ChatClient chatClient;
 
   /**
    * Built once at startup so the streaming path never races to initialise a shared field. The menu
-   * tools come from the connected MCP server (ADR-012); environments without one start the chat
-   * with no tools.
+   * tools are in-process {@code @Tool} methods over {@link MenuTools} (ADR-013), so unlike the MCP
+   * client they replaced they are always present — the system prompt can no longer advertise a tool
+   * the runtime does not have.
    */
   @PostConstruct
   public void initChatClient() {
-    ToolCallback[] menuTools = menuToolProvider.getToolCallbacks();
-    log.info("chat client initialising with {} menu tool(s)", menuTools.length);
-    this.chatClient = chatClientBuilder.defaultToolCallbacks(menuTools).build();
+    ToolCallback[] menuToolCallbacks =
+        MethodToolCallbackProvider.builder().toolObjects(menuTools).build().getToolCallbacks();
+    log.info("chat client initialising with {} menu tool(s)", menuToolCallbacks.length);
+    this.chatClient = chatClientBuilder.defaultToolCallbacks(menuToolCallbacks).build();
   }
 
   /** Blocking turn for {@code POST /api/ai/messages}. */
-  public SendMessageResponse send(UUID userId, String callerJwt, SendMessageRequest request) {
+  public SendMessageResponse send(UUID userId, SendMessageRequest request) {
     Optional<AiConversation> existing = resolveConversation(userId, request.getConversationId());
     AiQuotaGuard.QuotaWindow window = quotaGuard.requireAllowance(userId);
 
@@ -82,7 +84,7 @@ public class AiChatService {
               .prompt()
               .system(buildSystemPrompt(userId))
               .messages(buildContext(existing, request.getMessage()))
-              .toolContext(AiToolContext.forCaller(callerJwt))
+              .toolContext(AiToolContext.forUser(userId))
               .call()
               .content();
     } catch (RuntimeException ex) {
@@ -107,7 +109,7 @@ public class AiChatService {
    * are raised before the emitter is returned so they still produce a JSON error response; a
    * failure after the stream opens is delivered as an {@code error} event.
    */
-  public SseEmitter stream(UUID userId, String callerJwt, SendMessageRequest request) {
+  public SseEmitter stream(UUID userId, SendMessageRequest request) {
     Optional<AiConversation> existing = resolveConversation(userId, request.getConversationId());
     AiQuotaGuard.QuotaWindow window = quotaGuard.requireAllowance(userId);
     List<Message> context = buildContext(existing, request.getMessage());
@@ -121,7 +123,7 @@ public class AiChatService {
             .prompt()
             .system(systemPrompt)
             .messages(context)
-            .toolContext(AiToolContext.forCaller(callerJwt))
+            .toolContext(AiToolContext.forUser(userId))
             .stream()
             .content()
             .subscribe(
