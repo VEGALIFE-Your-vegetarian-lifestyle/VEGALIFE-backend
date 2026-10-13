@@ -6,12 +6,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import com.vegalife.model.user.DietaryPreferences;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
 import java.math.BigDecimal;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -158,6 +160,116 @@ class ProfileControllerIntegrationTest {
         .andExpect(jsonPath("$.data.age").value(30)) // unchanged
         .andExpect(jsonPath("$.data.gender").value("female")) // unchanged
         .andExpect(jsonPath("$.data.avatarUrl").value("https://old.com")); // unchanged
+  }
+
+  @Test
+  void updateProfile_withDietaryFields_shouldPersistAsJsonbAndReturnFlatFieldsWithBmi()
+      throws Exception {
+    String requestJson =
+        """
+        {
+          "heightCm": 170.00,
+          "weightKg": 70.00,
+          "preferences": ["spicy"],
+          "dislikes": ["mushrooms"],
+          "allergies": ["peanuts", "shellfish"],
+          "restrictions": ["gluten free"],
+          "healthGoal": "weight loss"
+        }
+        """;
+
+    mockMvc
+        .perform(
+            put("/api/profile")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.preferences[0]").value("spicy"))
+        .andExpect(jsonPath("$.data.dislikes[0]").value("mushrooms"))
+        .andExpect(jsonPath("$.data.allergies[0]").value("peanuts"))
+        .andExpect(jsonPath("$.data.allergies[1]").value("shellfish"))
+        .andExpect(jsonPath("$.data.restrictions[0]").value("gluten free"))
+        .andExpect(jsonPath("$.data.healthGoal").value("weight loss"))
+        // 70 / 1.70^2 = 24.2 — derived at read time, never stored
+        .andExpect(jsonPath("$.data.bmi").value(24.2));
+
+    // Persisted as the single JSONB value type, not as flat columns
+    UserProfile profile = profileRepository.findByUserId(testUser.getId()).orElseThrow();
+    assertThat(profile.getDietaryPreferences().getPreferences()).containsExactly("spicy");
+    assertThat(profile.getDietaryPreferences().getAllergies())
+        .containsExactly("peanuts", "shellfish");
+    assertThat(profile.getDietaryPreferences().getHealthGoal()).isEqualTo("weight loss");
+  }
+
+  @Test
+  void updateProfile_dietaryPartialUpdate_shouldKeepExistingMembersAndOmitUnsetOnes()
+      throws Exception {
+    profileRepository.save(
+        UserProfile.builder()
+            .user(testUser)
+            .dietaryPreferences(
+                DietaryPreferences.builder()
+                    .preferences(List.of("spicy"))
+                    .allergies(List.of("peanuts"))
+                    .build())
+            .build());
+
+    // Only restrictions + healthGoal provided; allergies cleared with an empty list
+    String requestJson =
+        """
+        {
+          "restrictions": ["gluten free"],
+          "healthGoal": "muscle gain",
+          "allergies": []
+        }
+        """;
+
+    mockMvc
+        .perform(
+            put("/api/profile")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+        .andExpect(status().isOk())
+        // kept because omitted
+        .andExpect(jsonPath("$.data.preferences[0]").value("spicy"))
+        // cleared because an empty list was sent
+        .andExpect(jsonPath("$.data.allergies").isEmpty())
+        .andExpect(jsonPath("$.data.restrictions[0]").value("gluten free"))
+        .andExpect(jsonPath("$.data.healthGoal").value("muscle gain"))
+        .andExpect(jsonPath("$.data.bmi").doesNotExist());
+  }
+
+  @Test
+  void getOwnProfile_withoutDietaryData_shouldOmitTheFieldsAndBmi() throws Exception {
+    mockMvc
+        .perform(get("/api/profile").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.preferences").doesNotExist())
+        .andExpect(jsonPath("$.data.healthGoal").doesNotExist())
+        .andExpect(jsonPath("$.data.bmi").doesNotExist());
+  }
+
+  @Test
+  void updateProfile_withDietaryTagTooLong_shouldReturn400() throws Exception {
+    String tooLong = "a".repeat(101);
+    String requestJson =
+        """
+        {
+          "allergies": ["%s"]
+        }
+        """
+            .formatted(tooLong);
+
+    mockMvc
+        .perform(
+            put("/api/profile")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Validation failed"));
   }
 
   @Test

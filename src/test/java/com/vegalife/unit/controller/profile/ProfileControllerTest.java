@@ -40,6 +40,9 @@ class ProfileControllerTest {
             .gender("male")
             .description("Test description")
             .avatarUrl("https://example.com/avatar.jpg")
+            .preferences(java.util.List.of("spicy"))
+            .allergies(java.util.List.of("peanuts"))
+            .healthGoal("weight loss")
             .build();
 
     profileResponse =
@@ -53,6 +56,10 @@ class ProfileControllerTest {
             .gender("male")
             .description("Test description")
             .avatarUrl("https://example.com/avatar.jpg")
+            .preferences(java.util.List.of("spicy"))
+            .allergies(java.util.List.of("peanuts"))
+            .healthGoal("weight loss")
+            .bmi(new BigDecimal("22.9"))
             .build();
   }
 
