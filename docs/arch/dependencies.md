@@ -32,9 +32,15 @@ These are part of the current tech stack. Use freely.
 | `org.hibernate:hibernate-jpamodelgen` | JPA static metamodel generation (test scope) | In pom.xml |
 | `spring-boot-starter-actuator` | Health endpoint `/actuator/health` (CD + Render health checks; status only, see `deployment.md`) | In pom.xml |
 | `com.cloudinary:cloudinary-http5` | Signed direct-to-Cloudinary upload + Admin API verification (media upload, issue #38) | In pom.xml |
-| `spring-ai-starter-mcp-server-webmvc` | Expose menu tools over Streamable HTTP (`/mcp`) in the `mcp-server` module (ADR-012) | Approved for `feat/mcp-server-implementation` |
-| `spring-ai-starter-mcp-client` | Chat tool calling against the MCP server in `api-server` (ADR-012) | Approved for `feat/mcp-server-implementation` |
-| `org.wiremock:wiremock-standalone` (3.12.1) | Stub HTTP server for the `BackendClient`/tool HTTP-contract tests in `mcp-server` (ADR-012) | Approved for `feat/mcp-server-implementation` |
+| `org.springframework.ai:spring-ai-bom` (1.1.8) | Version management for Spring AI artifacts | In pom.xml |
+| `spring-ai-starter-model-openai` | Chat model client + AI abstraction for post content filtering (ADR-007) | In pom.xml |
+| `spring-ai` `@Tool` / `@ToolParam` (via `spring-ai-model`) | AI chat menu tools declared on `service/ai/MenuTools` (ADR-013) | In pom.xml |
+
+**Not used:** `spring-ai-starter-mcp-server-webmvc`,
+`spring-ai-starter-mcp-client`, and `org.wiremock:wiremock-standalone` were
+approved for ADR-012's separate MCP server. ADR-013 supersedes ADR-012, the
+`mcp-server` module is deleted, and none of the three is in the pom — do not
+re-add them without a new decision.
 
 ## Planned (approved, add when a feature needs it)
 
@@ -42,7 +48,6 @@ These are approved in principle. Add them to pom.xml when a feature requires the
 
 | Dependency | Purpose | Add when |
 |---|---|---|
-| `org.springframework.ai:spring-ai-bom` + `spring-ai-starter-model-openai` (1.1.8) | Embedding / AI abstraction for post content filtering (ADR-007); chat later | Post content filtering — this feature (Phase 5) |
 | `spring-boot-starter-oauth2-resource-server` | JWT validation | When using JWT-based auth |
 | `spring-boot-starter-websocket` | Real-time chat / notifications | Chat feature implementation |
 | `com.github.ben-manes.caffeine:caffeine` | Local caching | When hot data needs caching (recipes, feeds) |
