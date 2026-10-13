@@ -13,9 +13,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
-import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "ai_conversation")
@@ -35,13 +33,6 @@ public class AiConversation {
 
   @Column(name = "title", nullable = false, columnDefinition = "TEXT")
   private String title;
-
-  @Column(name = "summary", columnDefinition = "TEXT")
-  private String summary;
-
-  @JdbcTypeCode(SqlTypes.JSON)
-  @Column(name = "recent_messages", columnDefinition = "jsonb")
-  private String recentMessages;
 
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
