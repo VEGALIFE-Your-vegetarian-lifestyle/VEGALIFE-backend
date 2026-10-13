@@ -5,7 +5,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "user_profile")
@@ -42,6 +44,10 @@ public class UserProfile {
 
   @Column(name = "avatar_url")
   private String avatarUrl;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "dietary_preferences", columnDefinition = "jsonb")
+  private DietaryPreferences dietaryPreferences;
 
   @UpdateTimestamp
   @Column(name = "updated_at", nullable = false)
