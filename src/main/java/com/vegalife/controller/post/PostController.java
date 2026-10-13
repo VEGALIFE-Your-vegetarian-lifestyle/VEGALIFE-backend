@@ -2,6 +2,8 @@ package com.vegalife.controller.post;
 
 import com.vegalife.dto.request.post.PostCreateRequest;
 import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.PostMediaAttachmentRequest;
+import com.vegalife.dto.request.post.PostRecipeAttachmentRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.request.post.PostVisibilityRequest;
 import com.vegalife.dto.response.post.PostListResponse;
@@ -34,6 +36,32 @@ import org.springframework.web.bind.annotation.RestController;
 public class PostController {
 
   private final PostService postService;
+
+  @PostMapping("/{postId}/media")
+  @PreAuthorize("isAuthenticated()")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<PostListResponse>> attachMedia(
+      @AuthenticationPrincipal UUID userId,
+      Authentication authentication,
+      @PathVariable UUID postId,
+      @Valid @RequestBody PostMediaAttachmentRequest request) {
+    PostListResponse post =
+        postService.attachMedia(userId, isAdmin(authentication), postId, request);
+    return ResponseEntity.ok(ApiResponse.success(post, "Post media updated successfully"));
+  }
+
+  @PostMapping("/{postId}/recipes")
+  @PreAuthorize("isAuthenticated()")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<PostListResponse>> attachRecipes(
+      @AuthenticationPrincipal UUID userId,
+      Authentication authentication,
+      @PathVariable UUID postId,
+      @Valid @RequestBody PostRecipeAttachmentRequest request) {
+    PostListResponse post =
+        postService.attachRecipes(userId, isAdmin(authentication), postId, request);
+    return ResponseEntity.ok(ApiResponse.success(post, "Post recipes updated successfully"));
+  }
 
   @PostMapping
   @PreAuthorize("isAuthenticated()")

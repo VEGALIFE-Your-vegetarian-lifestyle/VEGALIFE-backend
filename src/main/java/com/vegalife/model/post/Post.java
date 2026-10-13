@@ -1,6 +1,7 @@
 package com.vegalife.model.post;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -22,7 +23,10 @@ import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -74,6 +78,13 @@ public class Post {
       inverseJoinColumns = @JoinColumn(name = "media_id"))
   @Builder.Default
   private Set<Media> media = new HashSet<>();
+
+  @ManyToMany(mappedBy = "posts", fetch = FetchType.LAZY)
+  @BatchSize(size = 50)
+  @Builder.Default
+  @ToString.Exclude
+  @EqualsAndHashCode.Exclude
+  private Set<Recipe> recipes = new HashSet<>();
 
   @Enumerated(EnumType.STRING)
   @Column(name = "status", length = 20, nullable = false)

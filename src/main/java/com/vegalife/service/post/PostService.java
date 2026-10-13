@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.post.PostMapper;
 import com.vegalife.dto.request.post.PostCreateRequest;
 import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.PostMediaAttachmentRequest;
+import com.vegalife.dto.request.post.PostRecipeAttachmentRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.filter.ContentFilterPayload;
@@ -14,11 +16,15 @@ import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
+import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
+import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -47,6 +53,8 @@ public class PostService {
   private final PostRepository postRepository;
   private final UserRepository userRepository;
   private final CategoryRepository categoryRepository;
+  private final MediaRepository mediaRepository;
+  private final RecipeRepository recipeRepository;
   private final ModerationLogRepository moderationLogRepository;
   private final OutboundMessageRepository outboundMessageRepository;
   private final PostMapper postMapper;
@@ -133,6 +141,54 @@ public class PostService {
     }
     recordModerationIfAdminOverride(actorId, isAdmin, saved, "EDIT_POST");
     return postMapper.toListResponse(saved);
+  }
+
+  /** Replaces the post's media with existing, active, successfully uploaded media. */
+  @Transactional
+  public PostListResponse attachMedia(
+      UUID actorId, boolean isAdmin, UUID postId, PostMediaAttachmentRequest request) {
+    Post post = findManageablePost(actorId, isAdmin, postId);
+    Set<UUID> ids = request.getMediaIds();
+    List<Media> media =
+        ids.isEmpty()
+            ? List.of()
+            : mediaRepository.findByIdInAndDeletedAtIsNullAndStatus(ids, Media.Status.succeed);
+    if (media.size() != ids.size()) {
+      throw new ValidationException("One or more media items do not exist or are not ready");
+    }
+    post.getMedia().clear();
+    post.getMedia().addAll(media);
+    Post saved = postRepository.saveAndFlush(post);
+    return postMapper.toListResponse(saved);
+  }
+
+  /** Replaces the post's recipe set; recipe ownership is not restricted. */
+  @Transactional
+  public PostListResponse attachRecipes(
+      UUID actorId, boolean isAdmin, UUID postId, PostRecipeAttachmentRequest request) {
+    Post post = findManageablePost(actorId, isAdmin, postId);
+    Set<UUID> ids = request.getRecipeIds();
+    List<Recipe> desired =
+        ids.isEmpty() ? List.of() : recipeRepository.findByIdInAndDeletedAtIsNull(ids);
+    if (desired.size() != ids.size()) {
+      throw new ValidationException("One or more recipes do not exist or are deleted");
+    }
+
+    List<Recipe> current = recipeRepository.findByPosts_Id(postId);
+    current.forEach(recipe -> recipe.getPosts().remove(post));
+    desired.forEach(recipe -> recipe.getPosts().add(post));
+    post.getRecipes().clear();
+    post.getRecipes().addAll(desired);
+    if (!current.isEmpty() || !desired.isEmpty()) {
+      recipeRepository.saveAllAndFlush(unionRecipes(current, desired));
+    }
+    return postMapper.toListResponse(post);
+  }
+
+  private List<Recipe> unionRecipes(List<Recipe> current, List<Recipe> desired) {
+    Set<Recipe> recipes = new HashSet<>(current);
+    recipes.addAll(desired);
+    return List.copyOf(recipes);
   }
 
   /**

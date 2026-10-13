@@ -5,6 +5,7 @@ import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.recipe.Recipe;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -18,6 +19,7 @@ public interface PostMapper {
   @Mapping(target = "user", ignore = true)
   @Mapping(target = "categories", ignore = true)
   @Mapping(target = "media", ignore = true)
+  @Mapping(target = "recipes", ignore = true)
   @Mapping(target = "status", ignore = true)
   @Mapping(target = "flag", ignore = true)
   @Mapping(target = "viewCount", ignore = true)
@@ -29,6 +31,7 @@ public interface PostMapper {
 
   @Mapping(target = "categoryIds", source = "categories")
   @Mapping(target = "mediaIds", source = "media")
+  @Mapping(target = "recipeIds", source = "recipes")
   PostListResponse toListResponse(Post post);
 
   default Set<UUID> categoryIds(Set<Category> categories) {
@@ -39,6 +42,13 @@ public interface PostMapper {
     return media.stream()
         .filter(item -> item.getDeletedAt() == null)
         .map(Media::getId)
+        .collect(Collectors.toSet());
+  }
+
+  default Set<UUID> recipeIds(Set<Recipe> recipes) {
+    return recipes.stream()
+        .filter(recipe -> recipe.getDeletedAt() == null)
+        .map(Recipe::getId)
         .collect(Collectors.toSet());
   }
 }

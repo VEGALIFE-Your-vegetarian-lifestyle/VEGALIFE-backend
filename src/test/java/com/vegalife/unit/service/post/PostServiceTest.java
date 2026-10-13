@@ -10,17 +10,23 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.post.PostMapper;
 import com.vegalife.dto.request.post.PostCreateRequest;
 import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.PostMediaAttachmentRequest;
+import com.vegalife.dto.request.post.PostRecipeAttachmentRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
+import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
+import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.post.PostService;
 import com.vegalife.shared.dto.PageResponse;
@@ -50,6 +56,10 @@ class PostServiceTest {
   @Mock private UserRepository userRepository;
 
   @Mock private CategoryRepository categoryRepository;
+
+  @Mock private MediaRepository mediaRepository;
+
+  @Mock private RecipeRepository recipeRepository;
 
   @Mock private ModerationLogRepository moderationLogRepository;
 
@@ -257,6 +267,95 @@ class PostServiceTest {
     PostListResponse response = postService.getPost(postId);
 
     assertThat(response).isSameAs(expectedResponse);
+  }
+
+  @Test
+  void attachMedia_replacesExistingSetAndKeepsPostState() {
+    UUID postId = UUID.randomUUID();
+    UUID mediaId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.created);
+    existing.setFlag(Post.Flag.PENDING);
+    existing.setPublishedAt(null);
+    Media media = Media.builder().id(mediaId).status(Media.Status.succeed).build();
+    PostListResponse expected = PostListResponse.builder().id(postId).build();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(mediaRepository.findByIdInAndDeletedAtIsNullAndStatus(
+            Set.of(mediaId), Media.Status.succeed))
+        .thenReturn(List.of(media));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+    when(postMapper.toListResponse(existing)).thenReturn(expected);
+
+    PostListResponse response =
+        postService.attachMedia(
+            userId,
+            false,
+            postId,
+            PostMediaAttachmentRequest.builder().mediaIds(Set.of(mediaId)).build());
+
+    assertThat(response).isSameAs(expected);
+    assertThat(existing.getMedia()).containsExactly(media);
+    assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(existing.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(existing.getPublishedAt()).isNull();
+    verifyContentFilterNotQueued();
+  }
+
+  @Test
+  void attachMedia_rejectsMediaNotReadyWithoutSaving() {
+    UUID postId = UUID.randomUUID();
+    UUID mediaId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.created);
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(mediaRepository.findByIdInAndDeletedAtIsNullAndStatus(
+            Set.of(mediaId), Media.Status.succeed))
+        .thenReturn(List.of());
+
+    assertThatThrownBy(
+            () ->
+                postService.attachMedia(
+                    userId,
+                    false,
+                    postId,
+                    PostMediaAttachmentRequest.builder().mediaIds(Set.of(mediaId)).build()))
+        .isInstanceOf(ValidationException.class);
+    verify(postRepository, never()).saveAndFlush(existing);
+  }
+
+  @Test
+  void attachRecipes_replacesAllExistingRecipesIncludingOtherUsersRecipe() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.published);
+    Recipe oldRecipe =
+        Recipe.builder()
+            .id(UUID.randomUUID())
+            .posts(new java.util.HashSet<>(Set.of(existing)))
+            .build();
+    Recipe newRecipe =
+        Recipe.builder().id(UUID.randomUUID()).posts(new java.util.HashSet<>()).build();
+    PostListResponse expected = PostListResponse.builder().id(postId).build();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(recipeRepository.findByIdInAndDeletedAtIsNull(Set.of(newRecipe.getId())))
+        .thenReturn(List.of(newRecipe));
+    when(recipeRepository.findByPosts_Id(postId)).thenReturn(List.of(oldRecipe));
+    when(postMapper.toListResponse(existing)).thenReturn(expected);
+
+    PostListResponse response =
+        postService.attachRecipes(
+            userId,
+            false,
+            postId,
+            PostRecipeAttachmentRequest.builder().recipeIds(Set.of(newRecipe.getId())).build());
+
+    assertThat(response).isSameAs(expected);
+    assertThat(oldRecipe.getPosts()).doesNotContain(existing);
+    assertThat(newRecipe.getPosts()).contains(existing);
+    assertThat(existing.getRecipes()).containsExactly(newRecipe);
+    assertThat(existing.getStatus()).isEqualTo(Post.Status.published);
+    verify(recipeRepository).saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
+    verifyContentFilterNotQueued();
   }
 
   @Test
