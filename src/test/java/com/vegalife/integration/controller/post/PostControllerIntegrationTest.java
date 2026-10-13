@@ -13,12 +13,18 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
+import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
+import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.recipe.DishRepository;
+import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
 import java.time.Instant;
@@ -74,6 +80,12 @@ class PostControllerIntegrationTest {
 
   @Autowired private CategoryRepository categoryRepository;
 
+  @Autowired private MediaRepository mediaRepository;
+
+  @Autowired private RecipeRepository recipeRepository;
+
+  @Autowired private DishRepository dishRepository;
+
   @Autowired private ModerationLogRepository moderationLogRepository;
 
   @Autowired private OutboundMessageRepository outboundMessageRepository;
@@ -104,6 +116,112 @@ class PostControllerIntegrationTest {
         .andExpect(jsonPath("$.message").value("Post retrieved successfully"))
         .andExpect(jsonPath("$.data.id").value(published.getId().toString()))
         .andExpect(jsonPath("$.data.title").value("Someone else's post"));
+  }
+
+  @Test
+  void attachMediaAndRecipes_replacesSetsAndReadBackIncludesBoth() throws Exception {
+    Post post = createPost(user, "Attachments", Post.Status.created, null);
+    Media media =
+        mediaRepository.saveAndFlush(
+            Media.builder().status(Media.Status.succeed).uploadedBy(otherUser).build());
+    Dish dish = dishRepository.saveAndFlush(Dish.builder().name("Tofu bowl").build());
+    Recipe recipe =
+        recipeRepository.saveAndFlush(
+            Recipe.builder()
+                .dish(dish)
+                .user(otherUser)
+                .name("Other user's recipe")
+                .instructions("Cook it")
+                .servings(2)
+                .build());
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", post.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\":[\"" + media.getId() + "\"]}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.mediaIds[0]").value(media.getId().toString()));
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", post.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipeIds\":[\"" + recipe.getId() + "\"]}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.recipeIds[0]").value(recipe.getId().toString()));
+
+    mockMvc
+        .perform(get("/api/posts/{postId}", post.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.mediaIds[0]").value(media.getId().toString()))
+        .andExpect(jsonPath("$.data.recipeIds[0]").value(recipe.getId().toString()));
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", post.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\":[]}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.mediaIds").isEmpty())
+        .andExpect(jsonPath("$.data.recipeIds[0]").value(recipe.getId().toString()));
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", post.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipeIds\":[]}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.recipeIds").isEmpty());
+
+    assertThat(postRepository.findById(post.getId()).orElseThrow().getStatus())
+        .isEqualTo(Post.Status.created);
+  }
+
+  @Test
+  void attachMediaOrRecipes_rejectsInvalidResourcesAndOtherUsersPost() throws Exception {
+    Post post = createPost(user, "Attachments", Post.Status.created, null);
+    Post otherPost = createPost(otherUser, "Other", Post.Status.created, null);
+    Media failedMedia =
+        mediaRepository.saveAndFlush(
+            Media.builder().status(Media.Status.failed).uploadedBy(user).build());
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", post.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\":[\"" + UUID.randomUUID() + "\"]}"))
+        .andExpect(status().isBadRequest());
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", post.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\":[\"" + failedMedia.getId() + "\"]}"))
+        .andExpect(status().isBadRequest());
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", post.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipeIds\":[\"" + UUID.randomUUID() + "\"]}"))
+        .andExpect(status().isBadRequest());
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", otherPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\":[]}"))
+        .andExpect(status().isNotFound());
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", post.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipeIds\":[]}"))
+        .andExpect(status().isUnauthorized());
   }
 
   @Test
