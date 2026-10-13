@@ -16,28 +16,28 @@ VEGALIFE-backend/
 │   ├── apis/               #   API reference docs
 │   ├── brs/                #   Business constraints
 │   └── feats/              #   Feature specifications
-├── api-server/             # The Spring Boot API application module
-│   ├── src/
-│   │   ├── main/
-│   │   │   ├── java/       # Application source code
-│   │   │   └── resources/  # Config: application.properties, Flyway migrations
-│   │   └── test/
-│   │       └── java/       # Tests mirroring src/main structure
-│   ├── Dockerfile          # API image (build context = repo root)
-│   └── pom.xml             # Module build config + dependencies
-├── mcp-server/             # MCP server module (thin tool adapter, ADR-012)
-│   ├── src/main/java/      # Tool + client code, internal network only
-│   ├── Dockerfile          # MCP image (build context = repo root)
-│   └── pom.xml             # Module build config (Spring AI MCP starter)
+├── src/                    # The Spring Boot API application
+│   ├── main/
+│   │   ├── java/           # Application source code
+│   │   └── resources/      # Config: application.yml, Flyway migrations
+│   └── test/
+│       ├── java/           # Tests mirroring src/main structure
+│       └── resources/      # Test config + Testcontainers support files
 ├── AGENTS.md               # Entry point for AI agents
-├── pom.xml                 # Maven parent pom (multi-module reactor + shared plugin config)
+├── Dockerfile              # API image (build context = repo root)
+├── pom.xml                 # Maven build — single module (dependencies + plugins)
+├── docker-compose.yml      # Local dev stack (postgres + API)
 └── README.md               # Human-facing project README
 ```
+
+One Maven module, one `src/` at the root. The AI chat's menu tools are
+`@Tool` methods in `service/ai/` inside this same application, not a separate
+deployable — see `docs/adrs/013-serve-ai-tools-in-process.md`.
 
 ## Source tree
 
 ```
-api-server/src/main/java/com/vegalife/
+src/main/java/com/vegalife/
 ├── VegalifeApplication.java          # Spring Boot entry point
 │
 ├── controller/                       # REST API layer — thin, no business logic
@@ -76,7 +76,7 @@ api-server/src/main/java/com/vegalife/
 ## Test tree
 
 ```
-api-server/src/test/java/com/vegalife/
+src/test/java/com/vegalife/
 ├── VegalifeApplicationTest.java          # Context load test (unit)
 │
 ├── unit/                                 # mvn test (Surefire, H2)
@@ -135,7 +135,7 @@ When building a new feature (e.g., "recipes"):
 3. Add `dto/request/CreateRecipeRequest.java` and `dto/response/RecipeResponse.java`.
 4. Add `service/recipe/RecipeService.java` — business logic.
 5. Add `controller/recipe/RecipeController.java` — REST endpoints.
-6. Add matching test classes under `api-server/src/test/java/com/vegalife/`.
-7. Add a Flyway migration in `api-server/src/main/resources/db/migration/` for the table.
+6. Add matching test classes under `src/test/java/com/vegalife/`.
+7. Add a Flyway migration in `src/main/resources/db/migration/` for the table.
 
 Each layer can be built and tested independently before wiring them together.

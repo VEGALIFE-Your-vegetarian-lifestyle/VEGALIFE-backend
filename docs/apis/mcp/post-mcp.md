@@ -1,40 +1,57 @@
-# API Reference: MCP Tools over POST /mcp
+# API Reference: AI Chat Menu Tool Contract
 
 ## Overview
 
-The MCP (Model Context Protocol) server exposes exactly five weekly-menu
-tools to the AI chat over Streamable HTTP. It is a separate internal service
-(ADR-012): each tool translates to a backend REST call made **as the calling
-user**. This document is the tool contract the chat and any future MCP client
-consumes.
+The AI chat reaches exactly five weekly-menu capabilities as Spring AI `@Tool`
+methods living **inside the backend itself** (ADR-013) — `MenuTools` in
+`service/ai/`. There is no separate MCP service, no HTTP hop, and no MCP
+transport: each tool calls `MenuService` directly in the same process.
 
-## Endpoint
+This document is the tool contract — the names, descriptions, parameter
+schemas, and result shapes the model sees. It is deliberately identical in
+content to what the tools published over MCP, because that contract is the
+behavior the refactor preserves.
+
+## How a tool call runs
 
 ```text
-POST /mcp
+POST /api/ai/messages (or .../stream)
+  └─ authenticated caller → server-derived userId
+       └─ AiChatService puts it in the Spring AI ToolContext (AiToolContext.forUser)
+            └─ model's tool call dispatched through ToolCallback
+                 └─ MenuTools reads the userId from the ToolContext
+                      └─ MenuService, scoped by findByIdAndUserId
 ```
 
-Streamable HTTP MCP endpoint served by the `mcp-server` module (Spring AI MCP
-server), container port `8081`, internal Docker network only — no public
-route. Health: `/actuator/health`.
+Four steps, one process. The old path — controller JWT header → allowlisted
+`ToolContext` → MCP `_meta` → MCP server re-reads it → `Authorization` header →
+backend REST call → back — existed only to cross a process boundary, and is
+gone with it.
 
-## Authentication
+## Identity
 
-Tool calls carry **no credential of their own**. The member's JWT enters at
-the chat endpoint (`POST /api/ai/messages`), travels server-side through
-Spring AI `ToolContext` → MCP `_meta`, and is attached as
-`Authorization: Bearer <jwt>` on the backend REST call the tool makes
-(BR-MCP-001). Identity is never a tool parameter (BR-MCP-004).
+Tool calls carry **no credential and no identity parameter**. The `userId` is
+put in the `ToolContext` by `AiChatService` from the principal the security
+context already validated (BR-MCP-001), and read back by `MenuTools`. Identity
+is never a tool argument, so a model cannot select whose data a tool reads by
+manipulating parameters (BR-MCP-004).
 
-An MCP client calling `/mcp` directly (as the end-to-end test does) must
-supply the identity through the same `ToolContext`/`_meta` channel.
+Every operation is still scoped by `MenuService`, which matches on
+`id AND userId`. The tools are not a privilege escalation path: they can reach
+exactly the rows the caller could reach through `MenuController`.
+
+Because there is no credential in the chain, a token revoked mid-request
+(`blacklist_token`) does not invalidate the in-flight turn. That is the one
+behavioral difference from the MCP design, and it is bounded by the streaming
+timeout (180s) against a 15-minute token lifetime.
 
 ## Tools
 
-Exactly five tools exist (BR-MCP-002). Results and errors are the backend's
-standard `{success, message, data}` envelopes, relayed as tool result text.
-Each read tool mirrors one backend endpoint with the same parameter names, so
-a tool call is a mapping rather than a translation.
+Exactly five tools exist (BR-MCP-002). Each read tool mirrors one backend
+endpoint with the same parameter names, so a tool call is a mapping rather
+than a translation. Request validation is shared with the REST path through
+`MenuQueryFilterResolver`, so a tool call and the equivalent HTTP request
+reject the same input with the same wording.
 
 ### `get_menu` — list the caller's menus
 
@@ -49,7 +66,7 @@ Mirrors `GET /api/menus`.
 | size | integer | No | Menus per page, 1–100. Omit for `20`. |
 | sort | string | No | `field,direction`, e.g. `startDate,desc`. |
 
-Behavior: relays the paginated list envelope unchanged, so the result always
+Behavior: returns the paginated list envelope unchanged, so the result always
 says how many menus exist (`totalElements`, `totalPages`) and never silently
 truncates. Each item is a **summary** — `id`, `startDate`, `endDate`, `status`,
 `notes` — with no meals. Use `get_meal_plan` for the day-by-day dishes.
@@ -80,7 +97,7 @@ array, not a page object.
 | dietaryPreferences | string | No | Free-text dietary preference for the week. |
 | notes | string | No | Free-text note. |
 
-Forwards to `POST /api/menus`. Always creates `drafted` (BR-MENU-005); all
+Calls `MenuService.createMenu`. Always creates `drafted` (BR-MENU-005); all
 structural validation (7 dates, ≤1 meal per type per day, ≥5 distinct dishes,
 no dish >3 times, dishes exist) is the backend's. Response: full menu detail
 with the new `id`.
@@ -97,8 +114,8 @@ with the new `id`.
 **Tool-layer pre-check (BR-MCP-005):** refused with a readable message unless
 the target is the caller's own menu, in the current UTC week, with status
 `drafted` — stricter than the REST API, which also allows `scheduled`. Then
-forwards to `PATCH /api/menus/{menuId}`; the backend re-validates the whole
-week (BR-MENU-005) and ownership (BR-MENU-001).
+`MenuService.updateMenu` re-validates the whole week (BR-MENU-005) and
+ownership (BR-MENU-001).
 
 ### `schedule_menu` — activate a drafted week
 
@@ -106,13 +123,17 @@ week (BR-MENU-005) and ownership (BR-MENU-001).
 |-----------|------|----------|-------------|
 | menuId | uuid | Yes | The drafted menu to schedule. |
 
-Forwards to `POST /api/menus/{menuId}/status` with `{"status":"scheduled"}`.
-Per BR-MCP-006 the assistant confirms the exact week with the user before
-calling. Response: full menu detail with `status: scheduled`.
+Calls `MenuService.changeStatus(..., "scheduled")`. Per BR-MCP-006 the
+assistant confirms the exact week with the user before calling. Response: full
+menu detail with `status: scheduled`.
 
 ## Responses
 
-Success returns the backend envelope as tool result text, e.g.:
+Two distinct result shapes, and the model must be able to read both without
+JSON-parsing (BR-MCP-007).
+
+**Success** — the backend's `{success, message, data}` envelope, emitted as a
+single JSON object (never a quoted/escaped string literal):
 
 ```json
 {
@@ -122,20 +143,31 @@ Success returns the backend envelope as tool result text, e.g.:
 }
 ```
 
-### Error Responses
+Success messages are the controller's own: `Menus retrieved successfully`,
+`Meal plan retrieved successfully`, `Menu created successfully`,
+`Menu updated successfully`, `Menu status updated successfully`.
 
-Backend HTTP errors are mapped to readable tool results (BR-MCP-007), not MCP
-transport failures:
+**Failure** — bare text, not JSON. Most failures are prefixed `error: `; the
+BR-MCP-005 pre-check refusal is prefixed `update refused: `.
+
+### Error Responses
 
 | Tool-visible result | Condition | Source |
 |---------------------|-----------|--------|
-| `days must contain exactly the 7 dates...` (or any BR-MENU-005 message) | Structural validation failed | 400 from `POST/PATCH /api/menus` |
-| `Menu not found` | Unknown `menuId` or another user's menu | 404 |
-| `Cannot transition a drafted menu to completed` | Illegal status transition | 409 |
-| `Another scheduled menu already overlaps this week` | Scheduling conflict | 409 (V30 GiST, ADR-010) |
-| `update_menu refused: only your current week's drafted menu can be edited in chat` | Tool-layer pre-check failed | BR-MCP-005 |
-| `Unauthorized` | JWT missing/expired at the backend | 401 |
-| `MCP server cannot reach the backend` | `BACKEND_URL` down / timeout | transport-level |
+| `error: caller identity missing (no caller identity on this tool invocation)` | No `userId` in the `ToolContext` | tool layer |
+| `error: Invalid from 'not-a-date'. Use YYYY-MM-DD.` | Malformed or out-of-range date bound | `MenuQueryFilterResolver` (shared with REST) |
+| `error: from must be on or before to` / `error: Date range must not exceed 366 days` | Invalid range | `MenuQueryFilterResolver` (shared with REST) |
+| `error: Unknown status 'x'. Use drafted, scheduled, cancelled or completed.` | Bad status filter | `MenuQueryFilterResolver` (shared with REST) |
+| `error: menuId must be a UUID` / `error: menuId is required` | Malformed or missing id | tool layer |
+| `error: startDate must be a date in YYYY-MM-DD format` | Malformed week start | tool layer |
+| `error: days must contain exactly the 7 dates...` (or any BR-MENU-005 message) | Structural validation failed | backend validation |
+| `error: Menu not found` | Unknown `menuId` or another user's menu | backend (404-equivalent) |
+| `error: Cannot transition a drafted menu to completed` | Illegal status transition | backend (409-equivalent) |
+| `error: Another scheduled menu already overlaps this week` | Scheduling conflict | backend (V30 GiST, ADR-010) |
+| `update refused: the target must be the caller's own current-week menu with status drafted` | Tool-layer pre-check failed | BR-MCP-005 |
+
+There is no transport failure mode: the tool cannot be unreachable, and there
+is no credential to expire in the middle of a call.
 
 ## Business Rules
 
@@ -150,23 +182,27 @@ transport failures:
 
 ## Example
 
-A chat turn (server-side flow, JWT omitted for brevity):
+A chat turn (server-side flow):
 
 ```text
 user: "Draft next week with tofu scramble for breakfasts and schedule it"
   → assistant calls create_menu(startDate=2026-10-19, days=[...])
-  → 201 drafted menu, id 7c1f2b90-...
+  → {"success":true,"message":"Menu created successfully","data":{"id":"7c1f2b90-...", ...}}
 user: "Yes, schedule it"
   → assistant calls schedule_menu(menuId=7c1f2b90-...)
-  → 200 status=scheduled
+  → {"success":true,"message":"Menu status updated successfully","data":{...,"status":"scheduled"}}
 ```
 
 ---
 
 ## Related
 
+- Decision: `docs/adrs/013-serve-ai-tools-in-process.md` (supersedes
+  `docs/adrs/012-multi-module-mcp-tool-surface.md`)
 - Feature Spec: `docs/feats/mcp-menu-tools.md`
 - Business Rules: `docs/brs/mcp-tools.md`
-- Decision: `docs/adrs/012-multi-module-mcp-tool-surface.md`
+- Implementation: `src/main/java/com/vegalife/service/ai/MenuTools.java`
+- End-to-end test:
+  `src/test/java/com/vegalife/integration/ai/MenuToolsEndToEndIntegrationTest.java`
 - Backend endpoints: `docs/apis/menus/` (`get-menus.md`, `get-menus-details.md`, `post-menus.md`, `patch-menus.md`, `post-menu-status.md`)
 - Shared error/response contract: `docs/apis/error-responses.md`

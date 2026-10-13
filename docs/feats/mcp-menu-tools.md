@@ -1,4 +1,4 @@
-# Feature Spec: MCP Menu Tools for AI Chat
+# Feature Spec: Menu Tools for AI Chat
 
 ## Status
 
@@ -9,14 +9,18 @@ Approved
 Backend team; scope confirmed with the product owner (2026-10-12): four menu
 tools, JWT-based identity, thin adapters over REST. Extended 2026-10-12 by
 `docs/feats/meal-plan-detail-query.md`, which adds `get_meal_plan` (five
-tools) and narrows `get_menu`.
+tools) and narrows `get_menu`. Re-scoped 2026-10-13 by
+`docs/adrs/013-serve-ai-tools-in-process.md`: the capability and the tool
+contract are unchanged, but the tools are now `@Tool` methods inside the
+backend rather than an MCP server. This file keeps its name because existing
+references point at it.
 
 ## Summary
 
 Expose the weekly-menu operations (`get_menu`, `get_meal_plan`,
-`create_menu`, `update_menu`, `schedule_menu`) as MCP tools on an internal MCP
-server, and wire the existing AI chat so both its JSON and SSE paths can call
-them while acting as the logged-in user.
+`create_menu`, `update_menu`, `schedule_menu`) as Spring AI `@Tool` methods
+on the backend's own tool layer, and wire the existing AI chat so both its
+JSON and SSE paths can call them while acting as the logged-in user.
 
 ## Problem / motivation
 
@@ -34,17 +38,17 @@ menus by hand.
 - The assistant can create a drafted weekly menu and schedule it on the
   caller's behalf, through confirmation in the conversation.
 - Every tool call executes with the caller's identity, enforced by the same
-  JWT validation and ownership scoping as a normal API request.
-- The MCP surface is a small, deliberate allowlist rather than a mirror of the
+  ownership scoping as a normal API request.
+- The tool surface is a small, deliberate allowlist rather than a mirror of the
   backend's endpoints.
 
 ## Non-goals
 
-- **No new backend endpoints or domain logic.** All four operations already
+- **No new backend endpoints or domain logic.** All five operations already
   exist; this feature wraps them. (Menu rules stay in BR-MENU-*.)
 - No dish/ingredient/recipe/shop discovery tools (`search_dishes` and friends
   are explicitly out — see BR-MCP-002).
-- No public MCP exposure, no OAuth/authorization server, no agent framework.
+- No public tool exposure, no OAuth/authorization server, no agent framework.
 - No change to AI quota mechanics (BR-AI-001/002 unchanged).
 - No frontend work; the chat UI already posts to the same endpoints.
 
@@ -52,68 +56,75 @@ menus by hand.
 
 ### Functional Requirements
 
-- [ ] FR-001: A multi-module Maven reactor (`api-server`, `mcp-server`) builds
-      from the root with `./mvnw clean verify`; `api-server` behavior is
-      unchanged.
-- [ ] FR-002: The MCP server exposes exactly five tools — `get_menu`,
-      `get_meal_plan`, `create_menu`, `update_menu`, `schedule_menu` — over
-      Streamable HTTP at `/mcp`, port 8081, internal network only.
-      (`get_meal_plan` was added by `docs/feats/meal-plan-detail-query.md`,
-      which also narrowed `get_menu`; see FR-003.)
+- [ ] FR-001: The application builds from the root with
+      `./mvnw clean verify` as a single Maven module with `src/` at the repo
+      root; existing behavior is unchanged.
+- [ ] FR-002: The tool layer exposes exactly five tools — `get_menu`,
+      `get_meal_plan`, `create_menu`, `update_menu`, `schedule_menu` — as
+      `@Tool` methods on `service/ai/MenuTools`, registered with the chat
+      client at startup. There is no HTTP tool endpoint. (`get_meal_plan` was
+      added by `docs/feats/meal-plan-detail-query.md`, which also narrowed
+      `get_menu`; see FR-003.)
 - [ ] FR-003: `get_menu` mirrors `GET /api/menus` and nothing else: a
       paginated list of menu summaries with `totalElements`/`totalPages`
       relayed unchanged. It takes no `menuId` and performs no second detail
       call — day-by-day meal detail is `get_meal_plan`'s sole job.
-- [ ] FR-004: `create_menu` and `update_menu` forward an LLM-composed 7-day
-      `days[]` payload to `POST /api/menus` / `PATCH /api/menus/{menuId}`;
-      all BR-MENU-005 structural validation stays in the backend.
+- [ ] FR-004: `create_menu` and `update_menu` take an LLM-composed 7-day
+      `days[]` payload and call `MenuService.createMenu` /
+      `MenuService.updateMenu`; all BR-MENU-005 structural validation stays in
+      the backend service layer.
 - [ ] FR-005: `update_menu` refuses, at the tool layer, any menu that is not
       the caller's current-week `drafted` menu (BR-MCP-005).
-- [ ] FR-006: `schedule_menu` calls `POST /api/menus/{menuId}/status` with
-      `scheduled`; the chat prompt instructs the assistant to confirm the
+- [ ] FR-006: `schedule_menu` calls `MenuService.changeStatus(...,
+      "scheduled")`; the chat prompt instructs the assistant to confirm the
       week with the user first (BR-MCP-006).
-- [ ] FR-007: The caller's identity travels `ToolContext` → MCP `_meta` →
-      `Authorization` on the backend call; it is never a tool parameter
-      (BR-MCP-001) and never model-visible (BR-MCP-004).
+- [ ] FR-007: The caller's identity enters the Spring AI `ToolContext` once
+      per turn from the authenticated principal, and is read from it by the
+      tools; it is never a tool parameter (BR-MCP-001) and never
+      model-visible (BR-MCP-004).
 - [ ] FR-008: Both chat paths (`POST /api/ai/messages` and
       `POST /api/ai/messages/stream`) can invoke the tools within one turn.
-- [ ] FR-009: Backend tool-call errors (400/404/409) reach the model as
-      readable tool results (BR-MCP-007).
+- [ ] FR-009: Tool-call failures (validation, 404-equivalent, 409-equivalent)
+      reach the model as readable tool results (BR-MCP-007).
 
 ### Non-Functional Requirements
 
-- [ ] NFR-SEC-001: The MCP server publishes no host port (or `127.0.0.1`
-      only for local debugging) and is reachable only on the internal Docker
-      network.
-- [ ] NFR-SEC-002: The JWT appears in no log line in either service, and in
-      no prompt, tool schema, tool argument, or tool result (BR-MCP-004).
+- [ ] NFR-SEC-001: The tool layer publishes no host, port, or network surface
+      of its own — it is method calls inside the already-running API process.
+- [ ] NFR-SEC-002: No credential exists in the tool path, and no token appears
+      in a log line, a prompt, a tool schema, a tool argument, or a tool result
+      (BR-MCP-004).
 - [ ] NFR-SEC-003: A tool call cannot affect data the caller could not reach
-      directly through the REST API — the backend's ownership checks remain
+      directly through the REST API — `MenuService`'s ownership checks remain
       the authority.
-- [ ] NFR-MAINT-001: The MCP server contains no business rules; removing it
-      leaves the backend fully functional.
+- [ ] NFR-MAINT-001: The tool layer contains no business rules; removing it
+      leaves the backend fully functional and the menu REST API untouched.
 - [ ] NFR-MAINT-002: Tool calls never touch `AiQuotaGuard`; one chat turn is
       exactly one quota unit regardless of tool-call count (BR-MCP-003).
 
 ## Design overview
 
-Two containers on one internal Docker network. The backend keeps the chat and
-the data; the MCP server translates tool calls into REST calls against
-`BACKEND_URL`. Identity is the caller's own JWT carried through Spring AI
-`ToolContext` and MCP `_meta`, merged server-side by a small wrapper because
-Spring AI drops `meta` at the MCP server boundary
-(spring-projects/spring-ai#4773). Full reasoning, alternatives, and the
-fallback path are in `docs/adrs/012-multi-module-mcp-tool-surface.md`; the
+One process. `AiChatService` registers `MenuTools`' `@Tool` methods with the
+`ChatClient` at startup via `MethodToolCallbackProvider`, places the caller's
+`userId` in the `ToolContext` at the start of each turn, and Spring AI
+dispatches the model's tool calls back into those methods. Each tool calls
+`MenuService` directly. Full reasoning, alternatives, and the rejected
+multi-process option are in `docs/adrs/013-serve-ai-tools-in-process.md`
+(which supersedes `docs/adrs/012-multi-module-mcp-tool-surface.md`); the
 tool-by-tool contract is in `docs/apis/mcp/post-mcp.md`.
+
+Tool results are exactly two shapes: the backend's `{success, message, data}`
+envelope as a single JSON object on success, and bare `error: ...` (or
+`update refused: ...`) text on failure, so the model can read either without
+parsing.
 
 ## Success metrics
 
 - A chat turn asking "what's my meal plan this week?" returns the caller's
   real menu detail (or an honest "none for this week") in the deployed
   environment.
-- Issues #17/#18/#19 close with all four tools callable end to end.
-- The end-to-end Docker test (postgres + api-server + mcp-server) is green in
-  the integration profile.
+- Issues #17/#18/#19 close with all five tools callable end to end.
+- `MenuToolsEndToEndIntegrationTest` is green in the integration profile.
 
 ## Acceptance criteria
 
@@ -132,8 +143,8 @@ chat — as myself, with no one else's data reachable.
       overlapping week is attempted, the 409 is relayed as an explanation,
       not a crash.
 - [ ] Given any tool call, when the backend handles it, then the row it reads
-      or writes belongs to the JWT's user (BR-MCP-001) and no other user's
-      menu is ever touched.
+      or writes belongs to the caller (BR-MCP-001) and no other user's menu
+      is ever touched.
 - [ ] Given a chat turn with 3 tool calls, when it completes, then quota
       increased by exactly 1 (BR-MCP-003).
 - [ ] Given the tool registry, when listed, then exactly five tools exist
@@ -141,11 +152,15 @@ chat — as myself, with no one else's data reachable.
 
 ## Risks / open questions
 
-- Spring AI #4773 remains open upstream; the server-side `meta` merge is our
-  own ~30-line wrapper. Mitigation: isolated in one class with a deletion
-  note; runtime-proven by the phase 3 spike and phase 7 test.
-- The identity chain spans two processes; a config mistake (e.g. a tool
-  forgetting to attach the header) would fail closed as 401 — visible, but
-  worth an explicit test per tool.
+- Identity for a whole turn is a `userId` carried in the `ToolContext`, not a
+  credential re-validated per call. A token revoked mid-turn
+  (`blacklist_token`) therefore does not invalidate the rest of that turn.
+  Mitigation: bounded by the 180-second streaming timeout against a
+  15-minute token lifetime, and no wider than what the REST endpoints already
+  accept.
 - Prompt-level confirmation (BR-MCP-006) is guidance, not enforcement; the
   backend's overlap/legal-transition rules are the real safety net.
+- The tool contract (names, descriptions, parameter schemas, result shapes) is
+  intentionally byte-identical to the MCP-era contract. Changing it is a
+  reviewed change to `MenuTools` plus BR-MCP-002's table, not a refactor
+  side effect.
