@@ -41,10 +41,13 @@ No request body.
     "email": "john@example.com",
     "heightCm": 175.50,
     "weightKg": 70.20,
+    "bmi": 22.9,
     "age": 25,
     "gender": "male",
     "description": "Vegan enthusiast",
     "avatarUrl": "https://cdn.example.com/avatar.jpg",
+    "preferences": ["spicy"],
+    "healthGoal": "weight loss",
     "updatedAt": "2026-10-01T08:15:30Z"
   }
 }
@@ -60,11 +63,21 @@ No request body.
 | data.email | string | The user's email address |
 | data.heightCm | number \| null | Height in cm; `null` if never set |
 | data.weightKg | number \| null | Weight in kg; `null` if never set |
+| data.bmi | number | Computed `weightKg / (heightCm/100)²`, one decimal (HALF_UP); omitted when height or weight is missing. Derived, never stored |
 | data.age | integer \| null | Age 1–150; `null` if never set |
 | data.gender | string \| null | One of `male`, `female`, `other`; `null` if never set |
 | data.description | string \| null | Bio, max 2000 chars; `null` if never set |
 | data.avatarUrl | string \| null | Avatar URL; `null` if never set |
+| data.preferences | string[] \| absent | Dietary preferences (≤50 tags of ≤100 chars); omitted when unset |
+| data.dislikes | string[] \| absent | Disliked ingredients/dishes; omitted when unset |
+| data.allergies | string[] \| absent | Allergies; omitted when unset |
+| data.restrictions | string[] \| absent | Dietary restrictions; omitted when unset |
+| data.healthGoal | string \| absent | Health goal, ≤200 chars; omitted when unset |
 | data.updatedAt | string | ISO-8601 timestamp of the profile row (DB default `NOW()`, never `null`) |
+
+Dietary fields are stored as one JSONB value but appear as flat members,
+exactly as on `GET /api/profile`. Note that this endpoint is public: the
+dietary fields and `bmi` are visible to anyone who knows the `userId`.
 
 ### Error Responses
 | Status Code | Condition | Message |
@@ -95,6 +108,7 @@ curl -X GET /api/profile/550e8400-e29b-41d4-a716-446655440000
     "email": "john@example.com",
     "heightCm": 175.50,
     "weightKg": 70.20,
+    "bmi": 22.9,
     "age": 25,
     "gender": "male",
     "description": "Vegan enthusiast",

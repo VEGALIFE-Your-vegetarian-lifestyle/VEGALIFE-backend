@@ -16,15 +16,26 @@ Required: Valid JWT access token in Authorization header (`Bearer <token>`)
 ### Request Body
 ```json
 {
-  "heightCm": "number — optional, positive decimal, max 300",
-  "weightKg": "number — optional, positive decimal, max 500",
+  "heightCm": "number — optional, positive decimal (min 0.01), max 300, max 2 decimals",
+  "weightKg": "number — optional, positive decimal (min 0.01), max 500, max 2 decimals",
   "age": "integer — optional, between 1 and 150",
   "gender": "string — optional, one of: male, female, other",
   "description": "string — optional, max 2000 characters",
-  "avatarUrl": "string — optional, valid URL format"
+  "avatarUrl": "string — optional, valid URL format",
+  "preferences": "string[] — optional, ≤50 entries, each ≤100 chars",
+  "dislikes": "string[] — optional, ≤50 entries, each ≤100 chars",
+  "allergies": "string[] — optional, ≤50 entries, each ≤100 chars",
+  "restrictions": "string[] — optional, ≤50 entries, each ≤100 chars",
+  "healthGoal": "string — optional, max 200 characters"
 }
 ```
-At least one field must be provided.
+At least one field must be provided (any of the above counts).
+
+The five dietary fields are stored together in the single JSONB column
+`user_profile.dietary_preferences` but are sent and received as flat
+top-level members. Updates merge member-wise: an omitted member keeps its
+stored value, while an empty array clears that member. Sending only a
+dietary field leaves all non-dietary fields untouched.
 
 ## Responses
 
@@ -39,10 +50,14 @@ At least one field must be provided.
     "email": "john@example.com",
     "heightCm": 175.5,
     "weightKg": 70.2,
+    "bmi": 22.9,
     "age": 25,
     "gender": "male",
     "description": "Vegan enthusiast",
     "avatarUrl": "https://example.com/avatar.jpg",
+    "preferences": ["spicy"],
+    "allergies": ["peanuts"],
+    "healthGoal": "weight loss",
     "updatedAt": "2026-09-23T10:00:00Z"
   }
 }
@@ -58,10 +73,16 @@ At least one field must be provided.
 | data.email | string | The user's email address |
 | data.heightCm | number | Height in centimeters |
 | data.weightKg | number | Weight in kilograms |
+| data.bmi | number | Computed `weightKg / (heightCm/100)²`, one decimal (HALF_UP); omitted when height or weight is missing. Derived, never stored |
 | data.age | integer | User age |
 | data.gender | string | male, female, or other |
 | data.description | string | User description |
 | data.avatarUrl | string | Profile avatar URL |
+| data.preferences | string[] | Dietary preferences; omitted when unset |
+| data.dislikes | string[] | Disliked ingredients/dishes; omitted when unset |
+| data.allergies | string[] | Allergies; omitted when unset |
+| data.restrictions | string[] | Dietary restrictions; omitted when unset |
+| data.healthGoal | string | Health goal; omitted when unset |
 | data.updatedAt | string | ISO 8601 timestamp of last update |
 
 ### Error Responses
@@ -73,6 +94,8 @@ At least one field must be provided.
 | 400 | Invalid age | "Age must be between 1 and 150" |
 | 400 | Invalid gender | "Gender must be male, female, or other" |
 | 400 | Description too long | "Description must not exceed 2000 characters" |
+| 400 | Dietary list too long (>50) or tag too long (>100 chars) | "Preferences must contain at most 50 entries" / "Each preference must not exceed 100 characters" (analogous messages for dislikes, allergies, restrictions) |
+| 400 | Health goal too long | "Health goal must not exceed 200 characters" |
 | 400 | Invalid avatarUrl | "Avatar URL must be a valid URL" |
 | 401 | Missing/invalid JWT | "Invalid or missing access token" |
 | 404 | User not found | "User not found" |
@@ -85,6 +108,11 @@ At least one field must be provided.
 - **gender**: Optional, must be one of: male, female, other (BR-PROFILE-001)
 - **description**: Optional, maximum 2000 characters
 - **avatarUrl**: Optional, valid URL format (RFC 3986)
+- **preferences / dislikes / allergies / restrictions**: Optional arrays, each
+  at most 50 entries with each entry at most 100 characters; free text
+- **healthGoal**: Optional, maximum 200 characters, free text
+- All dietary fields are optional; omitting one on update keeps the stored
+  value, an empty array clears it
 
 ## Business Rules
 - BR-PROFILE-001: Profile Fields Validation
@@ -112,7 +140,11 @@ curl -X PUT http://localhost:8080/api/profile \
     "age": 25,
     "gender": "male",
     "description": "Vegan enthusiast",
-    "avatarUrl": "https://example.com/avatar.jpg"
+    "avatarUrl": "https://example.com/avatar.jpg",
+    "preferences": ["spicy", "high-protein"],
+    "allergies": ["peanuts"],
+    "restrictions": ["gluten free"],
+    "healthGoal": "weight loss"
   }'
 ```
 

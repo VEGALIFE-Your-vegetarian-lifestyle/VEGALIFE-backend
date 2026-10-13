@@ -70,9 +70,11 @@ menus by hand.
       relayed unchanged. It takes no `menuId` and performs no second detail
       call — day-by-day meal detail is `get_meal_plan`'s sole job.
 - [ ] FR-004: `create_menu` and `update_menu` take an LLM-composed 7-day
-      `days[]` payload and call `MenuService.createMenu` /
+      `days[]` payload plus a required `notes` summary of the week, and call
+      `MenuService.createMenu` /
       `MenuService.updateMenu`; all BR-MENU-005 structural validation stays in
-      the backend service layer.
+      the backend service layer. Dietary preferences are not tool parameters —
+      they live on the member's profile.
 - [ ] FR-005: `update_menu` refuses, at the tool layer, any menu that is not
       the caller's current-week `drafted` menu (BR-MCP-005).
 - [ ] FR-006: `schedule_menu` calls `MenuService.changeStatus(...,

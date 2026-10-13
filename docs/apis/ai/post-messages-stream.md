@@ -84,8 +84,10 @@ with HTTP 200 already sent.
 - BR-AI-002 — only successful replies count toward quota (a stream that dies
   mid-way persists nothing and counts nothing)
 - BR-AI-003 — conversation ownership comes from authentication
-- BR-AI-004 — context is profile + own conversation history
+- BR-AI-004 — context is the stored profile (incl. dietary JSON and a
+  derived BMI) + own conversation history
 - BR-AI-005 — provider configured via dedicated `AI_CHAT_*` env vars
+- BR-AI-006 — persona scoped to vegan/platform topics; polite refusal otherwise
 - BR-SUBS-001 — quota window is the current UTC calendar month
 
 ## Example
