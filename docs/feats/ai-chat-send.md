@@ -61,10 +61,16 @@ feature measures.
   `ai_conversation.updated_at` is refreshed; new conversations get a title
   derived from the first message (trimmed to 60 chars).
 - [ ] FR-005: Every request builds context as: a system prompt containing the
-  member's `UserProfile` data (age, gender, height, weight, description) plus
-  the last 20 messages of the conversation (new message included); the model
-  infers dietary preferences, restrictions, and recent activity from those
-  messages.
+  member's `UserProfile` data (age, gender, height, weight, description), a
+  BMI computed at prompt-build time from height/weight (one decimal; omitted
+  when either is missing; never stored), the stored dietary profile from
+  `user_profile.dietary_preferences` (allergies/restrictions as hard
+  constraints, dislikes as avoid-unless-asked, preferences as a lean-in,
+  health goal to shape intent; unset members omitted), plus the last 20
+  messages of the conversation (new message included). The model respects the
+  stored dietary data instead of inferring it from the messages. The persona
+  is scoped to vegan/plant-based and platform topics (BR-AI-006); anything
+  else gets a brief polite refusal with a redirect.
 - [ ] FR-006: A supplied `conversationId` must reference a conversation owned
   by the caller; otherwise 404 `Conversation not found` (no provider call).
 - [ ] FR-007: Before any provider call the used-count for the current UTC
@@ -103,7 +109,8 @@ New `controller/ai/AiChatController` exposes both endpoints; both delegate to
 2. `AiQuotaGuard` resolves the active plan (in-effect subscription or FREE
    default per BR-SUBS-003) and the current-UTC-month usage
    (`sumRequestCountInWindow`); over-limit → 429 before any provider call.
-3. Build messages: system prompt (persona + `UserProfile` block) + last 20
+3. Build messages: system prompt (scoped persona + `UserProfile` block with
+   the dietary profile and a derived BMI) + last 20
    `ai_message` rows + the new user message.
 4. Call the Spring AI `ChatClient` (blocking `.content()` for JSON,
    `.stream()` flux for SSE, terminal `SseEmitter` events `delta`/`done`/
@@ -112,8 +119,9 @@ New `controller/ai/AiChatController` exposes both endpoints; both delegate to
    `AiMessage` rows, bump `updated_at`, upsert `AiUsage` +1.
 
 Entities `AiConversation` and `AiMessage` are created new (tables already
-exist from `V10__create_ai_tables.sql`; `recent_messages` stays NULL —
-history lives in `ai_message`). Two exceptions join `shared/exception/`:
+exist from `V10__create_ai_tables.sql`; the unused `summary` and
+`recent_messages` columns were dropped by `V34` — history lives in
+`ai_message`). Two exceptions join `shared/exception/`:
 `AiQuotaExceededException` (429 + `Retry-After`) and `AiProviderException`
 (502), each with a `GlobalExceptionHandler` entry. Provider config is
 `spring.ai.openai.{base-url,api-key,chat.options.model}` re-pointed to
@@ -140,9 +148,13 @@ answers without re-explaining myself every message.
 - [ ] Given an existing conversation, when posting a message with its
       `conversationId`, then the reply uses the prior messages of that
       conversation as context and both messages are persisted.
-- [ ] Given a member with a profile (description, measurements), when sending
-      a message, then the system prompt is built from that profile and the
-      model infers preferences/dietary restrictions from the messages.
+- [ ] Given a member with a profile (description, measurements and dietary
+      settings), when sending a message, then the system prompt is built from
+      that stored profile — including the dietary data and a derived BMI —
+      and the model does not infer preferences from the messages.
+- [ ] Given an off-topic request (general coding, politics, non-vegan
+      cooking), when sending a message, then the reply politely refuses and
+      redirects to vegan or platform topics.
 - [ ] Given a streaming request, when the provider responds, then `delta`
       events arrive incrementally and a final `done` event carries
       `conversationId` + `usage`.

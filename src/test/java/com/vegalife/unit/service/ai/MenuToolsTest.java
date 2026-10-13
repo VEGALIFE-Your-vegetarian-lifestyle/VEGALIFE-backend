@@ -169,7 +169,8 @@ class MenuToolsTest {
     when(menuService.createMenu(eq(USER), any()))
         .thenReturn(MenuDetailResponse.builder().id(MENU_ID).status("drafted").build());
 
-    String result = menuTools.createMenu("2026-10-19", breakfastDay(), null, null, CONTEXT);
+    String result =
+        menuTools.createMenu("2026-10-19", breakfastDay(), "High-protein week", CONTEXT);
 
     assertThat(result)
         .contains("\"success\":true")
@@ -179,6 +180,7 @@ class MenuToolsTest {
     verify(menuService).createMenu(eq(USER), sent.capture());
     CreateMenuRequest request = sent.getValue();
     assertThat(request.getStartDate()).isEqualTo(LocalDate.parse("2026-10-19"));
+    assertThat(request.getNotes()).isEqualTo("High-protein week");
     assertThat(request.getDays()).hasSize(1);
     assertThat(request.getDays().get(0).getDate()).isEqualTo(LocalDate.parse("2026-10-19"));
     assertThat(request.getDays().get(0).getMeals()).hasSize(1);
@@ -189,7 +191,7 @@ class MenuToolsTest {
 
   @Test
   void createMenu_rejectsAMalformedStartDate() {
-    String result = menuTools.createMenu("19/10/2026", breakfastDay(), null, null, CONTEXT);
+    String result = menuTools.createMenu("19/10/2026", breakfastDay(), "summary", CONTEXT);
 
     assertThat(result).isEqualTo("error: startDate must be a date in YYYY-MM-DD format");
     verifyNoInteractions(menuService);
@@ -200,7 +202,7 @@ class MenuToolsTest {
     List<MenuTools.Day> days =
         List.of(new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", "nope", 2))));
 
-    String result = menuTools.createMenu("2026-10-19", days, null, null, CONTEXT);
+    String result = menuTools.createMenu("2026-10-19", days, "summary", CONTEXT);
 
     assertThat(result).isEqualTo("error: days[0].meals[0].dishId must be a UUID");
     verifyNoInteractions(menuService);
@@ -216,7 +218,7 @@ class MenuToolsTest {
         List.of(
             new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", DISH_ID.toString(), null))));
 
-    String result = menuTools.createMenu("2026-10-19", days, null, null, CONTEXT);
+    String result = menuTools.createMenu("2026-10-19", days, "summary", CONTEXT);
 
     assertThat(result).isEqualTo("error: servings is required");
     verifyNoInteractions(menuService);
@@ -229,7 +231,7 @@ class MenuToolsTest {
     when(menuService.updateMenu(eq(USER), eq(MENU_ID), any()))
         .thenReturn(MenuDetailResponse.builder().id(MENU_ID).status("drafted").build());
 
-    String result = menuTools.updateMenu(MENU_ID.toString(), breakfastDay(), null, null, CONTEXT);
+    String result = menuTools.updateMenu(MENU_ID.toString(), breakfastDay(), "summary", CONTEXT);
 
     assertThat(result).contains("\"success\":true").contains("Menu updated successfully");
     verify(menuService).updateMenu(eq(USER), eq(MENU_ID), any());
@@ -239,7 +241,7 @@ class MenuToolsTest {
   void updateMenu_refusesWhenTheTargetIsNotTheCurrentWeekDraft() {
     when(menuService.listMenus(eq(USER), any(), anyInt(), anyInt(), any())).thenReturn(emptyPage());
 
-    String result = menuTools.updateMenu(MENU_ID.toString(), breakfastDay(), null, null, CONTEXT);
+    String result = menuTools.updateMenu(MENU_ID.toString(), breakfastDay(), "summary", CONTEXT);
 
     assertThat(result)
         .isEqualTo(
@@ -250,7 +252,7 @@ class MenuToolsTest {
 
   @Test
   void updateMenu_requiresAMenuId() {
-    String result = menuTools.updateMenu(null, breakfastDay(), null, null, CONTEXT);
+    String result = menuTools.updateMenu(null, breakfastDay(), "summary", CONTEXT);
 
     assertThat(result).isEqualTo("error: menuId is required");
     verifyNoInteractions(menuService);

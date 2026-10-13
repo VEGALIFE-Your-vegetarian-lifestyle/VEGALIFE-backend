@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.dto.mapper.profile.ProfileMapper;
 import com.vegalife.dto.request.ai.SendMessageRequest;
 import com.vegalife.dto.response.ai.SendMessageResponse;
 import com.vegalife.model.ai.AiConversation;
@@ -97,7 +98,8 @@ class AiChatServiceTest {
             userProfileRepository,
             quotaGuard,
             transactionTemplate,
-            menuTools);
+            menuTools,
+            ProfileMapper.INSTANCE);
   }
 
   private void stubClient() {

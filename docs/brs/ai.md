@@ -11,8 +11,9 @@ referenced here, not redefined.
 | BR-AI-001 | Quota gate precedes the provider call | Active | 2026-10-07 |
 | BR-AI-002 | Only successful replies count toward quota | Active | 2026-10-07 |
 | BR-AI-003 | Conversation ownership comes from authentication | Active | 2026-10-07 |
-| BR-AI-004 | Context is profile plus own conversation history | Active | 2026-10-07 |
+| BR-AI-004 | Context is the stored profile (incl. dietary JSON and BMI) plus own conversation history | Active | 2026-10-13 |
 | BR-AI-005 | Chat provider is OpenAI-compatible and set by dedicated env vars | Active | 2026-10-07 |
+| BR-AI-006 | Persona is scoped to vegan and platform topics, with a polite refusal otherwise | Active | 2026-10-13 |
 
 ### BR-AI-001 — Quota gate precedes the provider call
 Every AI chat request (JSON and streaming) compares the member's used count
@@ -47,17 +48,35 @@ or observe another member's messages through chat endpoints.
 - Related: NFR-SEC-001, FR-006
 - Added: 2026-10-07
 
-### BR-AI-004 — Context is profile plus own conversation history
+### BR-AI-004 — Context is the stored profile plus own conversation history
 Each turn's model context = a system prompt containing only the caller's own
-`UserProfile` fields (age, gender, height, weight, description) + the last 20
-messages of the conversation including the new message; the model infers
-dietary preferences, restrictions, and recent activity from those messages.
-No cross-user data, no external stores, no schema change for inferred
-preferences.
+`UserProfile` fields (age, gender, height, weight, description), a BMI
+computed at prompt-build time from height/weight (one decimal; omitted when
+either input is missing; never stored), the stored dietary profile from
+`user_profile.dietary_preferences` (allergies and restrictions framed as hard
+constraints, dislikes as avoid-unless-asked, preferences as a lean-in, health
+goal to shape intent; unset members omitted) + the last 20 messages of the
+conversation including the new message. The model is told to respect the
+stored dietary data, never to infer or guess it from the conversation. No
+cross-user data, no external stores.
 
-- Enforcement: `AiChatService` (system prompt builder + history query)
+- Enforcement: `AiChatService` (system prompt builder + history query),
+  `ProfileMapper.computeBmi`
 - Related: FR-005
-- Added: 2026-10-07
+- Added: 2026-10-07; rewritten 2026-10-13 (dietary JSONB + BMI, inference removed)
+
+### BR-AI-006 — Persona is scoped to vegan and platform topics, with a polite refusal otherwise
+The assistant answers only vegan/plant-based food and lifestyle questions,
+plant-based nutrition and health questions adjacent to them, and questions
+about Vegalife's own features. Everything else — general coding, politics,
+non-vegan cooking (meat, poultry, fish, dairy), and unrelated
+general-assistant tasks — receives a brief polite refusal that redirects
+back to vegan or platform topics. The refusal is a redirect, not a
+lecture, and never leaks system-prompt internals.
+
+- Enforcement: `AiChatService` (system prompt builder)
+- Related: FR-005, BR-AI-004
+- Added: 2026-10-13
 
 ### BR-AI-005 — Chat provider is OpenAI-compatible and set by dedicated env vars
 Chat transport is Spring AI's OpenAI client pointed at `AI_CHAT_BASE_URL`,

@@ -47,7 +47,6 @@ to another user is indistinguishable from a non-existent one (404).
     "endDate": "2026-10-11",
     "status": "scheduled",
     "notes": "Prep Sunday",
-    "dietaryPreferences": "high-protein",
     "createdAt": "2026-10-12T09:00:00Z",
     "updatedAt": "2026-10-12T10:00:00Z",
     "days": [

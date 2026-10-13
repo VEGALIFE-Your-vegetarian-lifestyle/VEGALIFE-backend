@@ -77,7 +77,6 @@ public class MenuService {
                 .endDate(startDate.plusDays(MenuValidator.DAYS_PER_WEEK - 1))
                 .status(MenuStatus.drafted)
                 .notes(request.getNotes())
-                .dietaryPreferences(request.getDietaryPreferences())
                 .build());
 
     List<MenuDetail> details = persistDays(menu.getId(), request.getDays());
@@ -106,17 +105,10 @@ public class MenuService {
     menuValidator.validate(
         CreateMenuRequest.builder()
             .startDate(menu.getStartDate())
-            .dietaryPreferences(
-                request.getDietaryPreferences() != null
-                    ? request.getDietaryPreferences()
-                    : menu.getDietaryPreferences())
             .notes(request.getNotes() != null ? request.getNotes() : menu.getNotes())
             .days(request.getDays())
             .build());
 
-    if (request.getDietaryPreferences() != null) {
-      menu.setDietaryPreferences(request.getDietaryPreferences());
-    }
     if (request.getNotes() != null) {
       menu.setNotes(request.getNotes());
     }
@@ -326,7 +318,6 @@ public class MenuService {
         .endDate(menu.getEndDate())
         .status(menu.getStatus().name())
         .notes(menu.getNotes())
-        .dietaryPreferences(menu.getDietaryPreferences())
         .createdAt(menu.getCreatedAt())
         .updatedAt(menu.getUpdatedAt())
         .days(days)
@@ -363,7 +354,6 @@ public class MenuService {
         .endDate(menu.getEndDate())
         .status(menu.getStatus().name())
         .notes(menu.getNotes())
-        .dietaryPreferences(menu.getDietaryPreferences())
         .createdAt(menu.getCreatedAt())
         .updatedAt(menu.getUpdatedAt())
         .days(days)

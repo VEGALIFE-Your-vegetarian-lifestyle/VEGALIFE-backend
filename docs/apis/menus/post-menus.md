@@ -30,8 +30,7 @@ No path parameters.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | startDate | date (`YYYY-MM-DD`) | Yes | First day of the week. `endDate` is derived as `startDate + 6`; it is never accepted from the client. |
-| dietaryPreferences | string | No | Free-text dietary preference for the week (e.g. `high-protein`, `soy-free`). |
-| notes | string | No | Free-text note. |
+| notes | string | No | Free-text note (the week's summary: theme and honored restrictions). |
 | days | array of day objects | Yes | Exactly the 7 dates `startDate .. startDate + 6`, each appearing once. |
 
 Day object:
@@ -75,7 +74,6 @@ Any violation returns 400 and persists nothing.
     "endDate": "2026-10-11",
     "status": "drafted",
     "notes": "High-protein week",
-    "dietaryPreferences": "high-protein",
     "createdAt": "2026-10-12T09:00:00Z",
     "updatedAt": "2026-10-12T09:00:00Z",
     "days": [
@@ -135,7 +133,6 @@ curl -X POST /api/menus \
   -H "Content-Type: application/json" \
   -d '{
     "startDate": "2026-10-05",
-    "dietaryPreferences": "high-protein",
     "notes": "High-protein week",
     "days": [
       {

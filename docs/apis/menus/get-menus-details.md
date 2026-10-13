@@ -75,7 +75,6 @@ No request body.
       "endDate": "2026-10-11",
       "status": "scheduled",
       "notes": "High-protein week",
-      "dietaryPreferences": "soy-free",
       "createdAt": "2026-10-01T09:00:00Z",
       "updatedAt": "2026-10-01T09:00:00Z",
       "days": [
@@ -111,7 +110,6 @@ No request body.
 | data[].endDate | date | Last day of the menu (`startDate + 6`). |
 | data[].status | string | `drafted`, `scheduled`, `cancelled`, or `completed`. |
 | data[].notes | string or null | Optional free-text note. |
-| data[].dietaryPreferences | string or null | Optional free-text dietary preference. |
 | data[].createdAt | string | ISO-8601 creation timestamp. |
 | data[].updatedAt | string | ISO-8601 last-update timestamp. |
 | data[].days | array | Days that carry at least one meal. A menu with no `menu_detail` rows yields an empty array. |
@@ -179,7 +177,6 @@ curl "/api/menus/details?menuId=3f0a9d21-5f6e-4c11-9a8b-1d2e3f4a5b6c" \
       "endDate": "2026-10-11",
       "status": "scheduled",
       "notes": "High-protein week",
-      "dietaryPreferences": "soy-free",
       "createdAt": "2026-10-01T09:00:00Z",
       "updatedAt": "2026-10-01T09:00:00Z",
       "days": [

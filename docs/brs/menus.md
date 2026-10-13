@@ -207,7 +207,7 @@ Active
 A `cancelled` or `completed` menu is never editable and returns 409. An
 update replaces the menu's meals wholesale (the new `days` must form a
 complete, valid week under BR-MENU-005 — there is no partial meal edit)
-and may change `dietaryPreferences` and `notes`. The menu's window
+and may change `notes`. The menu's window
 (`startDate`/`endDate`) is immutable, so editing can never introduce a
 scheduled-overlap violation (BR-MENU-003).
 

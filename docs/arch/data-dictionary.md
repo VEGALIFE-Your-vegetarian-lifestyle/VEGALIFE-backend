@@ -31,17 +31,18 @@ _Description: Stores user account credentials, status, and role-based access con
 
 ## Table 2: UserProfile
 
-_Description: Stores physical body metrics used for meal planning._
+_Description: Stores physical body metrics and the member's dietary profile used for meal planning and AI context._
 
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
 | id | UUID | PK | No | Unique identifier for user profile |
 | user_id | UUID | FK, Unique | No | References User(id) (1-to-1 relationship) |
-| height_cm | DECIMAL(5,2) | - | No | User height in centimeters |
-| weight_kg | DECIMAL(5,2) | - | No | User weight in kilograms |
-| age | INT | - | No | User age |
-| gender | VARCHAR(20) | - | No | User sex: male, female, other |
+| height_cm | DECIMAL(5,2) | - | Yes | User height in centimeters |
+| weight_kg | DECIMAL(5,2) | - | Yes | User weight in kilograms |
+| age | INT | - | Yes | User age |
+| gender | VARCHAR(20) | - | Yes | User sex: male, female, other |
 | description | TEXT | - | Yes | User description about themself |
+| dietary_preferences | JSONB | - | Yes | Single JSONB value: preferences, dislikes, allergies, restrictions (arrays of free-text tags) and health_goal (free text). All members optional. |
 | updated_at | TIMESTAMPTZ | - | No | Timestamp of the last metric update |
 
 **Constraints:**
@@ -317,7 +318,7 @@ _Description: Canonical vegan dishes — each dish can have multiple recipe vari
 
 ## Table 15: Menu
 
-_Description: User-specific weekly meal plan generated based on BMI and available ingredients._
+_Description: User-specific weekly meal plan authored by the member or the AI assistant._
 
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
@@ -408,8 +409,6 @@ _Description: Tracks AI Chatbot conversations._
 | id | UUID | PK | No | Unique identifier for chat session |
 | user_id | UUID | FK | Yes | References User(id) (Null for guest users) |
 | title | TEXT | - | No | Title of conversation |
-| summary | TEXT | - | Yes | Summary of conversation |
-| recent_messages | JSONB | - | Yes | Recent messages for context |
 | created_at | TIMESTAMPTZ | - | No | Conversation start timestamp |
 | updated_at | TIMESTAMPTZ | - | No | Conversation last update timestamp |
 

@@ -27,20 +27,23 @@ Profile fields must satisfy the following validation constraints:
 - **gender**: Must be exactly one of: `male`, `female`, `other`
 - **description**: Maximum 2000 characters
 - **avatar_url**: Must be a valid URL format (RFC 3986) if provided
+- **preferences / dislikes / allergies / restrictions**: Arrays of free-text
+  tags — at most 50 entries each, each entry at most 100 characters
+- **health_goal**: Free text, maximum 200 characters
 
 ## Rationale
-Ensures physically plausible body metrics for meal planning calculations, valid gender values for personalization, reasonable description length for storage, and valid avatar URLs for display.
+Ensures physically plausible body metrics for meal planning calculations, valid gender values for personalization, reasonable description length for storage, valid avatar URLs for display, and bounded dietary tags so the JSONB profile stays small enough to embed in every AI prompt.
 
 ## Scope & Exceptions
-Applies to all profile update requests via `PUT /api/profile`. All fields are optional (partial update), but at least one field must be provided.
+Applies to all profile update requests via `PUT /api/profile`. All fields are optional (partial update), but at least one field must be provided. The dietary fields update `user_profile.dietary_preferences` member-wise: an omitted member keeps its stored value, an empty array clears it.
 
 ## Enforcement
-- DTO: Jakarta Validation annotations on `ProfileRequest` (`@DecimalMin`, `@DecimalMax`, `@Digits`, `@Min`, `@Max`, `@Pattern`, `@Size`)
+- DTO: Jakarta Validation annotations on `UpdateProfileRequest` (`@DecimalMin`, `@DecimalMax`, `@Digits`, `@Min`, `@Max`, `@Pattern`, `@Size`)
 - Service: `UserProfileService.updateProfile()` checks `request.hasAnyField()` before processing
 - API: Returns 400 Bad Request with validation error message on violation
 
 ## Last Reviewed
-2026-09-23, by <name/role>
+2026-10-13, by <name/role>
 
 ---
 
@@ -117,9 +120,10 @@ Active
 Any member's profile is readable without authentication at
 `GET /api/profile/{userId}`. The public response contains exactly the
 `ProfileResponse` fields — `userId`, `username`, `email`, `heightCm`,
-`weightKg`, `age`, `gender`, `description`, `avatarUrl`, `updatedAt` — and
-nothing else. There is no per-user visibility toggle; read access is
-unconditional for every existing user.
+`weightKg`, `bmi`, `age`, `gender`, `description`, `avatarUrl`,
+`preferences`, `dislikes`, `allergies`, `restrictions`, `healthGoal`,
+`updatedAt` — and nothing else. There is no per-user visibility toggle;
+read access is unconditional for every existing user.
 
 ## Rationale
 Author cards, member directories, and other members' post pages need profile

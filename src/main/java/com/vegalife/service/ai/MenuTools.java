@@ -185,9 +185,13 @@ public class MenuTools {
                   "Exactly 7 day objects: {date: YYYY-MM-DD, meals: [{mealType, dishId,"
                       + " servings}]}.")
           List<Day> days,
-      @ToolParam(required = false, description = "Free-text dietary preference for the week.")
-          String dietaryPreferences,
-      @ToolParam(required = false, description = "Free-text note for the menu.") String notes,
+      @ToolParam(
+              required = true,
+              description =
+                  "A short summary of the week and why these meals were chosen (its theme and"
+                      + " the member's relevant restrictions honored, e.g. 'High-protein week,"
+                      + " peanut-free, built around your saved dishes'). Always supply one.")
+          String notes,
       ToolContext toolContext) {
     UUID userId = callerUserId(toolContext);
     if (userId == null) {
@@ -207,7 +211,6 @@ public class MenuTools {
     CreateMenuRequest request =
         CreateMenuRequest.builder()
             .startDate(start)
-            .dietaryPreferences(blankToNull(dietaryPreferences))
             .notes(blankToNull(notes))
             .days(dayRequests)
             .build();
@@ -225,9 +228,8 @@ public class MenuTools {
       description =
           "Replace the days of the caller's current-week drafted menu. Meals are replaced"
               + " wholesale. Refused unless the target is the caller's own menu of the current"
-              + " week with status drafted; dietaryPreferences and notes, when passed, replace"
-              + " the stored values. The backend re-validates the whole week. Returns the"
-              + " updated menu's full detail.")
+              + " week with status drafted; notes, when passed, replace the stored value. The"
+              + " backend re-validates the whole week. Returns the updated menu's full detail.")
   public String updateMenu(
       @ToolParam(
               required = true,
@@ -240,10 +242,12 @@ public class MenuTools {
                       + " replaced wholesale.")
           List<Day> days,
       @ToolParam(
-              required = false,
-              description = "New dietary preference; omit to keep the stored value.")
-          String dietaryPreferences,
-      @ToolParam(required = false, description = "New note; omit to keep the stored value.")
+              required = true,
+              description =
+                  "A short summary of the week and why these meals were chosen (its theme and"
+                      + " the member's relevant restrictions honored, e.g. 'High-protein week,"
+                      + " peanut-free, built around your saved dishes'). Always supply one; it"
+                      + " replaces the stored note.")
           String notes,
       ToolContext toolContext) {
     UUID userId = callerUserId(toolContext);
@@ -268,11 +272,7 @@ public class MenuTools {
     }
 
     UpdateMenuRequest request =
-        UpdateMenuRequest.builder()
-            .days(dayRequests)
-            .dietaryPreferences(blankToNull(dietaryPreferences))
-            .notes(blankToNull(notes))
-            .build();
+        UpdateMenuRequest.builder().days(dayRequests).notes(blankToNull(notes)).build();
     try {
       validate(request);
       return write(menuService.updateMenu(userId, id, request), "Menu updated successfully");

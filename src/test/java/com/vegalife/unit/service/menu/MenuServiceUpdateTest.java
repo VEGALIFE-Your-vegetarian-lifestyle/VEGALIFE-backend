@@ -65,8 +65,7 @@ class MenuServiceUpdateTest {
     when(menuRepository.save(any(Menu.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(dishRepository.findAllById(any())).thenReturn(dishesOf(week));
     when(menuDetailRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
-    UpdateMenuRequest request =
-        UpdateMenuRequest.builder().days(week).dietaryPreferences("soy-free").notes("new").build();
+    UpdateMenuRequest request = UpdateMenuRequest.builder().days(week).notes("new").build();
 
     MenuDetailResponse response = menuService.updateMenu(USER, MENU_ID, request);
 
@@ -76,7 +75,6 @@ class MenuServiceUpdateTest {
 
     ArgumentCaptor<Menu> menuCaptor = ArgumentCaptor.forClass(Menu.class);
     verify(menuRepository).save(menuCaptor.capture());
-    assertThat(menuCaptor.getValue().getDietaryPreferences()).isEqualTo("soy-free");
     assertThat(menuCaptor.getValue().getNotes()).isEqualTo("new");
     assertThat(menuCaptor.getValue().getStartDate()).isEqualTo(MONDAY);
     assertThat(menuCaptor.getValue().getEndDate()).isEqualTo(MONDAY.plusDays(6));
@@ -106,7 +104,6 @@ class MenuServiceUpdateTest {
   void updateMenuKeepsFreeTextFieldsWhenOmitted() {
     List<MenuDayRequest> week = newWeek();
     Menu existing = menu(MenuStatus.drafted);
-    existing.setDietaryPreferences("high-protein");
     existing.setNotes("original");
     when(menuRepository.findByIdAndUserId(MENU_ID, USER)).thenReturn(Optional.of(existing));
     when(menuRepository.save(any(Menu.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -116,7 +113,6 @@ class MenuServiceUpdateTest {
     menuService.updateMenu(USER, MENU_ID, UpdateMenuRequest.builder().days(week).build());
 
     verify(menuValidator).validate(revalidationCaptor.capture());
-    assertThat(revalidationCaptor.getValue().getDietaryPreferences()).isEqualTo("high-protein");
     assertThat(revalidationCaptor.getValue().getNotes()).isEqualTo("original");
   }
 

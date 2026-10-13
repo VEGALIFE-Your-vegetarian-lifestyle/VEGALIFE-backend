@@ -2,6 +2,7 @@ package com.vegalife.dto.request.profile;
 
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -38,12 +39,40 @@ public class UpdateProfileRequest {
       message = "Avatar URL must be a valid URL")
   private String avatarUrl;
 
+  @Size(max = 50, message = "Preferences must contain at most 50 entries")
+  private List<@Size(max = 100, message = "Each preference must not exceed 100 characters") String>
+      preferences;
+
+  @Size(max = 50, message = "Dislikes must contain at most 50 entries")
+  private List<@Size(max = 100, message = "Each dislike must not exceed 100 characters") String>
+      dislikes;
+
+  @Size(max = 50, message = "Allergies must contain at most 50 entries")
+  private List<@Size(max = 100, message = "Each allergy must not exceed 100 characters") String>
+      allergies;
+
+  @Size(max = 50, message = "Restrictions must contain at most 50 entries")
+  private List<@Size(max = 100, message = "Each restriction must not exceed 100 characters") String>
+      restrictions;
+
+  @Size(max = 200, message = "Health goal must not exceed 200 characters")
+  private String healthGoal;
+
   public boolean hasAnyField() {
     return heightCm != null
         || weightKg != null
         || age != null
         || gender != null
         || description != null
-        || avatarUrl != null;
+        || avatarUrl != null
+        || hasDietaryField();
+  }
+
+  public boolean hasDietaryField() {
+    return preferences != null
+        || dislikes != null
+        || allergies != null
+        || restrictions != null
+        || healthGoal != null;
   }
 }

@@ -13,7 +13,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-AUTH-005 | Password Minimum Length (8 chars) | Active | 2026-09-22 |
 | BR-AUTH-006 | Username Format and Length (3-50 chars) | Active | 2026-09-22 |
 | BR-AUTH-007 | Email Format and Length (valid, max 100 chars) | Active | 2026-09-22 |
-| BR-PROFILE-001 | Profile Fields Validation | Active | 2026-09-23 |
+| BR-PROFILE-001 | Profile Fields Validation | Active | 2026-10-13 |
 | BR-PROFILE-002 | Profile Ownership | Active | 2026-09-23 |
 | BR-PROFILE-003 | Profile Auto-Creation | Active | 2026-10-01 |
 | BR-PROFILE-004 | Public Profile Read | Active | 2026-10-01 |
@@ -85,8 +85,9 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-AI-001 | Quota Gate Precedes the Provider Call | Active | 2026-10-07 |
 | BR-AI-002 | Only Successful Replies Count Toward Quota | Active | 2026-10-07 |
 | BR-AI-003 | Conversation Ownership Comes from Authentication | Active | 2026-10-07 |
-| BR-AI-004 | Context Is Profile Plus Own Conversation History | Active | 2026-10-07 |
+| BR-AI-004 | Context Is the Stored Profile (Incl. Dietary JSON and BMI) Plus Own Conversation History | Active | 2026-10-13 |
 | BR-AI-005 | Chat Provider Is OpenAI-Compatible and Set by Dedicated Env Vars | Active | 2026-10-07 |
+| BR-AI-006 | Persona Is Scoped to Vegan and Platform Topics, With a Polite Refusal Otherwise | Active | 2026-10-13 |
 | BR-MENU-001 | Menu Ownership Comes from Authentication | Active | 2026-10-10 |
 | BR-MENU-002 | Menu Read Windows Are Intersections | Active | 2026-10-10 |
 | BR-MENU-003 | One Scheduled Week per User, No Overlap | Active | 2026-10-10 |

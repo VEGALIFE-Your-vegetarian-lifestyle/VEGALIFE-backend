@@ -94,13 +94,13 @@ array, not a page object.
 |-----------|------|----------|-------------|
 | startDate | date `YYYY-MM-DD` | Yes | First day of the week (a Monday by convention). `endDate` is derived as `+6`. |
 | days | array | Yes | Exactly 7 day objects, each `{date, meals[]}`; meal = `{mealType, dishId, servings}` with `mealType` ∈ `BREAKFAST`/`LUNCH`/`DINNER`, `servings ≥ 1`. |
-| dietaryPreferences | string | No | Free-text dietary preference for the week. |
-| notes | string | No | Free-text note. |
+| notes | string | Yes | A short summary of the week and why these meals were chosen (its theme and the member's relevant restrictions honored, e.g. `High-protein week, peanut-free, built around your saved dishes`). The model must always supply one; the REST contract keeps `notes` optional for HTTP callers. |
 
 Calls `MenuService.createMenu`. Always creates `drafted` (BR-MENU-005); all
 structural validation (7 dates, ≤1 meal per type per day, ≥5 distinct dishes,
 no dish >3 times, dishes exist) is the backend's. Response: full menu detail
-with the new `id`.
+with the new `id`. Dietary preferences are not a menu field — they live on the
+member's profile and are already part of the assistant's context.
 
 ### `update_menu` — edit the caller's current-week draft
 
@@ -108,8 +108,7 @@ with the new `id`.
 |-----------|------|----------|-------------|
 | menuId | uuid | Yes | The menu to replace. |
 | days | array | Yes | The complete new week (same shape as `create_menu`); meals are replaced wholesale. |
-| dietaryPreferences | string | No | New value; omit to keep. |
-| notes | string | No | New value; omit to keep. |
+| notes | string | Yes | A short summary of the week (same guidance as `create_menu`); it replaces the stored note. The model must always supply one. |
 
 **Tool-layer pre-check (BR-MCP-005):** refused with a readable message unless
 the target is the caller's own menu, in the current UTC week, with status
@@ -186,7 +185,7 @@ A chat turn (server-side flow):
 
 ```text
 user: "Draft next week with tofu scramble for breakfasts and schedule it"
-  → assistant calls create_menu(startDate=2026-10-19, days=[...])
+  → assistant calls create_menu(startDate=2026-10-19, days=[...], notes="Tofu-scramble week, peanut-free")
   → {"success":true,"message":"Menu created successfully","data":{"id":"7c1f2b90-...", ...}}
 user: "Yes, schedule it"
   → assistant calls schedule_menu(menuId=7c1f2b90-...)

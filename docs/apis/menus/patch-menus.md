@@ -31,7 +31,6 @@ to another user is indistinguishable from a non-existent one (404).
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | days | array of day objects | Yes | The complete new week: exactly the 7 dates of the menu (`startDate .. endDate`), each once. Meals are replaced wholesale — the existing set is discarded. Same day/meal shape and rules as `POST /api/menus`. |
-| dietaryPreferences | string | No | New free-text dietary preference. Omitted (or `null`) keeps the current value. |
 | notes | string | No | New free-text note. Omitted (or `null`) keeps the current value. |
 
 `startDate` and `endDate` are never accepted: a menu keeps its original
@@ -59,7 +58,6 @@ meals — an update that would produce an invalid week is rejected whole.
     "endDate": "2026-10-11",
     "status": "scheduled",
     "notes": "Updated prep notes",
-    "dietaryPreferences": "soy-free",
     "createdAt": "2026-10-12T09:00:00Z",
     "updatedAt": "2026-10-12T10:00:00Z",
     "days": [
@@ -112,7 +110,7 @@ curl -X PATCH /api/menus/7c1f2b90-4a3d-4e8a-9d5b-2f6e8c0a1d4e \
   -H "Authorization: Bearer <accessToken>" \
   -H "Content-Type: application/json" \
   -d '{
-    "dietaryPreferences": "soy-free",
+    "notes": "Soy-free week",
     "days": [
       {
         "date": "2026-10-05",

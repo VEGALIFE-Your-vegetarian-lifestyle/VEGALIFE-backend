@@ -1,10 +1,12 @@
 package com.vegalife.service.ai;
 
+import com.vegalife.dto.mapper.profile.ProfileMapper;
 import com.vegalife.dto.request.ai.SendMessageRequest;
 import com.vegalife.dto.response.ai.AiUsageQuotaResponse;
 import com.vegalife.dto.response.ai.SendMessageResponse;
 import com.vegalife.model.ai.AiConversation;
 import com.vegalife.model.ai.AiMessage;
+import com.vegalife.model.user.DietaryPreferences;
 import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.ai.AiConversationRepository;
 import com.vegalife.repository.ai.AiMessageRepository;
@@ -12,6 +14,7 @@ import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.shared.exception.AiProviderException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import jakarta.annotation.PostConstruct;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -55,6 +58,7 @@ public class AiChatService {
   private final AiQuotaGuard quotaGuard;
   private final TransactionTemplate transactionTemplate;
   private final MenuTools menuTools;
+  private final ProfileMapper profileMapper;
 
   private ChatClient chatClient;
 
@@ -198,39 +202,100 @@ public class AiChatService {
             .orElseThrow(() -> new ResourceNotFoundException("Conversation not found")));
   }
 
-  /** System prompt: persona plus whatever profile facts are known (BR-AI-004). */
+  /**
+   * System prompt: scoped persona plus whatever profile facts are known (BR-AI-004). Dietary data
+   * and BMI come from the stored profile — the model is told to respect them, never to infer them.
+   */
   private String buildSystemPrompt(UUID userId) {
     UserProfile profile = userProfileRepository.findByUserId(userId).orElse(null);
 
     StringBuilder prompt = new StringBuilder();
     prompt.append(
         "You are Vegalife's vegan-lifestyle assistant. Help members with plant-based "
-            + "cooking, nutrition, recipes, and sustainable living. Keep answers practical "
-            + "and concise.\n\n");
-    prompt.append(
-        "Infer the member's dietary preferences, restrictions, and recent activity "
-            + "from the conversation instead of asking for data you can reasonably guess.\n");
+            + "cooking, nutrition, recipes, sustainable living, and this platform's features. "
+            + "Keep answers practical and concise.\n"
+            + "Stay on topic: vegan/plant-based food, vegan lifestyle, nutrition, and this "
+            + "platform. Politely refuse anything else — general coding, politics, non-vegan "
+            + "cooking (meat, poultry, fish, dairy), or unrelated assistant tasks — with a "
+            + "brief refusal and a redirect back to vegan or platform topics. Adjacent "
+            + "plant-based nutrition and health questions are allowed.\n");
 
     if (profile != null) {
-      prompt.append("\nMember profile:\n");
-      if (profile.getAge() != null) {
-        prompt.append("- Age: ").append(profile.getAge()).append('\n');
-      }
-      if (profile.getGender() != null) {
-        prompt.append("- Gender: ").append(profile.getGender()).append('\n');
-      }
-      if (profile.getHeightCm() != null) {
-        prompt.append("- Height: ").append(profile.getHeightCm()).append(" cm\n");
-      }
-      if (profile.getWeightKg() != null) {
-        prompt.append("- Weight: ").append(profile.getWeightKg()).append(" kg\n");
-      }
-      if (profile.getDescription() != null && !profile.getDescription().isBlank()) {
-        prompt.append("- About: ").append(profile.getDescription()).append('\n');
-      }
+      appendProfileFacts(prompt, profile);
+      appendDietaryProfile(prompt, profile.getDietaryPreferences());
     }
     appendWeeklyMenuTools(prompt);
     return prompt.toString();
+  }
+
+  /** The member's known profile facts; BMI is derived at prompt-build time, never stored. */
+  private void appendProfileFacts(StringBuilder prompt, UserProfile profile) {
+    prompt.append("\nMember profile:\n");
+    if (profile.getAge() != null) {
+      prompt.append("- Age: ").append(profile.getAge()).append('\n');
+    }
+    if (profile.getGender() != null) {
+      prompt.append("- Gender: ").append(profile.getGender()).append('\n');
+    }
+    if (profile.getHeightCm() != null) {
+      prompt.append("- Height: ").append(profile.getHeightCm()).append(" cm\n");
+    }
+    if (profile.getWeightKg() != null) {
+      prompt.append("- Weight: ").append(profile.getWeightKg()).append(" kg\n");
+    }
+    BigDecimal bmi = profileMapper.computeBmi(profile.getHeightCm(), profile.getWeightKg());
+    if (bmi != null) {
+      prompt.append("- BMI: ").append(bmi).append(" (context only, not medical advice)\n");
+    }
+    if (profile.getDescription() != null && !profile.getDescription().isBlank()) {
+      prompt.append("- About: ").append(profile.getDescription()).append('\n');
+    }
+  }
+
+  /**
+   * The member's stored dietary preferences. Allergies and restrictions are hard constraints the
+   * model must never violate; dislikes are soft, preferences are a lean-in, and the health goal
+   * shapes intent. Unset members are omitted entirely so an empty profile adds nothing.
+   */
+  private void appendDietaryProfile(StringBuilder prompt, DietaryPreferences dietary) {
+    if (dietary == null) {
+      return;
+    }
+    prompt.append("\nDietary profile (from the member's stored settings):\n");
+    if (notEmpty(dietary.getAllergies())) {
+      prompt
+          .append("- Allergies (hard constraint — never suggest a dish containing them): ")
+          .append(String.join(", ", dietary.getAllergies()))
+          .append('\n');
+    }
+    if (notEmpty(dietary.getRestrictions())) {
+      prompt
+          .append("- Restrictions (hard constraint — never suggest a dish violating them): ")
+          .append(String.join(", ", dietary.getRestrictions()))
+          .append('\n');
+    }
+    if (notEmpty(dietary.getDislikes())) {
+      prompt
+          .append("- Dislikes (avoid unless the member explicitly asks): ")
+          .append(String.join(", ", dietary.getDislikes()))
+          .append('\n');
+    }
+    if (notEmpty(dietary.getPreferences())) {
+      prompt
+          .append("- Preferences (lean into these): ")
+          .append(String.join(", ", dietary.getPreferences()))
+          .append('\n');
+    }
+    if (dietary.getHealthGoal() != null && !dietary.getHealthGoal().isBlank()) {
+      prompt
+          .append("- Health goal (shape the plan's intent around it): ")
+          .append(dietary.getHealthGoal())
+          .append('\n');
+    }
+  }
+
+  private static boolean notEmpty(List<String> values) {
+    return values != null && !values.isEmpty();
   }
 
   /**

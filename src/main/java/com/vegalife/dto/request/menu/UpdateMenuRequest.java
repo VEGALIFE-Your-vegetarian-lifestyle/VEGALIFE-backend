@@ -10,8 +10,8 @@ import lombok.NoArgsConstructor;
 
 /**
  * Input model for {@code PATCH /api/menus/{menuId}}. Meals are replaced wholesale and must form a
- * complete valid week (BR-MENU-005); {@code dietaryPreferences} and {@code notes} are optional and
- * keep their current value when omitted. The window is never part of the payload (BR-MENU-006).
+ * complete valid week (BR-MENU-005); {@code notes} is optional and keeps its current value when
+ * omitted. The window is never part of the payload (BR-MENU-006).
  */
 @Data
 @Builder
@@ -22,8 +22,6 @@ public class UpdateMenuRequest {
   @NotEmpty(message = "days must contain exactly the 7 dates of the week")
   @Valid
   private List<MenuDayRequest> days;
-
-  private String dietaryPreferences;
 
   private String notes;
 }
