@@ -277,6 +277,7 @@ class MenuToolsEndToEndIntegrationTest {
   private String createMenuArguments(LocalDate startDate) throws JsonProcessingException {
     ObjectNode arguments = MAPPER.createObjectNode();
     arguments.put("startDate", startDate.toString());
+    arguments.put("notes", "Test week summary");
     arguments.set("days", sevenBreakfastDays(startDate));
     return MAPPER.writeValueAsString(arguments);
   }
@@ -284,6 +285,7 @@ class MenuToolsEndToEndIntegrationTest {
   private String updateMenuArguments(String menuId) throws JsonProcessingException {
     ObjectNode arguments = MAPPER.createObjectNode();
     arguments.put("menuId", menuId);
+    arguments.put("notes", "Updated week summary");
     arguments.set("days", sevenBreakfastDays(currentWeekMonday));
     return MAPPER.writeValueAsString(arguments);
   }

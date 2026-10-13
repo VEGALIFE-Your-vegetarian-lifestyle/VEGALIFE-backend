@@ -20,7 +20,6 @@ public class MenuDetailResponse {
   private LocalDate endDate;
   private String status;
   private String notes;
-  private String dietaryPreferences;
   private Instant createdAt;
   private Instant updatedAt;
   private List<MenuDayResponse> days;

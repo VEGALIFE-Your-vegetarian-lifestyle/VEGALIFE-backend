@@ -47,9 +47,6 @@ public class Menu {
   @Column(name = "notes", columnDefinition = "TEXT")
   private String notes;
 
-  @Column(name = "dietary_preferences", columnDefinition = "TEXT")
-  private String dietaryPreferences;
-
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;

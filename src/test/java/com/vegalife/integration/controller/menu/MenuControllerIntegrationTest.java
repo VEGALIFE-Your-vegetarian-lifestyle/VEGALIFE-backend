@@ -2,7 +2,6 @@ package com.vegalife.integration.controller.menu;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -799,14 +798,14 @@ class MenuControllerIntegrationTest {
             patch("/api/menus/{menuId}", menu.getId())
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(patchMenuJson(oneBreakfastPerDay(dishes.subList(0, 7)), "soy-free", null)))
+                .content(patchMenuJson(oneBreakfastPerDay(dishes.subList(0, 7)), "soy-free")))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Menu updated successfully"))
         .andExpect(jsonPath("$.data.status").value("scheduled"))
         .andExpect(jsonPath("$.data.startDate").value("2026-10-05"))
         .andExpect(jsonPath("$.data.endDate").value("2026-10-11"))
-        .andExpect(jsonPath("$.data.dietaryPreferences").value("soy-free"))
+        .andExpect(jsonPath("$.data.notes").value("soy-free"))
         .andExpect(jsonPath("$.data.days.length()").value(7));
 
     assertThat(menuDetailRepository.findAll()).hasSize(7);
@@ -831,10 +830,9 @@ class MenuControllerIntegrationTest {
             patch("/api/menus/{menuId}", menu.getId())
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(patchMenuJson(oneBreakfastPerDay(dishes), null, "new notes")))
+                .content(patchMenuJson(oneBreakfastPerDay(dishes), "new notes")))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.notes").value("new notes"))
-        .andExpect(jsonPath("$.data.dietaryPreferences").value(nullValue()))
         .andExpect(jsonPath("$.data.days.length()").value(7));
 
     assertThat(menuDetailRepository.findAll()).hasSize(7);
@@ -850,7 +848,7 @@ class MenuControllerIntegrationTest {
               patch("/api/menus/{menuId}", menu.getId())
                   .header("Authorization", "Bearer " + accessToken)
                   .contentType(MediaType.APPLICATION_JSON)
-                  .content(patchMenuJson(oneBreakfastPerDay(createDishes(7)), null, null)))
+                  .content(patchMenuJson(oneBreakfastPerDay(createDishes(7)), null)))
           .andExpect(status().isConflict())
           .andExpect(jsonPath("$.message").value("Only drafted or scheduled menus can be updated"));
     }
@@ -865,7 +863,7 @@ class MenuControllerIntegrationTest {
             patch("/api/menus/{menuId}", menu.getId())
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(patchMenuJson(oneBreakfastPerDay(createDishes(7)), null, null)))
+                .content(patchMenuJson(oneBreakfastPerDay(createDishes(7)), null)))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.message").value("Menu not found"));
   }
@@ -893,7 +891,7 @@ class MenuControllerIntegrationTest {
             patch("/api/menus/{menuId}", menu.getId())
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(patchMenuJson(days, null, null)))
+                .content(patchMenuJson(days, null)))
         .andExpect(status().isBadRequest())
         .andExpect(
             jsonPath("$.message").value("the same dish may appear at most 3 times in a menu"));
@@ -910,7 +908,7 @@ class MenuControllerIntegrationTest {
             patch("/api/menus/{menuId}", menu.getId())
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"dietaryPreferences\": \"vegan\"}"))
+                .content("{\"notes\": \"vegan\"}"))
         .andExpect(status().isBadRequest());
   }
 
@@ -922,7 +920,7 @@ class MenuControllerIntegrationTest {
         .perform(
             patch("/api/menus/{menuId}", menu.getId())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(patchMenuJson(oneBreakfastPerDay(createDishes(7)), null, null)))
+                .content(patchMenuJson(oneBreakfastPerDay(createDishes(7)), null)))
         .andExpect(status().isUnauthorized());
   }
 
@@ -1159,14 +1157,10 @@ class MenuControllerIntegrationTest {
     return objectMapper.writeValueAsString(body);
   }
 
-  private String patchMenuJson(
-      List<Map<String, Object>> days, String dietaryPreferences, String notes)
+  private String patchMenuJson(List<Map<String, Object>> days, String notes)
       throws JsonProcessingException {
     Map<String, Object> body = new LinkedHashMap<>();
     body.put("days", days);
-    if (dietaryPreferences != null) {
-      body.put("dietaryPreferences", dietaryPreferences);
-    }
     if (notes != null) {
       body.put("notes", notes);
     }

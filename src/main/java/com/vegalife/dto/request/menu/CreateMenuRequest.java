@@ -23,8 +23,6 @@ public class CreateMenuRequest {
   @NotNull(message = "startDate is required")
   private LocalDate startDate;
 
-  private String dietaryPreferences;
-
   private String notes;
 
   @NotEmpty(message = "days must contain exactly the 7 dates of the week")

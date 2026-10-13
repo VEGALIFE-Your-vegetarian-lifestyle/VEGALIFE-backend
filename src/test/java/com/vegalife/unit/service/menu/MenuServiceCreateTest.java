@@ -77,7 +77,6 @@ class MenuServiceCreateTest {
     assertThat(saved.getStartDate()).isEqualTo(MONDAY);
     assertThat(saved.getEndDate()).isEqualTo(MONDAY.plusDays(6));
     assertThat(saved.getStatus()).isEqualTo(MenuStatus.drafted);
-    assertThat(saved.getDietaryPreferences()).isEqualTo("high-protein");
 
     assertThat(response.getId()).isEqualTo(saved.getId());
     assertThat(response.getStatus()).isEqualTo("drafted");
@@ -142,11 +141,7 @@ class MenuServiceCreateTest {
                                         .build())))
                         .build())
             .toList();
-    return CreateMenuRequest.builder()
-        .startDate(MONDAY)
-        .dietaryPreferences("high-protein")
-        .days(new ArrayList<>(days))
-        .build();
+    return CreateMenuRequest.builder().startDate(MONDAY).days(new ArrayList<>(days)).build();
   }
 
   private List<Dish> dishesOf(CreateMenuRequest request) {

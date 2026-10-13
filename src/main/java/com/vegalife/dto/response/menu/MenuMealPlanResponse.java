@@ -31,7 +31,6 @@ public class MenuMealPlanResponse {
   private String status;
 
   private String notes;
-  private String dietaryPreferences;
   private Instant createdAt;
   private Instant updatedAt;
 
