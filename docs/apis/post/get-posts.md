@@ -50,6 +50,7 @@ No request body.
         "featuredImageUrl": "https://example.com/tofu-bowl.jpg",
         "categoryIds": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
         "mediaIds": [],
+        "recipeIds": [],
         "status": "published",
         "flag": "PASSED",
         "viewCount": 12,
@@ -78,6 +79,7 @@ No request body.
 | data.content[].featuredImageUrl | string or null | Featured image URL, if present. |
 | data.content[].categoryIds | array of UUID | Assigned categories. |
 | data.content[].mediaIds | array of UUID | Attached uploaded media. |
+| data.content[].recipeIds | array of UUID | Always empty on this list endpoint and on create/edit — recipes are only resolved on `GET /api/posts/{postId}` and the two attach endpoints, to avoid a query per row on a paginated list (issue #137). |
 | data.content[].status | string | Post status: `created`, `processed`, `published`, `unpublished`, or `hidden`. A post the content filter did not pass is `unpublished` (BR-POST-010, BR-FILTER-008). |
 | data.content[].flag | string or null | Content filter state: `null` (never filtered — drafts are not queued), `PENDING`, `PASSED`, `REJECTED`, or `NEEDS_REVIEW` (BR-FILTER-007). |
 | data.content[].viewCount | integer | Number of recorded views. |

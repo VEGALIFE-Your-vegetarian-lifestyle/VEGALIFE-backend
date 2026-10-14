@@ -32,6 +32,8 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts (public: published only; owner/Admin: all) |
 | `post/get-posts-feed.md` | `GET /api/posts/feed` | Global feed of published posts, newest first (public) |
 | `post/patch-posts-postid.md` | `PATCH /api/posts/{postId}` | Edit a post (owner or Admin) |
+| `post/post-posts-postid-media.md` | `POST /api/posts/{postId}/media` | Replace a post's whole attached-media set (owner or Admin) |
+| `post/post-posts-postid-recipes.md` | `POST /api/posts/{postId}/recipes` | Replace a post's whole attached-recipe set (owner or Admin) |
 | `post/delete-posts-postid.md` | `DELETE /api/posts/{postId}` | Soft-delete a post (owner or Admin) |
 | `post/patch-posts-postid-visibility.md` | `PATCH /api/posts/{postId}/visibility` | Hide or unhide a post (Admin) |
 | `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |

@@ -2,6 +2,8 @@ package com.vegalife.controller.post;
 
 import com.vegalife.dto.request.post.PostCreateRequest;
 import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.PostMediaAttachRequest;
+import com.vegalife.dto.request.post.PostRecipeAttachRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.request.post.PostVisibilityRequest;
 import com.vegalife.dto.response.post.PostListResponse;
@@ -62,6 +64,32 @@ public class PostController {
     PostListResponse post =
         postService.updatePost(userId, isAdmin(authentication), postId, request);
     return ResponseEntity.ok(ApiResponse.success(post, "Post updated successfully"));
+  }
+
+  @PostMapping("/{postId}/media")
+  @PreAuthorize("isAuthenticated()")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<PostListResponse>> attachMedia(
+      @AuthenticationPrincipal UUID userId,
+      Authentication authentication,
+      @PathVariable UUID postId,
+      @Valid @RequestBody PostMediaAttachRequest request) {
+    PostListResponse post =
+        postService.attachMedia(userId, isAdmin(authentication), postId, request.getMediaIds());
+    return ResponseEntity.ok(ApiResponse.success(post, "Media attached successfully"));
+  }
+
+  @PostMapping("/{postId}/recipes")
+  @PreAuthorize("isAuthenticated()")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<PostListResponse>> attachRecipes(
+      @AuthenticationPrincipal UUID userId,
+      Authentication authentication,
+      @PathVariable UUID postId,
+      @Valid @RequestBody PostRecipeAttachRequest request) {
+    PostListResponse post =
+        postService.attachRecipes(userId, isAdmin(authentication), postId, request.getRecipeIds());
+    return ResponseEntity.ok(ApiResponse.success(post, "Recipes attached successfully"));
   }
 
   @PatchMapping("/{postId}/visibility")

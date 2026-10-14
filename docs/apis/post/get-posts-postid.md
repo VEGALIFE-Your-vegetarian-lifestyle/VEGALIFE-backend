@@ -45,6 +45,7 @@ No request body.
     "featuredImageUrl": "https://example.com/tofu-bowl.jpg",
     "categoryIds": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
     "mediaIds": [],
+    "recipeIds": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
     "status": "published",
     "flag": "PASSED",
     "viewCount": 12,
@@ -54,7 +55,7 @@ No request body.
 }
 ```
 
-Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-posts.md` for the full field table.
+Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-posts.md` for the full field table. Unlike the list and feed endpoints, this endpoint resolves `recipeIds` to the post's actual attached recipes (issue #137), since it returns a single post rather than a page.
 
 ### Error Responses
 
