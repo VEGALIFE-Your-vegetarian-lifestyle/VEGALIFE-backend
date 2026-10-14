@@ -75,3 +75,4 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `menus/patch-menus.md` | `PATCH /api/menus/{menuId}` | Update an owned drafted or scheduled menu's meals and preferences (authenticated) |
 | `menus/post-menu-status.md` | `POST /api/menus/{menuId}/status` | Transition an owned menu's status: schedule, cancel, or complete (authenticated) |
 | `mcp/post-mcp.md` | In-process `@Tool` methods (no HTTP endpoint) | Five menu tools — get_menu, get_meal_plan, create_menu, update_menu, schedule_menu — served by the backend's own tool layer for the AI chat (ADR-013) |
+| `locations/get-locations.md` | `GET /api/locations` | List recommend locations with rating/type/price/open-now filters (authenticated) |
