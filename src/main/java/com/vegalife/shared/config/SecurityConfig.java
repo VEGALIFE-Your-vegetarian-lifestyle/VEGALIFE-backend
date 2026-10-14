@@ -58,6 +58,8 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/users/*/posts")
                     .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/search")
+                    .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/posts/feed")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/posts/*")
