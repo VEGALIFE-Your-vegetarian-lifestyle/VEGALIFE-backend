@@ -51,6 +51,9 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `admin/post-categories.md` | `POST /api/admin/categories` | Create a content category (Admin) |
 | `admin/patch-categories-categoryid.md` | `PATCH /api/admin/categories/{categoryId}` | Edit a content category (Admin) |
 | `admin/delete-categories-categoryid.md` | `DELETE /api/admin/categories/{categoryId}` | Retire a content category (Admin) |
+| `admin/post-locations.md` | `POST /api/admin/locations` | Create a location (Admin) |
+| `admin/patch-locations-locationid.md` | `PATCH /api/admin/locations/{locationId}` | Edit a location (Admin) |
+| `admin/delete-locations-locationid.md` | `DELETE /api/admin/locations/{locationId}` | Soft-delete a location (Admin) |
 | `post/get-categories.md` | `GET /api/categories` | List active content categories (public) |
 | `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |
 | `ingredients/get-ingredients.md` | `GET /api/ingredients` | List ingredients paginated, with case-insensitive name filter (authenticated) |

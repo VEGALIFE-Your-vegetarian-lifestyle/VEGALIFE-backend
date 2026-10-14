@@ -1,27 +1,39 @@
 package com.vegalife.unit.service.location;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.dto.mapper.admin.AdminLocationMapper;
 import com.vegalife.dto.mapper.location.LocationMapper;
+import com.vegalife.dto.request.location.LocationCreateRequest;
 import com.vegalife.dto.request.location.LocationListRequest;
 import com.vegalife.dto.request.location.LocationNearbyRequest;
+import com.vegalife.dto.request.location.LocationUpdateRequest;
+import com.vegalife.dto.response.admin.AdminLocationResponse;
 import com.vegalife.dto.response.location.LocationResponse;
+import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Location;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.LocationRepository;
 import com.vegalife.service.location.LocationService;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.ResourceNotFoundException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -36,6 +48,10 @@ class LocationServiceTest {
   @Mock private LocationRepository locationRepository;
 
   @Mock private LocationMapper locationMapper;
+
+  @Mock private AdminLocationMapper adminLocationMapper;
+
+  @Mock private ModerationLogRepository moderationLogRepository;
 
   @Spy private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -214,6 +230,99 @@ class LocationServiceTest {
                 .build());
 
     assertThat(response).isEmpty();
+  }
+
+  @Test
+  void createLocation_savesAndRecordsModerationLog() {
+    UUID adminId = UUID.randomUUID();
+    LocationCreateRequest request =
+        LocationCreateRequest.builder()
+            .name("Vegan Garden")
+            .address("123 Nguyen Hue")
+            .latitude(new BigDecimal("10.776889"))
+            .longitude(new BigDecimal("106.700806"))
+            .placeType("restaurant")
+            .build();
+    when(locationRepository.saveAndFlush(any(Location.class)))
+        .thenAnswer(
+            invocation -> {
+              Location saved = invocation.getArgument(0);
+              saved.setId(UUID.randomUUID());
+              return saved;
+            });
+    AdminLocationResponse expected = AdminLocationResponse.builder().name("Vegan Garden").build();
+    when(adminLocationMapper.toResponse(any(Location.class))).thenReturn(expected);
+
+    AdminLocationResponse response = locationService.createLocation(adminId, request);
+
+    assertThat(response).isSameAs(expected);
+    ArgumentCaptor<Location> savedCaptor = ArgumentCaptor.forClass(Location.class);
+    verify(locationRepository).saveAndFlush(savedCaptor.capture());
+    assertThat(savedCaptor.getValue().getPlaceType()).isEqualTo(Location.PlaceType.restaurant);
+
+    ArgumentCaptor<ModerationLog> logCaptor = ArgumentCaptor.forClass(ModerationLog.class);
+    verify(moderationLogRepository).save(logCaptor.capture());
+    assertThat(logCaptor.getValue().getActorId()).isEqualTo(adminId);
+    assertThat(logCaptor.getValue().getAction()).isEqualTo("CREATE_LOCATION");
+    assertThat(logCaptor.getValue().getTargetType()).isEqualTo("LOCATION");
+  }
+
+  @Test
+  void updateLocation_changesOnlySuppliedFields() {
+    UUID adminId = UUID.randomUUID();
+    UUID locationId = UUID.randomUUID();
+    Location existing = locationAt("Old Name", new BigDecimal("10.0"), new BigDecimal("106.0"));
+    existing.setId(locationId);
+    existing.setAddress("Old Address");
+    when(locationRepository.findById(locationId)).thenReturn(Optional.of(existing));
+    when(locationRepository.saveAndFlush(existing)).thenReturn(existing);
+    when(adminLocationMapper.toResponse(existing))
+        .thenReturn(AdminLocationResponse.builder().name("New Name").build());
+
+    LocationUpdateRequest request = LocationUpdateRequest.builder().name("New Name").build();
+    AdminLocationResponse response = locationService.updateLocation(adminId, locationId, request);
+
+    assertThat(response.getName()).isEqualTo("New Name");
+    assertThat(existing.getName()).isEqualTo("New Name");
+    assertThat(existing.getAddress()).isEqualTo("Old Address");
+    verify(moderationLogRepository)
+        .save(
+            org.mockito.ArgumentMatchers.argThat(log -> "UPDATE_LOCATION".equals(log.getAction())));
+  }
+
+  @Test
+  void updateLocation_unknownOrDeletedLocationThrowsNotFound() {
+    UUID locationId = UUID.randomUUID();
+    when(locationRepository.findById(locationId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                locationService.updateLocation(
+                    UUID.randomUUID(),
+                    locationId,
+                    LocationUpdateRequest.builder().name("X").build()))
+        .isInstanceOf(ResourceNotFoundException.class);
+
+    verify(locationRepository, never()).saveAndFlush(any(Location.class));
+  }
+
+  @Test
+  void deleteLocation_softDeletesAndRecordsModerationLog() {
+    UUID adminId = UUID.randomUUID();
+    UUID locationId = UUID.randomUUID();
+    Location existing = locationAt("To Delete", new BigDecimal("10.0"), new BigDecimal("106.0"));
+    existing.setId(locationId);
+    when(locationRepository.findById(locationId)).thenReturn(Optional.of(existing));
+    when(locationRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    locationService.deleteLocation(adminId, locationId);
+
+    assertThat(existing.getDeletedAt()).isNotNull();
+    verify(moderationLogRepository)
+        .save(
+            org.mockito.ArgumentMatchers.argThat(
+                log ->
+                    "DELETE_LOCATION".equals(log.getAction()) && adminId.equals(log.getActorId())));
   }
 
   private Location location(String name, BigDecimal rating) {

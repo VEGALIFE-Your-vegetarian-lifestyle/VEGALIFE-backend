@@ -1,19 +1,30 @@
 package com.vegalife.service.location;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.dto.mapper.admin.AdminLocationMapper;
 import com.vegalife.dto.mapper.location.LocationMapper;
+import com.vegalife.dto.request.location.LocationCreateRequest;
 import com.vegalife.dto.request.location.LocationListRequest;
 import com.vegalife.dto.request.location.LocationNearbyRequest;
+import com.vegalife.dto.request.location.LocationUpdateRequest;
+import com.vegalife.dto.response.admin.AdminLocationResponse;
 import com.vegalife.dto.response.location.LocationResponse;
+import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Location;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.LocationRepository;
 import com.vegalife.repository.post.LocationSpecifications;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.ResourceNotFoundException;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -50,6 +61,8 @@ public class LocationService {
 
   private final LocationRepository locationRepository;
   private final LocationMapper locationMapper;
+  private final AdminLocationMapper adminLocationMapper;
+  private final ModerationLogRepository moderationLogRepository;
   private final ObjectMapper objectMapper;
 
   @Transactional(readOnly = true)
@@ -140,4 +153,110 @@ public class LocationService {
 
   private record BoundingBox(
       BigDecimal minLat, BigDecimal maxLat, BigDecimal minLng, BigDecimal maxLng) {}
+
+  /** BR-ADMIN-003: only an Administrator may create, edit, or retire a location (issue #144). */
+  @Transactional
+  public AdminLocationResponse createLocation(UUID adminId, LocationCreateRequest request) {
+    Location location =
+        Location.builder()
+            .name(request.getName().trim())
+            .address(request.getAddress().trim())
+            .latitude(request.getLatitude())
+            .longitude(request.getLongitude())
+            .phoneNumber(normalize(request.getPhoneNumber()))
+            .placeType(Location.PlaceType.valueOf(request.getPlaceType()))
+            .openingHours(serializeOpeningHours(request.getOpeningHours()))
+            .websiteUrl(normalize(request.getWebsiteUrl()))
+            .rating(request.getRating())
+            .priceLevel(request.getPriceLevel())
+            .build();
+
+    Location saved = locationRepository.saveAndFlush(location);
+    recordModeration(adminId, "CREATE_LOCATION", saved.getId());
+    return adminLocationMapper.toResponse(saved);
+  }
+
+  /** Partial update: only supplied fields change; a blank text field clears it (issue #144). */
+  @Transactional
+  public AdminLocationResponse updateLocation(
+      UUID adminId, UUID locationId, LocationUpdateRequest request) {
+    Location location = findActiveLocation(locationId);
+
+    if (request.getName() != null) {
+      location.setName(request.getName().trim());
+    }
+    if (request.getAddress() != null) {
+      location.setAddress(request.getAddress().trim());
+    }
+    if (request.getLatitude() != null) {
+      location.setLatitude(request.getLatitude());
+    }
+    if (request.getLongitude() != null) {
+      location.setLongitude(request.getLongitude());
+    }
+    if (request.getPhoneNumber() != null) {
+      location.setPhoneNumber(normalize(request.getPhoneNumber()));
+    }
+    if (request.getPlaceType() != null) {
+      location.setPlaceType(Location.PlaceType.valueOf(request.getPlaceType()));
+    }
+    if (request.getOpeningHours() != null) {
+      location.setOpeningHours(serializeOpeningHours(request.getOpeningHours()));
+    }
+    if (request.getWebsiteUrl() != null) {
+      location.setWebsiteUrl(normalize(request.getWebsiteUrl()));
+    }
+    if (request.getRating() != null) {
+      location.setRating(request.getRating());
+    }
+    if (request.getPriceLevel() != null) {
+      location.setPriceLevel(request.getPriceLevel());
+    }
+
+    Location saved = locationRepository.saveAndFlush(location);
+    recordModeration(adminId, "UPDATE_LOCATION", saved.getId());
+    return adminLocationMapper.toResponse(saved);
+  }
+
+  /** Soft delete: {@code deletedAt} is set, the row is kept (issue #144). */
+  @Transactional
+  public void deleteLocation(UUID adminId, UUID locationId) {
+    Location location = findActiveLocation(locationId);
+    location.setDeletedAt(Instant.now());
+    Location saved = locationRepository.saveAndFlush(location);
+    recordModeration(adminId, "DELETE_LOCATION", saved.getId());
+  }
+
+  private Location findActiveLocation(UUID locationId) {
+    return locationRepository
+        .findById(locationId)
+        .filter(l -> l.getDeletedAt() == null)
+        .orElseThrow(() -> new ResourceNotFoundException("Location not found"));
+  }
+
+  /** BR-ADMIN-002: every admin create/update/delete is recorded in the moderation log. */
+  private void recordModeration(UUID adminId, String action, UUID targetId) {
+    moderationLogRepository.save(
+        ModerationLog.builder()
+            .actorId(adminId)
+            .action(action)
+            .targetType("LOCATION")
+            .targetId(targetId)
+            .build());
+  }
+
+  private String serializeOpeningHours(JsonNode openingHours) {
+    if (openingHours == null) {
+      return null;
+    }
+    try {
+      return objectMapper.writeValueAsString(openingHours);
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Failed to serialize opening hours", e);
+    }
+  }
+
+  private String normalize(String value) {
+    return value == null || value.isBlank() ? null : value.trim();
+  }
 }
