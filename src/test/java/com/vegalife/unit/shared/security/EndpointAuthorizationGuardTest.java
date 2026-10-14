@@ -47,6 +47,7 @@ class EndpointAuthorizationGuardTest {
       Set.of(
           "PostController#getPost",
           "PostController#listFeed",
+          "SearchController#search",
           "SubscriptionController#getAvailablePlans",
           "ProfileController#getProfileByUserId",
           "PaymentWebhookController#ipnGet",
