@@ -234,7 +234,7 @@ class SearchControllerIntegrationTest {
                 .uploadedBy(owner)
                 .build());
     post.getMedia().add(media);
-    postRepository.save(post);
+    postRepository.saveAndFlush(post);
     return media;
   }
 
