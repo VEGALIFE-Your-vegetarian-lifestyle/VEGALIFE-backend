@@ -28,4 +28,7 @@ public class LocationResponse {
   private String websiteUrl;
   private BigDecimal rating;
   private Integer priceLevel;
+
+  /** Distance from the search centre in metres; only set by {@code GET /api/locations/nearby}. */
+  private Double distance;
 }

@@ -35,4 +35,19 @@ public final class LocationSpecifications {
       return cb.and(predicates.toArray(new Predicate[0]));
     };
   }
+
+  /**
+   * Every non-deleted location whose coordinates fall inside a lat/lng bounding box — a coarse,
+   * index-friendly pre-filter over {@code idx_location_coords} (issue #10). The exact radius cut
+   * and distance are computed afterward with the haversine formula, since a bounding box is a
+   * rectangle, not a circle.
+   */
+  public static Specification<Location> activeWithinBoundingBox(
+      BigDecimal minLat, BigDecimal maxLat, BigDecimal minLng, BigDecimal maxLng) {
+    return (root, query, cb) ->
+        cb.and(
+            cb.isNull(root.get("deletedAt")),
+            cb.between(root.get("latitude"), minLat, maxLat),
+            cb.between(root.get("longitude"), minLng, maxLng));
+  }
 }

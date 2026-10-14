@@ -229,6 +229,127 @@ class LocationControllerIntegrationTest {
   }
 
   @Test
+  void listNearbyLocations_withoutJwt_returns401() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/locations/nearby")
+                .param("lat", "10.772465")
+                .param("lng", "106.698055")
+                .param("radius", "2000"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void listNearbyLocations_noMatchesReturnsEmptyArrayWith200() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/locations/nearby")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("lat", "10.772465")
+                .param("lng", "106.698055")
+                .param("radius", "2000"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data").isArray())
+        .andExpect(jsonPath("$.data").isEmpty());
+  }
+
+  @Test
+  void listNearbyLocations_returnsOnlyWithinRadiusSortedByDistanceWithComputedField()
+      throws Exception {
+    // ~620m from the search centre — within a 2000m radius.
+    Location near =
+        createLocationAt("Near", new BigDecimal("10.777529"), new BigDecimal("106.695528"));
+    // ~22km from the search centre — outside a 2000m radius.
+    createLocationAt("Far", new BigDecimal("10.972465"), new BigDecimal("106.698055"));
+
+    mockMvc
+        .perform(
+            get("/api/locations/nearby")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("lat", "10.772465")
+                .param("lng", "106.698055")
+                .param("radius", "2000"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].id").value(near.getId().toString()))
+        .andExpect(
+            jsonPath("$.data[0].distance").value(org.hamcrest.Matchers.closeTo(620.0, 50.0)));
+  }
+
+  @Test
+  void listNearbyLocations_sortsMultipleMatchesByAscendingDistance() throws Exception {
+    Location farther =
+        createLocationAt("Farther", new BigDecimal("10.777529"), new BigDecimal("106.695528"));
+    Location closer =
+        createLocationAt("Closer", new BigDecimal("10.773465"), new BigDecimal("106.698055"));
+
+    mockMvc
+        .perform(
+            get("/api/locations/nearby")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("lat", "10.772465")
+                .param("lng", "106.698055")
+                .param("radius", "5000"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data[0].id").value(closer.getId().toString()))
+        .andExpect(jsonPath("$.data[1].id").value(farther.getId().toString()));
+  }
+
+  @Test
+  void listNearbyLocations_excludesSoftDeletedLocations() throws Exception {
+    Location deleted =
+        createLocationAt("Deleted", new BigDecimal("10.772465"), new BigDecimal("106.698055"));
+    deleted.setDeletedAt(Instant.now());
+    locationRepository.save(deleted);
+
+    mockMvc
+        .perform(
+            get("/api/locations/nearby")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("lat", "10.772465")
+                .param("lng", "106.698055")
+                .param("radius", "5000"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data").isEmpty());
+  }
+
+  @Test
+  void listNearbyLocations_missingRequiredParamReturns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/locations/nearby")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("lat", "10.772465")
+                .param("lng", "106.698055"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void listNearbyLocations_outOfRangeLatitudeReturns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/locations/nearby")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("lat", "95")
+                .param("lng", "106.698055")
+                .param("radius", "2000"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void listNearbyLocations_nonPositiveRadiusReturns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/locations/nearby")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("lat", "10.772465")
+                .param("lng", "106.698055")
+                .param("radius", "0"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void listLocations_combinedFiltersApplyWithAndLogic() throws Exception {
     Location match =
         createLocation("Match", new BigDecimal("4.5"), Location.PlaceType.cafe, 2, null);
@@ -275,6 +396,17 @@ class LocationControllerIntegrationTest {
             .priceLevel(priceLevel)
             .openingHours(openingHours)
             .deletedAt(deletedAt)
+            .build());
+  }
+
+  private Location createLocationAt(String name, BigDecimal lat, BigDecimal lng) {
+    return locationRepository.save(
+        Location.builder()
+            .name(name)
+            .address("123 Vegan St")
+            .latitude(lat)
+            .longitude(lng)
+            .placeType(Location.PlaceType.restaurant)
             .build());
   }
 

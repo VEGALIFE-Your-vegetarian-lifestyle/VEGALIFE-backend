@@ -3,11 +3,13 @@ package com.vegalife.service.location;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.location.LocationMapper;
 import com.vegalife.dto.request.location.LocationListRequest;
+import com.vegalife.dto.request.location.LocationNearbyRequest;
 import com.vegalife.dto.response.location.LocationResponse;
 import com.vegalife.model.post.Location;
 import com.vegalife.repository.post.LocationRepository;
 import com.vegalife.repository.post.LocationSpecifications;
 import com.vegalife.shared.dto.PageResponse;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,6 +36,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class LocationService {
+
+  /** 1 degree of latitude is ~111.32 km everywhere; used to size the bounding box (issue #10). */
+  private static final double METERS_PER_DEGREE_LATITUDE = 111_320.0;
+
+  /** Avoids a division blow-up in the longitude delta for a search centre near the poles. */
+  private static final double MIN_COS_LATITUDE = 1e-6;
 
   private static final Comparator<Location> RESULT_ORDER =
       Comparator.comparing(Location::getRating, Comparator.nullsLast(Comparator.reverseOrder()))
@@ -78,4 +86,58 @@ public class LocationService {
   private Location.PlaceType parsePlaceType(String placeType) {
     return placeType == null || placeType.isBlank() ? null : Location.PlaceType.valueOf(placeType);
   }
+
+  /**
+   * Every active location within {@code radius} metres of (lat, lng), nearest first, with no
+   * pagination (issue #10). A bounding-box {@link Specification} does the coarse, index-friendly
+   * pre-filter over {@code idx_location_coords}; haversine then applies the exact radius cut and
+   * computes the distance each row is sorted and returned with.
+   */
+  @Transactional(readOnly = true)
+  public List<LocationResponse> listNearby(LocationNearbyRequest request) {
+    BigDecimal lat = request.getLat();
+    BigDecimal lng = request.getLng();
+    double radiusMeters = request.getRadius().doubleValue();
+
+    BoundingBox box = boundingBox(lat, lng, radiusMeters);
+    Specification<Location> spec =
+        LocationSpecifications.activeWithinBoundingBox(
+            box.minLat(), box.maxLat(), box.minLng(), box.maxLng());
+    List<Location> candidates = locationRepository.findAll(spec);
+
+    List<LocationWithDistance> withinRadius = new ArrayList<>();
+    for (Location candidate : candidates) {
+      double distance =
+          HaversineDistanceCalculator.distanceInMeters(
+              lat, lng, candidate.getLatitude(), candidate.getLongitude());
+      if (distance <= radiusMeters) {
+        withinRadius.add(new LocationWithDistance(candidate, distance));
+      }
+    }
+    withinRadius.sort(Comparator.comparingDouble(LocationWithDistance::distance));
+
+    return withinRadius.stream()
+        .map(item -> locationMapper.toResponse(item.location(), item.distance()))
+        .toList();
+  }
+
+  /**
+   * Converts a radius in metres to a lat/lng box: 1 degree of longitude shrinks with {@code
+   * cos(latitude)}, so the box narrows east-west away from the equator.
+   */
+  private BoundingBox boundingBox(BigDecimal lat, BigDecimal lng, double radiusMeters) {
+    double deltaLatDeg = radiusMeters / METERS_PER_DEGREE_LATITUDE;
+    double cosLat = Math.max(Math.cos(Math.toRadians(lat.doubleValue())), MIN_COS_LATITUDE);
+    double deltaLngDeg = radiusMeters / (METERS_PER_DEGREE_LATITUDE * cosLat);
+
+    BigDecimal deltaLat = BigDecimal.valueOf(deltaLatDeg);
+    BigDecimal deltaLng = BigDecimal.valueOf(deltaLngDeg);
+    return new BoundingBox(
+        lat.subtract(deltaLat), lat.add(deltaLat), lng.subtract(deltaLng), lng.add(deltaLng));
+  }
+
+  private record LocationWithDistance(Location location, double distance) {}
+
+  private record BoundingBox(
+      BigDecimal minLat, BigDecimal maxLat, BigDecimal minLng, BigDecimal maxLng) {}
 }

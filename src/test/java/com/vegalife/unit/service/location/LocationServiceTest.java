@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.location.LocationMapper;
 import com.vegalife.dto.request.location.LocationListRequest;
+import com.vegalife.dto.request.location.LocationNearbyRequest;
 import com.vegalife.dto.response.location.LocationResponse;
 import com.vegalife.model.post.Location;
 import com.vegalife.repository.post.LocationRepository;
@@ -50,6 +51,18 @@ class LocationServiceTest {
               return LocationResponse.builder()
                   .id(location.getId())
                   .name(location.getName())
+                  .build();
+            });
+    org.mockito.Mockito.lenient()
+        .when(locationMapper.toResponse(any(Location.class), any(Double.class)))
+        .thenAnswer(
+            invocation -> {
+              Location location = invocation.getArgument(0);
+              Double distance = invocation.getArgument(1);
+              return LocationResponse.builder()
+                  .id(location.getId())
+                  .name(location.getName())
+                  .distance(distance)
                   .build();
             });
   }
@@ -144,6 +157,65 @@ class LocationServiceTest {
     assertThat(response.getContent()).isEmpty();
   }
 
+  @Test
+  void listNearby_keepsOnlyLocationsWithinRadiusSortedByDistance() {
+    BigDecimal centerLat = new BigDecimal("10.772465");
+    BigDecimal centerLng = new BigDecimal("106.698055");
+    // ~620m away (well within a 2000m radius).
+    Location near = locationAt("Near", new BigDecimal("10.777529"), new BigDecimal("106.695528"));
+    // ~0.2 degrees away (~22km — well outside a 2000m radius).
+    Location far = locationAt("Far", new BigDecimal("10.972465"), new BigDecimal("106.698055"));
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of(far, near));
+
+    List<LocationResponse> response =
+        locationService.listNearby(
+            LocationNearbyRequest.builder()
+                .lat(centerLat)
+                .lng(centerLng)
+                .radius(new BigDecimal("2000"))
+                .build());
+
+    assertThat(response).extracting(LocationResponse::getName).containsExactly("Near");
+    assertThat(response.get(0).getDistance())
+        .isCloseTo(620.0, org.assertj.core.data.Offset.offset(50.0));
+  }
+
+  @Test
+  void listNearby_sortsMultipleMatchesByAscendingDistance() {
+    BigDecimal centerLat = new BigDecimal("10.772465");
+    BigDecimal centerLng = new BigDecimal("106.698055");
+    Location farther =
+        locationAt("Farther", new BigDecimal("10.777529"), new BigDecimal("106.695528"));
+    Location closer =
+        locationAt("Closer", new BigDecimal("10.773465"), new BigDecimal("106.698055"));
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of(farther, closer));
+
+    List<LocationResponse> response =
+        locationService.listNearby(
+            LocationNearbyRequest.builder()
+                .lat(centerLat)
+                .lng(centerLng)
+                .radius(new BigDecimal("5000"))
+                .build());
+
+    assertThat(response).extracting(LocationResponse::getName).containsExactly("Closer", "Farther");
+  }
+
+  @Test
+  void listNearby_returnsEmptyListWhenNoCandidatesMatch() {
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of());
+
+    List<LocationResponse> response =
+        locationService.listNearby(
+            LocationNearbyRequest.builder()
+                .lat(new BigDecimal("10.0"))
+                .lng(new BigDecimal("106.0"))
+                .radius(new BigDecimal("1000"))
+                .build());
+
+    assertThat(response).isEmpty();
+  }
+
   private Location location(String name, BigDecimal rating) {
     return Location.builder()
         .id(UUID.randomUUID())
@@ -153,6 +225,17 @@ class LocationServiceTest {
         .longitude(new BigDecimal("106.000000"))
         .placeType(Location.PlaceType.restaurant)
         .rating(rating)
+        .build();
+  }
+
+  private Location locationAt(String name, BigDecimal lat, BigDecimal lng) {
+    return Location.builder()
+        .id(UUID.randomUUID())
+        .name(name)
+        .address("123 Vegan St")
+        .latitude(lat)
+        .longitude(lng)
+        .placeType(Location.PlaceType.restaurant)
         .build();
   }
 
