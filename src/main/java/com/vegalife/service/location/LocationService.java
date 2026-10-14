@@ -9,12 +9,13 @@ import com.vegalife.repository.post.LocationRepository;
 import com.vegalife.repository.post.LocationSpecifications;
 import com.vegalife.shared.dto.PageResponse;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,16 +24,21 @@ import org.springframework.transaction.annotation.Transactional;
  * Recommend-locations list (issue #9): active locations filtered by rating/type/price/open-now,
  * sorted by rating descending (unrated last), then creation time and id ascending for stable
  * paging. Open-now, pagination, and the tie-break sort stay a single code path by loading every
- * active match for the structured filters up front and paging it in memory: a location with no
- * opening hours can only be excluded after parsing its document, which the database cannot do.
+ * active match for the structured filters up front and ordering/paging it in memory: a location
+ * with no opening hours can only be excluded after parsing its document, which the database cannot
+ * do, and "unrated last" needs a {@code Comparator} since {@code
+ * JpaSpecificationExecutor.findAll(Specification, Sort)} builds its order through the Criteria API,
+ * which does not support {@code Sort.Order.nullsLast()} (throws {@code
+ * UnsupportedOperationException}).
  */
 @Service
 @RequiredArgsConstructor
 public class LocationService {
 
-  private static final Sort RESULT_ORDER =
-      Sort.by(
-          Sort.Order.desc("rating").nullsLast(), Sort.Order.asc("createdAt"), Sort.Order.asc("id"));
+  private static final Comparator<Location> RESULT_ORDER =
+      Comparator.comparing(Location::getRating, Comparator.nullsLast(Comparator.reverseOrder()))
+          .thenComparing(Location::getCreatedAt)
+          .thenComparing(Location::getId);
 
   private final LocationRepository locationRepository;
   private final LocationMapper locationMapper;
@@ -45,7 +51,8 @@ public class LocationService {
         LocationSpecifications.activeWithFilters(
             request.getMinRating(), placeType, request.getMaxPriceLevel());
 
-    List<Location> matches = locationRepository.findAll(spec, RESULT_ORDER);
+    List<Location> matches = new ArrayList<>(locationRepository.findAll(spec));
+    matches.sort(RESULT_ORDER);
     List<Location> filtered = request.isOpenNow() ? filterOpenNow(matches) : matches;
 
     Page<Location> page = paginate(filtered, request.getPage(), request.getSize());

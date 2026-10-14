@@ -25,7 +25,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,8 +56,7 @@ class LocationServiceTest {
 
   @Test
   void listLocations_returnsEmptyPageWhenNoMatches() {
-    when(locationRepository.findAll(any(Specification.class), any(Sort.class)))
-        .thenReturn(List.of());
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of());
 
     PageResponse<LocationResponse> response =
         locationService.listLocations(LocationListRequest.builder().build());
@@ -71,8 +69,7 @@ class LocationServiceTest {
   void listLocations_mapsEveryMatchWhenWithinOnePage() {
     Location first = location("Vegan Bistro", new BigDecimal("4.5"));
     Location second = location("Plant Cafe", new BigDecimal("4.0"));
-    when(locationRepository.findAll(any(Specification.class), any(Sort.class)))
-        .thenReturn(List.of(first, second));
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of(first, second));
 
     PageResponse<LocationResponse> response =
         locationService.listLocations(LocationListRequest.builder().build());
@@ -90,7 +87,7 @@ class LocationServiceTest {
             location("A", new BigDecimal("5.0")),
             location("B", new BigDecimal("4.5")),
             location("C", new BigDecimal("4.0")));
-    when(locationRepository.findAll(any(Specification.class), any(Sort.class))).thenReturn(matches);
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(matches);
 
     PageResponse<LocationResponse> firstPage =
         locationService.listLocations(LocationListRequest.builder().page(0).size(2).build());
@@ -107,7 +104,7 @@ class LocationServiceTest {
 
   @Test
   void listLocations_pageBeyondResultsReturnsEmptyContent() {
-    when(locationRepository.findAll(any(Specification.class), any(Sort.class)))
+    when(locationRepository.findAll(any(Specification.class)))
         .thenReturn(List.of(location("A", new BigDecimal("5.0"))));
 
     PageResponse<LocationResponse> response =
@@ -126,7 +123,7 @@ class LocationServiceTest {
     closed.setOpeningHours(
         currentDayJson(LocalTime.now().plusHours(2), LocalTime.now().plusHours(3)));
     Location noHours = location("No opening hours", new BigDecimal("5.0"));
-    when(locationRepository.findAll(any(Specification.class), any(Sort.class)))
+    when(locationRepository.findAll(any(Specification.class)))
         .thenReturn(List.of(noHours, closed, open));
 
     PageResponse<LocationResponse> response =
@@ -139,8 +136,7 @@ class LocationServiceTest {
 
   @Test
   void listLocations_validPlaceTypeIsParsedWithoutError() {
-    when(locationRepository.findAll(any(Specification.class), any(Sort.class)))
-        .thenReturn(List.of());
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of());
 
     PageResponse<LocationResponse> response =
         locationService.listLocations(LocationListRequest.builder().placeType("cafe").build());
