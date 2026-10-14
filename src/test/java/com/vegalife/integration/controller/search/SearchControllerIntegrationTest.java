@@ -208,7 +208,7 @@ class SearchControllerIntegrationTest {
   private Post createPublishedPost(String title, String content, String publishedAt) {
     Post post = createPost(title, content, Post.Status.published, null);
     post.setPublishedAt(Instant.parse(publishedAt));
-    return postRepository.save(post);
+    return postRepository.saveAndFlush(post);
   }
 
   private Post createPost(String title, String content, Post.Status status, Instant deletedAt) {
@@ -233,7 +233,7 @@ class SearchControllerIntegrationTest {
                 .status(Media.Status.succeed)
                 .uploadedBy(owner)
                 .build());
-    post.setMedia(Set.of(media));
+    post.getMedia().add(media);
     postRepository.save(post);
     return media;
   }
