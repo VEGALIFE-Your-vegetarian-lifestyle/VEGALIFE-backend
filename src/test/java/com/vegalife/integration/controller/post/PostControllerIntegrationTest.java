@@ -13,12 +13,18 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
+import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
+import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.recipe.DishRepository;
+import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
 import java.time.Instant;
@@ -73,6 +79,12 @@ class PostControllerIntegrationTest {
   @Autowired private PostRepository postRepository;
 
   @Autowired private CategoryRepository categoryRepository;
+
+  @Autowired private MediaRepository mediaRepository;
+
+  @Autowired private RecipeRepository recipeRepository;
+
+  @Autowired private DishRepository dishRepository;
 
   @Autowired private ModerationLogRepository moderationLogRepository;
 
@@ -204,6 +216,224 @@ class PostControllerIntegrationTest {
     assertThat(createdPost.getUser().getId()).isEqualTo(user.getId());
     assertThat(createdPost.getStatus()).isEqualTo(Post.Status.created);
     assertThat(createdPost.getPublishedAt()).isNull();
+  }
+
+  @Test
+  void attachMedia_ownerAttachesAndGetPostReflectsIt() throws Exception {
+    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+    Media media = createMedia(Media.Status.succeed);
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\": [\"" + media.getId() + "\"]}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Media attached successfully"))
+        .andExpect(jsonPath("$.data.mediaIds", containsInAnyOrder(media.getId().toString())));
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(jsonPath("$.data.mediaIds", containsInAnyOrder(media.getId().toString())));
+  }
+
+  @Test
+  void attachMedia_reCallIsIdempotentAndEmptyListDetachesAll() throws Exception {
+    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+    Media media = createMedia(Media.Status.succeed);
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\": [\"" + media.getId() + "\"]}"))
+        .andExpect(status().isOk());
+
+    // re-calling with the same set is idempotent
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\": [\"" + media.getId() + "\"]}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.mediaIds", containsInAnyOrder(media.getId().toString())));
+
+    // empty list detaches everything
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\": []}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.mediaIds").isEmpty());
+  }
+
+  @Test
+  void attachMedia_unsucceededMediaReturns400AndWritesNothing() throws Exception {
+    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+    Media uploading = createMedia(Media.Status.uploading);
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\": [\"" + uploading.getId() + "\"]}"))
+        .andExpect(status().isBadRequest());
+
+    assertThat(postRepository.findById(ownedPost.getId()).orElseThrow().getMedia()).isEmpty();
+  }
+
+  @Test
+  void attachMedia_unknownMediaIdReturns400() throws Exception {
+    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\": [\"" + UUID.randomUUID() + "\"]}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void attachMedia_nonOwnerNonAdminGetsNotFound() throws Exception {
+    Post othersPost = createPost(otherUser, "Someone else's post", Post.Status.created, null);
+    Media media = createMedia(Media.Status.succeed);
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", othersPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\": [\"" + media.getId() + "\"]}"))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void attachRecipes_ownerAttachesAndGetPostReflectsIt() throws Exception {
+    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+    Recipe recipe = createRecipe(user);
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipeIds\": [\"" + recipe.getId() + "\"]}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Recipes attached successfully"))
+        .andExpect(jsonPath("$.data.recipeIds", containsInAnyOrder(recipe.getId().toString())));
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(jsonPath("$.data.recipeIds", containsInAnyOrder(recipe.getId().toString())));
+  }
+
+  @Test
+  void attachRecipes_replacingSetDetachesRecipesNotInNewSet() throws Exception {
+    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+    Recipe first = createRecipe(user);
+    Recipe second = createRecipe(user);
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"recipeIds\": [\"" + first.getId() + "\", \"" + second.getId() + "\"]}"))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipeIds\": [\"" + first.getId() + "\"]}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.recipeIds", containsInAnyOrder(first.getId().toString())));
+  }
+
+  @Test
+  void attachRecipes_emptyListDetachesAll() throws Exception {
+    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+    Recipe recipe = createRecipe(user);
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipeIds\": [\"" + recipe.getId() + "\"]}"))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipeIds\": []}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.recipeIds").isEmpty());
+  }
+
+  @Test
+  void attachRecipes_unknownRecipeIdReturns400AndWritesNothing() throws Exception {
+    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipeIds\": [\"" + UUID.randomUUID() + "\"]}"))
+        .andExpect(status().isBadRequest());
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(jsonPath("$.data.recipeIds").isEmpty());
+  }
+
+  @Test
+  void attachRecipes_nonOwnerNonAdminGetsNotFound() throws Exception {
+    Post othersPost = createPost(otherUser, "Someone else's post", Post.Status.created, null);
+    Recipe recipe = createRecipe(otherUser);
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", othersPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipeIds\": [\"" + recipe.getId() + "\"]}"))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void attachMedia_adminCanAttachToAnotherUsersPost() throws Exception {
+    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
+    String adminToken = jwtTokenService.generateAccessToken(admin);
+    Post othersPost = createPost(otherUser, "Someone else's post", Post.Status.created, null);
+    Media media = createMedia(Media.Status.succeed);
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/media", othersPost.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mediaIds\": [\"" + media.getId() + "\"]}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.mediaIds", containsInAnyOrder(media.getId().toString())));
   }
 
   @Test
@@ -933,5 +1163,22 @@ class PostControllerIntegrationTest {
     Post post = createPost(owner, title, Post.Status.published, null);
     post.setPublishedAt(publishedAt);
     return postRepository.save(post);
+  }
+
+  private Media createMedia(Media.Status status) {
+    return mediaRepository.save(
+        Media.builder().mediaUrl("https://example.com/video.mp4").status(status).build());
+  }
+
+  private Recipe createRecipe(User owner) {
+    Dish dish = dishRepository.save(Dish.builder().name("Tofu bowl " + UUID.randomUUID()).build());
+    return recipeRepository.save(
+        Recipe.builder()
+            .dish(dish)
+            .user(owner)
+            .name("Vegan tofu bowl")
+            .instructions("Cook rice, add tofu.")
+            .servings(2)
+            .build());
   }
 }

@@ -16,7 +16,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "location")
@@ -50,6 +52,12 @@ public class Location {
   @Column(name = "place_type", length = 20, nullable = false)
   private PlaceType placeType;
 
+  /**
+   * Raw JSON text stored in the {@code jsonb} column. {@code @JdbcTypeCode(SqlTypes.JSON)} makes
+   * Hibernate bind this parameter with the {@code jsonb} JDBC type instead of {@code varchar} —
+   * without it, PostgreSQL rejects the insert/update (issue #9).
+   */
+  @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "opening_hours", columnDefinition = "jsonb")
   private String openingHours;
 

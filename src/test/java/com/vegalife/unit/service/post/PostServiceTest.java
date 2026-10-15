@@ -15,12 +15,16 @@ import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
+import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
+import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.post.PostService;
 import com.vegalife.shared.dto.PageResponse;
@@ -50,6 +54,10 @@ class PostServiceTest {
   @Mock private UserRepository userRepository;
 
   @Mock private CategoryRepository categoryRepository;
+
+  @Mock private MediaRepository mediaRepository;
+
+  @Mock private RecipeRepository recipeRepository;
 
   @Mock private ModerationLogRepository moderationLogRepository;
 
@@ -252,7 +260,8 @@ class PostServiceTest {
     Post existing = ownedPost(postId, Post.Status.published);
     PostListResponse expectedResponse = PostListResponse.builder().id(postId).build();
     when(postRepository.findDetailById(postId)).thenReturn(Optional.of(existing));
-    when(postMapper.toListResponse(existing)).thenReturn(expectedResponse);
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(existing, Set.of())).thenReturn(expectedResponse);
 
     PostListResponse response = postService.getPost(postId);
 
@@ -265,7 +274,8 @@ class PostServiceTest {
     Post draft = ownedPost(postId, Post.Status.created);
     PostListResponse expectedResponse = PostListResponse.builder().id(postId).build();
     when(postRepository.findDetailById(postId)).thenReturn(Optional.of(draft));
-    when(postMapper.toListResponse(draft)).thenReturn(expectedResponse);
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(draft, Set.of())).thenReturn(expectedResponse);
 
     PostListResponse response = postService.getPost(postId);
 
@@ -764,5 +774,160 @@ class PostServiceTest {
     verify(postRepository)
         .findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
             Post.Status.published, pageable);
+  }
+
+  @Test
+  void attachMedia_replacesWholeSet() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.created);
+    UUID mediaId = UUID.randomUUID();
+    Media media = Media.builder().id(mediaId).status(Media.Status.succeed).build();
+    PostListResponse expectedResponse = PostListResponse.builder().id(postId).build();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(mediaRepository.findByIdInAndDeletedAtIsNull(Set.of(mediaId))).thenReturn(List.of(media));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(existing, Set.of())).thenReturn(expectedResponse);
+
+    PostListResponse response = postService.attachMedia(userId, false, postId, Set.of(mediaId));
+
+    assertThat(response).isSameAs(expectedResponse);
+    assertThat(existing.getMedia()).containsExactly(media);
+    verify(postRepository).saveAndFlush(existing);
+  }
+
+  @Test
+  void attachMedia_emptySetDetachesAll() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.created);
+    existing.setMedia(
+        new java.util.HashSet<>(
+            Set.of(Media.builder().id(UUID.randomUUID()).status(Media.Status.succeed).build())));
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(existing, Set.of()))
+        .thenReturn(PostListResponse.builder().id(postId).build());
+
+    postService.attachMedia(userId, false, postId, Set.of());
+
+    assertThat(existing.getMedia()).isEmpty();
+  }
+
+  @Test
+  void attachMedia_rejectsMediaThatIsNotSucceeded() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.created);
+    UUID mediaId = UUID.randomUUID();
+    Media uploading = Media.builder().id(mediaId).status(Media.Status.uploading).build();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(mediaRepository.findByIdInAndDeletedAtIsNull(Set.of(mediaId)))
+        .thenReturn(List.of(uploading));
+
+    assertThatThrownBy(() -> postService.attachMedia(userId, false, postId, Set.of(mediaId)))
+        .isInstanceOf(ValidationException.class);
+
+    verify(postRepository, never()).saveAndFlush(existing);
+  }
+
+  @Test
+  void attachMedia_rejectsUnknownMedia() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.created);
+    UUID mediaId = UUID.randomUUID();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(mediaRepository.findByIdInAndDeletedAtIsNull(Set.of(mediaId))).thenReturn(List.of());
+
+    assertThatThrownBy(() -> postService.attachMedia(userId, false, postId, Set.of(mediaId)))
+        .isInstanceOf(ValidationException.class);
+
+    verify(postRepository, never()).saveAndFlush(existing);
+  }
+
+  @Test
+  void attachMedia_nonOwnerNonAdminGetsNotFound() {
+    UUID postId = UUID.randomUUID();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> postService.attachMedia(userId, false, postId, Set.of()))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Post not found");
+  }
+
+  @Test
+  void attachRecipes_replacesWholeSetDetachingPreviouslyAttached() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.created);
+    UUID keptId = UUID.randomUUID();
+    UUID droppedId = UUID.randomUUID();
+    Recipe kept =
+        Recipe.builder().id(keptId).posts(new java.util.HashSet<>(Set.of(existing))).build();
+    Recipe dropped =
+        Recipe.builder().id(droppedId).posts(new java.util.HashSet<>(Set.of(existing))).build();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(recipeRepository.findByIdInAndDeletedAtIsNull(Set.of(keptId))).thenReturn(List.of(kept));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId))
+        .thenReturn(List.of(kept, dropped));
+    when(postMapper.toListResponse(existing, Set.of(keptId)))
+        .thenReturn(PostListResponse.builder().id(postId).build());
+
+    postService.attachRecipes(userId, false, postId, Set.of(keptId));
+
+    assertThat(kept.getPosts()).contains(existing);
+    assertThat(dropped.getPosts()).doesNotContain(existing);
+    verify(recipeRepository).saveAll(List.of(kept, dropped));
+    verify(recipeRepository).saveAll(List.of(kept));
+  }
+
+  @Test
+  void attachRecipes_emptySetDetachesAll() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.created);
+    Recipe attached =
+        Recipe.builder()
+            .id(UUID.randomUUID())
+            .posts(new java.util.HashSet<>(Set.of(existing)))
+            .build();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of(attached));
+    when(postMapper.toListResponse(existing, Set.of()))
+        .thenReturn(PostListResponse.builder().id(postId).build());
+
+    postService.attachRecipes(userId, false, postId, Set.of());
+
+    assertThat(attached.getPosts()).doesNotContain(existing);
+  }
+
+  @Test
+  void attachRecipes_rejectsUnknownOrDeletedRecipe() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, Post.Status.created);
+    UUID recipeId = UUID.randomUUID();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(recipeRepository.findByIdInAndDeletedAtIsNull(Set.of(recipeId))).thenReturn(List.of());
+
+    assertThatThrownBy(() -> postService.attachRecipes(userId, false, postId, Set.of(recipeId)))
+        .isInstanceOf(ValidationException.class);
+
+    verify(recipeRepository, never()).saveAll(org.mockito.ArgumentMatchers.anyList());
+  }
+
+  @Test
+  void attachRecipes_nonOwnerNonAdminGetsNotFound() {
+    UUID postId = UUID.randomUUID();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> postService.attachRecipes(userId, false, postId, Set.of()))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Post not found");
   }
 }

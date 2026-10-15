@@ -27,9 +27,21 @@ public interface PostMapper {
   @Mapping(target = "deletedAt", ignore = true)
   Post toEntity(PostCreateRequest request);
 
+  /**
+   * {@code recipeIds} defaults to empty: {@code Post} carries no recipe field ({@code post_recipe}
+   * is owned by {@code Recipe.posts}), and a freshly created or edited post never has recipes
+   * attached through these endpoints (that's done separately via {@code POST
+   * /api/posts/{postId}/recipes}).
+   */
   @Mapping(target = "categoryIds", source = "categories")
   @Mapping(target = "mediaIds", source = "media")
+  @Mapping(target = "recipeIds", expression = "java(new java.util.HashSet<>())")
   PostListResponse toListResponse(Post post);
+
+  @Mapping(target = "categoryIds", source = "post.categories")
+  @Mapping(target = "mediaIds", source = "post.media")
+  @Mapping(target = "recipeIds", source = "recipeIds")
+  PostListResponse toListResponse(Post post, Set<UUID> recipeIds);
 
   default Set<UUID> categoryIds(Set<Category> categories) {
     return categories.stream().map(Category::getId).collect(Collectors.toSet());

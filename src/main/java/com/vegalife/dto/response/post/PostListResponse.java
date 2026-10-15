@@ -22,6 +22,7 @@ public class PostListResponse {
   private String featuredImageUrl;
   private Set<UUID> categoryIds;
   private Set<UUID> mediaIds;
+  private Set<UUID> recipeIds;
   private String status;
 
   /** Content filter verdict: PENDING, PASSED, REJECTED, NEEDS_REVIEW; null when never filtered. */

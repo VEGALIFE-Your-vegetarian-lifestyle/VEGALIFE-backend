@@ -14,11 +14,15 @@ import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
+import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
+import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -28,6 +32,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -47,6 +52,8 @@ public class PostService {
   private final PostRepository postRepository;
   private final UserRepository userRepository;
   private final CategoryRepository categoryRepository;
+  private final MediaRepository mediaRepository;
+  private final RecipeRepository recipeRepository;
   private final ModerationLogRepository moderationLogRepository;
   private final OutboundMessageRepository outboundMessageRepository;
   private final PostMapper postMapper;
@@ -196,7 +203,50 @@ public class PostService {
         postRepository
             .findDetailById(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-    return postMapper.toListResponse(post);
+    return postMapper.toListResponse(post, attachedRecipeIds(postId));
+  }
+
+  /**
+   * Replaces the post's whole media set (issue #137). Only media that exists, is not soft-deleted,
+   * and has {@code status = succeed} may be attached; any other id fails the whole call with a 400
+   * and nothing is written. An empty {@code mediaIds} detaches every attached media.
+   */
+  @Transactional
+  public PostListResponse attachMedia(
+      UUID actorId, boolean isAdmin, UUID postId, Set<UUID> mediaIds) {
+    Post post = findManageablePost(actorId, isAdmin, postId);
+    post.setMedia(resolveMedia(mediaIds));
+    Post saved = postRepository.saveAndFlush(post);
+    return postMapper.toListResponse(saved, attachedRecipeIds(postId));
+  }
+
+  /**
+   * Replaces the post's whole recipe set (issue #137). {@code post_recipe} is owned by {@code
+   * Recipe.posts}, so the mutation happens from the recipe side rather than on {@code Post} itself;
+   * only recipes that exist and are not soft-deleted may be attached. An empty {@code recipeIds}
+   * detaches every attached recipe.
+   */
+  @Transactional
+  public PostListResponse attachRecipes(
+      UUID actorId, boolean isAdmin, UUID postId, Set<UUID> recipeIds) {
+    Post post = findManageablePost(actorId, isAdmin, postId);
+    List<Recipe> requested = resolveRecipes(recipeIds);
+    List<Recipe> currentlyAttached = recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId);
+
+    // Membership is checked by id, not entity equality: Recipe's Lombok-generated equals/hashCode
+    // covers its mutable `posts` collection, which this method is about to mutate.
+    for (Recipe recipe : currentlyAttached) {
+      if (!recipeIds.contains(recipe.getId())) {
+        recipe.getPosts().remove(post);
+      }
+    }
+    for (Recipe recipe : requested) {
+      recipe.getPosts().add(post);
+    }
+    recipeRepository.saveAll(currentlyAttached);
+    recipeRepository.saveAll(requested);
+
+    return postMapper.toListResponse(post, recipeIds);
   }
 
   /** Owner sees own posts; an Administrator sees every non-deleted post. */
@@ -364,5 +414,40 @@ public class PostService {
       throw new ValidationException("One or more categories do not exist or are inactive");
     }
     return new HashSet<>(found);
+  }
+
+  /**
+   * Only media that exists, is not soft-deleted, and has finished uploading ({@code status =
+   * succeed}) may be attached (issue #137).
+   */
+  private Set<Media> resolveMedia(Set<UUID> ids) {
+    if (ids == null || ids.isEmpty()) {
+      return new HashSet<>();
+    }
+    List<Media> found = mediaRepository.findByIdInAndDeletedAtIsNull(ids);
+    boolean allSucceeded = found.stream().allMatch(m -> m.getStatus() == Media.Status.succeed);
+    if (found.size() != ids.size() || !allSucceeded) {
+      throw new ValidationException(
+          "One or more media do not exist, are deleted, or have not finished uploading");
+    }
+    return new HashSet<>(found);
+  }
+
+  /** Only recipes that exist and are not soft-deleted may be attached (issue #137). */
+  private List<Recipe> resolveRecipes(Set<UUID> ids) {
+    if (ids == null || ids.isEmpty()) {
+      return List.of();
+    }
+    List<Recipe> found = recipeRepository.findByIdInAndDeletedAtIsNull(ids);
+    if (found.size() != ids.size()) {
+      throw new ValidationException("One or more recipes do not exist or are deleted");
+    }
+    return found;
+  }
+
+  private Set<UUID> attachedRecipeIds(UUID postId) {
+    return recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId).stream()
+        .map(Recipe::getId)
+        .collect(Collectors.toSet());
   }
 }

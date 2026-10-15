@@ -32,6 +32,8 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts (public: published only; owner/Admin: all) |
 | `post/get-posts-feed.md` | `GET /api/posts/feed` | Global feed of published posts, newest first (public) |
 | `post/patch-posts-postid.md` | `PATCH /api/posts/{postId}` | Edit a post (owner or Admin) |
+| `post/post-posts-postid-media.md` | `POST /api/posts/{postId}/media` | Replace a post's whole attached-media set (owner or Admin) |
+| `post/post-posts-postid-recipes.md` | `POST /api/posts/{postId}/recipes` | Replace a post's whole attached-recipe set (owner or Admin) |
 | `post/delete-posts-postid.md` | `DELETE /api/posts/{postId}` | Soft-delete a post (owner or Admin) |
 | `post/patch-posts-postid-visibility.md` | `PATCH /api/posts/{postId}/visibility` | Hide or unhide a post (Admin) |
 | `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
@@ -49,6 +51,9 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `admin/post-categories.md` | `POST /api/admin/categories` | Create a content category (Admin) |
 | `admin/patch-categories-categoryid.md` | `PATCH /api/admin/categories/{categoryId}` | Edit a content category (Admin) |
 | `admin/delete-categories-categoryid.md` | `DELETE /api/admin/categories/{categoryId}` | Retire a content category (Admin) |
+| `admin/post-locations.md` | `POST /api/admin/locations` | Create a location (Admin) |
+| `admin/patch-locations-locationid.md` | `PATCH /api/admin/locations/{locationId}` | Edit a location (Admin) |
+| `admin/delete-locations-locationid.md` | `DELETE /api/admin/locations/{locationId}` | Soft-delete a location (Admin) |
 | `post/get-categories.md` | `GET /api/categories` | List active content categories (public) |
 | `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |
 | `ingredients/get-ingredients.md` | `GET /api/ingredients` | List ingredients paginated, with case-insensitive name filter (authenticated) |
@@ -73,3 +78,5 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `menus/patch-menus.md` | `PATCH /api/menus/{menuId}` | Update an owned drafted or scheduled menu's meals and preferences (authenticated) |
 | `menus/post-menu-status.md` | `POST /api/menus/{menuId}/status` | Transition an owned menu's status: schedule, cancel, or complete (authenticated) |
 | `mcp/post-mcp.md` | In-process `@Tool` methods (no HTTP endpoint) | Five menu tools — get_menu, get_meal_plan, create_menu, update_menu, schedule_menu — served by the backend's own tool layer for the AI chat (ADR-013) |
+| `locations/get-locations.md` | `GET /api/locations` | List recommend locations with rating/type/price/open-now filters (authenticated) |
+| `locations/get-locations-nearby.md` | `GET /api/locations/nearby` | List every active location within a radius, nearest first, no pagination (authenticated) |

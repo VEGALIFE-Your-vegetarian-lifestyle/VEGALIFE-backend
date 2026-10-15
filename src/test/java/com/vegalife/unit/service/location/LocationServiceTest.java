@@ -1,0 +1,361 @@
+package com.vegalife.unit.service.location;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.dto.mapper.admin.AdminLocationMapper;
+import com.vegalife.dto.mapper.location.LocationMapper;
+import com.vegalife.dto.request.location.LocationCreateRequest;
+import com.vegalife.dto.request.location.LocationListRequest;
+import com.vegalife.dto.request.location.LocationNearbyRequest;
+import com.vegalife.dto.request.location.LocationUpdateRequest;
+import com.vegalife.dto.response.admin.AdminLocationResponse;
+import com.vegalife.dto.response.location.LocationResponse;
+import com.vegalife.model.admin.ModerationLog;
+import com.vegalife.model.post.Location;
+import com.vegalife.repository.admin.ModerationLogRepository;
+import com.vegalife.repository.post.LocationRepository;
+import com.vegalife.service.location.LocationService;
+import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.ResourceNotFoundException;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Spy;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.jpa.domain.Specification;
+
+@ExtendWith(MockitoExtension.class)
+class LocationServiceTest {
+
+  private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
+
+  @Mock private LocationRepository locationRepository;
+
+  @Mock private LocationMapper locationMapper;
+
+  @Mock private AdminLocationMapper adminLocationMapper;
+
+  @Mock private ModerationLogRepository moderationLogRepository;
+
+  @Spy private ObjectMapper objectMapper = new ObjectMapper();
+
+  @InjectMocks private LocationService locationService;
+
+  @BeforeEach
+  void setUp() {
+    org.mockito.Mockito.lenient()
+        .when(locationMapper.toResponse(any(Location.class)))
+        .thenAnswer(
+            invocation -> {
+              Location location = invocation.getArgument(0);
+              return LocationResponse.builder()
+                  .id(location.getId())
+                  .name(location.getName())
+                  .build();
+            });
+    org.mockito.Mockito.lenient()
+        .when(locationMapper.toResponse(any(Location.class), any(Double.class)))
+        .thenAnswer(
+            invocation -> {
+              Location location = invocation.getArgument(0);
+              Double distance = invocation.getArgument(1);
+              return LocationResponse.builder()
+                  .id(location.getId())
+                  .name(location.getName())
+                  .distance(distance)
+                  .build();
+            });
+  }
+
+  @Test
+  void listLocations_returnsEmptyPageWhenNoMatches() {
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of());
+
+    PageResponse<LocationResponse> response =
+        locationService.listLocations(LocationListRequest.builder().build());
+
+    assertThat(response.getContent()).isEmpty();
+    assertThat(response.getTotalElements()).isZero();
+  }
+
+  @Test
+  void listLocations_mapsEveryMatchWhenWithinOnePage() {
+    Location first = location("Vegan Bistro", new BigDecimal("4.5"));
+    Location second = location("Plant Cafe", new BigDecimal("4.0"));
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of(first, second));
+
+    PageResponse<LocationResponse> response =
+        locationService.listLocations(LocationListRequest.builder().build());
+
+    assertThat(response.getContent()).hasSize(2);
+    assertThat(response.getTotalElements()).isEqualTo(2);
+    assertThat(response.isFirst()).isTrue();
+    assertThat(response.isLast()).isTrue();
+  }
+
+  @Test
+  void listLocations_paginatesInMemoryAfterFiltering() {
+    List<Location> matches =
+        List.of(
+            location("A", new BigDecimal("5.0")),
+            location("B", new BigDecimal("4.5")),
+            location("C", new BigDecimal("4.0")));
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(matches);
+
+    PageResponse<LocationResponse> firstPage =
+        locationService.listLocations(LocationListRequest.builder().page(0).size(2).build());
+    PageResponse<LocationResponse> secondPage =
+        locationService.listLocations(LocationListRequest.builder().page(1).size(2).build());
+
+    assertThat(firstPage.getContent()).hasSize(2);
+    assertThat(firstPage.isLast()).isFalse();
+    assertThat(secondPage.getContent()).hasSize(1);
+    assertThat(secondPage.isLast()).isTrue();
+    assertThat(firstPage.getTotalElements()).isEqualTo(3);
+    assertThat(firstPage.getTotalPages()).isEqualTo(2);
+  }
+
+  @Test
+  void listLocations_pageBeyondResultsReturnsEmptyContent() {
+    when(locationRepository.findAll(any(Specification.class)))
+        .thenReturn(List.of(location("A", new BigDecimal("5.0"))));
+
+    PageResponse<LocationResponse> response =
+        locationService.listLocations(LocationListRequest.builder().page(5).size(10).build());
+
+    assertThat(response.getContent()).isEmpty();
+    assertThat(response.getTotalElements()).isEqualTo(1);
+  }
+
+  @Test
+  void listLocations_openNowExcludesLocationsWithoutMatchingHours() {
+    Location open = location("Open now", new BigDecimal("4.0"));
+    open.setOpeningHours(
+        currentDayJson(LocalTime.now().minusHours(1), LocalTime.now().plusHours(1)));
+    Location closed = location("Closed now", new BigDecimal("4.9"));
+    closed.setOpeningHours(
+        currentDayJson(LocalTime.now().plusHours(2), LocalTime.now().plusHours(3)));
+    Location noHours = location("No opening hours", new BigDecimal("5.0"));
+    when(locationRepository.findAll(any(Specification.class)))
+        .thenReturn(List.of(noHours, closed, open));
+
+    PageResponse<LocationResponse> response =
+        locationService.listLocations(LocationListRequest.builder().openNow(true).build());
+
+    assertThat(response.getContent())
+        .extracting(LocationResponse::getName)
+        .containsExactly("Open now");
+  }
+
+  @Test
+  void listLocations_validPlaceTypeIsParsedWithoutError() {
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of());
+
+    PageResponse<LocationResponse> response =
+        locationService.listLocations(LocationListRequest.builder().placeType("cafe").build());
+
+    assertThat(response.getContent()).isEmpty();
+  }
+
+  @Test
+  void listNearby_keepsOnlyLocationsWithinRadiusSortedByDistance() {
+    BigDecimal centerLat = new BigDecimal("10.772465");
+    BigDecimal centerLng = new BigDecimal("106.698055");
+    // ~620m away (well within a 2000m radius).
+    Location near = locationAt("Near", new BigDecimal("10.777529"), new BigDecimal("106.695528"));
+    // ~0.2 degrees away (~22km — well outside a 2000m radius).
+    Location far = locationAt("Far", new BigDecimal("10.972465"), new BigDecimal("106.698055"));
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of(far, near));
+
+    List<LocationResponse> response =
+        locationService.listNearby(
+            LocationNearbyRequest.builder()
+                .lat(centerLat)
+                .lng(centerLng)
+                .radius(new BigDecimal("2000"))
+                .build());
+
+    assertThat(response).extracting(LocationResponse::getName).containsExactly("Near");
+    assertThat(response.get(0).getDistance())
+        .isCloseTo(620.0, org.assertj.core.data.Offset.offset(50.0));
+  }
+
+  @Test
+  void listNearby_sortsMultipleMatchesByAscendingDistance() {
+    BigDecimal centerLat = new BigDecimal("10.772465");
+    BigDecimal centerLng = new BigDecimal("106.698055");
+    Location farther =
+        locationAt("Farther", new BigDecimal("10.777529"), new BigDecimal("106.695528"));
+    Location closer =
+        locationAt("Closer", new BigDecimal("10.773465"), new BigDecimal("106.698055"));
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of(farther, closer));
+
+    List<LocationResponse> response =
+        locationService.listNearby(
+            LocationNearbyRequest.builder()
+                .lat(centerLat)
+                .lng(centerLng)
+                .radius(new BigDecimal("5000"))
+                .build());
+
+    assertThat(response).extracting(LocationResponse::getName).containsExactly("Closer", "Farther");
+  }
+
+  @Test
+  void listNearby_returnsEmptyListWhenNoCandidatesMatch() {
+    when(locationRepository.findAll(any(Specification.class))).thenReturn(List.of());
+
+    List<LocationResponse> response =
+        locationService.listNearby(
+            LocationNearbyRequest.builder()
+                .lat(new BigDecimal("10.0"))
+                .lng(new BigDecimal("106.0"))
+                .radius(new BigDecimal("1000"))
+                .build());
+
+    assertThat(response).isEmpty();
+  }
+
+  @Test
+  void createLocation_savesAndRecordsModerationLog() {
+    UUID adminId = UUID.randomUUID();
+    LocationCreateRequest request =
+        LocationCreateRequest.builder()
+            .name("Vegan Garden")
+            .address("123 Nguyen Hue")
+            .latitude(new BigDecimal("10.776889"))
+            .longitude(new BigDecimal("106.700806"))
+            .placeType("restaurant")
+            .build();
+    when(locationRepository.saveAndFlush(any(Location.class)))
+        .thenAnswer(
+            invocation -> {
+              Location saved = invocation.getArgument(0);
+              saved.setId(UUID.randomUUID());
+              return saved;
+            });
+    AdminLocationResponse expected = AdminLocationResponse.builder().name("Vegan Garden").build();
+    when(adminLocationMapper.toResponse(any(Location.class))).thenReturn(expected);
+
+    AdminLocationResponse response = locationService.createLocation(adminId, request);
+
+    assertThat(response).isSameAs(expected);
+    ArgumentCaptor<Location> savedCaptor = ArgumentCaptor.forClass(Location.class);
+    verify(locationRepository).saveAndFlush(savedCaptor.capture());
+    assertThat(savedCaptor.getValue().getPlaceType()).isEqualTo(Location.PlaceType.restaurant);
+
+    ArgumentCaptor<ModerationLog> logCaptor = ArgumentCaptor.forClass(ModerationLog.class);
+    verify(moderationLogRepository).save(logCaptor.capture());
+    assertThat(logCaptor.getValue().getActorId()).isEqualTo(adminId);
+    assertThat(logCaptor.getValue().getAction()).isEqualTo("CREATE_LOCATION");
+    assertThat(logCaptor.getValue().getTargetType()).isEqualTo("LOCATION");
+  }
+
+  @Test
+  void updateLocation_changesOnlySuppliedFields() {
+    UUID adminId = UUID.randomUUID();
+    UUID locationId = UUID.randomUUID();
+    Location existing = locationAt("Old Name", new BigDecimal("10.0"), new BigDecimal("106.0"));
+    existing.setId(locationId);
+    existing.setAddress("Old Address");
+    when(locationRepository.findById(locationId)).thenReturn(Optional.of(existing));
+    when(locationRepository.saveAndFlush(existing)).thenReturn(existing);
+    when(adminLocationMapper.toResponse(existing))
+        .thenReturn(AdminLocationResponse.builder().name("New Name").build());
+
+    LocationUpdateRequest request = LocationUpdateRequest.builder().name("New Name").build();
+    AdminLocationResponse response = locationService.updateLocation(adminId, locationId, request);
+
+    assertThat(response.getName()).isEqualTo("New Name");
+    assertThat(existing.getName()).isEqualTo("New Name");
+    assertThat(existing.getAddress()).isEqualTo("Old Address");
+    verify(moderationLogRepository)
+        .save(
+            org.mockito.ArgumentMatchers.argThat(log -> "UPDATE_LOCATION".equals(log.getAction())));
+  }
+
+  @Test
+  void updateLocation_unknownOrDeletedLocationThrowsNotFound() {
+    UUID locationId = UUID.randomUUID();
+    when(locationRepository.findById(locationId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                locationService.updateLocation(
+                    UUID.randomUUID(),
+                    locationId,
+                    LocationUpdateRequest.builder().name("X").build()))
+        .isInstanceOf(ResourceNotFoundException.class);
+
+    verify(locationRepository, never()).saveAndFlush(any(Location.class));
+  }
+
+  @Test
+  void deleteLocation_softDeletesAndRecordsModerationLog() {
+    UUID adminId = UUID.randomUUID();
+    UUID locationId = UUID.randomUUID();
+    Location existing = locationAt("To Delete", new BigDecimal("10.0"), new BigDecimal("106.0"));
+    existing.setId(locationId);
+    when(locationRepository.findById(locationId)).thenReturn(Optional.of(existing));
+    when(locationRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    locationService.deleteLocation(adminId, locationId);
+
+    assertThat(existing.getDeletedAt()).isNotNull();
+    verify(moderationLogRepository)
+        .save(
+            org.mockito.ArgumentMatchers.argThat(
+                log ->
+                    "DELETE_LOCATION".equals(log.getAction()) && adminId.equals(log.getActorId())));
+  }
+
+  private Location location(String name, BigDecimal rating) {
+    return Location.builder()
+        .id(UUID.randomUUID())
+        .name(name)
+        .address("123 Vegan St")
+        .latitude(new BigDecimal("10.000000"))
+        .longitude(new BigDecimal("106.000000"))
+        .placeType(Location.PlaceType.restaurant)
+        .rating(rating)
+        .build();
+  }
+
+  private Location locationAt(String name, BigDecimal lat, BigDecimal lng) {
+    return Location.builder()
+        .id(UUID.randomUUID())
+        .name(name)
+        .address("123 Vegan St")
+        .latitude(lat)
+        .longitude(lng)
+        .placeType(Location.PlaceType.restaurant)
+        .build();
+  }
+
+  private String currentDayJson(LocalTime open, LocalTime close) {
+    String day = LocalDate.now().getDayOfWeek().toString().toLowerCase(java.util.Locale.ROOT);
+    return "{\""
+        + day
+        + "\": [{\"open\": \""
+        + TIME_FORMAT.format(open)
+        + "\", \"close\": \""
+        + TIME_FORMAT.format(close)
+        + "\"}]}";
+  }
+}
