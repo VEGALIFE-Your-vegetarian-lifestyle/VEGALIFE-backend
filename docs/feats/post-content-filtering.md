@@ -104,15 +104,18 @@ vegan food at all, or what it contains.
 
 - [ ] NFR-SCALE-001: Filtering runs off the request thread through the
       existing PostgreSQL outbox (ADR-005) — no new broker, no new
-      infrastructure beyond the HuggingFace HTTP API.
-- [ ] NFR-SEC-001: The HuggingFace token comes only from the
-      `HF_TOKEN` environment variable and is never logged or persisted.
+      infrastructure beyond the embedding provider's HTTP API.
+- [ ] NFR-SEC-001: The embedding token comes only from the active
+      provider's key environment variable (`EMBED_API_KEY` for Gemini,
+      `HF_TOKEN` for the dormant HuggingFace client) and is never logged or
+      persisted (ADR-014).
 - [ ] NFR-SEC-002: Only `post.flag` is exposed to owners via the normal
       post responses; scores, reasons, and model details stay internal
       (logs only).
 - [ ] NFR-MAINT-001: The embedding provider is behind Spring AI's
       `EmbeddingModel` interface, so the provider can be swapped without
-      touching the scorer or the service.
+      touching the scorer or the service. Exercised in practice by ADR-014,
+      which moved from HuggingFace to Gemini without changing either.
 - [ ] NFR-PERF-001: `POST /api/posts` and `PATCH /api/posts/{postId}`
       add no network calls — only one additional insert (outbox row)
       inside the existing transaction.
