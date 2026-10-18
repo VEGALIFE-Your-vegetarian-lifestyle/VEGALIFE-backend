@@ -41,7 +41,7 @@ class EmailVerificationIntegrationTest {
   @Container
   @SuppressWarnings("resource")
   static PostgreSQLContainer<?> postgres =
-      new PostgreSQLContainer<>("postgres:15-alpine")
+      new PostgreSQLContainer<>("pgvector/pgvector:pg15")
           .withDatabaseName("vegalife_test")
           .withUsername("test")
           .withPassword("test")

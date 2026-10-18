@@ -125,6 +125,12 @@ app:
     accept-threshold: 0.70
     reject-threshold: 0.45
     sweep-max-age: 24h
+    # Duplicate detection (issue #156, ADR-015): cosine similarity, not distance. Measured
+    # against gemini-embedding-001 on real Vietnamese and English pairs; the bands are in
+    # docs/feats/duplicate-post-detection.md. 0.85 is the lowest value with no false flags.
+    duplicate-threshold: ${DUPLICATE_THRESHOLD:0.85}
+    # Additive and switchable: false leaves the publish path exactly as it was before the feature.
+    duplicate-enabled: ${DUPLICATE_DETECTION_ENABLED:true}
     embedding:
       # Which embedding client is active (ADR-014). 'gemini' is the default; 'hf' re-arms the
       # retained HuggingFace client, which is dormant because the account holds no Inference

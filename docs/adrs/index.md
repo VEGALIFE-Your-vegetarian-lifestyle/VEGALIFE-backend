@@ -18,3 +18,4 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [012-multi-module-mcp-tool-surface.md](012-multi-module-mcp-tool-surface.md) | Expose Menu Operations as an Internal MCP Server With Caller-Identity Propagation | Superseded by 013 | 2026-10-12 |
 | [013-serve-ai-tools-in-process.md](013-serve-ai-tools-in-process.md) | Serve AI Chat Menu Tools In-Process, Retiring the Separate MCP Server | Accepted | 2026-10-12 |
 | [014-embedding-provider-gemini.md](014-embedding-provider-gemini.md) | Serve Filter Embeddings From Gemini, Retaining the HuggingFace Client Unwired | Accepted | 2026-10-18 |
+| [015-post-embedding-pgvector.md](015-post-embedding-pgvector.md) | Store Post Embeddings in pgvector and Search Them in SQL | Accepted | 2026-10-18 |

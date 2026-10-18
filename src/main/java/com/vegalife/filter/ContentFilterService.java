@@ -24,30 +24,45 @@ public class ContentFilterService {
   }
 
   /**
-   * Filters a single content body and returns the verdict with flag, score and reasons.
+   * Filters a single content body and returns the verdict with flag, score, reasons and the
+   * embedding it scored.
+   *
+   * <p>The embedding is returned rather than recomputed by the caller: duplicate detection needs
+   * the same vector (ADR-015), and a second {@code embed()} call per publish would double the
+   * provider cost for no benefit.
    *
    * @param content the post body (title/content already composed by the caller)
    * @return the verdict; never {@link Post.Flag#PENDING}
    */
-  public FilterVerdict filter(String content) {
+  public FilterResult filter(String content) {
     float[] embedding = embeddingModel.embed(content);
     RelevanceScore relevance = relevanceScorer.score(embedding);
-    return switch (relevance.band()) {
-      case PASS -> new FilterVerdict(Post.Flag.PASSED, relevance.score(), List.of());
-      case REJECT ->
-          new FilterVerdict(
-              Post.Flag.REJECTED,
-              relevance.score(),
-              List.of(formatReason("RELEVANCE_LOW", relevance.score())));
-      case REVIEW ->
-          new FilterVerdict(
-              Post.Flag.NEEDS_REVIEW,
-              relevance.score(),
-              List.of(formatReason("RELEVANCE_REVIEW", relevance.score())));
-    };
+    FilterVerdict verdict =
+        switch (relevance.band()) {
+          case PASS -> new FilterVerdict(Post.Flag.PASSED, relevance.score(), List.of());
+          case REJECT ->
+              new FilterVerdict(
+                  Post.Flag.REJECTED,
+                  relevance.score(),
+                  List.of(formatReason("RELEVANCE_LOW", relevance.score())));
+          case REVIEW ->
+              new FilterVerdict(
+                  Post.Flag.NEEDS_REVIEW,
+                  relevance.score(),
+                  List.of(formatReason("RELEVANCE_REVIEW", relevance.score())));
+        };
+    return new FilterResult(verdict, embedding);
   }
 
   private static String formatReason(String code, double score) {
     return String.format(Locale.ROOT, "%s: %.3f", code, score);
   }
+
+  /**
+   * A verdict together with the vector it was scored from.
+   *
+   * <p>The embedding is the raw model output, not the mean-centered vector the scorer compares
+   * with: post-to-post similarity must not carry the seed-corpus mean (ADR-015).
+   */
+  public record FilterResult(FilterVerdict verdict, float[] embedding) {}
 }

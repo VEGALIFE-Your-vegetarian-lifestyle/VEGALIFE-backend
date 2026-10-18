@@ -72,7 +72,7 @@ class PostContentFilterIntegrationTest {
   @Container
   @SuppressWarnings("resource")
   static PostgreSQLContainer<?> postgres =
-      new PostgreSQLContainer<>("postgres:15-alpine")
+      new PostgreSQLContainer<>("pgvector/pgvector:pg15")
           .withDatabaseName("vegalife_test")
           .withUsername("test")
           .withPassword("test")
@@ -117,7 +117,9 @@ class PostContentFilterIntegrationTest {
     otherUser = createUser("filterother", "filterother@example.com");
     accessToken = jwtTokenService.generateAccessToken(user);
     otherAccessToken = jwtTokenService.generateAccessToken(otherUser);
-    when(embeddingModel.embed(anyString())).thenReturn(new float[1024]);
+    // 768 dimensions, matching the VECTOR(768) column the publish path now writes to (ADR-015).
+    // A different width fails at insert time, so this also pins the EMBED_DIMENSIONS coupling.
+    when(embeddingModel.embed(anyString())).thenReturn(unitVector(768));
   }
 
   @Test
@@ -404,6 +406,12 @@ class PostContentFilterIntegrationTest {
         .andExpect(jsonPath("$.data.status").value("created"))
         .andExpect(jsonPath("$.data.flag").value("PENDING"));
     return findPostId(title);
+  }
+
+  private static float[] unitVector(int dimensions) {
+    float[] v = new float[dimensions];
+    v[0] = 1f;
+    return v;
   }
 
   private User createUser(String username, String email) {
