@@ -1,7 +1,7 @@
 # On-topic seed corpus for content filtering centroids (vegan food, recipes,
 # plant-based lifestyle; Vietnamese + English mixed). One seed per line;
 # blank lines and lines starting with # are ignored.
-# Regenerate centroids.json after editing: set HF_TOKEN and CENTROIDS_WRITE=true,
+# Regenerate centroids.json after editing: set EMBED_API_KEY and CENTROIDS_WRITE=true,
 # then run `mvn test -Dtest=CentroidRegenerationTest`.
 # Công thức nấu chay từ đậu hũ và rau củ tươi ngon cho cả gia đình
 Bữa sáng thuần chay giàu đạm với yến mạch và trái cây

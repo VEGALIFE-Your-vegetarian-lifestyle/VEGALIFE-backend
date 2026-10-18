@@ -32,8 +32,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * Env-gated round trip against the real OpenAI-compatible chat provider (BR-AI-005): the full
  * endpoint must reach the configured {@code AI_CHAT_*} endpoint and persist a reply. Skips when
- * {@code AI_CHAT_API_KEY} / {@code HF_TOKEN} are absent — such a run never proves the provider
- * exchange, only that the rest of the suite is green. Mirrors the VNPay sandbox smoke test.
+ * {@code AI_CHAT_API_KEY} is absent — such a run never proves the provider exchange, only that the
+ * rest of the suite is green. Mirrors the VNPay sandbox smoke test.
  */
 @Testcontainers
 @SpringBootTest
@@ -72,8 +72,8 @@ class AiChatProviderSmokeIntegrationTest {
   @BeforeEach
   void requireProviderCredentials() {
     Assumptions.assumeTrue(
-        present(System.getenv("AI_CHAT_API_KEY")) || present(System.getenv("HF_TOKEN")),
-        "AI_CHAT_API_KEY / HF_TOKEN not set - skipping real chat provider round trip");
+        present(System.getenv("AI_CHAT_API_KEY")),
+        "AI_CHAT_API_KEY not set - skipping real chat provider round trip");
 
     user =
         userRepository.save(

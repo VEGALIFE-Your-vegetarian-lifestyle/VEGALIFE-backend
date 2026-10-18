@@ -11,6 +11,8 @@ import com.vegalife.filter.EmbeddingRelevanceScorer.Centroids;
 import com.vegalife.filter.FilterProperties;
 import com.vegalife.filter.RelevanceScore;
 import com.vegalife.filter.RelevanceScore.Band;
+import com.vegalife.infrastructure.embedding.GeminiEmbeddingModel;
+import com.vegalife.infrastructure.embedding.GeminiEmbeddingProperties;
 import com.vegalife.infrastructure.embedding.HfEmbeddingModel;
 import com.vegalife.infrastructure.embedding.HfEmbeddingProperties;
 import java.io.IOException;
@@ -28,8 +30,8 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 /**
- * Regenerates the committed centroids from the bilingual seed corpora via the real HuggingFace
- * embedding endpoint. Skipped entirely when {@code HF_TOKEN} is absent, so CI runs stay green
+ * Regenerates the committed centroids from the bilingual seed corpora via the configured embedding
+ * provider (ADR-014). Skipped entirely when the provider's API key is absent, so CI runs stay green
  * against the committed JSON (FR-006, Phase 8 design gate). Two modes: with {@code
  * CENTROIDS_WRITE=true} it rewrites {@code src/main/resources/filter/centroids.json} and re-embeds
  * the fixture paragraphs in {@code src/test/resources/filter/fixtures.json} (labels and texts
@@ -39,9 +41,14 @@ import org.springframework.web.client.RestClient;
  * must PASS and every off-topic seed must REJECT after mean-centering. The guardrail
  * warns-and-proceeds in write mode (recalibration iterates) but hard-fails in verify mode, so
  * inconsistent committed state can never pass unnoticed.
+ *
+ * <p>Independently of every cosine check, the returned vectors must be unit length. Cosine is
+ * scale-invariant, so a client that forgot to normalise would still pass a cosine comparison while
+ * shifting every score — the bug ADR-014 decision 3 exists to prevent. This assertion is the only
+ * check that can catch it.
  */
 @Slf4j
-@EnabledIfEnvironmentVariable(named = "HF_TOKEN", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "EMBED_API_KEY", matches = ".+")
 class CentroidRegenerationTest {
 
   private static final Path SEEDS_ON_TOPIC = Path.of("src/main/resources/filter/seed-on-topic.txt");
@@ -50,6 +57,12 @@ class CentroidRegenerationTest {
   private static final Path CENTROIDS_FILE = Path.of("src/main/resources/filter/centroids.json");
   private static final Path FIXTURES_FILE = Path.of("src/test/resources/filter/fixtures.json");
   private static final double MIN_CENTROID_COSINE = 0.99;
+
+  /**
+   * Unit-length tolerance. See {@link #assertUnitNorm} for why this value; it is deliberately far
+   * looser than the 0.41 error it must catch.
+   */
+  private static final double UNIT_NORM_TOLERANCE = 1e-6;
 
   private record FixtureEntry(String label, String text, float[] embedding) {}
 
@@ -63,14 +76,38 @@ class CentroidRegenerationTest {
     assertFalse(onTopicSeeds.isEmpty(), "on-topic seed corpus must not be empty");
     assertFalse(offTopicSeeds.isEmpty(), "off-topic seed corpus must not be empty");
 
-    HfEmbeddingProperties properties = new HfEmbeddingProperties();
-    properties.setApiKey(System.getenv("HF_TOKEN"));
-    HfEmbeddingModel model = new HfEmbeddingModel(buildRestClient(properties), properties);
+    // Build whichever client the configuration selects, so centroids can never be regenerated with
+    // one model and scored live with another.
+    String provider = System.getenv().getOrDefault("EMBED_PROVIDER", "gemini").trim();
+    GeminiEmbeddingModel gemini = null;
+    HfEmbeddingModel hf = null;
+    String activeModel;
+    if ("hf".equalsIgnoreCase(provider)) {
+      HfEmbeddingProperties properties = new HfEmbeddingProperties();
+      properties.setApiKey(System.getenv("HF_TOKEN"));
+      hf = new HfEmbeddingModel(buildRestClient(properties.getTimeout()), properties);
+      activeModel = properties.getModel();
+    } else {
+      GeminiEmbeddingProperties properties = new GeminiEmbeddingProperties();
+      properties.setBaseUrl(nonBlankOr(System.getenv("EMBED_BASE_URL"), properties.getBaseUrl()));
+      properties.setModel(nonBlankOr(System.getenv("EMBED_MODEL"), properties.getModel()));
+      properties.setApiKey(System.getenv("EMBED_API_KEY"));
+      gemini = new GeminiEmbeddingModel(buildRestClient(properties.getTimeout()), properties);
+      activeModel = properties.getModel();
+    }
+    log.info(
+        "centroid regeneration using provider={} model={} dimensions={}",
+        provider,
+        activeModel,
+        gemini != null ? gemini.dimensions() : hf.dimensions());
 
-    List<float[]> onVectors = model.embed(onTopicSeeds);
-    List<float[]> offVectors = model.embed(offTopicSeeds);
+    List<float[]> onVectors = embed(gemini, hf, onTopicSeeds);
+    List<float[]> offVectors = embed(gemini, hf, offTopicSeeds);
     assertEquals(onTopicSeeds.size(), onVectors.size());
     assertEquals(offTopicSeeds.size(), offVectors.size());
+
+    assertUnitNorm(onVectors, "on-topic");
+    assertUnitNorm(offVectors, "off-topic");
 
     float[] onTopicCentroid = centroid(onVectors);
     float[] offTopicCentroid = centroid(offVectors);
@@ -92,7 +129,7 @@ class CentroidRegenerationTest {
           CENTROIDS_FILE,
           onVectors.size(),
           offVectors.size());
-      refreshFixtures(mapper, model, properties, onTopicCentroid, offTopicCentroid, mean);
+      refreshFixtures(mapper, gemini, hf, activeModel, onTopicCentroid, offTopicCentroid, mean);
       return;
     }
 
@@ -195,8 +232,9 @@ class CentroidRegenerationTest {
    */
   private static void refreshFixtures(
       ObjectMapper mapper,
-      HfEmbeddingModel model,
-      HfEmbeddingProperties hfProperties,
+      GeminiEmbeddingModel gemini,
+      HfEmbeddingModel hf,
+      String activeModel,
       float[] onTopicCentroid,
       float[] offTopicCentroid,
       float[] mean)
@@ -212,8 +250,9 @@ class CentroidRegenerationTest {
       }
       texts.add(entry.text());
     }
-    List<float[]> embeddings = model.embed(texts);
+    List<float[]> embeddings = embed(gemini, hf, texts);
     assertEquals(texts.size(), embeddings.size());
+    assertUnitNorm(embeddings, "fixtures");
 
     FilterProperties filterProperties = new FilterProperties();
     EmbeddingRelevanceScorer scorer =
@@ -235,8 +274,7 @@ class CentroidRegenerationTest {
       refreshed.add(new FixtureEntry(entry.label(), entry.text(), embeddings.get(i)));
     }
     FixtureFile updated =
-        new FixtureFile(
-            hfProperties.getModel(), LocalDate.now().toString(), file.note(), refreshed);
+        new FixtureFile(activeModel, LocalDate.now().toString(), file.note(), refreshed);
     String json =
         mapper.writerWithDefaultPrettyPrinter().writeValueAsString(updated)
             + System.lineSeparator();
@@ -245,7 +283,53 @@ class CentroidRegenerationTest {
         "wrote {} ({} fixtures refreshed with model {})",
         FIXTURES_FILE,
         refreshed.size(),
-        hfProperties.getModel());
+        activeModel);
+  }
+
+  /** Embeds through whichever client is active; exactly one of the two is non-null. */
+  private static List<float[]> embed(
+      GeminiEmbeddingModel gemini, HfEmbeddingModel hf, List<String> inputs) {
+    return gemini != null ? gemini.embed(inputs) : hf.embed(inputs);
+  }
+
+  /**
+   * Asserts every vector has L2 length 1.0 within {@link #UNIT_NORM_TOLERANCE}.
+   *
+   * <p>The tolerance is not a precision requirement — the failure being caught is a client that
+   * skipped normalisation entirely, which lands near 0.59 for 768 of 3072 Gemini dimensions, nine
+   * orders of magnitude away. It is chosen loose enough that float32 accumulation over 768 terms
+   * can never produce a false failure, and tight enough that any unnormalised vector fails.
+   */
+  private static void assertUnitNorm(List<float[]> vectors, String label) {
+    for (int i = 0; i < vectors.size(); i++) {
+      double sumOfSquares = 0d;
+      for (float value : vectors.get(i)) {
+        sumOfSquares += (double) value * value;
+      }
+      double norm = Math.sqrt(sumOfSquares);
+      assertEquals(
+          1.0d,
+          norm,
+          UNIT_NORM_TOLERANCE,
+          label
+              + " vector #"
+              + i
+              + " is not unit length (norm="
+              + norm
+              + "); the embedding "
+              + "client must L2-normalise every returned row before it reaches the scorer");
+    }
+  }
+
+  private static RestClient buildRestClient(java.time.Duration timeout) {
+    SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+    requestFactory.setConnectTimeout(timeout);
+    requestFactory.setReadTimeout(timeout);
+    return RestClient.builder().requestFactory(requestFactory).build();
+  }
+
+  private static String nonBlankOr(String candidate, String fallback) {
+    return candidate == null || candidate.isBlank() ? fallback : candidate;
   }
 
   /** Mean of the given vectors, without renormalization (the centering point itself). */
@@ -299,13 +383,6 @@ class CentroidRegenerationTest {
     for (int i = 0; i < sum.length; i++) {
       sum[i] += vector[i];
     }
-  }
-
-  private static RestClient buildRestClient(HfEmbeddingProperties properties) {
-    SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-    requestFactory.setConnectTimeout(properties.getTimeout());
-    requestFactory.setReadTimeout(properties.getTimeout());
-    return RestClient.builder().requestFactory(requestFactory).build();
   }
 
   private static List<String> readSeeds(Path path) throws IOException {

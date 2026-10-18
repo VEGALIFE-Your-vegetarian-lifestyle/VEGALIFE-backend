@@ -51,3 +51,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `mcp-menu-tools.md`                 | Menu Tools for AI Chat (In-Process)    | Approved    | 2026-10-13 |
 | `meal-plan-detail-query.md`         | Meal Plan Detail Query                   | Implemented | 2026-10-12 |
 | `moderate-posts-admin-api.md`       | Moderate Posts API (Admin)                | Implemented | 2026-10-10 |
+| `embedding-provider-migration.md`   | Embedding Provider Migration to Gemini    | Draft       | 2026-10-18 |

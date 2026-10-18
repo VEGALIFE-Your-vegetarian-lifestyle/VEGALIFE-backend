@@ -15,7 +15,10 @@ import org.springframework.stereotype.Component;
  * / 2, clamped to [0, 1]; the band comes from the {@code app.filter.accept-threshold} / {@code
  * app.filter.reject-threshold} values (FR-006, FR-007). The centroids and the mean are precomputed
  * from the bilingual seed corpora in {@code src/main/resources/filter/seed-*.txt} and regenerated
- * by {@code CentroidRegenerationTest} when {@code HF_TOKEN} is available.
+ * by {@code CentroidRegenerationTest} when {@code EMBED_API_KEY} is available.
+ *
+ * <p>Provider-agnostic by design: {@link #score(float[])} receives a finished vector and never
+ * learns whether Gemini or HuggingFace produced it (ADR-014).
  */
 @Component
 public class EmbeddingRelevanceScorer implements RelevanceScorer {
