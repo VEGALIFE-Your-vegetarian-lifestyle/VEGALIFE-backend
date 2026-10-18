@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress — issue
+Implemented — issue
 [#156](https://github.com/VEGALIFE-Your-vegetarian-lifestyle/VEGALIFE-backend/issues/156).
 
 ## Problem
@@ -184,6 +184,48 @@ constraint with one that also admits the duplicate value.
 | `app.filter.duplicate-threshold` | `0.85` | Cosine **similarity** at or above which a post is a duplicate |
 | `app.filter.duplicate-enabled` | `true` | Turns detection off without disabling the topic filter |
 
+## Verified behaviour
+
+### The index is actually used
+
+`EXPLAIN (ANALYZE)` against 5,000 published posts on a real
+`pgvector/pgvector:pg15` database, seeded through the same DDL as `V35`:
+
+```
+->  Index Scan using idx_post_embedding_hnsw on post_embedding e
+      Order By: (embedding <=> $1)
+      Filter: (((model)::text = 'gemini-embedding-001'::text) AND (post_id <> $2))
+  Execution Time: 1.408 ms
+```
+
+For comparison, the same query with index scans disabled:
+
+```
+->  Seq Scan on post_embedding e  (rows=5000)
+      Filter: ...
+  Execution Time: 61.857 ms
+```
+
+So the `ORDER BY … LIMIT 1` shape keeps the HNSW index in play, and the
+filter is applied during traversal exactly as ADR-015 warns. The
+worst-case seeding — all 5,000 vectors inside one similarity cluster, so
+pruning has nothing to work with — still produced an index scan at
+1.4 ms. This is the check that separates "the feature works" from "the
+feature works and will keep working".
+
+### A failed store does not block a publish
+
+If `post_embedding` cannot be written — the usual cause being a target
+database without the pgvector extension — the failure is logged at WARN
+and swallowed. The post still publishes on its topic verdict.
+
+The reasoning: storing the vector powers *future* detection; it is not
+what publishes *this* post. Left fatal, one missing `CREATE EXTENSION`
+would hold every member's post in the queue, turning a deployment
+omission into a platform-wide outage. The blast radius stays at detection
+being less effective, and the WARN names the post so it is diagnosable.
+A unit test pins this.
+
 ## Deployment prerequisites
 
 - **pgvector must be enabled on the target database.** It is not on by
@@ -208,11 +250,11 @@ constraint with one that also admits the duplicate value.
 - [x] Exactly one embedding call per publish.
 - [x] Re-publishing a post upserts its vector and does not match itself.
 - [x] The whole existing integration suite passes on the new image.
-- [ ] `EXPLAIN (ANALYZE)` shows an index scan on the HNSW index, not a
+- [x] `EXPLAIN (ANALYZE)` shows an index scan on the HNSW index, not a
       sequential scan; output recorded in the PR.
 - [x] The threshold is measured against real Vietnamese and English
       text, with observed scores recorded.
-- [ ] `./mvnw clean verify` green, observed in the session that ships it.
+- [x] `./mvnw clean verify` green, observed in the session that ships it.
 
 ## Known limitations
 
