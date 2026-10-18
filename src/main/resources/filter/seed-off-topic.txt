@@ -1,7 +1,7 @@
 # Off-topic seed corpus for content filtering centroids (spam, crypto, betting,
 # unrelated promotions; Vietnamese + English mixed). One seed per line;
 # blank lines and lines starting with # are ignored.
-# Regenerate centroids.json after editing: set HF_TOKEN and CENTROIDS_WRITE=true,
+# Regenerate centroids.json after editing: set EMBED_API_KEY and CENTROIDS_WRITE=true,
 # then run `mvn test -Dtest=CentroidRegenerationTest`.
 Buy cheap cryptocurrency now and double your money fast
 Giá cổ phiếu tăng mạnh hôm nay trên sàn giao dịch

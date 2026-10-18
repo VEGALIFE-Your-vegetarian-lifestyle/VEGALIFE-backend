@@ -8,8 +8,7 @@ import org.springframework.stereotype.Component;
 /**
  * Bound configuration for the content filter (FR-007): relevance thresholds and the maximum age of
  * a pending flag before the sweep re-queues it. The nested {@code app.filter.embedding.*} keys are
- * intentionally ignored here; they bind to {@link
- * com.vegalife.infrastructure.embedding.HfEmbeddingProperties}.
+ * intentionally ignored here; they bind to the provider-specific properties classes (ADR-014).
  */
 @Data
 @Component
