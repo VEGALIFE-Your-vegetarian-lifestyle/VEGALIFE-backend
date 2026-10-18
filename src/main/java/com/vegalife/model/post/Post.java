@@ -112,6 +112,10 @@ public class Post {
     PENDING,
     PASSED,
     REJECTED,
-    NEEDS_REVIEW
+    NEEDS_REVIEW,
+    /**
+     * Near-duplicate of an existing published post; always routed to admin, never auto-rejected.
+     */
+    DUPLICATE
   }
 }
