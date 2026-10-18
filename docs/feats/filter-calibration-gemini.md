@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — thresholds in effect.
+Accepted — thresholds in effect, filter enabled by default.
 
 ## Summary
 
@@ -122,6 +122,27 @@ At the selected thresholds the committed fixtures score:
 
 Both on-topic fixtures pass, both unambiguous spam fixtures reject, both
 neutrals review. The banding behaves as intended.
+
+## Enabling the filter
+
+`app.filter.enabled` now defaults to **`true`** (`FILTER_ENABLED`, still
+overridable per environment). This was the last step of re-enabling
+moderation: the original workaround set it `false` because the filter
+could not call HuggingFace, and leaving it off while the provider worked
+would have defeated the point of the migration.
+
+The operational consequence is that **every publish now makes a Gemini
+call**. If that call fails the publish request still succeeds — the post
+is queued and the outbox retries — but a prolonged Gemini outage means
+posts sit `PENDING` until the 24h sweep moves them to `NEEDS_REVIEW`.
+`EMBED_API_KEY` must therefore be set in any environment where the filter
+is left enabled. Setting `FILTER_ENABLED=false` remains available as a
+deliberate outage mode; it bypasses the filter entirely rather than
+failing posts.
+
+`FilterDefaultsTest` pins both the `FilterProperties` default and the
+`${FILTER_ENABLED:true}` placeholder, so flipping this back requires a
+visible test change rather than a quiet one-line edit.
 
 ## Provider properties verified at calibration time
 

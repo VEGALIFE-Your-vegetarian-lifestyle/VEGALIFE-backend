@@ -33,7 +33,9 @@ The embedding model and route were never wrong; the account cannot call
 them. The filter was therefore switched off
 (`FILTER_ENABLED=false`) as a workaround, which means published posts are
 no longer screened at all — they land directly in the review queue and
-nothing judges them.
+nothing judges them. **The filter is back on now**: the default is
+`FILTER_ENABLED=true` and posts are screened again (see
+[Filter Calibration](filter-calibration-gemini.md)).
 
 A replacement must be callable without a billing relationship, and must
 fail in a way operators can see rather than silently doing nothing.
