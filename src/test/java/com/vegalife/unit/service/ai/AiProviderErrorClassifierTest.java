@@ -25,7 +25,7 @@ class AiProviderErrorClassifierTest {
   private static final String OP = "chat completion";
 
   @Test
-  void rateLimited_provider403_producesRateLimitedReasonAndStatus() {
+  void rateLimited_producesRateLimitedReasonAndStatus() {
     RuntimeException wrapped =
         new TransientAiException("429", httpStatusError(HttpStatusCode.valueOf(429)));
 
@@ -84,6 +84,18 @@ class AiProviderErrorClassifierTest {
     assertThat(result.getUpstreamStatus()).isNull();
   }
 
+  /**
+   * A non-error status means Spring AI rejected a response the provider considered successful — the
+   * HTTP code alone explains nothing, so it must not be reported as an upstream error.
+   */
+  @Test
+  void nonErrorStatus_isNotReportedAsUpstreamError() {
+    AiProviderException result =
+        AiProviderErrorClassifier.classify(httpStatusError(HttpStatusCode.valueOf(302)), OP);
+
+    assertThat(result.getReason()).isEqualTo(Reason.UNKNOWN);
+  }
+
   @Test
   void emptyReply_isDistinctFromUnknown() {
     AiProviderException result = AiProviderErrorClassifier.emptyReply(OP);
@@ -126,11 +138,8 @@ class AiProviderErrorClassifierTest {
   private static final class RestClientResponseExceptionStub
       extends org.springframework.web.client.RestClientResponseException {
 
-    private final HttpStatusCode status;
-
     private RestClientResponseExceptionStub(int code) {
       super("provider error", code, "error", HttpHeaders.EMPTY, new byte[0], null);
-      this.status = HttpStatusCode.valueOf(code);
     }
   }
 }

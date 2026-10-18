@@ -57,6 +57,8 @@ public final class AiProviderErrorClassifier {
   }
 
   private static Reason reasonFor(Throwable failure, Integer status) {
+    // Ordered deliberately: a 429 is the one status worth its own reason, then credential and
+    // timeout failures, then everything else the provider maps to a 4xx/5xx.
     if (status != null) {
       if (status == TOO_MANY_REQUESTS) {
         return Reason.RATE_LIMITED;
@@ -70,6 +72,9 @@ public final class AiProviderErrorClassifier {
       if (status >= 400) {
         return Reason.UPSTREAM_ERROR;
       }
+      // A 3xx/2xx status here is a successful response Spring AI still rejected. The HTTP code
+      // alone would not explain that, so fall through to the cause-chain check rather than
+      // mislabelling it as an upstream error.
     }
     if (isTimeout(failure)) {
       return Reason.TIMEOUT;
