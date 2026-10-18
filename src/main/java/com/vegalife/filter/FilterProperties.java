@@ -22,6 +22,7 @@ public class FilterProperties {
   /**
    * When false, a published post skips the semantic filter entirely and lands directly in the admin
    * review queue ({@code flag=NEEDS_REVIEW}, {@code status=unpublished}) with no embedding call.
+   * True by default so the filter is the normal path; false is a deliberate outage mode.
    */
-  private boolean enabled = false;
+  private boolean enabled = true;
 }

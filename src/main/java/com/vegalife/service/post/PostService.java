@@ -78,11 +78,12 @@ public class PostService {
     post.setCategories(categories);
 
     // BR-CONTENT-003 / FR-007: a post never becomes visible directly. With publish=true and the
-    // filter enabled it is queued for content filtering (BR-FILTER-005) and the filter callback
-    // publishes it once it passes; without it the post stays a private draft that is never
-    // filtered. The queued outbound row's creation time is the enqueue clock (BR-FILTER-009).
-    // While app.filter.enabled=false a published post skips the filter and lands directly in the
-    // admin review queue (flag=NEEDS_REVIEW, status=unpublished) with no embedding call.
+    // filter enabled (the default) it is queued for content filtering (BR-FILTER-005) and the
+    // filter callback publishes it once it passes; without it the post stays a private draft that
+    // is never filtered. The queued outbound row's creation time is the enqueue clock
+    // (BR-FILTER-009). Only when app.filter.enabled=false (deliberate outage mode) does a published
+    // post skip the filter and land directly in the admin review queue (flag=NEEDS_REVIEW,
+    // status=unpublished) with no embedding call.
     post.setStatus(Post.Status.created);
     if (request.isPublish()) {
       post.setFlag(filterProperties.isEnabled() ? Post.Flag.PENDING : Post.Flag.NEEDS_REVIEW);

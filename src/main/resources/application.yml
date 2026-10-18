@@ -113,9 +113,11 @@ app:
       allowed-video-types: [video/mp4, video/webm]
 
   filter:
-    # When false, a published post skips the semantic filter and lands directly in the admin review
-    # queue (flag=NEEDS_REVIEW, status=unpublished) with no embedding call. Set true to re-enable.
-    enabled: ${FILTER_ENABLED:false}
+    # When true (the default), a published post is queued for semantic filtering and is only
+    # published by the filter callback if it passes. When false, it skips the filter and lands
+    # directly in the admin review queue (flag=NEEDS_REVIEW, status=unpublished) with no embedding
+    # call — intended for a deliberate outage mode, not as the normal path.
+    enabled: ${FILTER_ENABLED:true}
     # Calibrated for gemini-embedding-001 at 768 dims over the seed corpus; see
     # docs/feats/filter-calibration-gemini.md for the measured L/H separation and
     # why these values differ from the rule's pure output. Do not port these
