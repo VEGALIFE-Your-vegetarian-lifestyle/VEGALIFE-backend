@@ -24,7 +24,7 @@ public class FilterProperties {
    * duplicate of an existing published post. Calibrated against real Vietnamese and English text;
    * see {@code docs/feats/duplicate-post-detection.md}.
    */
-  private double duplicateThreshold = 0.8;
+  private double duplicateThreshold = 0.85;
 
   /**
    * Turns duplicate detection off without disabling the topic filter. Detection is additive, so

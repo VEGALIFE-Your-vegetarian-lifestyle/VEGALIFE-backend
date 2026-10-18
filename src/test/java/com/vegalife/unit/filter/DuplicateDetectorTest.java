@@ -60,14 +60,14 @@ class DuplicateDetectorTest {
   void similarityExactlyAtThresholdIsADuplicate() {
     // The band is inclusive: a post exactly at the threshold is flagged rather than published,
     // which is the conservative direction for a rule that only ever sends content to a human.
-    stubNearest(0.8);
+    stubNearest(0.85);
 
     assertTrue(detector.findDuplicate(EMBEDDING, candidate).isPresent());
   }
 
   @Test
   void similarityBelowThresholdIsNotADuplicate() {
-    stubNearest(0.79);
+    stubNearest(0.8499);
 
     assertTrue(detector.findDuplicate(EMBEDDING, candidate).isEmpty());
   }

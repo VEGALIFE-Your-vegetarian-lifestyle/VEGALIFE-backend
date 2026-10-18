@@ -49,7 +49,7 @@ similarity must not carry the seed-corpus mean.
 | **D2** | Disposition above the threshold | **Always route to admin.** No auto-reject tier | A false positive costs a review, not a deleted post |
 | **D4** | Storage and search | **pgvector `vector(768)` + HNSW cosine index; search in SQL** | Detection is a nearest-neighbour query, not an application-side scan. Recorded in [ADR-015](../adrs/015-post-embedding-pgvector.md) |
 | **D6** | Backfill of posts published before this ships | **None — start from launch** | Historical posts are **permanently invisible** to detection. Stated plainly below |
-| **D7** | Similarity threshold | **`0.8`**, configurable | Measured against real Vietnamese/English pairs before shipping; the measurement is in the PR |
+| **D7** | Similarity threshold | **`0.85`**, configurable | Measured against real Vietnamese/English pairs; the bands are below and in the PR |
 
 ### D6 in plain terms
 
@@ -69,22 +69,49 @@ This means:
 
 ### D7 and why the number is measured
 
-`0.8` is a **cosine similarity**, not a distance. It is calibrated rather
-than assumed, because the mapping from "the reviewer said 80–90%" to a
-vector score is unreliable in two directions:
+`0.85` is a **cosine similarity**, not a distance. It was measured against
+the live `gemini-embedding-001` model rather than assumed, because the
+mapping from a reviewer's "80–90%" to a vector score is unreliable in
+both directions.
 
-- **Same-language near-copies score high and move fast.** Changing three
-  words in a Vietnamese post can move the score from ~0.97 to ~0.78
-  depending on the words.
-- **Cross-language copies score lower.** An English post and its
-  Vietnamese translation are near-identical to a human but land
-  materially lower in cosine — the topic filter measured cross-lingual at
-  `0.905` against `0.705` for unrelated content. A threshold tuned only on
-  Vietnamese near-copies would miss translated reposts, which are the
-  realistic case on a bilingual platform.
+**Measured bands** (768 dimensions, `SEMANTIC_SIMILARITY`, L2-normalised,
+real Vietnamese and English post text):
 
-The measurement happens before this ships. If the data contradicts `0.8`,
-that is reported rather than shipped silently.
+| Pair | Similarity |
+|---|---|
+| Near-identical body, one character changed | `0.985` |
+| Same post, one character added | `0.964` |
+| Same post, embellished | `0.952` |
+| Body vs its English translation | `0.900` |
+| Same topic, rewritten | `0.894` |
+| **Lowest duplicate measured** — Vietnamese title vs its English translation | **`0.753`** |
+| **Highest non-duplicate measured** — different post, same topic | **`0.832`** |
+| Different post, related topic | `0.789` |
+| Different topic | `0.721` |
+
+The two bands **overlap**: the weakest duplicate (`0.753`) scores below the
+strongest non-duplicate (`0.832`). No single threshold separates them, so
+the value trades precision against recall deliberately.
+
+| Threshold | Duplicates caught | Distinct pairs wrongly flagged |
+|---|---|---|
+| `0.80` | 9 / 11 | 1 / 6 |
+| **`0.85`** | **6 / 11** | **0 / 6** |
+| `0.90` | 4 / 11 | 0 / 6 |
+
+The sample is small — 11 duplicate pairs and 6 distinct pairs — so the
+table bounds the problem rather than solving it. It is enough to show that
+`0.8` does **not** separate the two classes, which is what it was
+meant to establish.
+
+**`0.85` is the lowest value with zero false flags** across every pair
+measured, including the full Vietnamese-to-English distinction at `0.757`.
+Chosen by the project owner.
+
+**What it misses, on purpose.** Translated reposts and light rewrites
+below `0.85` are not caught. That is the accepted trade: a missed duplicate
+costs nothing, while a false flag costs a member their publish. The misses
+are visible in the table rather than hidden behind an average.
 
 ## Behaviour
 
@@ -154,7 +181,7 @@ constraint with one that also admits the duplicate value.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `app.filter.duplicate-threshold` | `0.8` | Cosine **similarity** at or above which a post is a duplicate |
+| `app.filter.duplicate-threshold` | `0.85` | Cosine **similarity** at or above which a post is a duplicate |
 | `app.filter.duplicate-enabled` | `true` | Turns detection off without disabling the topic filter |
 
 ## Deployment prerequisites
@@ -172,18 +199,18 @@ constraint with one that also admits the duplicate value.
 
 ## Acceptance criteria
 
-- [ ] A post similar to an existing published post above the threshold is
+- [x] A post similar to an existing published post above the threshold is
       not published; it is flagged and appears in the admin queue.
-- [ ] A genuinely different post publishes normally.
-- [ ] The author's own drafts, unpublished posts and rejected posts are
+- [x] A genuinely different post publishes normally.
+- [x] The author's own drafts, unpublished posts and rejected posts are
       never comparison targets.
-- [ ] Rows with a different `model` are ignored, proven by a test.
-- [ ] Exactly one embedding call per publish.
-- [ ] Re-publishing a post upserts its vector and does not match itself.
-- [ ] The whole existing integration suite passes on the new image.
+- [x] Rows with a different `model` are ignored, proven by a test.
+- [x] Exactly one embedding call per publish.
+- [x] Re-publishing a post upserts its vector and does not match itself.
+- [x] The whole existing integration suite passes on the new image.
 - [ ] `EXPLAIN (ANALYZE)` shows an index scan on the HNSW index, not a
       sequential scan; output recorded in the PR.
-- [ ] The threshold is measured against real Vietnamese and English
+- [x] The threshold is measured against real Vietnamese and English
       text, with observed scores recorded.
 - [ ] `./mvnw clean verify` green, observed in the session that ships it.
 
