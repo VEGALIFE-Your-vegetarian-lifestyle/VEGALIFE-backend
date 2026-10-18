@@ -84,7 +84,7 @@ vegan food at all, or what it contains.
       `REJECTED` (< reject-threshold), or `NEEDS_REVIEW` (between the
       two).
 - [ ] FR-007: Thresholds and the stale-pending age are configuration
-      (`app.filter.accept-threshold` = 0.65, `reject-threshold` = 0.43,
+      (`app.filter.accept-threshold` = 0.70, `reject-threshold` = 0.45,
       `sweep-max-age` = 24h), not constants in code.
 - [ ] FR-008: `PASSED` sets `flag = PASSED` and publishes the post
       (`status = published`, `publishedAt` set) — every queued run was
@@ -200,10 +200,13 @@ Issue #34 (edit):
   external dependency. Failures do not lose posts (the outbox retries),
   but a prolonged outage delays publishing; the 24h sweep converts the
   worst case into `NEEDS_REVIEW` rather than a permanent `PENDING`.
-- **Threshold tuning**: 0.65 / 0.43 are derived from the measured
-  centered seed distribution (highest off-topic 0.4058, lowest
-  on-topic 0.7279), not measured against production traffic. Expect
-  one tuning pass after real content flows through.
+- **Threshold tuning**: 0.70 / 0.45 are derived from the measured
+  centered seed distribution under `gemini-embedding-001` (lowest
+  on-topic 0.7553, highest off-topic 0.3491), not measured against
+  production traffic. See
+  [Filter Calibration](filter-calibration-gemini.md) for the full
+  derivation and the selected values. Expect one tuning pass after real
+  content flows through.
 - **False rejects are user-visible**: a rejected post is `unpublished`
   (with `flag = REJECTED`/`NEEDS_REVIEW`), not deleted, and re-editing
   re-runs the filter — but there is no admin release path until review

@@ -15,13 +15,14 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.filter")
 public class FilterProperties {
 
-  private double acceptThreshold = 0.65;
-  private double rejectThreshold = 0.43;
+  private double acceptThreshold = 0.70;
+  private double rejectThreshold = 0.45;
   private Duration sweepMaxAge = Duration.ofHours(24);
 
   /**
    * When false, a published post skips the semantic filter entirely and lands directly in the admin
    * review queue ({@code flag=NEEDS_REVIEW}, {@code status=unpublished}) with no embedding call.
+   * True by default so the filter is the normal path; false is a deliberate outage mode.
    */
-  private boolean enabled = false;
+  private boolean enabled = true;
 }

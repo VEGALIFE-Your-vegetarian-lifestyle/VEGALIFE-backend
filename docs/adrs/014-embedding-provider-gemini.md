@@ -30,6 +30,8 @@ It does not, and the failure was two faults stacked on top of each other:
 So the model and the route were never wrong. The account cannot call
 them. The filter has therefore been inert since the demo, and
 `app.filter.enabled` was left `false` as a workaround rather than fixed.
+That workaround is now retired: `app.filter.enabled` defaults to `true`,
+and the migration below is what made it safe to turn back on.
 
 Two constraints bound any replacement:
 
