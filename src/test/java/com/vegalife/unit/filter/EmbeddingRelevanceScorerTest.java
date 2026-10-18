@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.vegalife.filter.EmbeddingRelevanceScorer;
 import com.vegalife.filter.EmbeddingRelevanceScorer.Centroids;
+import com.vegalife.filter.FilterProperties;
 import com.vegalife.filter.RelevanceScore;
 import com.vegalife.filter.RelevanceScore.Band;
 import org.junit.jupiter.api.Test;
@@ -81,16 +82,31 @@ class EmbeddingRelevanceScorerTest {
   @Test
   void committedCentroidsLoadAndSeparateOnTopicFromOffTopic() {
     Centroids centroids = EmbeddingRelevanceScorer.loadCentroids();
-    assertEquals(1024, centroids.dimensions());
-    assertEquals(1024, centroids.onTopic().length);
-    assertEquals(1024, centroids.offTopic().length);
-    assertEquals(1024, centroids.mean().length);
+    // The committed centroids are gemini-embedding-001 at 768 dimensions (ADR-014). Asserting the
+    // concrete width here is deliberate: a mismatch with order 5's vector column is a runtime
+    // insert failure, so it is worth pinning.
+    assertEquals(768, centroids.dimensions());
+    assertEquals(768, centroids.onTopic().length);
+    assertEquals(768, centroids.offTopic().length);
+    assertEquals(768, centroids.mean().length);
 
+    FilterProperties properties = new FilterProperties();
     EmbeddingRelevanceScorer scorer =
         new EmbeddingRelevanceScorer(
-            centroids.onTopic(), centroids.offTopic(), centroids.mean(), 0.65, 0.43);
+            centroids.onTopic(),
+            centroids.offTopic(),
+            centroids.mean(),
+            properties.getAcceptThreshold(),
+            properties.getRejectThreshold());
     double onScore = scorer.score(centroids.onTopic()).score();
     double offScore = scorer.score(centroids.offTopic()).score();
     assertTrue(onScore > offScore, "on-topic centroid must score higher than off-topic");
+    // Thresholds must sit on the correct sides of the two centroids, or the band is inverted.
+    assertTrue(
+        onScore >= properties.getAcceptThreshold(),
+        "on-topic centroid must at least reach the accept threshold, was " + onScore);
+    assertTrue(
+        offScore < properties.getRejectThreshold(),
+        "off-topic centroid must fall below the reject threshold, was " + offScore);
   }
 }
