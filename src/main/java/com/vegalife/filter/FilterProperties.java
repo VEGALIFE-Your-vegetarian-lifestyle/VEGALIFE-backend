@@ -20,6 +20,19 @@ public class FilterProperties {
   private Duration sweepMaxAge = Duration.ofHours(24);
 
   /**
+   * Cosine <strong>similarity</strong> (not distance) at or above which a post is treated as a
+   * duplicate of an existing published post. Calibrated against real Vietnamese and English text;
+   * see {@code docs/feats/duplicate-post-detection.md}.
+   */
+  private double duplicateThreshold = 0.8;
+
+  /**
+   * Turns duplicate detection off without disabling the topic filter. Detection is additive, so
+   * switching it off leaves the publish path exactly as it was before the feature.
+   */
+  private boolean duplicateEnabled = true;
+
+  /**
    * When false, a published post skips the semantic filter entirely and lands directly in the admin
    * review queue ({@code flag=NEEDS_REVIEW}, {@code status=unpublished}) with no embedding call.
    * True by default so the filter is the normal path; false is a deliberate outage mode.

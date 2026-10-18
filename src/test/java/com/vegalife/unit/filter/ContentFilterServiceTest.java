@@ -40,7 +40,7 @@ class ContentFilterServiceTest {
   @Test
   void shortContentStillEmbedsAndIsScored() {
     embeddingModel.next = new float[] {0f, 1f};
-    FilterVerdict verdict = service.filter("a");
+    FilterVerdict verdict = service.filter("a").verdict();
     assertEquals(Post.Flag.REJECTED, verdict.flag());
     assertEquals(0.0, verdict.score(), 1e-9);
     assertEquals(List.of("RELEVANCE_LOW: 0.000"), verdict.reasons());
@@ -50,7 +50,7 @@ class ContentFilterServiceTest {
   @Test
   void acceptBandReturnsPassedWithEmptyReasons() {
     embeddingModel.next = new float[] {1f, 0f};
-    FilterVerdict verdict = service.filter(VALID_CONTENT);
+    FilterVerdict verdict = service.filter(VALID_CONTENT).verdict();
     assertEquals(Post.Flag.PASSED, verdict.flag());
     assertEquals(1.0, verdict.score(), 1e-9);
     assertEquals(List.of(), verdict.reasons());
@@ -60,7 +60,7 @@ class ContentFilterServiceTest {
   @Test
   void rejectBandReturnsRejectedWithLowReason() {
     embeddingModel.next = new float[] {0f, 1f};
-    FilterVerdict verdict = service.filter(VALID_CONTENT);
+    FilterVerdict verdict = service.filter(VALID_CONTENT).verdict();
     assertEquals(Post.Flag.REJECTED, verdict.flag());
     assertEquals(0.0, verdict.score(), 1e-9);
     assertEquals(List.of("RELEVANCE_LOW: 0.000"), verdict.reasons());
@@ -69,7 +69,7 @@ class ContentFilterServiceTest {
   @Test
   void reviewBandReturnsNeedsReviewWithReason() {
     embeddingModel.next = new float[] {1f, 1f};
-    FilterVerdict verdict = service.filter(VALID_CONTENT);
+    FilterVerdict verdict = service.filter(VALID_CONTENT).verdict();
     assertEquals(Post.Flag.NEEDS_REVIEW, verdict.flag());
     assertEquals(0.5, verdict.score(), 1e-9);
     assertEquals(List.of("RELEVANCE_REVIEW: 0.500"), verdict.reasons());
