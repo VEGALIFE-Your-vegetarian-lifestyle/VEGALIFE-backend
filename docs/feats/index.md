@@ -53,3 +53,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `moderate-posts-admin-api.md`       | Moderate Posts API (Admin)                | Implemented | 2026-10-10 |
 | `embedding-provider-migration.md`   | Embedding Provider Migration to Gemini    | Draft       | 2026-10-18 |
 | `filter-calibration-gemini.md`      | Filter Calibration for `gemini-embedding-001` | Accepted | 2026-10-18 |
+| `duplicate-post-detection.md`       | Duplicate Post Detection                  | In Progress | 2026-10-18 |
