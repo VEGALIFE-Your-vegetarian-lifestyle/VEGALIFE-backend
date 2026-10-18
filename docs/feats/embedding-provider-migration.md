@@ -143,8 +143,9 @@ the same interface. `ContentFilterService`, `EmbeddingRelevanceScorer`,
 changes, the abstraction would be leaking and the provider would not
 truly be swappable.
 
-Selected by `app.filter.embedding.provider` through
-`@ConditionalOnProperty`, so exactly one client bean registers.
+Selected by `app.filter.embedding.provider` through a `SpringBootCondition`
+rather than `@ConditionalOnProperty`, so exactly one client bean registers
+and an unrecognised value aborts startup instead of registering nothing.
 
 ### Threshold derivation rule
 
@@ -211,6 +212,29 @@ a broken publish.
       `.env.example`.
 - [ ] **AC-9** `./mvnw clean verify` green.
 - [ ] **AC-10** No secret appears in any commit, log line, or exception.
+
+## Implementation status
+
+Delivered on `feat/embedding-gemini-migration`:
+
+- Provider, normalisation, configuration and the startup gate (FR-001–FR-010).
+- Unit coverage for the client and the provider switch, including a case that
+  reproduces the truncated ~0.59-norm response and asserts it is normalised.
+- `CentroidRegenerationTest` builds whichever provider is configured.
+
+Not yet done, deliberately:
+
+- **Calibration (FR-014, FR-015) and AC-1–AC-5.** These require a live
+  `EMBED_API_KEY` and a quota spend; they are run separately and their
+  numbers reported back before `centroids.json` is replaced.
+- **Re-enabling the filter.** Non-goal by design. `app.filter.enabled` stays
+  `false` until calibration passes, so this change cannot alter live
+  moderation behaviour.
+- **FR-011 / FR-012 (failure reason).** The existing behaviour already
+  satisfies FR-011: an embedding failure propagates, the outbox drainer logs
+  it at ERROR with the cause chain and retries the message. FR-012's
+  distinguishing reason code is a schema change that belongs with the
+  moderation work and is not introduced here.
 
 ## Risks / open questions
 
