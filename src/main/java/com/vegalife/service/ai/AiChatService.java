@@ -50,6 +50,7 @@ public class AiChatService {
   private static final int MAX_CONTEXT_MESSAGES = 20;
   private static final int MAX_TITLE_LENGTH = 60;
   private static final long SSE_TIMEOUT_MILLIS = 180_000L;
+  private static final String CHAT_OPERATION = "chat completion";
 
   private final ChatClient.Builder chatClientBuilder;
   private final AiConversationRepository conversationRepository;
@@ -92,12 +93,21 @@ public class AiChatService {
               .call()
               .content();
     } catch (RuntimeException ex) {
-      log.error("AI provider call failed for user {}", userId, ex);
-      throw new AiProviderException("AI provider request failed", ex);
+      AiProviderException classified = AiProviderErrorClassifier.classify(ex, CHAT_OPERATION);
+      log.error(
+          "AI chat call failed for user {} (reason {}, upstream status {})",
+          userId,
+          classified.getReason(),
+          classified.getUpstreamStatus(),
+          ex);
+      throw classified;
     }
 
     if (reply == null || reply.isBlank()) {
-      throw new AiProviderException("AI provider request failed");
+      AiProviderException empty = AiProviderErrorClassifier.emptyReply(CHAT_OPERATION);
+      log.error(
+          "AI chat call for user {} returned no content (reason {})", userId, empty.getReason());
+      throw empty;
     }
 
     PersistedTurn persisted = persistTurn(userId, existing, request.getMessage(), reply, window);
@@ -136,8 +146,15 @@ public class AiChatService {
                   sendEvent(emitter, "delta", Map.of("reply", delta));
                 },
                 error -> {
-                  log.error("AI provider stream failed for user {}", userId, error);
-                  failStream(emitter);
+                  AiProviderException classified =
+                      AiProviderErrorClassifier.classify(error, CHAT_OPERATION);
+                  log.error(
+                      "AI chat stream failed for user {} (reason {}, upstream status {})",
+                      userId,
+                      classified.getReason(),
+                      classified.getUpstreamStatus(),
+                      error);
+                  failStream(emitter, classified);
                 },
                 () ->
                     completeStream(
@@ -165,7 +182,7 @@ public class AiChatService {
       SendMessageRequest request,
       AiQuotaGuard.QuotaWindow window) {
     if (reply.isBlank()) {
-      failStream(emitter);
+      failStream(emitter, AiProviderErrorClassifier.emptyReply(CHAT_OPERATION));
       return;
     }
     try {
@@ -178,12 +195,21 @@ public class AiChatService {
       emitter.complete();
     } catch (RuntimeException ex) {
       log.error("Failed to persist AI turn for user {}", userId, ex);
-      failStream(emitter);
+      failStream(emitter, new AiProviderException("AI turn could not be persisted"));
     }
   }
 
-  private void failStream(SseEmitter emitter) {
-    sendEvent(emitter, "error", Map.of("message", "AI provider request failed"));
+  /**
+   * Emits a typed {@code error} event so the frontend can branch on {@code code} and {@code
+   * retryable} instead of parsing prose. The human-readable {@code message} is preserved for
+   * clients that only render text.
+   */
+  private void failStream(SseEmitter emitter, AiProviderException failure) {
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("message", failure.getMessage());
+    payload.put("code", failure.getReason().name());
+    payload.put("retryable", failure.getReason() == AiProviderException.Reason.RATE_LIMITED);
+    sendEvent(emitter, "error", payload);
     emitter.complete();
   }
 
@@ -391,7 +417,7 @@ public class AiChatService {
             });
 
     if (result == null) {
-      throw new AiProviderException("AI provider request failed");
+      throw new AiProviderException("AI turn could not be persisted");
     }
     return result;
   }

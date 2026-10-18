@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -33,6 +34,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
@@ -41,6 +43,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -255,11 +259,56 @@ class AiChatControllerIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"message\":\"hello\"}"))
         .andExpect(status().isBadGateway())
-        .andExpect(jsonPath("$.message").value("AI provider request failed"));
+        .andExpect(jsonPath("$.message").value("chat completion failed"));
 
     assertThat(conversationRepository.findAll()).isEmpty();
     assertThat(messageRepository.findAll()).isEmpty();
     assertThat(usageRepository.findAll()).isEmpty();
+  }
+
+  /**
+   * Issue #152 regression: the provider throttling us used to surface as an anonymous 502. It must
+   * now be a real 429 with {@code Retry-After}, because the client can only retry if it is told to.
+   * This is the exact failure that made the chat endpoint look broken on demo day.
+   */
+  @Test
+  void send_providerRateLimited_returns429WithRetryAfterNot502() throws Exception {
+    when(chatModel.call(any(Prompt.class)))
+        .thenThrow(new HttpServerErrorException(HttpStatusCode.valueOf(429)));
+
+    mockMvc
+        .perform(
+            post("/api/ai/messages")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"message\":\"hello\"}"))
+        .andExpect(status().isTooManyRequests())
+        .andExpect(header().exists("Retry-After"))
+        .andExpect(jsonPath("$.success").value(false));
+
+    // A throttled call consumes no quota and persists no turn (BR-AI-002).
+    assertThat(conversationRepository.findAll()).isEmpty();
+    assertThat(messageRepository.findAll()).isEmpty();
+    assertThat(usageRepository.findAll()).isEmpty();
+  }
+
+  /**
+   * A rejected credential must never be distinguishable from a generic upstream failure, and must
+   * never echo anything about the key (issue #152).
+   */
+  @Test
+  void send_providerAuthFailure_returns502WithoutLeakingCredentialState() throws Exception {
+    when(chatModel.call(any(Prompt.class)))
+        .thenThrow(new HttpClientErrorException(HttpStatusCode.valueOf(401)));
+
+    mockMvc
+        .perform(
+            post("/api/ai/messages")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"message\":\"hello\"}"))
+        .andExpect(status().isBadGateway())
+        .andExpect(jsonPath("$.message").value("AI service is currently unavailable"));
   }
 
   @Test
