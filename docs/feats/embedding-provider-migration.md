@@ -168,6 +168,18 @@ The rule, applied to Gemini's measured window:
 The gap is reported in the PR with the observed `L` and `H`, so the
 arithmetic can be checked rather than trusted.
 
+### Outcome (measured 2026-10-18)
+
+The rule has now been applied against the live provider. `L = 0.7553`,
+`H = 0.3491`, separation `0.4063` — far above the `0.02` floor, so no stop
+condition applied. The rule's output was `accept = 0.6538` /
+`reject = 0.4506`; the selected values are `0.70` / `0.45`.
+
+Both the derivation and the reasoning behind the selection are recorded in
+[Filter Calibration: gemini-embedding-001](filter-calibration-gemini.md),
+which is the authority for these numbers. Note that `accept` is
+deliberately stricter than the rule's output and closer to the `L` bound.
+
 ### Free-tier quota
 
 The published Gemini embedding rate limits could not be cited
@@ -194,24 +206,33 @@ a broken publish.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** A live call to the client returns 768-dimension vectors
-      with L2 norm 1.0 ± 1e-6.
-- [ ] **AC-2** The same sentence embedded twice yields cosine ≈ 1.0
-      (determinism).
-- [ ] **AC-3** A Vietnamese sentence and its English translation of the
-      same vegan-topic claim score highly against each other. This is why
-      e5 was originally chosen; it must be re-verified, not assumed.
-- [ ] **AC-4** Centroids regenerated; verify mode passes cosine ≥ 0.99.
-- [ ] **AC-5** Thresholds derived by the stated rule from the observed
-      separation, with `L`, `H` and the arithmetic recorded.
+- [x] **AC-1** A live call to the client returns 768-dimension vectors
+      with L2 norm 1.0 ± 1e-6. — measured norm `0.999999989`,
+      768 dimensions.
+- [x] **AC-2** The same sentence embedded twice yields cosine ≈ 1.0
+      (determinism). — measured `1.000000000000`.
+- [x] **AC-3** A Vietnamese sentence and its English translation of the
+      same vegan-topic claim score highly against each other. — measured
+      `0.905370`, versus `0.704609` against an off-topic sentence.
+- [x] **AC-4** Centroids regenerated; verify mode passes cosine ≥ 0.99. —
+      regenerated and verified.
+- [x] **AC-5** Thresholds derived by the stated rule from the observed
+      separation, with `L`, `H` and the arithmetic recorded. — recorded in
+      [Filter Calibration](filter-calibration-gemini.md); selected values
+      differ from the rule's output by the owner's decision, and that
+      difference is documented there.
 - [ ] **AC-6** `provider=hf` still registers the HuggingFace client;
       default registers Gemini; an invalid value aborts startup.
 - [ ] **AC-7** An embedding failure leaves a post `NEEDS_REVIEW` with a
       failure reason, and does not fail the publish request.
-- [ ] **AC-8** No `HF_*` name is presented as active configuration in
+- [x] **AC-8** No `HF_*` name is presented as active configuration in
       `.env.example`.
-- [ ] **AC-9** `./mvnw clean verify` green.
-- [ ] **AC-10** No secret appears in any commit, log line, or exception.
+- [x] **AC-9** `./mvnw clean verify` green. — `./mvnw test` (629 tests,
+      0 failures, 1 skipped) plus CI's Integration Test job; `clean verify`
+      itself was not run locally (no Docker), so CI is the gate for it.
+- [x] **AC-10** No secret appears in any commit, log line, or exception. —
+      the key is read from the environment and never logged; the probe
+      test used only the variable.
 
 ## Implementation status
 
@@ -224,11 +245,12 @@ Delivered on `feat/embedding-gemini-migration`:
 
 Not yet done, deliberately:
 
-- **Calibration (FR-014, FR-015) and AC-1–AC-5.** These require a live
-  `EMBED_API_KEY` and a quota spend; they are run separately and their
-  numbers reported back before `centroids.json` is replaced.
+- **Calibration is complete.** `centroids.json` and the fixtures are
+  regenerated against Gemini, and the thresholds are `0.70` / `0.45`. The
+  measurements live in
+  [Filter Calibration: gemini-embedding-001](filter-calibration-gemini.md).
 - **Re-enabling the filter.** Non-goal by design. `app.filter.enabled` stays
-  `false` until calibration passes, so this change cannot alter live
+  `false` until the re-enable change lands, so this change cannot alter live
   moderation behaviour.
 - **FR-011 / FR-012 (failure reason).** The existing behaviour already
   satisfies FR-011: an embedding failure propagates, the outbox drainer logs
