@@ -28,6 +28,9 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+  /** Suggested wait before retrying a provider-throttled chat request. */
+  private static final int AI_PROVIDER_RETRY_AFTER_SECONDS = 10;
+
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationException(
       MethodArgumentNotValidException ex, HttpServletRequest request) {
@@ -206,9 +209,28 @@ public class GlobalExceptionHandler {
         .body(ApiResponse.failure(ex.getMessage()));
   }
 
+  /**
+   * Maps a classified provider failure onto an honest status (issue #152). A provider 429 becomes a
+   * real 429 + {@code Retry-After} so the client can wait and retry; everything else stays 502. A
+   * missing or rejected credential is deliberately reported as 502 with a vague body — the client
+   * must never learn whether the server has a key, and must never be shown one.
+   *
+   * <p>This is distinct from {@link AiQuotaExceededException}'s 429, which means the member hit
+   * their own monthly allowance. Both are 429 and both carry {@code Retry-After}, but the messages
+   * differ because the remedies differ.
+   */
   @ExceptionHandler(AiProviderException.class)
   public ResponseEntity<ApiResponse<Void>> handleAiProvider(
       AiProviderException ex, HttpServletRequest request) {
+    if (ex.getReason() == AiProviderException.Reason.RATE_LIMITED) {
+      return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+          .header(HttpHeaders.RETRY_AFTER, String.valueOf(AI_PROVIDER_RETRY_AFTER_SECONDS))
+          .body(ApiResponse.failure("The AI provider is busy. Please try again shortly."));
+    }
+    if (ex.getReason() == AiProviderException.Reason.AUTH) {
+      return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+          .body(ApiResponse.failure("AI service is currently unavailable"));
+    }
     return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(ApiResponse.failure(ex.getMessage()));
   }
 
