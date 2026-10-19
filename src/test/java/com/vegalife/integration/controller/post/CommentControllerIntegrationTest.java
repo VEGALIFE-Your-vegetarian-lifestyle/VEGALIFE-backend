@@ -582,6 +582,83 @@ class CommentControllerIntegrationTest {
         .andExpect(jsonPath("$.message").value("Post not found"));
   }
 
+  @Test
+  void reportComment_incrementsReportCount() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    Comment comment =
+        commentRepository.saveAndFlush(
+            Comment.builder()
+                .userId(otherUser.getId())
+                .postId(post.getId())
+                .content("Spam")
+                .build());
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/comments/{commentId}/report", post.getId(), comment.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Comment reported successfully"));
+
+    assertThat(commentRepository.findById(comment.getId()).orElseThrow().getReportCount())
+        .isEqualTo(1);
+  }
+
+  @Test
+  void reportComment_repeatedCallsKeepIncrementing() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    Comment comment =
+        commentRepository.saveAndFlush(
+            Comment.builder()
+                .userId(otherUser.getId())
+                .postId(post.getId())
+                .content("Spam")
+                .build());
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/comments/{commentId}/report", post.getId(), comment.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk());
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/comments/{commentId}/report", post.getId(), comment.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk());
+
+    assertThat(commentRepository.findById(comment.getId()).orElseThrow().getReportCount())
+        .isEqualTo(2);
+  }
+
+  @Test
+  void reportComment_unknownCommentReturns404() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/comments/{commentId}/report", post.getId(), UUID.randomUUID())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void reportComment_withoutJwt_returns401() throws Exception {
+    Post post = savePost(otherUser, Post.Status.published);
+    Comment comment =
+        commentRepository.saveAndFlush(
+            Comment.builder()
+                .userId(otherUser.getId())
+                .postId(post.getId())
+                .content("Spam")
+                .build());
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/comments/{commentId}/report", post.getId(), comment.getId()))
+        .andExpect(status().isUnauthorized());
+  }
+
   private User saveUser(String username, String email) {
     return saveUser(username, email, User.Role.USER);
   }

@@ -14,8 +14,10 @@ import com.vegalife.dto.request.admin.CommentListRequest;
 import com.vegalife.dto.request.admin.UserListRequest;
 import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
+import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.AdminService;
@@ -52,6 +54,8 @@ class AdminServiceTest {
   @Mock private CommentRepository commentRepository;
 
   @Mock private AdminCommentMapper adminCommentMapper;
+
+  @Mock private ModerationLogRepository moderationLogRepository;
 
   @InjectMocks private AdminService adminService;
 
@@ -277,7 +281,22 @@ class AdminServiceTest {
 
     assertThatThrownBy(() -> adminService.listComments(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage("Sort property must be one of: createdAt, updatedAt");
+        .hasMessage("Sort property must be one of: createdAt, updatedAt, reportCount");
+  }
+
+  @Test
+  void listComments_sortByReportCountIsAllowlisted() {
+    CommentListRequest request = CommentListRequest.builder().sort("reportCount,desc").build();
+    Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "reportCount"));
+    Page<Comment> page = new PageImpl<>(List.of(comment), pageable, 1);
+    when(commentRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
+    when(userRepository.findAllById(any())).thenReturn(List.of(user));
+    when(adminCommentMapper.toResponse(comment))
+        .thenReturn(CommentListResponse.builder().id(comment.getId()).build());
+
+    adminService.listComments(request);
+
+    verify(commentRepository).findAll(any(Specification.class), eq(pageable));
   }
 
   @Test
@@ -413,5 +432,39 @@ class AdminServiceTest {
         .hasMessage("User is not suspended");
 
     verify(userRepository, never()).save(any());
+  }
+
+  @Test
+  void moderateComment_softDeletesAndWritesModerationLogWithReason() {
+    UUID adminId = UUID.randomUUID();
+    when(commentRepository.findByIdAndDeletedAtIsNull(comment.getId()))
+        .thenReturn(java.util.Optional.of(comment));
+    when(commentRepository.saveAndFlush(comment)).thenReturn(comment);
+
+    adminService.moderateComment(adminId, comment.getId(), "Violates community guidelines");
+
+    assertThat(comment.getDeletedAt()).isNotNull();
+    org.mockito.ArgumentCaptor<ModerationLog> logCaptor =
+        org.mockito.ArgumentCaptor.forClass(ModerationLog.class);
+    verify(moderationLogRepository).save(logCaptor.capture());
+    assertThat(logCaptor.getValue().getActorId()).isEqualTo(adminId);
+    assertThat(logCaptor.getValue().getAction()).isEqualTo("MODERATE_COMMENT");
+    assertThat(logCaptor.getValue().getTargetType()).isEqualTo("COMMENT");
+    assertThat(logCaptor.getValue().getTargetId()).isEqualTo(comment.getId());
+    assertThat(logCaptor.getValue().getReason()).isEqualTo("Violates community guidelines");
+  }
+
+  @Test
+  void moderateComment_unknownOrDeletedCommentThrowsNotFound() {
+    UUID commentId = UUID.randomUUID();
+    when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
+        .thenReturn(java.util.Optional.empty());
+
+    assertThatThrownBy(() -> adminService.moderateComment(UUID.randomUUID(), commentId, "Spam"))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Comment not found");
+
+    verify(commentRepository, never()).saveAndFlush(any());
+    verify(moderationLogRepository, never()).save(any());
   }
 }

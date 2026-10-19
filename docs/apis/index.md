@@ -42,6 +42,8 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |
 | `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |
 | `admin/get-comments.md` | `GET /api/admin/comments` | List all comments (Admin) |
+| `admin/post-comments-commentid-moderate.md` | `POST /api/admin/comments/{commentId}/moderate` | Soft-delete a comment with a required reason (Admin) |
+| `post/post-posts-postid-comments-commentid-report.md` | `POST /api/posts/{postId}/comments/{commentId}/report` | Report a comment, incrementing its report count (authenticated) |
 | `admin/get-recipes.md` | `GET /api/admin/recipes` | List all recipes across users with ingredients and instructions (Admin) |
 | `admin/get-videos.md` | `GET /api/admin/videos` | List all uploaded videos across users and statuses (Admin) |
 | `media/post-upload.md` | `POST /api/media/upload` | Issue a signed upload grant and media ID |

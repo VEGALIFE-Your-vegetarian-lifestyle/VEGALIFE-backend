@@ -52,6 +52,11 @@ public class Comment {
   @Column(name = "is_edited", nullable = false)
   private boolean isEdited = false;
 
+  /** Times a user has reported this comment (issue #6); no report table, just a counter. */
+  @Builder.Default
+  @Column(name = "report_count", nullable = false)
+  private int reportCount = 0;
+
   @Column(name = "deleted_at")
   private Instant deletedAt;
 }

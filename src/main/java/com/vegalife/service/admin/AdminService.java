@@ -6,8 +6,10 @@ import com.vegalife.dto.request.admin.CommentListRequest;
 import com.vegalife.dto.request.admin.UserListRequest;
 import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
+import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.CommentSpecifications;
 import com.vegalife.repository.user.UserRepository;
@@ -42,6 +44,7 @@ public class AdminService {
   private final JwtTokenService jwtTokenService;
   private final CommentRepository commentRepository;
   private final AdminCommentMapper adminCommentMapper;
+  private final ModerationLogRepository moderationLogRepository;
 
   @Transactional(readOnly = true)
   public PageResponse<UserListResponse> listUsers(UserListRequest request) {
@@ -110,6 +113,33 @@ public class AdminService {
         mapped.getTotalElements());
 
     return PageResponse.from(mapped);
+  }
+
+  /**
+   * BR-ADMIN-003/BR-ADMIN-002: only an Administrator may moderate a comment, and every moderation
+   * action is soft-delete plus a required reason recorded on the moderation log (issue #6). Admin
+   * editing and bulk moderation are non-goals — this is the only moderation action.
+   */
+  @Transactional
+  public void moderateComment(UUID adminId, UUID commentId, String reason) {
+    Comment comment =
+        commentRepository
+            .findByIdAndDeletedAtIsNull(commentId)
+            .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+
+    comment.setDeletedAt(Instant.now());
+    Comment saved = commentRepository.saveAndFlush(comment);
+
+    moderationLogRepository.save(
+        ModerationLog.builder()
+            .actorId(adminId)
+            .action("MODERATE_COMMENT")
+            .targetType("COMMENT")
+            .targetId(saved.getId())
+            .reason(reason)
+            .build());
+
+    log.info("Comment {} moderated by admin {}", saved.getId(), adminId);
   }
 
   @Transactional
@@ -192,8 +222,11 @@ public class AdminService {
       throw new ValidationException("Sort must be in the form property,asc|desc");
     }
     String property = parts[0].trim();
-    if (!"createdAt".equals(property) && !"updatedAt".equals(property)) {
-      throw new ValidationException("Sort property must be one of: createdAt, updatedAt");
+    if (!"createdAt".equals(property)
+        && !"updatedAt".equals(property)
+        && !"reportCount".equals(property)) {
+      throw new ValidationException(
+          "Sort property must be one of: createdAt, updatedAt, reportCount");
     }
     Sort.Direction direction =
         parts.length == 2 && parts[1].trim().equalsIgnoreCase("asc")

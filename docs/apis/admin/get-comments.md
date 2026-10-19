@@ -21,7 +21,7 @@ None
 |------|------|----------|-------------|
 | page | integer | No | 0-based page index, default 0 |
 | size | integer | No | Page size, default 20, max 100 |
-| sort | string | No | Format `property,direction`. Default `createdAt,desc`. Property allowlisted to `createdAt` or `updatedAt` |
+| sort | string | No | Format `property,direction`. Default `createdAt,desc`. Property allowlisted to `createdAt`, `updatedAt`, or `reportCount` — use `sort=reportCount,desc` to see the most-reported comments first (issue #6). |
 | status | string | No | One of: `active`, `removed`. Omit to return both |
 | userId | uuid | No | Filter by comment author |
 | postId | uuid | No | Filter by post the comment belongs to |
@@ -48,6 +48,7 @@ No request body
         "username": "jane",
         "content": "Great recipe!",
         "status": "active",
+        "reportCount": 3,
         "createdAt": "2026-09-28T10:00:00Z",
         "updatedAt": "2026-09-28T10:00:00Z"
       }
@@ -74,6 +75,7 @@ No request body
 | data.content[].username | string | Author's username |
 | data.content[].content | string | Comment text |
 | data.content[].status | string | `active` (not deleted) or `removed` (soft-deleted) |
+| data.content[].reportCount | integer | Times a user has reported this comment (issue #6); `0` if never reported. |
 | data.content[].createdAt | string | ISO-8601 creation timestamp |
 | data.content[].updatedAt | string | ISO-8601 last update timestamp |
 | data.page | integer | 0-based page index returned |
