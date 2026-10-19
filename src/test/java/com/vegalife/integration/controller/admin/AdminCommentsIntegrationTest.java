@@ -263,7 +263,8 @@ class AdminCommentsIntegrationTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(
-            jsonPath("$.message").value("Sort property must be one of: createdAt, updatedAt"));
+            jsonPath("$.message")
+                .value("Sort property must be one of: createdAt, updatedAt, reportCount"));
   }
 
   @Test

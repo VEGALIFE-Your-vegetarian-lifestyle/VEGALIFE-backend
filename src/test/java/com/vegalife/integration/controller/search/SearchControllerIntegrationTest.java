@@ -151,7 +151,9 @@ class SearchControllerIntegrationTest {
   @Test
   void search_typeFilterVideoReturnsOnlyPostsWithVideoMedia() throws Exception {
     Post videoPost = createPublishedPost("Tofu cooking video", "Watch and learn.");
-    Media video = mediaRepository.save(Media.builder().mimeType("video/mp4").build());
+    Media video =
+        mediaRepository.save(
+            Media.builder().mimeType("video/mp4").status(Media.Status.succeed).build());
     videoPost.setMedia(new java.util.HashSet<>(Set.of(video)));
     postRepository.save(videoPost);
     createPublishedPost("Tofu written guide", "Read and learn.");
