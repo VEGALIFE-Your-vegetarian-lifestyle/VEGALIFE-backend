@@ -80,3 +80,4 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `mcp/post-mcp.md` | In-process `@Tool` methods (no HTTP endpoint) | Five menu tools — get_menu, get_meal_plan, create_menu, update_menu, schedule_menu — served by the backend's own tool layer for the AI chat (ADR-013) |
 | `locations/get-locations.md` | `GET /api/locations` | List recommend locations with rating/type/price/open-now filters (authenticated) |
 | `locations/get-locations-nearby.md` | `GET /api/locations/nearby` | List every active location within a radius, nearest first, no pagination (authenticated) |
+| `search/get-search.md` | `GET /api/search` | Keyword search across posts, videos, and recipes (public) |

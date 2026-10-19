@@ -72,6 +72,8 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/profile/*")
                     .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/search")
+                    .permitAll()
                     .requestMatchers("/api/payments/vnpay/ipn")
                     .permitAll()
                     .requestMatchers("/actuator/**")
