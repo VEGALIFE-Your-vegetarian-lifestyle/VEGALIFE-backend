@@ -1,15 +1,18 @@
 package com.vegalife.integration.controller.admin;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -69,6 +72,8 @@ class AdminCommentsIntegrationTest {
   @Autowired private PostRepository postRepository;
 
   @Autowired private CommentRepository commentRepository;
+
+  @Autowired private ModerationLogRepository moderationLogRepository;
 
   @Autowired private JwtTokenService jwtTokenService;
 
@@ -258,7 +263,8 @@ class AdminCommentsIntegrationTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(
-            jsonPath("$.message").value("Sort property must be one of: createdAt, updatedAt"));
+            jsonPath("$.message")
+                .value("Sort property must be one of: createdAt, updatedAt, reportCount"));
   }
 
   @Test
@@ -306,6 +312,88 @@ class AdminCommentsIntegrationTest {
                 .accept(MediaType.APPLICATION_JSON))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(3));
+  }
+
+  @Test
+  void listComments_sortByReportCountDescReturnsMostReportedFirst() throws Exception {
+    Comment mostReported = commentRepository.findById(activeCommentId).orElseThrow();
+    mostReported.setReportCount(5);
+    commentRepository.saveAndFlush(mostReported);
+
+    mockMvc
+        .perform(
+            get("/api/admin/comments")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("sort", "reportCount,desc"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content[0].id").value(activeCommentId.toString()))
+        .andExpect(jsonPath("$.data.content[0].reportCount").value(5));
+  }
+
+  @Test
+  void moderateComment_asAdmin_softDeletesAndWritesModerationLogWithReason() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/comments/{commentId}/moderate", activeCommentId)
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\": \"Violates community guidelines\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Comment moderated successfully"));
+
+    assertThat(commentRepository.findById(activeCommentId).orElseThrow().getDeletedAt())
+        .isNotNull();
+    assertThat(moderationLogRepository.findAll())
+        .anySatisfy(
+            logEntry -> {
+              assertThat(logEntry.getAction()).isEqualTo("MODERATE_COMMENT");
+              assertThat(logEntry.getTargetId()).isEqualTo(activeCommentId);
+              assertThat(logEntry.getReason()).isEqualTo("Violates community guidelines");
+            });
+  }
+
+  @Test
+  void moderateComment_missingReason_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/comments/{commentId}/moderate", activeCommentId)
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void moderateComment_alreadyModeratedReturns404() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/comments/{commentId}/moderate", removedCommentId)
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\": \"Spam\"}"))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void moderateComment_asNonAdmin_returns403() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/comments/{commentId}/moderate", activeCommentId)
+                .header("Authorization", "Bearer " + userToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\": \"Spam\"}"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void moderateComment_noToken_returns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/comments/{commentId}/moderate", activeCommentId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\": \"Spam\"}"))
+        .andExpect(status().isUnauthorized());
   }
 
   private User saveUser(String username, String email, User.Role role) {

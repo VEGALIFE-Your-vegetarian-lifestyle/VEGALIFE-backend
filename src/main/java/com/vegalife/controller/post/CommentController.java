@@ -77,6 +77,15 @@ public class CommentController {
     return ResponseEntity.ok(ApiResponse.success(null, "Comment deleted successfully"));
   }
 
+  @PostMapping("/{commentId}/report")
+  @PreAuthorize("isAuthenticated()")
+  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<Void>> reportComment(
+      @PathVariable UUID postId, @PathVariable UUID commentId) {
+    commentService.reportComment(postId, commentId);
+    return ResponseEntity.ok(ApiResponse.success(null, "Comment reported successfully"));
+  }
+
   private boolean isAdmin(Authentication authentication) {
     return authentication.getAuthorities().stream()
         .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));

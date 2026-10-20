@@ -9,6 +9,7 @@ import jakarta.persistence.criteria.Predicate;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -43,6 +44,37 @@ public final class RecipeSpecifications {
         if (query != null) {
           query.distinct(true);
         }
+      }
+
+      return cb.and(predicates.toArray(new Predicate[0]));
+    };
+  }
+
+  /**
+   * Non-deleted recipes whose name, description, or instructions contains {@code query}
+   * (case-insensitive), optionally narrowed by createdAt range (issue #40). No category filter: a
+   * recipe has no category of its own, only categories reachable indirectly through an attached
+   * post, and search deliberately does not follow that join — a category filter never excludes
+   * recipes.
+   */
+  public static Specification<Recipe> searchable(
+      String query, Instant createdFrom, Instant createdTo) {
+    return (root, cq, cb) -> {
+      List<Predicate> predicates = new ArrayList<>();
+      predicates.add(cb.isNull(root.get("deletedAt")));
+
+      String pattern = "%" + query.toLowerCase(Locale.ROOT) + "%";
+      predicates.add(
+          cb.or(
+              cb.like(cb.lower(root.get("name")), pattern),
+              cb.like(cb.lower(root.get("description")), pattern),
+              cb.like(cb.lower(root.get("instructions")), pattern)));
+
+      if (createdFrom != null) {
+        predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), createdFrom));
+      }
+      if (createdTo != null) {
+        predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), createdTo));
       }
 
       return cb.and(predicates.toArray(new Predicate[0]));

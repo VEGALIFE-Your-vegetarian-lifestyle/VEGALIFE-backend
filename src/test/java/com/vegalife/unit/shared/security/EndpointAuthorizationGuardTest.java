@@ -37,7 +37,12 @@ class EndpointAuthorizationGuardTest {
    * {@code SecurityConfig}.
    */
   private static final Set<String> PUBLIC_CONTROLLERS =
-      Set.of("AuthController", "UserPostController", "CategoryController", "IngredientController");
+      Set.of(
+          "AuthController",
+          "UserPostController",
+          "CategoryController",
+          "IngredientController",
+          "SearchController");
 
   /**
    * Public handlers inside otherwise-protected controllers. Keep in sync with {@code

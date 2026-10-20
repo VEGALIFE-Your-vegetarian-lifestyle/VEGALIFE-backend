@@ -8,6 +8,7 @@ import jakarta.persistence.criteria.Predicate;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -51,6 +52,42 @@ public final class PostSpecifications {
         if (query != null) {
           query.distinct(true);
         }
+      }
+
+      return cb.and(predicates.toArray(new Predicate[0]));
+    };
+  }
+
+  /**
+   * Published, non-deleted posts whose title or content contains {@code query} (case-insensitive),
+   * optionally narrowed by category and createdAt range (issue #40). Only published content is
+   * searchable — drafts and moderated-out posts never surface in search.
+   */
+  public static Specification<Post> searchable(
+      String query, UUID categoryId, Instant createdFrom, Instant createdTo) {
+    return (root, cq, cb) -> {
+      List<Predicate> predicates = new ArrayList<>();
+      predicates.add(cb.equal(root.get("status"), Post.Status.published));
+      predicates.add(cb.isNull(root.get("deletedAt")));
+
+      String pattern = "%" + query.toLowerCase(Locale.ROOT) + "%";
+      predicates.add(
+          cb.or(
+              cb.like(cb.lower(root.get("title")), pattern),
+              cb.like(cb.lower(root.get("content")), pattern)));
+
+      if (categoryId != null) {
+        Join<Post, Category> category = root.join("categories", JoinType.INNER);
+        predicates.add(cb.equal(category.get("id"), categoryId));
+        if (cq != null) {
+          cq.distinct(true);
+        }
+      }
+      if (createdFrom != null) {
+        predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), createdFrom));
+      }
+      if (createdTo != null) {
+        predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), createdTo));
       }
 
       return cb.and(predicates.toArray(new Predicate[0]));

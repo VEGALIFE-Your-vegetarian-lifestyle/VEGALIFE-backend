@@ -20,6 +20,7 @@ public class CommentListResponse {
   private String username;
   private String content;
   private String status;
+  private int reportCount;
   private Instant createdAt;
   private Instant updatedAt;
 }

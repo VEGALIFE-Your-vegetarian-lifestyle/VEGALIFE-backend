@@ -42,6 +42,8 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |
 | `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |
 | `admin/get-comments.md` | `GET /api/admin/comments` | List all comments (Admin) |
+| `admin/post-comments-commentid-moderate.md` | `POST /api/admin/comments/{commentId}/moderate` | Soft-delete a comment with a required reason (Admin) |
+| `post/post-posts-postid-comments-commentid-report.md` | `POST /api/posts/{postId}/comments/{commentId}/report` | Report a comment, incrementing its report count (authenticated) |
 | `admin/get-recipes.md` | `GET /api/admin/recipes` | List all recipes across users with ingredients and instructions (Admin) |
 | `admin/get-videos.md` | `GET /api/admin/videos` | List all uploaded videos across users and statuses (Admin) |
 | `media/post-upload.md` | `POST /api/media/upload` | Issue a signed upload grant and media ID |
@@ -80,3 +82,4 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `mcp/post-mcp.md` | In-process `@Tool` methods (no HTTP endpoint) | Five menu tools — get_menu, get_meal_plan, create_menu, update_menu, schedule_menu — served by the backend's own tool layer for the AI chat (ADR-013) |
 | `locations/get-locations.md` | `GET /api/locations` | List recommend locations with rating/type/price/open-now filters (authenticated) |
 | `locations/get-locations-nearby.md` | `GET /api/locations/nearby` | List every active location within a radius, nearest first, no pagination (authenticated) |
+| `search/get-search.md` | `GET /api/search` | Keyword search across posts, videos, and recipes (public) |

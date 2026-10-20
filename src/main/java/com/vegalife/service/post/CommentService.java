@@ -121,6 +121,23 @@ public class CommentService {
   }
 
   /**
+   * Increments the comment's report count (issue #6). No report table: repeat reports from the same
+   * user are not de-duplicated, and there is no record of who reported what — only how many times.
+   * Admins use {@code sort=reportCount,desc} on {@code GET /api/admin/comments} to find the
+   * most-reported comments.
+   */
+  @Transactional
+  public void reportComment(UUID postId, UUID commentId) {
+    Comment comment =
+        commentRepository
+            .findByIdAndPostIdAndDeletedAtIsNull(commentId, postId)
+            .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+
+    comment.setReportCount(comment.getReportCount() + 1);
+    commentRepository.save(comment);
+  }
+
+  /**
    * BR-COMMENT-001: reading comments is public. Top-level comments are paginated; each one carries
    * its full reply subtree unpaginated, since a reply thread for a single root comment is expected
    * to be small. A soft-deleted comment still appears (so its replies keep their place in the

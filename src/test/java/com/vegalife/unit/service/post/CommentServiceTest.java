@@ -419,4 +419,43 @@ class CommentServiceTest {
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
   }
+
+  @Test
+  void reportComment_incrementsReportCount() {
+    UUID commentId = UUID.randomUUID();
+    Comment comment = Comment.builder().id(commentId).postId(postId).reportCount(2).build();
+    when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(commentId, postId))
+        .thenReturn(Optional.of(comment));
+
+    commentService.reportComment(postId, commentId);
+
+    assertThat(comment.getReportCount()).isEqualTo(3);
+    verify(commentRepository).save(comment);
+  }
+
+  @Test
+  void reportComment_repeatedCallsKeepIncrementing() {
+    UUID commentId = UUID.randomUUID();
+    Comment comment = Comment.builder().id(commentId).postId(postId).build();
+    when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(commentId, postId))
+        .thenReturn(Optional.of(comment));
+
+    commentService.reportComment(postId, commentId);
+    commentService.reportComment(postId, commentId);
+
+    assertThat(comment.getReportCount()).isEqualTo(2);
+  }
+
+  @Test
+  void reportComment_unknownOrDeletedCommentThrowsNotFound() {
+    UUID commentId = UUID.randomUUID();
+    when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(commentId, postId))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> commentService.reportComment(postId, commentId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Comment not found");
+
+    verify(commentRepository, never()).save(any());
+  }
 }
