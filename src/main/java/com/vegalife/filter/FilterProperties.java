@@ -17,6 +17,19 @@ public class FilterProperties {
 
   private double acceptThreshold = 0.70;
   private double rejectThreshold = 0.45;
+
+  /**
+   * Accept and reject thresholds for the <strong>recipe body</strong> ({@code name + description +
+   * instructions}), scored against its own centroid pair. Recipe text is a different distribution
+   * from post prose — mostly imperative steps, ingredient amounts and timings — so it is calibrated
+   * separately rather than reusing the content thresholds (ADR-016).
+   *
+   * <p>These defaults mirror the content defaults until the corpus is measured; the calibration
+   * record is {@code docs/feats/filter-calibration-gemini.md}.
+   */
+  private double recipeAcceptThreshold = 0.70;
+
+  private double recipeRejectThreshold = 0.45;
   private Duration sweepMaxAge = Duration.ofHours(24);
 
   /**

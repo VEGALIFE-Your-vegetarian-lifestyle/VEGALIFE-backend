@@ -124,6 +124,13 @@ app:
     # numbers to another embedding model.
     accept-threshold: 0.70
     reject-threshold: 0.45
+    # Thresholds for the recipe body (name + description + instructions), scored against its own
+    # centroid pair. Recipe text is imperative and amount-heavy, a different distribution from post
+    # prose, so it is calibrated separately (ADR-016). These defaults mirror the content thresholds
+    # and are REPLACED by measured values; see docs/feats/filter-calibration-gemini.md.
+    recipe:
+      accept-threshold: ${RECIPE_ACCEPT_THRESHOLD:0.70}
+      reject-threshold: ${RECIPE_REJECT_THRESHOLD:0.45}
     sweep-max-age: 24h
     # Duplicate detection (issue #156, ADR-015): cosine similarity, not distance. Measured
     # against gemini-embedding-001 on real Vietnamese and English pairs; the bands are in

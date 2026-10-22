@@ -6,11 +6,16 @@ import com.vegalife.filter.ContentFilterService.FilterResult;
 import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -39,10 +44,12 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
 
   private final PostRepository postRepository;
   private final ContentFilterService contentFilterService;
+  private final RecipeRepository recipeRepository;
   private final PostEmbeddingRepository postEmbeddingRepository;
   private final DuplicateDetector duplicateDetector;
   private final ActiveEmbeddingModel activeEmbeddingModel;
   private final ObjectMapper objectMapper;
+  private final EmbeddingComponentScorer.Factory componentScorerFactory;
 
   @Override
   public OutboundChannel channel() {
@@ -65,6 +72,15 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
                             + payload.postId()));
     FilterResult result = contentFilterService.filter(filterBody(post));
     FilterVerdict verdict = result.verdict();
+    post.setContentScore(verdict.score());
+
+    // Component-level verification (ADR-016). The content verdict above stays authoritative for
+    // duplicate detection and for the REJECT band; the recipe body is a second, independent score.
+    // A recipe that needs review escalates the post, but never downgrades a REJECTED verdict.
+    RecipeComponentOutcome recipe = scoreAttachedRecipes(post);
+    if (recipe.needsReview() && verdict.flag() != Post.Flag.REJECTED) {
+      verdict = escalateToReview(verdict, recipe);
+    }
 
     // The vector was computed inside the filter call; returning it keeps one embedding per
     // publish. Only stored when the post was not rejected: a rejected post is never a comparison
@@ -169,5 +185,76 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
 
   private static String filterBody(Post post) {
     return post.getTitle() + "\n" + post.getContent();
+  }
+
+  /**
+   * Scores every recipe attached to the post and stores each score. A post may attach more than one
+   * recipe ({@code post_recipe} is many-to-many); the post needs review if <em>any</em> of them
+   * does.
+   *
+   * <p>No recipe attached means no recipe rows and no embedding call — absence is meaningful, not
+   * an error.
+   */
+  private RecipeComponentOutcome scoreAttachedRecipes(Post post) {
+    List<Recipe> recipes = recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId());
+    if (recipes.isEmpty()) {
+      return RecipeComponentOutcome.none();
+    }
+    ComponentScorer scorer = componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE);
+    boolean needsReview = false;
+    List<String> reasons = new ArrayList<>();
+    for (Recipe recipe : recipes) {
+      ComponentScorer.ComponentResult result =
+          scorer.score(ComponentScorer.Component.RECIPE, recipeBody(recipe));
+      recipe.setScore(result.score().orElse(null));
+      if (result.needsReview()) {
+        needsReview = true;
+        reasons.add(
+            result
+                .score()
+                .map(score -> formatReason("RECIPE_RELEVANCE_REVIEW", score))
+                .orElse("RECIPE_NOT_SCORED"));
+      }
+    }
+    return new RecipeComponentOutcome(needsReview, reasons);
+  }
+
+  /**
+   * The recipe body handed to the model: name, description and instructions in one string. Scored
+   * as a single unit rather than per field, so one weak description cannot outvote a long set of
+   * clean instructions (ADR-016).
+   */
+  static String recipeBody(Recipe recipe) {
+    StringBuilder body = new StringBuilder(recipe.getName());
+    if (recipe.getDescription() != null && !recipe.getDescription().isBlank()) {
+      body.append('\n').append(recipe.getDescription());
+    }
+    body.append('\n').append(recipe.getInstructions());
+    return body.toString();
+  }
+
+  /** Keeps the original reasons and adds the recipe's, so the log explains both components. */
+  private static FilterVerdict escalateToReview(
+      FilterVerdict verdict, RecipeComponentOutcome recipe) {
+    List<String> reasons = new ArrayList<>(verdict.reasons());
+    reasons.addAll(recipe.reasons());
+    return new FilterVerdict(Post.Flag.NEEDS_REVIEW, verdict.score(), reasons);
+  }
+
+  private static String formatReason(String code, double score) {
+    return String.format(Locale.ROOT, "%s: %.3f", code, score);
+  }
+
+  /**
+   * Outcome of scoring the post's attached recipes.
+   *
+   * @param needsReview true when at least one recipe scored below its threshold or could not be
+   *     scored
+   * @param reasons reason codes for the log, empty when nothing needs review
+   */
+  private record RecipeComponentOutcome(boolean needsReview, List<String> reasons) {
+    static RecipeComponentOutcome none() {
+      return new RecipeComponentOutcome(false, List.of());
+    }
   }
 }
