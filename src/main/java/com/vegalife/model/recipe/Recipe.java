@@ -72,6 +72,14 @@ public class Recipe {
   @Column(name = "difficulty", length = 20)
   private Difficulty difficulty;
 
+  /**
+   * Relevance score of the recipe body ({@code name + description + instructions}). {@code null}
+   * means never scored; distinct from a low score, same convention as {@code Post.contentScore}
+   * (ADR-016).
+   */
+  @Column(name = "score")
+  private Double score;
+
   @ManyToMany
   @JoinTable(
       name = "post_recipe",

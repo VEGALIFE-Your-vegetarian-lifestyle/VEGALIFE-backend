@@ -83,6 +83,14 @@ public class Post {
   @Column(name = "flag", length = 16)
   private Flag flag;
 
+  /**
+   * Relevance score of {@code title + content} as produced by the content filter. {@code null}
+   * means never scored: either the filter is disabled or the embedding call failed. That is
+   * deliberately distinct from a low score (ADR-016).
+   */
+  @Column(name = "content_score")
+  private Double contentScore;
+
   @Column(name = "view_count", nullable = false)
   private Integer viewCount;
 
