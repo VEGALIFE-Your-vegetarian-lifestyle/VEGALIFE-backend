@@ -11,7 +11,10 @@ import com.vegalife.dto.mapper.post.PostMapper;
 import com.vegalife.dto.request.post.PostCreateRequest;
 import com.vegalife.dto.request.post.PostListRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
+import com.vegalife.dto.request.post.RelatedPostsRequest;
 import com.vegalife.dto.response.post.PostListResponse;
+import com.vegalife.dto.response.post.RelatedPostResponse;
+import com.vegalife.filter.ActiveEmbeddingModel;
 import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
@@ -23,6 +26,7 @@ import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
+import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -68,6 +72,10 @@ class PostServiceTest {
   @Spy private ObjectMapper objectMapper = new ObjectMapper();
 
   @Mock private com.vegalife.filter.FilterProperties filterProperties;
+
+  @Mock private PostEmbeddingRepository postEmbeddingRepository;
+
+  @Mock private ActiveEmbeddingModel activeEmbeddingModel;
 
   @InjectMocks private PostService postService;
 
@@ -288,6 +296,55 @@ class PostServiceTest {
     when(postRepository.findDetailById(postId)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> postService.getPost(postId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Post not found");
+  }
+
+  @Test
+  void getRelatedPosts_returnsNearestPublishedMatchesRankedBySimilarity() {
+    UUID postId = UUID.randomUUID();
+    UUID matchId = UUID.randomUUID();
+    Post source = ownedPost(postId, Post.Status.published);
+    Post match = ownedPost(matchId, Post.Status.published);
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(source));
+    when(postEmbeddingRepository.findStoredEmbedding(postId))
+        .thenReturn(
+            Optional.of(new PostEmbeddingRepository.StoredEmbedding("[0.1,0.2]", "model-x")));
+    when(postEmbeddingRepository.findTopNearestPublished("[0.1,0.2]", "model-x", postId, 10))
+        .thenReturn(List.of(new PostEmbeddingRepository.NearestMatch(matchId, 0.92)));
+    when(postRepository.findAllById(List.of(matchId))).thenReturn(List.of(match));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(matchId)).thenReturn(List.of());
+    PostListResponse matchResponse = PostListResponse.builder().id(matchId).build();
+    when(postMapper.toListResponse(match, Set.of())).thenReturn(matchResponse);
+
+    List<RelatedPostResponse> related =
+        postService.getRelatedPosts(postId, RelatedPostsRequest.builder().build());
+
+    assertThat(related).hasSize(1);
+    assertThat(related.get(0).getPost()).isSameAs(matchResponse);
+    assertThat(related.get(0).getSimilarityScore()).isEqualTo(0.92);
+  }
+
+  @Test
+  void getRelatedPosts_sourceWithNoEmbeddingReturnsEmptyList() {
+    UUID postId = UUID.randomUUID();
+    Post source = ownedPost(postId, Post.Status.published);
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(source));
+    when(postEmbeddingRepository.findStoredEmbedding(postId)).thenReturn(Optional.empty());
+
+    List<RelatedPostResponse> related =
+        postService.getRelatedPosts(postId, RelatedPostsRequest.builder().build());
+
+    assertThat(related).isEmpty();
+  }
+
+  @Test
+  void getRelatedPosts_deletedOrUnknownPostThrowsNotFound() {
+    UUID postId = UUID.randomUUID();
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () -> postService.getRelatedPosts(postId, RelatedPostsRequest.builder().build()))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
   }

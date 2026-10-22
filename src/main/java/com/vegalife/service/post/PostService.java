@@ -6,7 +6,10 @@ import com.vegalife.dto.mapper.post.PostMapper;
 import com.vegalife.dto.request.post.PostCreateRequest;
 import com.vegalife.dto.request.post.PostListRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
+import com.vegalife.dto.request.post.RelatedPostsRequest;
 import com.vegalife.dto.response.post.PostListResponse;
+import com.vegalife.dto.response.post.RelatedPostResponse;
+import com.vegalife.filter.ActiveEmbeddingModel;
 import com.vegalife.filter.ContentFilterPayload;
 import com.vegalife.filter.FilterProperties;
 import com.vegalife.model.admin.ModerationLog;
@@ -21,6 +24,8 @@ import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
+import com.vegalife.repository.post.PostEmbeddingRepository;
+import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -30,6 +35,8 @@ import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -59,6 +66,8 @@ public class PostService {
   private final PostMapper postMapper;
   private final ObjectMapper objectMapper;
   private final FilterProperties filterProperties;
+  private final PostEmbeddingRepository postEmbeddingRepository;
+  private final ActiveEmbeddingModel activeEmbeddingModel;
 
   @Transactional
   public PostListResponse createPost(UUID userId, PostCreateRequest request) {
@@ -205,6 +214,51 @@ public class PostService {
             .findDetailById(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
     return postMapper.toListResponse(post, attachedRecipeIds(postId));
+  }
+
+  /**
+   * Semantically similar published posts, ranked by embedding cosine similarity (issue #7). Reuses
+   * the {@code post_embedding} vectors the content filter already computes at publish time
+   * (ADR-015) — no new embedding call is made here. A source post with no stored embedding (never
+   * filtered, or filtering disabled) yields an empty result rather than an error.
+   */
+  @Transactional(readOnly = true)
+  public List<RelatedPostResponse> getRelatedPosts(UUID postId, RelatedPostsRequest request) {
+    postRepository
+        .findByIdAndDeletedAtIsNull(postId)
+        .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
+
+    Optional<PostEmbeddingRepository.StoredEmbedding> stored =
+        postEmbeddingRepository.findStoredEmbedding(postId);
+    if (stored.isEmpty()) {
+      return List.of();
+    }
+
+    List<NearestMatch> matches =
+        postEmbeddingRepository.findTopNearestPublished(
+            stored.get().vectorLiteral(), stored.get().model(), postId, request.getLimit());
+    if (matches.isEmpty()) {
+      return List.of();
+    }
+
+    List<UUID> matchedIds = matches.stream().map(NearestMatch::postId).toList();
+    Map<UUID, Post> postsById =
+        postRepository.findAllById(matchedIds).stream()
+            .collect(Collectors.toMap(Post::getId, p -> p));
+
+    return matches.stream()
+        .filter(match -> postsById.containsKey(match.postId()))
+        .map(
+            match -> {
+              Post post = postsById.get(match.postId());
+              PostListResponse response =
+                  postMapper.toListResponse(post, attachedRecipeIds(post.getId()));
+              return RelatedPostResponse.builder()
+                  .post(response)
+                  .similarityScore(match.similarity())
+                  .build();
+            })
+        .toList();
   }
 
   /**

@@ -23,6 +23,7 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `post/post-posts.md` | `POST /api/posts` | Create a post for the authenticated user |
 | `post/get-posts.md` | `GET /api/posts` | List the authenticated user's posts |
 | `post/get-posts-postid.md` | `GET /api/posts/{postId}` | View a single non-deleted post by id (any status, any author, public) |
+| `post/get-posts-postid-related.md` | `GET /api/posts/{postId}/related` | Semantically similar published posts by embedding cosine similarity, ranked, excludes source (public) |
 | `post/post-posts-postid-comments.md` | `POST /api/posts/{postId}/comments` | Create a top-level comment or nested reply on a published post (authenticated) |
 | `post/get-posts-postid-comments.md` | `GET /api/posts/{postId}/comments` | List a post's comments as a paginated nested thread (public) |
 | `post/patch-posts-postid-comments-commentid.md` | `PATCH /api/posts/{postId}/comments/{commentId}` | Edit a comment's content, no time limit (owner only) |
@@ -86,3 +87,6 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `locations/get-locations.md` | `GET /api/locations` | List recommend locations with rating/type/price/open-now filters (authenticated) |
 | `locations/get-locations-nearby.md` | `GET /api/locations/nearby` | List every active location within a radius, nearest first, no pagination (authenticated) |
 | `search/get-search.md` | `GET /api/search` | Keyword search across posts, videos, and recipes (public) |
+| `admin/plan-crud.md` | `GET/POST/PATCH/DELETE /api/admin/plans[/{planId}]` | Manage AI subscription plans, including soft-deactivation (Admin) |
+| `admin/get-dashboard.md` | `GET /api/admin/dashboard` | Aggregated, time-range-filtered platform metrics, cached (Admin) |
+| `admin/settings-crud.md` | `GET/PATCH /api/admin/settings` | Manage grouped platform settings, audited (Admin) |

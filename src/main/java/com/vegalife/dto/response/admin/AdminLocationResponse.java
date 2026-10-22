@@ -3,6 +3,7 @@ package com.vegalife.dto.response.admin;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -31,6 +32,8 @@ public class AdminLocationResponse {
   private String websiteUrl;
   private BigDecimal rating;
   private Integer priceLevel;
+  private List<String> imageUrls;
+  private String description;
   private Instant createdAt;
   private Instant updatedAt;
 }

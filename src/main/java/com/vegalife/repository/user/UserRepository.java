@@ -2,6 +2,7 @@ package com.vegalife.repository.user;
 
 import com.vegalife.model.user.User;
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -33,4 +34,10 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
       where u.id = :id
       """)
   Optional<UserAccountAuthState> findAccountAuthStateById(@Param("id") UUID id);
+
+  /** Admin dashboard (issue #12): total registered accounts. */
+  long countByDeletedAtIsNull();
+
+  /** Admin dashboard (issue #12): accounts created within a time range. */
+  long countByCreatedAtBetweenAndDeletedAtIsNull(Instant from, Instant to);
 }

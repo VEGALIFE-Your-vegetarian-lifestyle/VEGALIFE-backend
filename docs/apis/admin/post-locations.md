@@ -31,7 +31,9 @@ Required: a valid JWT access token in the `Authorization` header (`Bearer <token
   },
   "websiteUrl": "https://example.com/vegan-garden",
   "rating": 4.8,
-  "priceLevel": 2
+  "priceLevel": 2,
+  "imageUrls": ["https://example.com/photos/1.jpg"],
+  "description": "Cozy all-vegan spot with a daily rotating menu."
 }
 ```
 
@@ -44,9 +46,11 @@ Required: a valid JWT access token in the `Authorization` header (`Bearer <token
 | phoneNumber | string | No | At most 20 characters. |
 | placeType | string | Yes | One of `restaurant`, `grocery`, `cafe`, `market`. |
 | openingHours | object | No | Keyed by lowercase weekday name; see `docs/apis/locations/get-locations.md` for the exact shape. Must be a JSON object if supplied. |
-| websiteUrl | string | No | — |
+| websiteUrl | string | No | Must be an absolute `http://` or `https://` URL if supplied. |
 | rating | decimal | No | 0.0 to 5.0. |
 | priceLevel | integer | No | 1 to 4. |
+| imageUrls | array of strings | No | Each entry must be an absolute `http://` or `https://` URL. Omitted → stored as `null` (issue #159). |
+| description | string | No | Short editorial blurb. Omitted → stored as `null` (issue #159). |
 
 ## Responses
 
@@ -68,6 +72,8 @@ Required: a valid JWT access token in the `Authorization` header (`Bearer <token
     "websiteUrl": "https://example.com/vegan-garden",
     "rating": 4.8,
     "priceLevel": 2,
+    "imageUrls": ["https://example.com/photos/1.jpg"],
+    "description": "Cozy all-vegan spot with a daily rotating menu.",
     "createdAt": "2026-10-14T10:00:00Z",
     "updatedAt": "2026-10-14T10:00:00Z"
   }
@@ -80,7 +86,7 @@ Unlike the public `GET /api/locations` / `GET /api/locations/nearby` (issues #9,
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | Missing/blank required field, invalid `placeType`, `priceLevel` outside 1–4, `rating` outside 0.0–5.0, or out-of-range coordinates | `Validation failed` |
+| 400 | Missing/blank required field, invalid `placeType`, `priceLevel` outside 1–4, `rating` outside 0.0–5.0, out-of-range coordinates, a non-absolute `websiteUrl`, or an `imageUrls` entry that is not an absolute http/https URL | `Validation failed` |
 | 401 | JWT is missing, invalid, or expired | `Unauthorized` |
 | 403 | Authenticated but not an Administrator | `Forbidden` |
 | 500 | Unexpected server error | `Internal server error` |

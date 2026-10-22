@@ -42,9 +42,11 @@ All fields are optional; omitted or null fields are left unchanged. At least one
 | phoneNumber | string | At most 20 characters. |
 | placeType | string | One of `restaurant`, `grocery`, `cafe`, `market`. |
 | openingHours | object | Replaces the whole document; must be a JSON object if supplied. |
-| websiteUrl | string | — |
+| websiteUrl | string | Must be an absolute `http://` or `https://` URL if supplied; blank clears it. |
 | rating | decimal | 0.0 to 5.0. |
 | priceLevel | integer | 1 to 4. |
+| imageUrls | array of strings | Each entry must be an absolute `http://` or `https://` URL. `[]` clears the gallery; omitted/null leaves it unchanged (issue #159). |
+| description | string | Blank clears it to `null`; omitted/null leaves it unchanged (issue #159). |
 
 ## Responses
 
@@ -56,7 +58,7 @@ Returns the updated location using the same shape as `POST /api/admin/locations`
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | No field supplied, invalid `placeType`, `priceLevel` outside 1–4, `rating` outside 0.0–5.0, out-of-range coordinates, or a blank required text field | `Validation failed` |
+| 400 | No field supplied, invalid `placeType`, `priceLevel` outside 1–4, `rating` outside 0.0–5.0, out-of-range coordinates, a blank required text field, a non-absolute `websiteUrl`, or an `imageUrls` entry that is not an absolute http/https URL | `Validation failed` |
 | 401 | JWT is missing, invalid, or expired | `Unauthorized` |
 | 403 | Authenticated but not an Administrator | `Forbidden` |
 | 404 | Location does not exist or is already soft-deleted | `Location not found` |

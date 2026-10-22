@@ -2,6 +2,7 @@ package com.vegalife.dto.response.location;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,6 +29,11 @@ public class LocationResponse {
   private String websiteUrl;
   private BigDecimal rating;
   private Integer priceLevel;
+
+  /** Curated gallery of absolute image URLs, or {@code null} when unset (issue #159). */
+  private List<String> imageUrls;
+
+  private String description;
 
   /** Distance from the search centre in metres; only set by {@code GET /api/locations/nearby}. */
   private Double distance;

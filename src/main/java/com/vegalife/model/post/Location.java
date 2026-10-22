@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -69,6 +70,14 @@ public class Location {
 
   @Column(name = "price_level")
   private Integer priceLevel;
+
+  /** Curated gallery (issue #159): plain array of absolute URLs, no child table. */
+  @JdbcTypeCode(SqlTypes.ARRAY)
+  @Column(name = "image_urls", columnDefinition = "TEXT[]")
+  private List<String> imageUrls;
+
+  @Column(name = "description", columnDefinition = "TEXT")
+  private String description;
 
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
