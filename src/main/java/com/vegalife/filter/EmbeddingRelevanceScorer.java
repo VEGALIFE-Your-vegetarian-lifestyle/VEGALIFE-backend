@@ -89,15 +89,34 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
               + " does not match centroid dimensions "
               + onTopic.length);
     }
-    float[] centered = subtract(embedding, mean);
-    double cosineOn = cosine(centered, onTopic);
-    double cosineOff = cosine(centered, offTopic);
-    double score = Math.max(0, Math.min(1, (cosineOn - cosineOff + 1) / 2));
+    double score = relevanceScore(embedding, onTopic, offTopic, mean);
     RelevanceScore.Band band =
         score >= acceptThreshold
             ? RelevanceScore.Band.PASS
             : score < rejectThreshold ? RelevanceScore.Band.REJECT : RelevanceScore.Band.REVIEW;
     return new RelevanceScore(score, band);
+  }
+
+  /**
+   * The scoring formula itself, without the banding: mean-center the text and both centroids, then
+   * map their cosine difference into [0, 1].
+   *
+   * <p>Exposed as a static so the calibration harness measures exactly what production computes,
+   * rather than a re-implementation that could drift from it. The centroids must already be
+   * mean-centered (as {@link #EmbeddingRelevanceScorer} stores them); the text is centered here.
+   *
+   * @param embedding the text's unit-normalized embedding
+   * @param centeredOnTopic on-topic centroid with {@code mean} already subtracted
+   * @param centeredOffTopic off-topic centroid with {@code mean} already subtracted
+   * @param mean the corpus mean to center the text with
+   * @return relevance score clamped to [0, 1]
+   */
+  public static double relevanceScore(
+      float[] embedding, float[] centeredOnTopic, float[] centeredOffTopic, float[] mean) {
+    float[] centered = subtract(embedding, mean);
+    double cosineOn = cosine(centered, centeredOnTopic);
+    double cosineOff = cosine(centered, centeredOffTopic);
+    return Math.max(0, Math.min(1, (cosineOn - cosineOff + 1) / 2));
   }
 
   /**
