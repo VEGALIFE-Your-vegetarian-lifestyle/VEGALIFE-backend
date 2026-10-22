@@ -2,6 +2,8 @@ package com.vegalife.model.recipe;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -54,4 +56,14 @@ public class Ingredient {
   @UpdateTimestamp
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
+
+  /** Soft delete; added with moderation so ingredients delete like recipes and dishes do. */
+  @Column(name = "deleted_at")
+  private Instant deletedAt;
+
+  /** Review state of this ingredient name (ADR-016); see {@link Dish#getModerationStatus()}. */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "moderation_status", length = 20, nullable = false)
+  @Builder.Default
+  private ModerationStatus moderationStatus = ModerationStatus.PENDING;
 }

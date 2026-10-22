@@ -80,6 +80,15 @@ public class Recipe {
   @Column(name = "score")
   private Double score;
 
+  /**
+   * Review state of this recipe (ADR-016). A recipe created through {@code POST /api/recipes}
+   * starts {@link ModerationStatus#PENDING}; existing rows were backfilled to {@code APPROVED}.
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "moderation_status", length = 20, nullable = false)
+  @Builder.Default
+  private ModerationStatus moderationStatus = ModerationStatus.PENDING;
+
   @ManyToMany
   @JoinTable(
       name = "post_recipe",

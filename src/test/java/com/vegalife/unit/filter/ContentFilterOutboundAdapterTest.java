@@ -26,10 +26,15 @@ import com.vegalife.filter.EmbeddingComponentScorer;
 import com.vegalife.filter.FilterVerdict;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.Ingredient;
+import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
+import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import java.time.Instant;
 import java.util.List;
@@ -64,6 +69,7 @@ class ContentFilterOutboundAdapterTest {
   @Mock private PostRepository postRepository;
   @Mock private ContentFilterService contentFilterService;
   @Mock private RecipeRepository recipeRepository;
+  @Mock private RecipeIngredientRepository recipeIngredientRepository;
   @Mock private PostEmbeddingRepository postEmbeddingRepository;
   @Mock private DuplicateDetector duplicateDetector;
   @Mock private ActiveEmbeddingModel activeEmbeddingModel;
@@ -80,6 +86,7 @@ class ContentFilterOutboundAdapterTest {
             postRepository,
             contentFilterService,
             recipeRepository,
+            recipeIngredientRepository,
             postEmbeddingRepository,
             duplicateDetector,
             activeEmbeddingModel,
@@ -306,6 +313,7 @@ class ContentFilterOutboundAdapterTest {
   void recipeThatNeedsReviewQueuesAnOtherwisePassingPost() throws Exception {
     Post post = passing(Post.Status.created, 0.88);
     Recipe recipe = recipe();
+    approvedComponents(recipe);
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));
     when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
@@ -329,6 +337,7 @@ class ContentFilterOutboundAdapterTest {
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
     stubFilter(new FilterVerdict(Post.Flag.REJECTED, 0.12, List.of("OFF_TOPIC")));
     Recipe recipe = recipe();
+    approvedComponents(recipe);
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));
     when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
@@ -348,6 +357,7 @@ class ContentFilterOutboundAdapterTest {
   void recipeThatPassesDoesNotAffectTheVerdict() throws Exception {
     Post post = passing(Post.Status.created, 0.90);
     Recipe recipe = recipe();
+    approvedComponents(recipe);
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));
     when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
@@ -372,6 +382,7 @@ class ContentFilterOutboundAdapterTest {
   void unscorableRecipeQueuesThePostWithoutFailingThePublish() throws Exception {
     Post post = passing(Post.Status.created, 0.91);
     Recipe recipe = recipe();
+    approvedComponents(recipe);
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));
     when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
@@ -388,6 +399,96 @@ class ContentFilterOutboundAdapterTest {
     verify(postRepository).save(post);
   }
 
+  // --- Dish and ingredient approval (BR-DISH-001): state, not score, decides ---
+
+  @Test
+  void pendingDishNameQueuesAnOtherwisePassingPost() throws Exception {
+    Post post = passing(Post.Status.created, 0.92);
+    Recipe recipe = recipe();
+    recipe.setDish(Dish.builder().id(UUID.randomUUID()).name("bún chả nấm").build());
+    lenient().when(recipeIngredientRepository.findByRecipeId(recipe.getId())).thenReturn(List.of());
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
+        .thenReturn(List.of(recipe));
+    when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
+        .thenReturn(recipeScorer);
+    when(recipeScorer.score(any(), anyString()))
+        .thenReturn(
+            new ComponentScorer.ComponentResult(
+                ComponentScorer.Component.RECIPE,
+                Post.Flag.PASSED,
+                Optional.of(0.88),
+                Optional.of(EMBEDDING)));
+
+    adapter.deliver(message(new ContentFilterPayload(post.getId())));
+
+    // The text passed on every scored component. The post still waits, because it introduces a
+    // name no admin has approved: that is the guarantee a score cannot provide.
+    assertEquals(Post.Flag.NEEDS_REVIEW, post.getFlag());
+    assertEquals(Post.Status.unpublished, post.getStatus());
+  }
+
+  @Test
+  void pendingIngredientNameQueuesAnOtherwisePassingPost() throws Exception {
+    Post post = passing(Post.Status.created, 0.93);
+    Recipe recipe = recipe();
+    recipe.setDish(approvedDish("Phở chay"));
+    Ingredient pending =
+        Ingredient.builder()
+            .id(UUID.randomUUID())
+            .name("bột ngọt giả")
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    when(recipeIngredientRepository.findByRecipeId(recipe.getId()))
+        .thenReturn(
+            List.of(
+                RecipeIngredient.builder()
+                    .recipeId(recipe.getId())
+                    .ingredientId(pending.getId())
+                    .ingredient(pending)
+                    .build()));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
+        .thenReturn(List.of(recipe));
+    when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
+        .thenReturn(recipeScorer);
+    when(recipeScorer.score(any(), anyString()))
+        .thenReturn(
+            new ComponentScorer.ComponentResult(
+                ComponentScorer.Component.RECIPE,
+                Post.Flag.PASSED,
+                Optional.of(0.90),
+                Optional.of(EMBEDDING)));
+
+    adapter.deliver(message(new ContentFilterPayload(post.getId())));
+
+    assertEquals(Post.Flag.NEEDS_REVIEW, post.getFlag());
+  }
+
+  @Test
+  void rejectingContentStillWinsOverAPendingName() throws Exception {
+    Post post = post(Post.Status.created);
+    when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+    stubFilter(new FilterVerdict(Post.Flag.REJECTED, 0.11, List.of("OFF_TOPIC")));
+    Recipe recipe = recipe();
+    recipe.setDish(Dish.builder().id(UUID.randomUUID()).name("món lạ").build());
+    lenient().when(recipeIngredientRepository.findByRecipeId(recipe.getId())).thenReturn(List.of());
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
+        .thenReturn(List.of(recipe));
+    when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
+        .thenReturn(recipeScorer);
+    when(recipeScorer.score(any(), anyString()))
+        .thenReturn(
+            new ComponentScorer.ComponentResult(
+                ComponentScorer.Component.RECIPE,
+                Post.Flag.PASSED,
+                Optional.of(0.80),
+                Optional.of(EMBEDDING)));
+    when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    adapter.deliver(message(new ContentFilterPayload(post.getId())));
+
+    assertEquals(Post.Flag.REJECTED, post.getFlag());
+  }
+
   private static ComponentScorer.ComponentResult needsReview(
       ComponentScorer.Component component, double score) {
     return new ComponentScorer.ComponentResult(
@@ -401,6 +502,24 @@ class ContentFilterOutboundAdapterTest {
         .description("Nước dùng thanh, nấm hương")
         .instructions("Nấu nước dùng, trụng bánh phở, thêm rau thơm")
         .servings(2)
+        .moderationStatus(ModerationStatus.APPROVED)
+        .build();
+  }
+
+  /**
+   * An approved dish and no ingredient lines: the default component state for tests that are about
+   * the recipe score rather than about approval.
+   */
+  private void approvedComponents(Recipe recipe) {
+    recipe.setDish(approvedDish("Phở chay"));
+    lenient().when(recipeIngredientRepository.findByRecipeId(recipe.getId())).thenReturn(List.of());
+  }
+
+  private static Dish approvedDish(String name) {
+    return Dish.builder()
+        .id(UUID.randomUUID())
+        .name(name)
+        .moderationStatus(ModerationStatus.APPROVED)
         .build();
   }
 

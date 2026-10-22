@@ -7,6 +7,7 @@ import com.vegalife.dto.response.recipe.RecipeIngredientResponse;
 import com.vegalife.dto.response.recipe.RecipeResponse;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
+import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -119,20 +121,55 @@ public class RecipeService {
     return recipeMapper.toResponse(recipe, dishName, ingredientResponses);
   }
 
+  /**
+   * Resolves a dish name to an existing visible row or creates it as {@link
+   * ModerationStatus#PENDING}.
+   *
+   * <p>A name created here is not approved: the member who typed it is not the reviewer, and the
+   * post carrying it is queued for an admin (BR-DISH-001). An existing row keeps whatever state it
+   * already has — reusing an approved name must not resurface it, and reusing a pending one must
+   * not quietly approve it.
+   *
+   * <p>A {@link ModerationStatus#REJECTED} name is a permanent block: it is refused rather than
+   * re-created, whichever lookup path finds it.
+   */
   private Dish findOrCreateDish(String normalizedDishName) {
-    return dishRepository
-        .findByNameIgnoreCaseAndDeletedAtIsNull(normalizedDishName)
-        .orElseGet(
-            () -> dishRepository.saveAndFlush(Dish.builder().name(normalizedDishName).build()));
+    Optional<Dish> existing = dishRepository.findByNameIgnoreCase(normalizedDishName);
+    if (existing.isPresent()) {
+      Dish dish = existing.get();
+      requireNotRejected(dish.getModerationStatus(), "Dish", normalizedDishName);
+      // Soft-deleted rows keep their name; the admin hid this dish deliberately.
+      if (dish.getDeletedAt() != null) {
+        throw new ValidationException("Dish is not available: " + normalizedDishName);
+      }
+      return dish;
+    }
+    return dishRepository.saveAndFlush(
+        Dish.builder().name(normalizedDishName).moderationStatus(ModerationStatus.PENDING).build());
   }
 
+  /** Same contract as {@link #findOrCreateDish}, for ingredient names. */
   private Ingredient findOrCreateIngredient(String normalizedName) {
-    return ingredientRepository
-        .findByNameIgnoreCase(normalizedName)
-        .orElseGet(
-            () ->
-                ingredientRepository.saveAndFlush(
-                    Ingredient.builder().name(normalizedName).build()));
+    Optional<Ingredient> existing = ingredientRepository.findByNameIgnoreCase(normalizedName);
+    if (existing.isPresent()) {
+      Ingredient ingredient = existing.get();
+      requireNotRejected(ingredient.getModerationStatus(), "Ingredient", normalizedName);
+      if (ingredient.getDeletedAt() != null) {
+        throw new ValidationException("Ingredient is not available: " + normalizedName);
+      }
+      return ingredient;
+    }
+    return ingredientRepository.saveAndFlush(
+        Ingredient.builder()
+            .name(normalizedName)
+            .moderationStatus(ModerationStatus.PENDING)
+            .build());
+  }
+
+  private static void requireNotRejected(ModerationStatus status, String kind, String name) {
+    if (status == ModerationStatus.REJECTED) {
+      throw new ValidationException(kind + " is not available: " + name);
+    }
   }
 
   /**
