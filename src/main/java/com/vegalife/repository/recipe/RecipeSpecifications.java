@@ -2,6 +2,7 @@ package com.vegalife.repository.recipe;
 
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
@@ -25,6 +26,20 @@ public final class RecipeSpecifications {
    */
   public static Specification<Recipe> allWithFilters(
       UUID userId, UUID categoryId, Instant createdFrom, Instant createdTo) {
+    return allWithFilters(userId, categoryId, createdFrom, createdTo, null);
+  }
+
+  /**
+   * Same query, additionally narrowed to one review state (ADR-016).
+   *
+   * @param moderationStatus the state to keep, or {@code null} for every state
+   */
+  public static Specification<Recipe> allWithFilters(
+      UUID userId,
+      UUID categoryId,
+      Instant createdFrom,
+      Instant createdTo,
+      ModerationStatus moderationStatus) {
     return (root, query, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
 
@@ -36,6 +51,9 @@ public final class RecipeSpecifications {
       }
       if (createdTo != null) {
         predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), createdTo));
+      }
+      if (moderationStatus != null) {
+        predicates.add(cb.equal(root.get("moderationStatus"), moderationStatus));
       }
       if (categoryId != null) {
         Join<Recipe, Post> post = root.join("posts", JoinType.INNER);
@@ -51,17 +69,23 @@ public final class RecipeSpecifications {
   }
 
   /**
-   * Non-deleted recipes whose name, description, or instructions contains {@code query}
+   * Non-deleted, approved recipes whose name, description, or instructions contains {@code query}
    * (case-insensitive), optionally narrowed by createdAt range (issue #40). No category filter: a
    * recipe has no category of its own, only categories reachable indirectly through an attached
    * post, and search deliberately does not follow that join — a category filter never excludes
    * recipes.
+   *
+   * <p>Search is public, so the approval predicate belongs here rather than at the call site: a
+   * recipe still awaiting review must not be discoverable through its instructions (ADR-016). Rows
+   * that predate the rule were backfilled to {@code APPROVED}, so nothing previously indexed
+   * disappears.
    */
   public static Specification<Recipe> searchable(
       String query, Instant createdFrom, Instant createdTo) {
     return (root, cq, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
       predicates.add(cb.isNull(root.get("deletedAt")));
+      predicates.add(cb.equal(root.get("moderationStatus"), ModerationStatus.APPROVED));
 
       String pattern = "%" + query.toLowerCase(Locale.ROOT) + "%";
       predicates.add(

@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -85,9 +86,9 @@ class DishControllerIntegrationTest {
 
   @Test
   void listDishes_withToken_returns200DefaultsExcludingSoftDeletedSortedByName() throws Exception {
-    dishRepository.save(Dish.builder().name("tofu stir-fry").build());
-    dishRepository.save(Dish.builder().name("banh mi chay").build());
-    dishRepository.save(Dish.builder().name("old dish").deletedAt(Instant.now()).build());
+    dishRepository.save(approved("tofu stir-fry"));
+    dishRepository.save(approved("banh mi chay"));
+    dishRepository.save(approved("old dish", Instant.now()));
 
     mockMvc
         .perform(get("/api/dishes").header("Authorization", "Bearer " + accessToken))
@@ -110,8 +111,8 @@ class DishControllerIntegrationTest {
 
   @Test
   void listDishes_nameFilter_returnsOnlyMatchingDishesCaseInsensitively() throws Exception {
-    dishRepository.save(Dish.builder().name("pho chay").build());
-    dishRepository.save(Dish.builder().name("tofu stir-fry").build());
+    dishRepository.save(approved("pho chay"));
+    dishRepository.save(approved("tofu stir-fry"));
 
     mockMvc
         .perform(
@@ -126,9 +127,9 @@ class DishControllerIntegrationTest {
 
   @Test
   void listDishes_pageAndSize_returnsRequestedPage() throws Exception {
-    dishRepository.save(Dish.builder().name("aaa").build());
-    dishRepository.save(Dish.builder().name("bbb").build());
-    dishRepository.save(Dish.builder().name("ccc").build());
+    dishRepository.save(approved("aaa"));
+    dishRepository.save(approved("bbb"));
+    dishRepository.save(approved("ccc"));
 
     mockMvc
         .perform(
@@ -187,8 +188,7 @@ class DishControllerIntegrationTest {
 
   @Test
   void listDishes_returnsPersistedIdForRecipeLookupRoundTrip() throws Exception {
-    Dish saved =
-        dishRepository.save(Dish.builder().name("pho chay").description("Noodle soup").build());
+    Dish saved = dishRepository.save(approved("pho chay", "Noodle soup"));
 
     mockMvc
         .perform(get("/api/dishes").header("Authorization", "Bearer " + accessToken))
@@ -200,8 +200,8 @@ class DishControllerIntegrationTest {
 
   @Test
   void listDishes_performsNoWrites() throws Exception {
-    dishRepository.save(Dish.builder().name("pho chay").build());
-    dishRepository.save(Dish.builder().name("tofu stir-fry").build());
+    dishRepository.save(approved("pho chay"));
+    dishRepository.save(approved("tofu stir-fry"));
     long before = dishRepository.count();
 
     mockMvc
@@ -211,5 +211,44 @@ class DishControllerIntegrationTest {
     List<Dish> dishes = dishRepository.findAll();
     assertThat(dishes).hasSize((int) before);
     assertThat(dishes).allMatch(dish -> dish.getDeletedAt() == null);
+  }
+
+  @Test
+  void listDishes_hidesNamesAwaitingAdminApproval() throws Exception {
+    dishRepository.save(approved("pho chay"));
+    dishRepository.save(
+        Dish.builder().name("mon chua duyet").moderationStatus(ModerationStatus.PENDING).build());
+    dishRepository.save(
+        Dish.builder().name("mon bi tu choi").moderationStatus(ModerationStatus.REJECTED).build());
+
+    mockMvc
+        .perform(get("/api/dishes").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content.length()").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("pho chay"));
+  }
+
+  /**
+   * Catalogue fixtures model data that existed before moderation was introduced, so they are
+   * approved. A PENDING dish is one a member introduced and no admin has reviewed yet (ADR-016).
+   */
+  private static Dish approved(String name) {
+    return Dish.builder().name(name).moderationStatus(ModerationStatus.APPROVED).build();
+  }
+
+  private static Dish approved(String name, String description) {
+    return Dish.builder()
+        .name(name)
+        .description(description)
+        .moderationStatus(ModerationStatus.APPROVED)
+        .build();
+  }
+
+  private static Dish approved(String name, Instant deletedAt) {
+    return Dish.builder()
+        .name(name)
+        .deletedAt(deletedAt)
+        .moderationStatus(ModerationStatus.APPROVED)
+        .build();
   }
 }

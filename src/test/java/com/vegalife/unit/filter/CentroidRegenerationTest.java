@@ -54,8 +54,14 @@ class CentroidRegenerationTest {
   private static final Path SEEDS_ON_TOPIC = Path.of("src/main/resources/filter/seed-on-topic.txt");
   private static final Path SEEDS_OFF_TOPIC =
       Path.of("src/main/resources/filter/seed-off-topic.txt");
+  private static final Path SEEDS_RECIPE_ON_TOPIC =
+      Path.of("src/main/resources/filter/seed-recipe-on-topic.txt");
+  private static final Path SEEDS_RECIPE_OFF_TOPIC =
+      Path.of("src/main/resources/filter/seed-recipe-off-topic.txt");
   private static final Path CENTROIDS_FILE = Path.of("src/main/resources/filter/centroids.json");
   private static final Path FIXTURES_FILE = Path.of("src/test/resources/filter/fixtures.json");
+  private static final Path RECIPE_FIXTURES_FILE =
+      Path.of("src/test/resources/filter/recipe-fixtures.json");
   private static final double MIN_CENTROID_COSINE = 0.99;
 
   /**
@@ -113,13 +119,41 @@ class CentroidRegenerationTest {
     float[] offTopicCentroid = centroid(offVectors);
     float[] mean = mean(onVectors, offVectors);
 
+    // Recipe-body pair (ADR-016). Separate corpora, separate mean: a recipe's imperative, quantity
+    // heavy text is a different distribution from post prose and is centered on its own.
+    List<String> recipeOnSeeds = readSeeds(SEEDS_RECIPE_ON_TOPIC);
+    List<String> recipeOffSeeds = readSeeds(SEEDS_RECIPE_OFF_TOPIC);
+    assertFalse(recipeOnSeeds.isEmpty(), "recipe on-topic seed corpus must not be empty");
+    assertFalse(recipeOffSeeds.isEmpty(), "recipe off-topic seed corpus must not be empty");
+    List<float[]> recipeOnVectors = embed(gemini, hf, recipeOnSeeds);
+    List<float[]> recipeOffVectors = embed(gemini, hf, recipeOffSeeds);
+    assertUnitNorm(recipeOnVectors, "recipe on-topic");
+    assertUnitNorm(recipeOffVectors, "recipe off-topic");
+    float[] recipeOnCentroid = centroid(recipeOnVectors);
+    float[] recipeOffCentroid = centroid(recipeOffVectors);
+    float[] recipeMean = mean(recipeOnVectors, recipeOffVectors);
+
     boolean writeMode = System.getenv("CENTROIDS_WRITE") != null;
     checkSeedBands(onVectors, offVectors, onTopicCentroid, offTopicCentroid, mean, writeMode);
+    checkRecipeSeedBands(
+        recipeOnVectors,
+        recipeOffVectors,
+        recipeOnCentroid,
+        recipeOffCentroid,
+        recipeMean,
+        writeMode);
 
     if (writeMode) {
       ObjectMapper mapper = new ObjectMapper();
       Centroids centroids =
-          new Centroids(onTopicCentroid.length, onTopicCentroid, offTopicCentroid, mean);
+          new Centroids(
+              onTopicCentroid.length,
+              onTopicCentroid,
+              offTopicCentroid,
+              mean,
+              recipeOnCentroid,
+              recipeOffCentroid,
+              recipeMean);
       String json =
           mapper.writerWithDefaultPrettyPrinter().writeValueAsString(centroids)
               + System.lineSeparator();
@@ -130,6 +164,8 @@ class CentroidRegenerationTest {
           onVectors.size(),
           offVectors.size());
       refreshFixtures(mapper, gemini, hf, activeModel, onTopicCentroid, offTopicCentroid, mean);
+      refreshRecipeFixtures(
+          mapper, gemini, hf, activeModel, recipeOnCentroid, recipeOffCentroid, recipeMean);
       return;
     }
 
@@ -149,6 +185,93 @@ class CentroidRegenerationTest {
         EmbeddingRelevanceScorer.cosine(mean, committed.mean()) >= MIN_CENTROID_COSINE,
         "corpus mean drifted from the committed centroids.json; regenerate with "
             + "CENTROIDS_WRITE=true");
+    assertTrue(
+        EmbeddingRelevanceScorer.cosine(recipeOnCentroid, committed.recipeOnTopic())
+            >= MIN_CENTROID_COSINE,
+        "recipe on-topic centroid drifted from the committed centroids.json; regenerate with "
+            + "CENTROIDS_WRITE=true");
+    assertTrue(
+        EmbeddingRelevanceScorer.cosine(recipeOffCentroid, committed.recipeOffTopic())
+            >= MIN_CENTROID_COSINE,
+        "recipe off-topic centroid drifted from the committed centroids.json; regenerate with "
+            + "CENTROIDS_WRITE=true");
+    assertTrue(
+        EmbeddingRelevanceScorer.cosine(recipeMean, committed.recipeMean()) >= MIN_CENTROID_COSINE,
+        "recipe corpus mean drifted from the committed centroids.json; regenerate with "
+            + "CENTROIDS_WRITE=true");
+  }
+
+  /**
+   * The same guardrail as {@link #checkSeedBands}, for the recipe pair and its own thresholds.
+   * Without it, the recipe thresholds could sit outside the measured band and either flag every
+   * recipe or wave every off-topic one through, while the content guardrail stayed green.
+   */
+  private static void checkRecipeSeedBands(
+      List<float[]> onVectors,
+      List<float[]> offVectors,
+      float[] onTopicCentroid,
+      float[] offTopicCentroid,
+      float[] mean,
+      boolean writeMode) {
+    FilterProperties properties = new FilterProperties();
+    EmbeddingRelevanceScorer scorer =
+        new EmbeddingRelevanceScorer(
+            onTopicCentroid,
+            offTopicCentroid,
+            mean,
+            properties.getRecipeAcceptThreshold(),
+            properties.getRecipeRejectThreshold());
+    double lowestOnScore = 1;
+    double highestOffScore = 0;
+    List<String> failures = new ArrayList<>();
+    for (int i = 0; i < onVectors.size(); i++) {
+      RelevanceScore result = scorer.score(onVectors.get(i));
+      lowestOnScore = Math.min(lowestOnScore, result.score());
+      if (result.band() != Band.PASS) {
+        failures.add(
+            "recipe on-topic seed #"
+                + i
+                + " scored "
+                + result.score()
+                + " after centering; expected PASS (recipe accept="
+                + properties.getRecipeAcceptThreshold()
+                + ")");
+      }
+    }
+    for (int i = 0; i < offVectors.size(); i++) {
+      RelevanceScore result = scorer.score(offVectors.get(i));
+      highestOffScore = Math.max(highestOffScore, result.score());
+      if (result.band() != Band.REJECT) {
+        failures.add(
+            "recipe off-topic seed #"
+                + i
+                + " scored "
+                + result.score()
+                + " after centering; expected REJECT (recipe reject="
+                + properties.getRecipeRejectThreshold()
+                + ")");
+      }
+    }
+    log.info(
+        "recipe centered seed separation: lowest on-topic score={} (recipe accept must stay <= "
+            + "this), highest off-topic score={} (recipe reject must stay > this); configured "
+            + "recipe accept={} reject={}",
+        lowestOnScore,
+        highestOffScore,
+        properties.getRecipeAcceptThreshold(),
+        properties.getRecipeRejectThreshold());
+    if (failures.isEmpty()) {
+      return;
+    }
+    if (writeMode) {
+      log.warn(
+          "recipe guardrail: {} seed band mismatch(es); continuing because CENTROIDS_WRITE is "
+              + "set: {}",
+          failures.size(),
+          String.join("; ", failures));
+      return;
+    }
+    fail(String.join("; ", failures));
   }
 
   /**
@@ -282,6 +405,67 @@ class CentroidRegenerationTest {
     log.info(
         "wrote {} ({} fixtures refreshed with model {})",
         FIXTURES_FILE,
+        refreshed.size(),
+        activeModel);
+  }
+
+  /**
+   * Re-embeds the recipe fixture recipe bodies with the recipe centroids just written, mirroring
+   * {@link #refreshFixtures} for the second pair. Without this, {@code
+   * RecipeRelevanceRegressionTest} would pin vectors from a different centroid generation.
+   */
+  private static void refreshRecipeFixtures(
+      ObjectMapper mapper,
+      GeminiEmbeddingModel gemini,
+      HfEmbeddingModel hf,
+      String activeModel,
+      float[] recipeOnCentroid,
+      float[] recipeOffCentroid,
+      float[] recipeMean)
+      throws IOException {
+    FixtureFile file = mapper.readValue(RECIPE_FIXTURES_FILE.toFile(), FixtureFile.class);
+    if (file.fixtures() == null || file.fixtures().isEmpty()) {
+      throw new IllegalStateException("no recipe fixture entries in " + RECIPE_FIXTURES_FILE);
+    }
+    List<String> texts = new ArrayList<>();
+    for (FixtureEntry entry : file.fixtures()) {
+      if (entry.text() == null || entry.text().isBlank()) {
+        throw new IllegalStateException(
+            "recipe fixture " + entry.label() + " lacks text; cannot embed");
+      }
+      texts.add(entry.text());
+    }
+    List<float[]> embeddings = embed(gemini, hf, texts);
+    assertUnitNorm(embeddings, "recipe fixtures");
+
+    FilterProperties filterProperties = new FilterProperties();
+    EmbeddingRelevanceScorer scorer =
+        new EmbeddingRelevanceScorer(
+            recipeOnCentroid,
+            recipeOffCentroid,
+            recipeMean,
+            filterProperties.getRecipeAcceptThreshold(),
+            filterProperties.getRecipeRejectThreshold());
+    List<FixtureEntry> refreshed = new ArrayList<>();
+    for (int i = 0; i < file.fixtures().size(); i++) {
+      FixtureEntry entry = file.fixtures().get(i);
+      RelevanceScore result = scorer.score(embeddings.get(i));
+      log.info(
+          "recipe fixture {} -> {} ({})",
+          entry.label(),
+          result.band(),
+          String.format("%.4f", result.score()));
+      refreshed.add(new FixtureEntry(entry.label(), entry.text(), embeddings.get(i)));
+    }
+    FixtureFile updated =
+        new FixtureFile(activeModel, LocalDate.now().toString(), file.note(), refreshed);
+    String json =
+        mapper.writerWithDefaultPrettyPrinter().writeValueAsString(updated)
+            + System.lineSeparator();
+    Files.writeString(RECIPE_FIXTURES_FILE, json, StandardCharsets.UTF_8);
+    log.info(
+        "wrote {} ({} recipe fixtures refreshed with model {})",
+        RECIPE_FIXTURES_FILE,
         refreshed.size(),
         activeModel);
   }

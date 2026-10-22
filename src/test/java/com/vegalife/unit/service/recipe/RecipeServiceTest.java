@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -20,6 +21,7 @@ import com.vegalife.dto.request.recipe.RecipeIngredientItem;
 import com.vegalife.dto.response.recipe.RecipeResponse;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
+import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
@@ -32,6 +34,7 @@ import com.vegalife.service.recipe.RecipeService;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -87,8 +90,7 @@ class RecipeServiceTest {
   @Test
   void createRecipe_newDishAndIngredient_savesNormalizedRowsAndLinks() {
     stubUserFound();
-    when(dishRepository.findByNameIgnoreCaseAndDeletedAtIsNull("tofu stir-fry"))
-        .thenReturn(Optional.empty());
+    when(dishRepository.findByNameIgnoreCase("tofu stir-fry")).thenReturn(Optional.empty());
     when(dishRepository.saveAndFlush(any(Dish.class)))
         .thenAnswer(invocation -> Dish.builder().id(dishId).name("tofu stir-fry").build());
     when(ingredientRepository.findByNameIgnoreCase("tofu")).thenReturn(Optional.empty());
@@ -141,10 +143,20 @@ class RecipeServiceTest {
   @Test
   void createRecipe_existingDishAndIngredient_reusesRowsWithoutSaving() {
     stubUserFound();
-    Dish existingDish = Dish.builder().id(dishId).name("tofu stir-fry").build();
-    when(dishRepository.findByNameIgnoreCaseAndDeletedAtIsNull("tofu stir-fry"))
+    Dish existingDish =
+        Dish.builder()
+            .id(dishId)
+            .name("tofu stir-fry")
+            .moderationStatus(ModerationStatus.APPROVED)
+            .build();
+    when(dishRepository.findByNameIgnoreCase("tofu stir-fry"))
         .thenReturn(Optional.of(existingDish));
-    Ingredient existingIngredient = Ingredient.builder().id(ingredientId).name("tofu").build();
+    Ingredient existingIngredient =
+        Ingredient.builder()
+            .id(ingredientId)
+            .name("tofu")
+            .moderationStatus(ModerationStatus.APPROVED)
+            .build();
     when(ingredientRepository.findByNameIgnoreCase("tofu"))
         .thenReturn(Optional.of(existingIngredient));
     when(recipeRepository.save(any(Recipe.class)))
@@ -164,6 +176,118 @@ class RecipeServiceTest {
     assertThat(result).isSameAs(expected);
     verify(dishRepository, never()).saveAndFlush(any(Dish.class));
     verify(ingredientRepository, never()).saveAndFlush(any(Ingredient.class));
+    // Reusing a name must not change its review state in either direction.
+    assertThat(existingDish.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
+    assertThat(existingIngredient.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
+  }
+
+  @Test
+  void createRecipe_newNamesArePendingNotApproved() {
+    stubUserFound();
+    when(dishRepository.findByNameIgnoreCase("tofu stir-fry")).thenReturn(Optional.empty());
+    when(ingredientRepository.findByNameIgnoreCase("tofu")).thenReturn(Optional.empty());
+    when(dishRepository.saveAndFlush(any(Dish.class)))
+        .thenAnswer(
+            invocation -> {
+              Dish dish = invocation.getArgument(0);
+              dish.setId(dishId);
+              return dish;
+            });
+    when(ingredientRepository.saveAndFlush(any(Ingredient.class)))
+        .thenAnswer(
+            invocation -> {
+              Ingredient ingredient = invocation.getArgument(0);
+              ingredient.setId(ingredientId);
+              return ingredient;
+            });
+    when(recipeRepository.save(any(Recipe.class)))
+        .thenAnswer(
+            invocation -> {
+              Recipe recipe = invocation.getArgument(0);
+              recipe.setId(recipeId);
+              return recipe;
+            });
+    when(recipeMapper.toResponse(any(Recipe.class), anyString(), anyList()))
+        .thenReturn(RecipeResponse.builder().id(recipeId).build());
+
+    recipeService.createRecipe(userId, createRequest("tofu stir-fry", null));
+
+    // A member typing a name is not an approval: the post waits for an admin (BR-DISH-001).
+    ArgumentCaptor<Dish> dishCaptor = ArgumentCaptor.forClass(Dish.class);
+    verify(dishRepository).saveAndFlush(dishCaptor.capture());
+    assertThat(dishCaptor.getValue().getModerationStatus()).isEqualTo(ModerationStatus.PENDING);
+    ArgumentCaptor<Ingredient> ingredientCaptor = ArgumentCaptor.forClass(Ingredient.class);
+    verify(ingredientRepository).saveAndFlush(ingredientCaptor.capture());
+    assertThat(ingredientCaptor.getValue().getModerationStatus())
+        .isEqualTo(ModerationStatus.PENDING);
+  }
+
+  @Test
+  void createRecipe_rejectedDishNameIsPermanentlyBlocked() {
+    stubUserFound();
+    when(dishRepository.findByNameIgnoreCase("tofu stir-fry"))
+        .thenReturn(
+            Optional.of(
+                Dish.builder()
+                    .id(dishId)
+                    .name("tofu stir-fry")
+                    .moderationStatus(ModerationStatus.REJECTED)
+                    .build()));
+
+    RecipeCreateRequest request = createRequest("tofu stir-fry", null);
+
+    assertThatThrownBy(() -> recipeService.createRecipe(userId, request))
+        .isInstanceOf(ValidationException.class)
+        .hasMessageContaining("Dish is not available");
+    verify(recipeRepository, never()).save(any(Recipe.class));
+  }
+
+  @Test
+  void createRecipe_rejectedIngredientNameIsPermanentlyBlocked() {
+    stubUserFound();
+    when(dishRepository.findByNameIgnoreCase("tofu stir-fry"))
+        .thenReturn(
+            Optional.of(
+                Dish.builder()
+                    .id(dishId)
+                    .name("tofu stir-fry")
+                    .moderationStatus(ModerationStatus.APPROVED)
+                    .build()));
+    when(ingredientRepository.findByNameIgnoreCase("tofu"))
+        .thenReturn(
+            Optional.of(
+                Ingredient.builder()
+                    .id(ingredientId)
+                    .name("tofu")
+                    .moderationStatus(ModerationStatus.REJECTED)
+                    .build()));
+
+    RecipeCreateRequest request = createRequest("tofu stir-fry", null);
+
+    assertThatThrownBy(() -> recipeService.createRecipe(userId, request))
+        .isInstanceOf(ValidationException.class)
+        .hasMessageContaining("Ingredient is not available");
+    verify(recipeRepository, never()).save(any(Recipe.class));
+  }
+
+  @Test
+  void createRecipe_softDeletedDishIsUnavailable() {
+    stubUserFound();
+    when(dishRepository.findByNameIgnoreCase("tofu stir-fry"))
+        .thenReturn(
+            Optional.of(
+                Dish.builder()
+                    .id(dishId)
+                    .name("tofu stir-fry")
+                    .moderationStatus(ModerationStatus.APPROVED)
+                    .deletedAt(Instant.now())
+                    .build()));
+
+    RecipeCreateRequest request = createRequest("tofu stir-fry", null);
+
+    assertThatThrownBy(() -> recipeService.createRecipe(userId, request))
+        .isInstanceOf(ValidationException.class)
+        .hasMessageContaining("Dish is not available");
   }
 
   @Test
@@ -207,8 +331,7 @@ class RecipeServiceTest {
   @Test
   void createRecipe_concurrentConflict_retriesOnceAndSucceeds() {
     stubUserFound();
-    when(dishRepository.findByNameIgnoreCaseAndDeletedAtIsNull("tofu stir-fry"))
-        .thenReturn(Optional.empty());
+    when(dishRepository.findByNameIgnoreCase("tofu stir-fry")).thenReturn(Optional.empty());
     when(dishRepository.saveAndFlush(any(Dish.class)))
         .thenAnswer(invocation -> Dish.builder().id(dishId).name("tofu stir-fry").build());
     when(ingredientRepository.findByNameIgnoreCase("tofu")).thenReturn(Optional.empty());
@@ -243,7 +366,7 @@ class RecipeServiceTest {
   @Test
   void createRecipe_invalidDifficultyValue_throwsValidationException() {
     stubUserFound();
-    when(dishRepository.findByNameIgnoreCaseAndDeletedAtIsNull("tofu stir-fry"))
+    when(dishRepository.findByNameIgnoreCase("tofu stir-fry"))
         .thenReturn(Optional.of(Dish.builder().id(dishId).name("tofu stir-fry").build()));
     when(ingredientRepository.findByNameIgnoreCase("tofu"))
         .thenReturn(Optional.of(Ingredient.builder().id(ingredientId).name("tofu").build()));
@@ -254,6 +377,85 @@ class RecipeServiceTest {
         .hasMessage("Difficulty must be EASY, MEDIUM, or HARD");
 
     verify(recipeRepository, never()).save(any(Recipe.class));
+  }
+
+  @Test
+  void getRecipe_ownRecipe_returnsItWithItsReviewState() {
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .user(user)
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .build();
+    Ingredient tofu = Ingredient.builder().id(ingredientId).name("tofu").build();
+    RecipeResponse expected = RecipeResponse.builder().id(recipeId).build();
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.of(recipe));
+    when(recipeIngredientRepository.findByRecipeId(recipeId))
+        .thenReturn(
+            List.of(
+                RecipeIngredient.builder()
+                    .recipeId(recipeId)
+                    .ingredientId(ingredientId)
+                    .ingredient(tofu)
+                    .amount(new BigDecimal("150"))
+                    .unit("g")
+                    .build()));
+    when(recipeMapper.toResponse(eq(recipe), eq("tofu stir-fry"), anyList())).thenReturn(expected);
+
+    assertThat(recipeService.getRecipe(userId, recipeId)).isSameAs(expected);
+  }
+
+  @Test
+  void getRecipe_anotherMembersRecipe_isReportedAsNotFound() {
+    UUID otherUserId = UUID.randomUUID();
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .user(User.builder().id(otherUserId).username("bob").build())
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .build();
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.of(recipe));
+
+    // A pending recipe belongs to its author until an admin approves it; returning it here would
+    // make the approval step cosmetic.
+    assertThatThrownBy(() -> recipeService.getRecipe(userId, recipeId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Recipe not found");
+  }
+
+  @Test
+  void getRecipe_missingRecipe_isReportedAsNotFound() {
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> recipeService.getRecipe(userId, recipeId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Recipe not found");
+  }
+
+  @Test
+  void listMyRecipes_mapsEveryRecipeWithItsIngredientLines() {
+    Recipe first =
+        Recipe.builder()
+            .id(recipeId)
+            .user(user)
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .build();
+    RecipeResponse expected = RecipeResponse.builder().id(recipeId).build();
+    when(recipeRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId))
+        .thenReturn(List.of(first));
+    when(recipeIngredientRepository.findByRecipeId(recipeId)).thenReturn(List.of());
+    when(recipeMapper.toResponse(eq(first), eq("tofu stir-fry"), anyList())).thenReturn(expected);
+
+    assertThat(recipeService.listMyRecipes(userId)).containsExactly(expected);
   }
 
   private void stubUserFound() {

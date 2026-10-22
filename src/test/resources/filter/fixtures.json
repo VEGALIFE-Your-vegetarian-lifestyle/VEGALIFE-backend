@@ -1,6 +1,6 @@
 {
   "model" : "gemini-embedding-001",
-  "captured" : "2026-10-18",
+  "captured" : "2026-10-22",
   "note" : "Real paragraph-length title+body embeddings (normalized, pre-centering) captured via the Gemini batchEmbedContents API. Used by EmbeddingRelevanceScorerRegressionTest. Recapture if the embedding model changes.",
   "fixtures" : [ {
     "label" : "on-lentil-curry",

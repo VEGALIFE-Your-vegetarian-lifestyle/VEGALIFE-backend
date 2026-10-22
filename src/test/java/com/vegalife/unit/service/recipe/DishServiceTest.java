@@ -12,11 +12,14 @@ import com.vegalife.dto.mapper.recipe.DishMapper;
 import com.vegalife.dto.request.recipe.DishListRequest;
 import com.vegalife.dto.response.recipe.DishResponse;
 import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.service.recipe.DishService;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -92,5 +95,35 @@ class DishServiceTest {
     verify(dishRepository, never()).save(any());
     verify(dishRepository, never()).delete(any(Dish.class));
     verify(dishRepository, never()).saveAll(any());
+  }
+
+  @Test
+  void getDish_approved_returnsMappedDish() {
+    Dish pho =
+        Dish.builder()
+            .id(UUID.randomUUID())
+            .name("pho chay")
+            .moderationStatus(ModerationStatus.APPROVED)
+            .build();
+    DishResponse response = DishResponse.builder().id(pho.getId()).name("pho chay").build();
+    when(dishRepository.findByIdAndDeletedAtIsNullAndModerationStatus(
+            pho.getId(), ModerationStatus.APPROVED))
+        .thenReturn(Optional.of(pho));
+    when(dishMapper.toResponse(pho)).thenReturn(response);
+
+    assertThat(dishService.getDish(pho.getId())).isEqualTo(response);
+  }
+
+  @Test
+  void getDish_pending_isReportedAsNotFound() {
+    UUID dishId = UUID.randomUUID();
+    when(dishRepository.findByIdAndDeletedAtIsNullAndModerationStatus(
+            dishId, ModerationStatus.APPROVED))
+        .thenReturn(Optional.empty());
+
+    // "Exists but you may not see it" would still confirm the name to whoever guessed the id.
+    assertThatThrownBy(() -> dishService.getDish(dishId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Dish not found");
   }
 }

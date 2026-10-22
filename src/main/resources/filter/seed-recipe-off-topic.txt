@@ -1,0 +1,25 @@
+# Off-topic seed corpus for the RECIPE-BODY centroid (issue #160, ADR-016).
+# Recipe-shaped text that is not about vegan food: spam, discounts, crypto,
+# betting, unrelated products. Same "name | description | instructions" shape
+# as the on-topic corpus, so the centroid is fitted on form as well as topic.
+# Blank lines and lines starting with # are ignored.
+Mua 1 tặng 1 | Săn voucher giảm giá sốc chỉ hôm nay | Bấm vào link và đăng ký tài khoản, nhập mã giảm giá khi thanh toán để được giảm 50 phần trăm cho đơn hàng đầu tiên, số lượng có hạn
+Đầu tư tiền ảo an toàn | Lợi nhuận cam kết hai mươi phần trăm mỗi tháng | Nạp vốn tối thiểu 500 nghìn, chọn gói đầu tư theo số ngày, hệ thống tự động sinh lời và rút tiền về ví điện tử không giới hạn
+Cách tăng follower nhanh | Dịch vụ tăng người theo dõi cho mọi tài khoản | Gửi tên tài khoản cho chúng tôi, chọn gói số lượng và tốc độ, hệ thống bắt đầu chạy trong 24 giờ, hoàn tiền nếu không đạt
+Casino trực tuyến uy tín | Nạp đầu nhận thưởng lớn | Tạo tài khoản, xác minh số điện thoại, nạp tiền qua thẻ để nhận 200 phần trăm tiền thưởng, cược theo bàn và rút thưởng trong 5 phút
+Hướng dẫn mua xe trả góp | Lãi suất ưu đãi cho khách hàng mới | Đăng ký thông tin cá nhân, chuẩn bị giấy tờ chứng minh thu nhập, chọn mẫu xe và kỳ hạn trả, ký hợp đồng trong cùng ngày
+Sổ tay chứng khoán cho người mới | Học đầu tư chứng khoán trong bảy ngày | Mở tài khoản chứng khoán, xác thực căn cước, chuyển tiền vào tài khoản, đặt lệnh mua cổ phiếu theo hướng dẫn từng bước
+Chạy quảng cáo Facebook hiệu quả | Giảm chi phí mỗi lượt nhấp xuống một nửa | Tạo chiến dịch mới trong trình quản lý, chọn mục tiêu chuyển đổi, tải tệp khách hàng lên, đặt ngân sách và theo dõi báo cáo mỗi ngày
+Giảm cân cấp tốc 7 ngày | Uống đủ nước và tuân thủ thực đơn nghiêm ngặt | Đăng ký khóa huấn luyện, nhận thực đơn qua email, uống ba lít nước mỗi ngày, ghi lại cân nặng và gửi ảnh cho huấn luyện viên
+Mẫu đơn xin việc 2026 | Bộ mẫu được cập nhật theo tiêu chuẩn mới | Tải bộ mẫu, điền thông tin cá nhân, chèn ảnh thẻ đúng kích thước, xuất file định dạng chuẩn và nộp cho nhà tuyển dụng
+Cô giáo bị phụ huynh yêu cầu nghỉ việc | Câu chuyện đang gây tranh cãi trên mạng | Chia sẻ bài viết để mọi người cùng bình luận, tag bạn bè, theo dõi diễn biến và cập nhật thông tin mới nhất trong nhóm
+Nhà đất ven sông giá rẻ | Quỹ căn giới hạn chỉ 30 suất | Đăng ký tham quan sa bàn dự án, chọn căn hộ theo mã, đặt cọc giữ chỗ, nhận chiết khấu và ký hợp đồng mua bán
+Phần mềm quản lý bán hàng | Quản lý kho và đơn hàng trên một ứng dụng | Tải ứng dụng về máy, đăng ký gói dùng thử, nhập thông tin sản phẩm, kết nối máy in và đồng bộ dữ liệu lên đám mây
+Crypto airdrop claim guide | Claim your free tokens before the deadline | Connect your wallet, approve the contract, complete the tasks list, and submit your address before the snapshot to receive the airdrop
+Lose ten kilos without exercise | A supplement programme that promises results | Take one capsule daily before breakfast, drink plenty of water, follow the meal plan, and record your weight every morning for eight weeks
+Best VPN for streaming | Unlimited bandwidth and no logs | Download the installer, create an account, choose a server location, activate the tunnel and switch region whenever the stream is blocked
+Earn money posting links | Get paid per click with no experience needed | Register on the platform, verify your identity, copy your referral link and share it on social networks to start earning commission
+Betting odds explained | Make profit with matched betting | Open accounts with several bookmakers, place a back bet and a lay bet on the same event, use the calculator and withdraw the free bet profit
+Cheap flights finder | Save up to sixty percent on international fares | Install the browser extension, set alerts for your route, compare calendars across months and book through the lowest fare
+Cryptocurrency tax loopholes | Reduce your liability legally this year | Track every trade in a spreadsheet, export the report, follow the tax guide and file before the deadline to avoid penalties
+Sneakers raffle access | Limited edition drop this weekend only | Sign up with your email, join the raffle, confirm entry within ten minutes, and collect in store with your order number

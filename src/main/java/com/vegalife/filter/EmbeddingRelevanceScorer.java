@@ -89,15 +89,34 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
               + " does not match centroid dimensions "
               + onTopic.length);
     }
-    float[] centered = subtract(embedding, mean);
-    double cosineOn = cosine(centered, onTopic);
-    double cosineOff = cosine(centered, offTopic);
-    double score = Math.max(0, Math.min(1, (cosineOn - cosineOff + 1) / 2));
+    double score = relevanceScore(embedding, onTopic, offTopic, mean);
     RelevanceScore.Band band =
         score >= acceptThreshold
             ? RelevanceScore.Band.PASS
             : score < rejectThreshold ? RelevanceScore.Band.REJECT : RelevanceScore.Band.REVIEW;
     return new RelevanceScore(score, band);
+  }
+
+  /**
+   * The scoring formula itself, without the banding: mean-center the text and both centroids, then
+   * map their cosine difference into [0, 1].
+   *
+   * <p>Exposed as a static so the calibration harness measures exactly what production computes,
+   * rather than a re-implementation that could drift from it. The centroids must already be
+   * mean-centered (as {@link #EmbeddingRelevanceScorer} stores them); the text is centered here.
+   *
+   * @param embedding the text's unit-normalized embedding
+   * @param centeredOnTopic on-topic centroid with {@code mean} already subtracted
+   * @param centeredOffTopic off-topic centroid with {@code mean} already subtracted
+   * @param mean the corpus mean to center the text with
+   * @return relevance score clamped to [0, 1]
+   */
+  public static double relevanceScore(
+      float[] embedding, float[] centeredOnTopic, float[] centeredOffTopic, float[] mean) {
+    float[] centered = subtract(embedding, mean);
+    double cosineOn = cosine(centered, centeredOnTopic);
+    double cosineOff = cosine(centered, centeredOffTopic);
+    return Math.max(0, Math.min(1, (cosineOn - cosineOff + 1) / 2));
   }
 
   /**
@@ -134,12 +153,26 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
   /**
    * The committed centroid set loaded from {@link #CENTROIDS_RESOURCE}.
    *
+   * <p>Holds two pairs: the post-content pair ({@code onTopic}/{@code offTopic}/{@code mean}) and
+   * the recipe-body pair ({@code recipeOnTopic}/{@code recipeOffTopic}/{@code recipeMean}). Each
+   * pair is centered over its own corpus mean, never the other's.
+   *
    * @param dimensions embedding dimensionality all vectors must have
-   * @param onTopic normalized on-topic centroid
-   * @param offTopic normalized off-topic centroid
-   * @param mean arithmetic mean of every seed embedding, used to center text and centroids
+   * @param onTopic normalized on-topic centroid for post content
+   * @param offTopic normalized off-topic centroid for post content
+   * @param mean arithmetic mean of the post-content seed corpus, used to center text and centroids
+   * @param recipeOnTopic normalized on-topic centroid for recipe bodies
+   * @param recipeOffTopic normalized off-topic centroid for recipe bodies
+   * @param recipeMean arithmetic mean of the recipe seed corpus
    */
-  public record Centroids(int dimensions, float[] onTopic, float[] offTopic, float[] mean) {}
+  public record Centroids(
+      int dimensions,
+      float[] onTopic,
+      float[] offTopic,
+      float[] mean,
+      float[] recipeOnTopic,
+      float[] recipeOffTopic,
+      float[] recipeMean) {}
 
   /** Loads and validates the committed centroids JSON from the classpath. */
   public static Centroids loadCentroids() {
@@ -160,9 +193,27 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
             "Filter centroids lack a mean vector; regenerate with CentroidRegenerationTest: "
                 + CENTROIDS_RESOURCE);
       }
+      requireVector(centroids.recipeOnTopic(), "recipeOnTopic", centroids.dimensions());
+      requireVector(centroids.recipeOffTopic(), "recipeOffTopic", centroids.dimensions());
+      requireVector(centroids.recipeMean(), "recipeMean", centroids.dimensions());
       return centroids;
     } catch (IOException e) {
       throw new IllegalStateException("Unreadable filter centroids: " + CENTROIDS_RESOURCE, e);
+    }
+  }
+
+  /**
+   * Fails fast on an incomplete centroid pair. A missing recipe pair would otherwise be scored as
+   * an all-zero vector, which silences every off-topic recipe instead of queuing it — the exact
+   * failure mode ADR-014 decision 3 exists to prevent.
+   */
+  private static void requireVector(float[] vector, String name, int dimensions) {
+    if (vector == null || vector.length != dimensions) {
+      throw new IllegalStateException(
+          "Filter centroids are missing "
+              + name
+              + "; regenerate with CentroidRegenerationTest: "
+              + CENTROIDS_RESOURCE);
     }
   }
 

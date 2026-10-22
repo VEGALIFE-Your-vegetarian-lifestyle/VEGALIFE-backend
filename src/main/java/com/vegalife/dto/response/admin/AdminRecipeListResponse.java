@@ -28,8 +28,21 @@ public class AdminRecipeListResponse {
   /** Derived from deletedAt (no stored column): ACTIVE or DELETED. */
   private String status;
 
+  /**
+   * {@code PENDING}, {@code APPROVED} or {@code REJECTED} (ADR-016). Distinct from {@link #status},
+   * which is about deletion: a recipe can be ACTIVE and still awaiting review.
+   */
+  private String moderationStatus;
+
+  /** Relevance score at submission time; {@code null} means never scored. */
+  private Double score;
+
   private UUID dishId;
   private String dishName;
+
+  /** The shared dish name's own review state; approving this recipe does not change it. */
+  private String dishModerationStatus;
+
   private Set<UUID> categoryIds;
   private List<IngredientItem> ingredients;
   private Instant createdAt;
@@ -47,6 +60,10 @@ public class AdminRecipeListResponse {
 
     private UUID ingredientId;
     private String name;
+
+    /** The shared ingredient name's own review state. */
+    private String moderationStatus;
+
     private BigDecimal amount;
     private String unit;
   }

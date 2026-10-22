@@ -35,14 +35,14 @@ class EndpointAuthorizationGuardTest {
   /**
    * Public controllers whose every handler is a {@code permitAll} path rule. Keep in sync with
    * {@code SecurityConfig}.
+   *
+   * <p>{@code DishController} and {@code IngredientController} were listed here but are not {@code
+   * permitAll} in {@code SecurityConfig} — they fall under the authenticated catch-all — so they
+   * now carry {@code @PreAuthorize("isAuthenticated()")} instead of relying on an allowlist entry
+   * that described the opposite of what the security config did.
    */
   private static final Set<String> PUBLIC_CONTROLLERS =
-      Set.of(
-          "AuthController",
-          "UserPostController",
-          "CategoryController",
-          "IngredientController",
-          "SearchController");
+      Set.of("AuthController", "UserPostController", "CategoryController", "SearchController");
 
   /**
    * Public handlers inside otherwise-protected controllers. Keep in sync with {@code
@@ -56,7 +56,6 @@ class EndpointAuthorizationGuardTest {
           "ProfileController#getProfileByUserId",
           "PaymentWebhookController#ipnGet",
           "PaymentWebhookController#ipnPost",
-          "DishController#listDishes",
           "CommentController#listComments",
           "VoteController#getVotes");
 

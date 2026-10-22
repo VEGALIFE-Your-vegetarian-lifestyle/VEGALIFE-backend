@@ -4,20 +4,30 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.mapper.admin.AdminPostMapper;
 import com.vegalife.dto.request.admin.PostListRequest;
-import com.vegalife.dto.request.admin.PostModerationRequest;
+import com.vegalife.dto.response.admin.AdminPostDetailResponse;
 import com.vegalife.dto.response.admin.AdminPostListResponse;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
+import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.Ingredient;
+import com.vegalife.model.recipe.ModerationStatus;
+import com.vegalife.model.recipe.Recipe;
+import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.recipe.DishRepository;
+import com.vegalife.repository.recipe.IngredientRepository;
+import com.vegalife.repository.recipe.RecipeIngredientRepository;
+import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.service.admin.AdminPostService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -49,6 +59,14 @@ class AdminPostServiceTest {
   @Mock private ModerationLogRepository moderationLogRepository;
 
   @Mock private AdminPostMapper adminPostMapper;
+
+  @Mock private RecipeRepository recipeRepository;
+
+  @Mock private RecipeIngredientRepository recipeIngredientRepository;
+
+  @Mock private DishRepository dishRepository;
+
+  @Mock private IngredientRepository ingredientRepository;
 
   @InjectMocks private AdminPostService adminPostService;
 
@@ -221,128 +239,356 @@ class AdminPostServiceTest {
   }
 
   @Test
-  void moderatePost_publish_setsStatusAndLogsWithReason() {
+  void approvePost_publishesAndLogsWithReason() {
     UUID adminId = UUID.randomUUID();
     post.setStatus(Post.Status.unpublished);
     post.setFlag(Post.Flag.REJECTED);
     post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
-    when(postRepository.saveAndFlush(post)).thenReturn(post);
-    when(adminPostMapper.toResponse(post)).thenReturn(postResponse);
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId())).thenReturn(List.of());
 
-    adminPostService.moderatePost(
-        adminId,
-        post.getId(),
-        PostModerationRequest.builder()
-            .action(PostModerationRequest.Action.PUBLISH)
-            .reason("Vegetarian recipe, filter false positive")
-            .build());
+    adminPostService.approvePost(adminId, post.getId(), "Vegetarian recipe, filter false positive");
 
     assertThat(post.getStatus()).isEqualTo(Post.Status.published);
     assertThat(post.getPublishedAt()).isNotNull();
+    // Auto-REJECTED is a record of what the filter decided; approving does not rewrite history.
     assertThat(post.getFlag()).isEqualTo(Post.Flag.REJECTED);
 
-    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository).save(captor.capture());
-    ModerationLog entry = captor.getValue();
+    ModerationLog entry = lastPostLog();
     assertThat(entry.getActorId()).isEqualTo(adminId);
-    assertThat(entry.getAction()).isEqualTo("PUBLISH_POST");
+    assertThat(entry.getAction()).isEqualTo("APPROVE_POST");
     assertThat(entry.getTargetType()).isEqualTo("POST");
     assertThat(entry.getTargetId()).isEqualTo(post.getId());
     assertThat(entry.getReason()).isEqualTo("Vegetarian recipe, filter false positive");
   }
 
   @Test
-  void moderatePost_unpublish_clearsPublishedAtAndLogs() {
+  void approvePost_approvesEveryPendingComponentOfThePost() {
+    UUID adminId = UUID.randomUUID();
+    post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
+    Dish dish =
+        Dish.builder()
+            .id(UUID.randomUUID())
+            .name("bún chả chay")
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    Ingredient ingredient =
+        Ingredient.builder()
+            .id(UUID.randomUUID())
+            .name("đậu hũ")
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    Recipe recipe =
+        Recipe.builder()
+            .id(UUID.randomUUID())
+            .name("bún chả chay")
+            .dish(dish)
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    stubPostWithRecipe(recipe, ingredient);
+
+    adminPostService.approvePost(adminId, post.getId(), null);
+
+    // Approving the post is the reviewer saying the names it introduced are acceptable.
+    assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
+    assertThat(dish.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
+    assertThat(ingredient.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
+    verify(recipeRepository).save(recipe);
+    verify(dishRepository).save(dish);
+    verify(ingredientRepository).save(ingredient);
+  }
+
+  @Test
+  void approvePost_doesNotResurrectARejectedName() {
+    UUID adminId = UUID.randomUUID();
+    post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
+    Dish rejectedDish =
+        Dish.builder()
+            .id(UUID.randomUUID())
+            .name("món bị từ chối")
+            .moderationStatus(ModerationStatus.REJECTED)
+            .build();
+    Ingredient approvedIngredient =
+        Ingredient.builder()
+            .id(UUID.randomUUID())
+            .name("đậu hũ")
+            .moderationStatus(ModerationStatus.APPROVED)
+            .build();
+    Recipe recipe =
+        Recipe.builder()
+            .id(UUID.randomUUID())
+            .name("món bị từ chối")
+            .dish(rejectedDish)
+            .moderationStatus(ModerationStatus.APPROVED)
+            .build();
+    stubPostWithRecipe(recipe, approvedIngredient);
+
+    adminPostService.approvePost(adminId, post.getId(), null);
+
+    // A rejected name is a permanent block (BR-DISH-001); approving a post that mentions it must
+    // not undo a decision someone already made.
+    assertThat(rejectedDish.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
+    verify(dishRepository, never()).save(any(Dish.class));
+    verify(ingredientRepository, never()).save(any(Ingredient.class));
+  }
+
+  @Test
+  void rejectPost_unpublishesAndRejectsPendingComponents() {
     UUID adminId = UUID.randomUUID();
     post.setStatus(Post.Status.published);
     post.setPublishedAt(Instant.parse("2026-09-21T10:00:00Z"));
-    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
-    when(postRepository.saveAndFlush(post)).thenReturn(post);
-    when(adminPostMapper.toResponse(post)).thenReturn(postResponse);
+    Dish dish =
+        Dish.builder()
+            .id(UUID.randomUUID())
+            .name("món lạ")
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    Ingredient ingredient =
+        Ingredient.builder()
+            .id(UUID.randomUUID())
+            .name("nguyên liệu lạ")
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    Recipe recipe =
+        Recipe.builder()
+            .id(UUID.randomUUID())
+            .name("món lạ")
+            .dish(dish)
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    stubPostWithRecipe(recipe, ingredient);
 
-    adminPostService.moderatePost(
-        adminId,
-        post.getId(),
-        PostModerationRequest.builder().action(PostModerationRequest.Action.UNPUBLISH).build());
+    adminPostService.rejectPost(adminId, post.getId(), "not vegan");
 
     assertThat(post.getStatus()).isEqualTo(Post.Status.unpublished);
     assertThat(post.getPublishedAt()).isNull();
+    assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
+    assertThat(dish.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
+    assertThat(ingredient.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
 
-    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository).save(captor.capture());
-    assertThat(captor.getValue().getAction()).isEqualTo("UNPUBLISH_POST");
-    assertThat(captor.getValue().getReason()).isNull();
+    ModerationLog entry = lastPostLog();
+    assertThat(entry.getAction()).isEqualTo("REJECT_POST");
+    assertThat(entry.getReason()).isEqualTo("not vegan");
+    verify(recipeRepository, never()).delete(any(Recipe.class));
   }
 
   @Test
-  void moderatePost_publishAlreadyPublished_isNoOpWithoutLog() {
+  void rejectPost_leavesAnApprovedNameApproved() {
     UUID adminId = UUID.randomUUID();
     post.setStatus(Post.Status.published);
-    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
-    when(adminPostMapper.toResponse(post)).thenReturn(postResponse);
+    Dish approvedDish =
+        Dish.builder()
+            .id(UUID.randomUUID())
+            .name("phở chay")
+            .moderationStatus(ModerationStatus.APPROVED)
+            .build();
+    Ingredient pendingIngredient =
+        Ingredient.builder()
+            .id(UUID.randomUUID())
+            .name("nguyên liệu lạ")
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    Recipe recipe =
+        Recipe.builder()
+            .id(UUID.randomUUID())
+            .name("phở chay")
+            .dish(approvedDish)
+            .moderationStatus(ModerationStatus.APPROVED)
+            .build();
+    stubPostWithRecipe(recipe, pendingIngredient);
 
-    adminPostService.moderatePost(
-        adminId,
-        post.getId(),
-        PostModerationRequest.builder().action(PostModerationRequest.Action.PUBLISH).build());
+    adminPostService.rejectPost(adminId, post.getId(), null);
 
-    verify(postRepository, never()).saveAndFlush(any(Post.class));
-    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
+    // One bad post must not knock out a name other members' recipes and menus depend on.
+    assertThat(approvedDish.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
+    assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
+    assertThat(pendingIngredient.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
+    verify(dishRepository, never()).save(any(Dish.class));
+    verify(recipeRepository, never()).save(any(Recipe.class));
   }
 
   @Test
-  void moderatePost_publishWithoutCategory_throwsValidationException() {
+  void approvePost_withoutCategory_throwsValidationException() {
     UUID adminId = UUID.randomUUID();
     post.setStatus(Post.Status.unpublished);
     post.setCategories(Set.of());
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
-    assertThatThrownBy(
-            () ->
-                adminPostService.moderatePost(
-                    adminId,
-                    post.getId(),
-                    PostModerationRequest.builder()
-                        .action(PostModerationRequest.Action.PUBLISH)
-                        .build()))
+    assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId(), null))
         .isInstanceOf(ValidationException.class)
         .hasMessage("At least one category is required to publish a post");
 
     verify(moderationLogRepository, never()).save(any(ModerationLog.class));
+    verify(postRepository, never()).saveAndFlush(any(Post.class));
   }
 
   @Test
-  void moderatePost_hiddenPost_throwsValidationException() {
+  void approvePost_hiddenPost_throwsValidationException() {
     UUID adminId = UUID.randomUUID();
     post.setStatus(Post.Status.hidden);
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
-    assertThatThrownBy(
-            () ->
-                adminPostService.moderatePost(
-                    adminId,
-                    post.getId(),
-                    PostModerationRequest.builder()
-                        .action(PostModerationRequest.Action.PUBLISH)
-                        .build()))
-        .isInstanceOf(ValidationException.class);
+    assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId(), null))
+        .isInstanceOf(ValidationException.class)
+        .hasMessageContaining("hidden post");
   }
 
   @Test
-  void moderatePost_missingPost_throwsResourceNotFound() {
+  void rejectPost_hiddenPost_throwsValidationException() {
+    UUID adminId = UUID.randomUUID();
+    post.setStatus(Post.Status.hidden);
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(() -> adminPostService.rejectPost(adminId, post.getId(), null))
+        .isInstanceOf(ValidationException.class)
+        .hasMessageContaining("hidden post");
+  }
+
+  @Test
+  void approvePost_missingPost_throwsResourceNotFound() {
     UUID adminId = UUID.randomUUID();
     UUID postId = UUID.randomUUID();
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(
-            () ->
-                adminPostService.moderatePost(
-                    adminId,
-                    postId,
-                    PostModerationRequest.builder()
-                        .action(PostModerationRequest.Action.UNPUBLISH)
-                        .build()))
+    assertThatThrownBy(() -> adminPostService.approvePost(adminId, postId, null))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Post not found");
+  }
+
+  @Test
+  void rejectPost_missingPost_throwsResourceNotFound() {
+    UUID adminId = UUID.randomUUID();
+    UUID postId = UUID.randomUUID();
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> adminPostService.rejectPost(adminId, postId, null))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Post not found");
+  }
+
+  /** Wires a post that has one recipe, one ingredient line, and a category to publish into. */
+  private void stubPostWithRecipe(Recipe recipe, Ingredient ingredient) {
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
+        .thenReturn(List.of(recipe));
+    // The line carries only ids in the unit test; the service resolves the ingredient through the
+    // repository when the association is absent.
+    when(recipeIngredientRepository.findByRecipeId(recipe.getId()))
+        .thenReturn(
+            List.of(
+                RecipeIngredient.builder()
+                    .recipeId(recipe.getId())
+                    .ingredientId(ingredient.getId())
+                    .build()));
+    lenient()
+        .when(ingredientRepository.findById(ingredient.getId()))
+        .thenReturn(Optional.of(ingredient));
+  }
+
+  /** The component log entries are written after the post one, so read them from the end. */
+  private ModerationLog lastPostLog() {
+    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
+    verify(moderationLogRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
+    return captor.getAllValues().stream()
+        .filter(entry -> "POST".equals(entry.getTargetType()))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("no POST moderation log was written"));
+  }
+
+  @Test
+  void getPostDetail_returnsScoresAndReferencedNames() {
+    UUID recipeId = UUID.randomUUID();
+    Dish dish =
+        Dish.builder()
+            .id(UUID.randomUUID())
+            .name("bún chả chay")
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .name("bún chả chay")
+            .dish(dish)
+            .score(0.81)
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    Ingredient tofu =
+        Ingredient.builder()
+            .id(UUID.randomUUID())
+            .name("đậu hũ")
+            .moderationStatus(ModerationStatus.APPROVED)
+            .build();
+    post.setContentScore(0.63);
+    post.setFlag(Post.Flag.NEEDS_REVIEW);
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
+        .thenReturn(List.of(recipe));
+    when(recipeIngredientRepository.findByRecipeId(recipeId))
+        .thenReturn(
+            List.of(
+                RecipeIngredient.builder()
+                    .recipeId(recipeId)
+                    .ingredientId(tofu.getId())
+                    .ingredient(tofu)
+                    .build()));
+    AdminPostDetailResponse detail = adminPostService.getPostDetail(post.getId());
+
+    assertThat(detail.getContentScore()).isEqualTo(0.63);
+    assertThat(detail.getFlag()).isEqualTo("NEEDS_REVIEW");
+    assertThat(detail.getRecipes()).hasSize(1);
+    assertThat(detail.getRecipes().get(0).getScore()).isEqualTo(0.81);
+    assertThat(detail.getRecipes().get(0).getType()).isEqualTo("RECIPE");
+    assertThat(detail.getNames())
+        .extracting(AdminPostDetailResponse.ComponentSummary::getType)
+        .containsExactly("DISH", "INGREDIENT");
+    assertThat(detail.getNames())
+        .extracting(AdminPostDetailResponse.ComponentSummary::getModerationStatus)
+        .containsExactly("PENDING", "APPROVED");
+  }
+
+  @Test
+  void getPostDetail_postWithoutRecipe_hasNoComponents() {
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId())).thenReturn(List.of());
+
+    AdminPostDetailResponse detail = adminPostService.getPostDetail(post.getId());
+
+    assertThat(detail.getRecipes()).isEmpty();
+    assertThat(detail.getNames()).isEmpty();
+    // Null means never scored, which is what a post that never reached the filter looks like.
+    assertThat(detail.getContentScore()).isNull();
+  }
+
+  @Test
+  void getPostDetail_dishSharedByTwoRecipes_isListedOnce() {
+    Dish dish =
+        Dish.builder()
+            .id(UUID.randomUUID())
+            .name("phở chay")
+            .moderationStatus(ModerationStatus.APPROVED)
+            .build();
+    Recipe first = Recipe.builder().id(UUID.randomUUID()).name("phở chay").dish(dish).build();
+    Recipe second =
+        Recipe.builder().id(UUID.randomUUID()).name("phở chay đặc biệt").dish(dish).build();
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
+        .thenReturn(List.of(first, second));
+    when(recipeIngredientRepository.findByRecipeId(first.getId())).thenReturn(List.of());
+    when(recipeIngredientRepository.findByRecipeId(second.getId())).thenReturn(List.of());
+
+    AdminPostDetailResponse detail = adminPostService.getPostDetail(post.getId());
+
+    // One name, one decision: approving the dish twice would be nonsense to the reviewer.
+    assertThat(detail.getRecipes()).hasSize(2);
+    assertThat(detail.getNames()).hasSize(1);
+  }
+
+  @Test
+  void getPostDetail_missingPost_throwsResourceNotFound() {
+    UUID postId = UUID.randomUUID();
+    when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> adminPostService.getPostDetail(postId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
   }

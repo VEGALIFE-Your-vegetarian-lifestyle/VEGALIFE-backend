@@ -325,7 +325,9 @@ class AdminRecipeControllerIntegrationTest {
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(
             jsonPath("$.message")
-                .value("Sort property must be one of: createdAt, updatedAt, name"));
+                .value(
+                    "Sort property must be one of: createdAt, updatedAt, name, moderationStatus,"
+                        + " score"));
   }
 
   @Test

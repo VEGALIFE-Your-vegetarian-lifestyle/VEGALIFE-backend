@@ -8,14 +8,17 @@ import com.vegalife.shared.dto.PageResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/** Ingredient suggestions for the recipe form; authenticated-only, like dish browsing. */
 @RestController
 @RequestMapping("/api/ingredients")
 @RequiredArgsConstructor
+@PreAuthorize("isAuthenticated()")
 public class IngredientController {
 
   private final IngredientService ingredientService;

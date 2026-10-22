@@ -124,6 +124,13 @@ app:
     # numbers to another embedding model.
     accept-threshold: 0.70
     reject-threshold: 0.45
+    # Thresholds for the recipe body (name + description + instructions), scored against its own
+    # centroid pair. Measured on gemini-embedding-001 at 768 dims: lowest on-topic 0.706247,
+    # highest off-topic 0.267938, separation 0.4383; these sit in the gap. See
+    # docs/feats/filter-calibration-gemini.md. Do not port to another embedding model.
+    recipe:
+      accept-threshold: ${RECIPE_ACCEPT_THRESHOLD:0.60}
+      reject-threshold: ${RECIPE_REJECT_THRESHOLD:0.38}
     sweep-max-age: 24h
     # Duplicate detection (issue #156, ADR-015): cosine similarity, not distance. Measured
     # against gemini-embedding-001 on real Vietnamese and English pairs; the bands are in

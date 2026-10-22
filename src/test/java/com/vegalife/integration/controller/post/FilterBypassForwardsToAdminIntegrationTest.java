@@ -129,17 +129,16 @@ class FilterBypassForwardsToAdminIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].id").value(postId.toString()))
         .andExpect(jsonPath("$.data.content[0].flag").value("NEEDS_REVIEW"));
 
-    // Admin publishes it through the moderation endpoint.
+    // Admin approves it through the moderation endpoint.
     mockMvc
         .perform(
-            post("/api/admin/posts/" + postId + "/moderate")
+            post("/api/admin/posts/" + postId + "/approve")
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"action\":\"PUBLISH\",\"reason\":\"Bypass demo\"}"))
+                .content("{\"reason\":\"Bypass demo\"}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.status").value("published"))
-        .andExpect(jsonPath("$.data.flag").value("NEEDS_REVIEW"))
-        .andExpect(jsonPath("$.data.publishedAt").exists());
+        .andExpect(jsonPath("$.data.flag").value("NEEDS_REVIEW"));
   }
 
   private User createUser(String username, String email, User.Role role) {

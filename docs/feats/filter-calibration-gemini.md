@@ -174,9 +174,71 @@ and the whole committed-artefact design would fail. It does not.
   `app.filter.embedding.provider` requires regenerating the centroids,
   because they are one model's vectors.
 
+## Recipe body calibration (issue #160, ADR-016)
+
+The recipe body — `name + description + instructions` — is scored against a
+**second** centroid pair, because its distribution is not post prose: mostly
+imperative steps, quantities and timings. Measured with the same model
+(`gemini-embedding-001`, 768 dimensions, client-side L2 normalisation) over
+`src/main/resources/filter/seed-recipe-on-topic.txt` (22 recipes) and
+`seed-recipe-off-topic.txt` (20 spam/marketing bodies written in the same
+`name | description | instructions` shape).
+
+### Measured separation
+
+| statistic | value |
+|---|---|
+| lowest on-topic seed (`Overnight oats with berries`) | `0.706247` |
+| highest off-topic seed (`Cô giáo bị phụ huynh yêu cầu nghỉ việc`) | `0.267938` |
+| separation (`L − H`) | `0.4383097306259157` |
+
+The corpora do not overlap at all: every off-topic body scores below `0.27`
+and every on-topic body above `0.70`. Every candidate accept threshold from
+`0.40` to `0.95` yields **zero false positives** on this corpus; the difference
+between candidates is only which real recipes get needlessly queued.
+
+| accept | on-topic passing | off-topic wrongly passing |
+|---|---|---|
+| `0.60` | 22 / 22 | 0 / 20 |
+| `0.70` | 22 / 22 | 0 / 20 |
+| `0.75` | 21 / 22 | 0 / 20 |
+| `0.80` | 20 / 22 | 0 / 20 |
+| `0.90` | 10 / 22 | 0 / 20 |
+
+### Chosen values
+
+| property | value | rationale |
+|---|---|---|
+| `app.filter.recipe.accept-threshold` | `0.60` | sits in the gap, below the weakest on-topic sample with margin, so no legitimate recipe is queued by the filter |
+| `app.filter.recipe.reject-threshold` | `0.38` | well above the strongest off-topic sample, so a clearly off-topic body is rejected rather than merely reviewed |
+
+Both are overridable via `RECIPE_ACCEPT_THRESHOLD` / `RECIPE_REJECT_THRESHOLD`.
+
+Per-seed scores are reproducible: re-running `CentroidRegenerationTest` in
+verify mode reproduces the content separation exactly (`0.755344` / `0.349076`),
+which is what allows these numbers to be treated as a committed property of the
+model rather than a one-off observation.
+
+### Caveats specific to this pair
+
+- **`0.706247` is one seed.** `Overnight oats with berries` is the weakest
+  on-topic sample and it is *short* — the smallest, least distinctive text in
+  the corpus. A one-line recipe with almost no description will score closer to
+  this floor than to the `0.90` achieved by longer bodies. The `0.60` accept
+  threshold is chosen with that in mind.
+- **20 of the 22 on-topic seeds are food recipes; 2 are desserts.** Recipes in
+  categories the corpus barely covers (drinks, fermentation) are the most likely
+  future false positives.
+- **The off-topic corpus is marketing-shaped, not malicious.** It catches spam
+  and unrelated products. It does not attempt to catch deliberately disguised
+  content, which is exactly why approval, not scoring, gates new
+  dish/ingredient names.
+
 ## Related
 
 - [ADR-014: Serve Filter Embeddings From Gemini](../adrs/014-embedding-provider-gemini.md)
 - [ADR-007: Filter Post Content Before Publication](../adrs/007-post-content-filtering.md)
+- [ADR-016: Component-aware moderation](../adrs/016-component-level-moderation.md)
+- [Feature spec: Component-level verification](component-level-verification.md)
 - [Feature spec: Embedding Provider Migration](embedding-provider-migration.md)
 - [Business rule: post content filtering](../brs/posts.md)

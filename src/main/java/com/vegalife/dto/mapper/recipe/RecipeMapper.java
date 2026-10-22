@@ -16,6 +16,8 @@ public interface RecipeMapper {
   @Mapping(source = "recipe.id", target = "id")
   @Mapping(source = "recipe.user.id", target = "userId")
   @Mapping(source = "recipe.dish.id", target = "dishId")
+  @Mapping(source = "recipe.dish.moderationStatus", target = "dishModerationStatus")
+  @Mapping(source = "recipe.moderationStatus", target = "moderationStatus")
   @Mapping(source = "dishName", target = "dishName")
   @Mapping(source = "ingredients", target = "ingredients")
   RecipeResponse toResponse(

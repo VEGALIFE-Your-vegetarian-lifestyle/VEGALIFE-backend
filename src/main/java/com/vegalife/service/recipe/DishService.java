@@ -4,10 +4,13 @@ import com.vegalife.dto.mapper.recipe.DishMapper;
 import com.vegalife.dto.request.recipe.DishListRequest;
 import com.vegalife.dto.response.recipe.DishResponse;
 import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.DishSpecifications;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -36,6 +39,22 @@ public class DishService {
     Page<Dish> page = dishRepository.findAll(spec, pageable);
 
     return PageResponse.from(page.map(dishMapper::toResponse));
+  }
+
+  /**
+   * One dish, only if an admin has approved it.
+   *
+   * <p>Pending and rejected names are reported as not found rather than returned with a flag: this
+   * endpoint is member-facing, and "exists but you may not see it" would still confirm the name to
+   * whoever guessed the id.
+   */
+  @Transactional(readOnly = true)
+  public DishResponse getDish(UUID dishId) {
+    Dish dish =
+        dishRepository
+            .findByIdAndDeletedAtIsNullAndModerationStatus(dishId, ModerationStatus.APPROVED)
+            .orElseThrow(() -> new ResourceNotFoundException("Dish not found"));
+    return dishMapper.toResponse(dish);
   }
 
   private Sort parseSort(String sort) {

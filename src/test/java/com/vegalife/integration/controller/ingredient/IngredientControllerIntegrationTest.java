@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vegalife.model.recipe.Ingredient;
+import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -225,6 +226,7 @@ class IngredientControllerIntegrationTest {
     Ingredient ingredient =
         Ingredient.builder()
             .name(name)
+            .moderationStatus(ModerationStatus.APPROVED)
             .calories(new BigDecimal("100.00"))
             .proteinG(new BigDecimal("10.00"))
             .carbohydrateG(new BigDecimal("5.00"))

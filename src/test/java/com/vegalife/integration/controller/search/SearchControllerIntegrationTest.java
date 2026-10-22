@@ -10,6 +10,7 @@ import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.CategoryRepository;
@@ -205,6 +206,20 @@ class SearchControllerIntegrationTest {
                 .value(org.hamcrest.Matchers.containsString("<mark>")));
   }
 
+  @Test
+  void search_pendingRecipeIsNeverReturned() throws Exception {
+    // A recipe created by a member starts PENDING; search is public, so it must not be discoverable
+    // through its instructions before an admin has reviewed it (ADR-016).
+    Recipe pending = createRecipe("Tofu stir fry", "Fried tofu with vegetables.");
+    pending.setModerationStatus(ModerationStatus.PENDING);
+    recipeRepository.saveAndFlush(pending);
+
+    mockMvc
+        .perform(get("/api/search").param("q", "tofu"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content").isEmpty());
+  }
+
   private Post createPublishedPost(String title, String content) {
     return createPost(title, content, Post.Status.published);
   }
@@ -238,7 +253,14 @@ class SearchControllerIntegrationTest {
   }
 
   private Recipe createRecipe(String name, String instructions) {
-    Dish dish = dishRepository.save(Dish.builder().name("Dish " + UUID.randomUUID()).build());
+    Dish dish =
+        dishRepository.save(
+            Dish.builder()
+                .name("Dish " + UUID.randomUUID())
+                .moderationStatus(ModerationStatus.APPROVED)
+                .build());
+    // These fixtures stand for recipes that predate the approval rule, which the migration
+    // backfilled to APPROVED.
     return recipeRepository.save(
         Recipe.builder()
             .dish(dish)
@@ -246,6 +268,7 @@ class SearchControllerIntegrationTest {
             .name(name)
             .instructions(instructions)
             .servings(2)
+            .moderationStatus(ModerationStatus.APPROVED)
             .build());
   }
 }

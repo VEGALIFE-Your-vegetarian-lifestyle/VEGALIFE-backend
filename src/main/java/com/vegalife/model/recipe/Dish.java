@@ -2,6 +2,8 @@ package com.vegalife.model.recipe;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -50,4 +52,14 @@ public class Dish {
 
   @Column(name = "deleted_at")
   private Instant deletedAt;
+
+  /**
+   * Review state of this dish name (ADR-016). Existing rows were backfilled to {@link
+   * ModerationStatus#APPROVED} by the migration; names introduced by a member's recipe start as
+   * {@link ModerationStatus#PENDING}.
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "moderation_status", length = 20, nullable = false)
+  @Builder.Default
+  private ModerationStatus moderationStatus = ModerationStatus.PENDING;
 }

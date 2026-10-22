@@ -7,6 +7,7 @@ import com.vegalife.dto.response.recipe.RecipeIngredientResponse;
 import com.vegalife.dto.response.recipe.RecipeResponse;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
+import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
@@ -22,12 +23,14 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -62,6 +65,60 @@ public class RecipeService {
       log.warn("Concurrent find-or-create conflict while creating recipe, retrying once");
       return transactionTemplate.execute(status -> doCreate(userId, request, ingredients));
     }
+  }
+
+  /**
+   * One of the caller's own recipes.
+   *
+   * <p>Owner-scoped rather than public: a recipe starts {@link ModerationStatus#PENDING}, and
+   * returning someone else's unreviewed recipe here would make the approval step cosmetic. The
+   * author still sees their own, with the state attached, so a withheld recipe is not a mystery.
+   */
+  @Transactional(readOnly = true)
+  public RecipeResponse getRecipe(UUID callerId, UUID recipeId) {
+    Recipe recipe =
+        recipeRepository
+            .findByIdAndDeletedAtIsNull(recipeId)
+            .filter(found -> found.getUser().getId().equals(callerId))
+            .orElseThrow(() -> new ResourceNotFoundException("Recipe not found"));
+
+    return recipeMapper.toResponse(
+        recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe));
+  }
+
+  /** Every non-deleted recipe the caller created, newest first. */
+  @Transactional(readOnly = true)
+  public List<RecipeResponse> listMyRecipes(UUID callerId) {
+    return recipeRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(callerId).stream()
+        .map(
+            recipe ->
+                recipeMapper.toResponse(
+                    recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe)))
+        .toList();
+  }
+
+  private List<RecipeIngredientResponse> ingredientResponsesOf(Recipe recipe) {
+    List<RecipeIngredientResponse> responses = new ArrayList<>();
+    for (RecipeIngredient line : recipeIngredientRepository.findByRecipeId(recipe.getId())) {
+      Ingredient ingredient = line.getIngredient();
+      if (ingredient == null) {
+        // insertable = false on the association: inside the transaction that created the line it
+        // can
+        // still be unset, so fall back to the row itself.
+        ingredient = ingredientRepository.findById(line.getIngredientId()).orElse(null);
+      }
+      if (ingredient == null) {
+        continue;
+      }
+      responses.add(
+          RecipeIngredientResponse.builder()
+              .ingredientId(ingredient.getId())
+              .name(ingredient.getName())
+              .amount(line.getAmount())
+              .unit(line.getUnit())
+              .build());
+    }
+    return responses;
   }
 
   private RecipeResponse doCreate(
@@ -119,20 +176,55 @@ public class RecipeService {
     return recipeMapper.toResponse(recipe, dishName, ingredientResponses);
   }
 
+  /**
+   * Resolves a dish name to an existing visible row or creates it as {@link
+   * ModerationStatus#PENDING}.
+   *
+   * <p>A name created here is not approved: the member who typed it is not the reviewer, and the
+   * post carrying it is queued for an admin (BR-DISH-001). An existing row keeps whatever state it
+   * already has — reusing an approved name must not resurface it, and reusing a pending one must
+   * not quietly approve it.
+   *
+   * <p>A {@link ModerationStatus#REJECTED} name is a permanent block: it is refused rather than
+   * re-created, whichever lookup path finds it.
+   */
   private Dish findOrCreateDish(String normalizedDishName) {
-    return dishRepository
-        .findByNameIgnoreCaseAndDeletedAtIsNull(normalizedDishName)
-        .orElseGet(
-            () -> dishRepository.saveAndFlush(Dish.builder().name(normalizedDishName).build()));
+    Optional<Dish> existing = dishRepository.findByNameIgnoreCase(normalizedDishName);
+    if (existing.isPresent()) {
+      Dish dish = existing.get();
+      requireNotRejected(dish.getModerationStatus(), "Dish", normalizedDishName);
+      // Soft-deleted rows keep their name; the admin hid this dish deliberately.
+      if (dish.getDeletedAt() != null) {
+        throw new ValidationException("Dish is not available: " + normalizedDishName);
+      }
+      return dish;
+    }
+    return dishRepository.saveAndFlush(
+        Dish.builder().name(normalizedDishName).moderationStatus(ModerationStatus.PENDING).build());
   }
 
+  /** Same contract as {@link #findOrCreateDish}, for ingredient names. */
   private Ingredient findOrCreateIngredient(String normalizedName) {
-    return ingredientRepository
-        .findByNameIgnoreCase(normalizedName)
-        .orElseGet(
-            () ->
-                ingredientRepository.saveAndFlush(
-                    Ingredient.builder().name(normalizedName).build()));
+    Optional<Ingredient> existing = ingredientRepository.findByNameIgnoreCase(normalizedName);
+    if (existing.isPresent()) {
+      Ingredient ingredient = existing.get();
+      requireNotRejected(ingredient.getModerationStatus(), "Ingredient", normalizedName);
+      if (ingredient.getDeletedAt() != null) {
+        throw new ValidationException("Ingredient is not available: " + normalizedName);
+      }
+      return ingredient;
+    }
+    return ingredientRepository.saveAndFlush(
+        Ingredient.builder()
+            .name(normalizedName)
+            .moderationStatus(ModerationStatus.PENDING)
+            .build());
+  }
+
+  private static void requireNotRejected(ModerationStatus status, String kind, String name) {
+    if (status == ModerationStatus.REJECTED) {
+      throw new ValidationException(kind + " is not available: " + name);
+    }
   }
 
   /**
