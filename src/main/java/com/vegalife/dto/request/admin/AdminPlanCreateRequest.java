@@ -16,10 +16,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class AdminPlanCreateRequest {
 
+  /** Normalized to uppercase by {@code AdminPlanService}; accepted case-insensitively here. */
   @NotBlank(message = "Code is required")
   @Pattern(
-      regexp = "^[A-Z0-9_]{1,20}$",
-      message = "Code must be 1-20 uppercase letters/digits/underscores")
+      regexp = "^[A-Za-z0-9_]{1,20}$",
+      message = "Code must be 1-20 letters/digits/underscores")
   private String code;
 
   @NotBlank(message = "Name is required")
