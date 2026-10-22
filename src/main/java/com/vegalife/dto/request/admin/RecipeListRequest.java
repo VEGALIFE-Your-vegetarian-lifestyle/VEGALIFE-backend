@@ -35,6 +35,14 @@ public class RecipeListRequest {
   @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
   private Instant createdTo;
 
+  /**
+   * {@code PENDING}, {@code APPROVED} or {@code REJECTED}; blank or absent means every state.
+   *
+   * <p>{@code PENDING} is the review queue — a recipe created through {@code POST /api/recipes}
+   * that no admin has decided on yet (ADR-016).
+   */
+  private String moderationStatus;
+
   public int getPage() {
     return page == null ? 0 : page;
   }

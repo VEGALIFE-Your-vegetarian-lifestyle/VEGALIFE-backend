@@ -19,6 +19,7 @@ public interface AdminRecipeMapper {
   @Mapping(target = "status", source = "deletedAt")
   @Mapping(target = "dishId", source = "dish.id")
   @Mapping(target = "dishName", source = "dish.name")
+  @Mapping(target = "dishModerationStatus", source = "dish.moderationStatus")
   @Mapping(target = "categoryIds", source = "posts")
   @Mapping(target = "ingredients", source = "recipeIngredients")
   @Mapping(target = "userId", source = "user.id")
@@ -46,6 +47,7 @@ public interface AdminRecipeMapper {
     return AdminRecipeListResponse.IngredientItem.builder()
         .ingredientId(ri.getIngredient().getId())
         .name(ri.getIngredient().getName())
+        .moderationStatus(ri.getIngredient().getModerationStatus().name())
         .amount(ri.getAmount())
         .unit(ri.getUnit())
         .build();

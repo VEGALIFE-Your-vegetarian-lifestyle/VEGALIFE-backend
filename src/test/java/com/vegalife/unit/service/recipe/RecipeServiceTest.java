@@ -379,6 +379,85 @@ class RecipeServiceTest {
     verify(recipeRepository, never()).save(any(Recipe.class));
   }
 
+  @Test
+  void getRecipe_ownRecipe_returnsItWithItsReviewState() {
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .user(user)
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .build();
+    Ingredient tofu = Ingredient.builder().id(ingredientId).name("tofu").build();
+    RecipeResponse expected = RecipeResponse.builder().id(recipeId).build();
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.of(recipe));
+    when(recipeIngredientRepository.findByRecipeId(recipeId))
+        .thenReturn(
+            List.of(
+                RecipeIngredient.builder()
+                    .recipeId(recipeId)
+                    .ingredientId(ingredientId)
+                    .ingredient(tofu)
+                    .amount(new BigDecimal("150"))
+                    .unit("g")
+                    .build()));
+    when(recipeMapper.toResponse(eq(recipe), eq("tofu stir-fry"), anyList())).thenReturn(expected);
+
+    assertThat(recipeService.getRecipe(userId, recipeId)).isSameAs(expected);
+  }
+
+  @Test
+  void getRecipe_anotherMembersRecipe_isReportedAsNotFound() {
+    UUID otherUserId = UUID.randomUUID();
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .user(User.builder().id(otherUserId).username("bob").build())
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .build();
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.of(recipe));
+
+    // A pending recipe belongs to its author until an admin approves it; returning it here would
+    // make the approval step cosmetic.
+    assertThatThrownBy(() -> recipeService.getRecipe(userId, recipeId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Recipe not found");
+  }
+
+  @Test
+  void getRecipe_missingRecipe_isReportedAsNotFound() {
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> recipeService.getRecipe(userId, recipeId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Recipe not found");
+  }
+
+  @Test
+  void listMyRecipes_mapsEveryRecipeWithItsIngredientLines() {
+    Recipe first =
+        Recipe.builder()
+            .id(recipeId)
+            .user(user)
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .build();
+    RecipeResponse expected = RecipeResponse.builder().id(recipeId).build();
+    when(recipeRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId))
+        .thenReturn(List.of(first));
+    when(recipeIngredientRepository.findByRecipeId(recipeId)).thenReturn(List.of());
+    when(recipeMapper.toResponse(eq(first), eq("tofu stir-fry"), anyList())).thenReturn(expected);
+
+    assertThat(recipeService.listMyRecipes(userId)).containsExactly(expected);
+  }
+
   private void stubUserFound() {
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
   }

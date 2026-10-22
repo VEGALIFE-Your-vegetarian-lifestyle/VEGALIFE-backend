@@ -18,6 +18,16 @@ public class RecipeResponse {
   private UUID userId;
   private UUID dishId;
   private String dishName;
+
+  /**
+   * The dish's review state. Exposed because a recipe whose dish name is still awaiting approval
+   * would otherwise look inexplicably withheld to its own author (BR-DISH-001).
+   */
+  private String dishModerationStatus;
+
+  /** This recipe's own review state, for the same reason. */
+  private String moderationStatus;
+
   private String name;
   private String description;
   private String instructions;

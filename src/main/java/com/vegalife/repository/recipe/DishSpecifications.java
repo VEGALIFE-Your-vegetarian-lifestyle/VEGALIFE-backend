@@ -32,12 +32,20 @@ public final class DishSpecifications {
     };
   }
 
-  /** Admin listing: every state, including pending and rejected, for review. */
-  public static Specification<Dish> anyModerationWithNameFilter(String name) {
+  /**
+   * Admin listing: every state, including pending and rejected, for review.
+   *
+   * @param status narrow to one state, or null for all of them
+   */
+  public static Specification<Dish> anyModerationWithNameFilter(
+      String name, ModerationStatus status) {
     return (root, query, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
       predicates.add(cb.isNull(root.get("deletedAt")));
 
+      if (status != null) {
+        predicates.add(cb.equal(root.get("moderationStatus"), status));
+      }
       if (name != null && !name.isBlank()) {
         predicates.add(cb.like(cb.lower(root.get("name")), "%" + name.trim().toLowerCase() + "%"));
       }

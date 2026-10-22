@@ -38,8 +38,10 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `post/patch-posts-postid-visibility.md` | `PATCH /api/posts/{postId}/visibility` | Hide or unhide a post (Admin) |
 | `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
 | `admin/get-posts.md` | `GET /api/admin/posts` | List all posts across users and statuses (Admin) |
-| `admin/post-posts-postid-moderate.md` | `POST /api/admin/posts/{postId}/moderate` | Publish or unpublish a post (Admin) — **removed, replaced by approve/reject** |
+| `admin/post-posts-postid-moderate.md` | `POST /api/admin/posts/{postId}/moderate` | **Removed** — retained only as a record; replaced by approve/reject (ADR-016) |
 | `admin/post-posts-postid-approve.md` | `GET/POST /api/admin/posts/{postId}[/approve\|/reject]` | Read a post's component detail, approve or reject it with its components (Admin) |
+| `admin/dish-and-ingredient-crud.md` | `GET/POST/PATCH/DELETE /api/admin/dishes[/{dishId}][/approve\|/reject]` | Manage dish names, including review state; `admin/ingredients` mirrors it (Admin) |
+| `admin/recipe-crud.md` | `GET/PATCH/DELETE /api/admin/recipes[/{recipeId}][/approve\|/reject]` | Manage recipes, including review state (Admin) |
 | `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |
 | `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |
 | `admin/get-comments.md` | `GET /api/admin/comments` | List all comments (Admin) |

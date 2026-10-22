@@ -30,6 +30,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -64,6 +65,60 @@ public class RecipeService {
       log.warn("Concurrent find-or-create conflict while creating recipe, retrying once");
       return transactionTemplate.execute(status -> doCreate(userId, request, ingredients));
     }
+  }
+
+  /**
+   * One of the caller's own recipes.
+   *
+   * <p>Owner-scoped rather than public: a recipe starts {@link ModerationStatus#PENDING}, and
+   * returning someone else's unreviewed recipe here would make the approval step cosmetic. The
+   * author still sees their own, with the state attached, so a withheld recipe is not a mystery.
+   */
+  @Transactional(readOnly = true)
+  public RecipeResponse getRecipe(UUID callerId, UUID recipeId) {
+    Recipe recipe =
+        recipeRepository
+            .findByIdAndDeletedAtIsNull(recipeId)
+            .filter(found -> found.getUser().getId().equals(callerId))
+            .orElseThrow(() -> new ResourceNotFoundException("Recipe not found"));
+
+    return recipeMapper.toResponse(
+        recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe));
+  }
+
+  /** Every non-deleted recipe the caller created, newest first. */
+  @Transactional(readOnly = true)
+  public List<RecipeResponse> listMyRecipes(UUID callerId) {
+    return recipeRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(callerId).stream()
+        .map(
+            recipe ->
+                recipeMapper.toResponse(
+                    recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe)))
+        .toList();
+  }
+
+  private List<RecipeIngredientResponse> ingredientResponsesOf(Recipe recipe) {
+    List<RecipeIngredientResponse> responses = new ArrayList<>();
+    for (RecipeIngredient line : recipeIngredientRepository.findByRecipeId(recipe.getId())) {
+      Ingredient ingredient = line.getIngredient();
+      if (ingredient == null) {
+        // insertable = false on the association: inside the transaction that created the line it
+        // can
+        // still be unset, so fall back to the row itself.
+        ingredient = ingredientRepository.findById(line.getIngredientId()).orElse(null);
+      }
+      if (ingredient == null) {
+        continue;
+      }
+      responses.add(
+          RecipeIngredientResponse.builder()
+              .ingredientId(ingredient.getId())
+              .name(ingredient.getName())
+              .amount(line.getAmount())
+              .unit(line.getUnit())
+              .build());
+    }
+    return responses;
   }
 
   private RecipeResponse doCreate(
