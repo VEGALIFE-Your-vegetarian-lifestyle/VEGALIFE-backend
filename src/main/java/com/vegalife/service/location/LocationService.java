@@ -169,6 +169,8 @@ public class LocationService {
             .websiteUrl(normalize(request.getWebsiteUrl()))
             .rating(request.getRating())
             .priceLevel(request.getPriceLevel())
+            .imageUrls(request.getImageUrls())
+            .description(normalize(request.getDescription()))
             .build();
 
     Location saved = locationRepository.saveAndFlush(location);
@@ -211,6 +213,12 @@ public class LocationService {
     }
     if (request.getPriceLevel() != null) {
       location.setPriceLevel(request.getPriceLevel());
+    }
+    if (request.getImageUrls() != null) {
+      location.setImageUrls(request.getImageUrls());
+    }
+    if (request.getDescription() != null) {
+      location.setDescription(normalize(request.getDescription()));
     }
 
     Location saved = locationRepository.saveAndFlush(location);

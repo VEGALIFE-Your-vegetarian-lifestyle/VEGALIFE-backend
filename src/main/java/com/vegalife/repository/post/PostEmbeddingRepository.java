@@ -1,5 +1,6 @@
 package com.vegalife.repository.post;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -83,8 +84,58 @@ public class PostEmbeddingRepository {
         .findFirst();
   }
 
+  /**
+   * Reads back a post's own stored vector as pgvector text ({@code [0.1,0.2,…]}), for reuse as the
+   * query vector of a related-posts lookup (issue #7) — never parsed into {@code float[]} in Java,
+   * just round-tripped as the same literal {@link #findNearestPublished} and {@link
+   * #findTopNearestPublished} accept.
+   */
+  public Optional<StoredEmbedding> findStoredEmbedding(UUID postId) {
+    return jdbcTemplate
+        .query(
+            "SELECT embedding::text AS vec, model FROM post_embedding WHERE post_id = ?",
+            (rs, rowNum) -> new StoredEmbedding(rs.getString("vec"), rs.getString("model")),
+            postId)
+        .stream()
+        .findFirst();
+  }
+
+  /**
+   * Finds the {@code limit} most similar published posts to a candidate vector (issue #7),
+   * excluding the candidate itself, ranked nearest first.
+   *
+   * @param embeddingLiteral the candidate's vector in pgvector text form (from {@link
+   *     #findStoredEmbedding} or {@link #literal})
+   * @param model the embedding model the vector was produced with
+   * @param excludePostId the candidate's own id, excluded so it cannot match itself
+   * @param limit maximum number of matches to return
+   */
+  public List<NearestMatch> findTopNearestPublished(
+      String embeddingLiteral, String model, UUID excludePostId, int limit) {
+    return jdbcTemplate.query(
+        "SELECT e.post_id, 1 - (e.embedding <=> ?::vector) AS similarity"
+            + " FROM post_embedding e"
+            + " JOIN post p ON p.id = e.post_id"
+            + " WHERE p.status = 'published'"
+            + "   AND p.deleted_at IS NULL"
+            + "   AND e.model = ?"
+            + "   AND e.post_id <> ?"
+            + " ORDER BY e.embedding <=> ?::vector"
+            + " LIMIT ?",
+        (rs, rowNum) ->
+            new NearestMatch(rs.getObject("post_id", UUID.class), rs.getDouble("similarity")),
+        embeddingLiteral,
+        model,
+        excludePostId,
+        embeddingLiteral,
+        limit);
+  }
+
   /** A candidate match: which published post, and how similar. */
   public record NearestMatch(UUID postId, double similarity) {}
+
+  /** A post's own stored vector, in pgvector text form, with the model that produced it. */
+  public record StoredEmbedding(String vectorLiteral, String model) {}
 
   /**
    * Renders a vector in pgvector's text form, {@code [0.1,0.2,…]}.

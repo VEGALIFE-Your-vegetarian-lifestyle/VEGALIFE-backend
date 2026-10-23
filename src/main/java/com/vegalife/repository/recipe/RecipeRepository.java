@@ -1,6 +1,8 @@
 package com.vegalife.repository.recipe;
 
+import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -22,4 +24,13 @@ public interface RecipeRepository
 
   /** A member's own recipes, newest first. */
   List<Recipe> findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID userId);
+
+  /** Admin dashboard (issue #12): total non-deleted recipes. */
+  long countByDeletedAtIsNull();
+
+  /** Admin dashboard (issue #12): recipes created within a time range. */
+  long countByCreatedAtBetweenAndDeletedAtIsNull(Instant from, Instant to);
+
+  /** Admin dashboard (issue #12): recipes awaiting moderation review. */
+  long countByModerationStatusAndDeletedAtIsNull(ModerationStatus moderationStatus);
 }

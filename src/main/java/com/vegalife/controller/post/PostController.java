@@ -6,13 +6,16 @@ import com.vegalife.dto.request.post.PostMediaAttachRequest;
 import com.vegalife.dto.request.post.PostRecipeAttachRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.request.post.PostVisibilityRequest;
+import com.vegalife.dto.request.post.RelatedPostsRequest;
 import com.vegalife.dto.response.post.PostListResponse;
+import com.vegalife.dto.response.post.RelatedPostResponse;
 import com.vegalife.service.post.PostService;
 import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -51,6 +54,13 @@ public class PostController {
   public ResponseEntity<ApiResponse<PostListResponse>> getPost(@PathVariable UUID postId) {
     PostListResponse post = postService.getPost(postId);
     return ResponseEntity.ok(ApiResponse.success(post, "Post retrieved successfully"));
+  }
+
+  @GetMapping("/{postId}/related")
+  public ResponseEntity<ApiResponse<List<RelatedPostResponse>>> getRelatedPosts(
+      @PathVariable UUID postId, @Valid @ModelAttribute RelatedPostsRequest request) {
+    List<RelatedPostResponse> related = postService.getRelatedPosts(postId, request);
+    return ResponseEntity.ok(ApiResponse.success(related, "Related posts retrieved successfully"));
   }
 
   @PatchMapping("/{postId}")

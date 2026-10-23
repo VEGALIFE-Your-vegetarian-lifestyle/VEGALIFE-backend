@@ -35,6 +35,7 @@ These are part of the current tech stack. Use freely.
 | `org.springframework.ai:spring-ai-bom` (1.1.8) | Version management for Spring AI artifacts | In pom.xml |
 | `spring-ai-starter-model-openai` | Chat model client + AI abstraction for post content filtering (ADR-007) | In pom.xml |
 | `spring-ai` `@Tool` / `@ToolParam` (via `spring-ai-model`) | AI chat menu tools declared on `service/ai/MenuTools` (ADR-013) | In pom.xml |
+| `com.github.ben-manes.caffeine:caffeine` | Local caching backing the admin dashboard's cached aggregate metrics (issue #12) | In pom.xml |
 
 **Not used:** `spring-ai-starter-mcp-server-webmvc`,
 `spring-ai-starter-mcp-client`, and `org.wiremock:wiremock-standalone` were
@@ -50,7 +51,6 @@ These are approved in principle. Add them to pom.xml when a feature requires the
 |---|---|---|
 | `spring-boot-starter-oauth2-resource-server` | JWT validation | When using JWT-based auth |
 | `spring-boot-starter-websocket` | Real-time chat / notifications | Chat feature implementation |
-| `com.github.ben-manes.caffeine:caffeine` | Local caching | When hot data needs caching (recipes, feeds) |
 | `io.rest-assured:rest-assured` | Fluent API testing | When API tests become complex |
 | `net.logstash.logback:logstash-logback-encoder` | Structured JSON logging | When deploying to cloud with log aggregation |
 | `io.micrometer:micrometer-registry-prometheus` | Prometheus metrics | When monitoring is set up |

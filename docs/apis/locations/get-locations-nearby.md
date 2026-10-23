@@ -53,6 +53,8 @@ No request body.
       "websiteUrl": "https://example.com/vegan-garden",
       "rating": 4.8,
       "priceLevel": 2,
+      "imageUrls": ["https://example.com/photos/1.jpg"],
+      "description": "Cozy all-vegan spot with a daily rotating menu.",
       "distance": 620.4
     }
   ]
@@ -80,7 +82,7 @@ No request body.
 - Results include only active (non-deleted) locations within `radius` metres of (`lat`, `lng`), sorted by distance ascending.
 - The query is a bounding-box pre-filter over the existing `idx_location_coords` index (no new geospatial dependency — no PostGIS, no Redis GEO); the exact radius cut and the returned `distance` are both computed afterward with the haversine formula.
 - No matches returns an empty array with `200 OK`, never a `404`.
-- Attribute filters (rating, type, price, open-now — issue #9), pagination, a "vegan-friendly score," and external provider data (photos, reviews, menu highlights) are out of scope for this endpoint (issue #10 non-goals).
+- Attribute filters (rating, type, price, open-now — issue #9), pagination, and a "vegan-friendly score" are out of scope for this endpoint (issue #10 non-goals). A curated `imageUrls`/`description` pair is supported (issue #159); reviews and menu highlights remain out of scope.
 - The search centre is always the request's `lat`/`lng`; the user's own coordinates are never read or stored.
 
 ## Example

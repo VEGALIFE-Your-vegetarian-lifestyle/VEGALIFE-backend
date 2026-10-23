@@ -1,6 +1,7 @@
 package com.vegalife.dto.request.location;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.vegalife.shared.validation.AbsoluteHttpUrl;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -9,6 +10,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -48,7 +50,7 @@ public class LocationUpdateRequest {
   /** See `docs/apis/locations/get-locations.md` for the expected shape. */
   private JsonNode openingHours;
 
-  private String websiteUrl;
+  @AbsoluteHttpUrl private String websiteUrl;
 
   @DecimalMin(value = "0.0", message = "Rating must be between 0.0 and 5.0")
   @DecimalMax(value = "5.0", message = "Rating must be between 0.0 and 5.0")
@@ -57,6 +59,11 @@ public class LocationUpdateRequest {
   @Min(value = 1, message = "priceLevel must be between 1 and 4")
   @Max(value = 4, message = "priceLevel must be between 1 and 4")
   private Integer priceLevel;
+
+  /** null keeps the existing gallery, [] clears it (issue #159). */
+  @AbsoluteHttpUrl private List<String> imageUrls;
+
+  private String description;
 
   @AssertTrue(message = "openingHours must be a JSON object")
   public boolean isOpeningHoursObject() {
@@ -74,6 +81,8 @@ public class LocationUpdateRequest {
         || openingHours != null
         || websiteUrl != null
         || rating != null
-        || priceLevel != null;
+        || priceLevel != null
+        || imageUrls != null
+        || description != null;
   }
 }

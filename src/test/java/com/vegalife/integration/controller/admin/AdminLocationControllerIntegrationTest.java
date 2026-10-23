@@ -193,6 +193,108 @@ class AdminLocationControllerIntegrationTest {
   }
 
   @Test
+  void createLocation_omittingGalleryAndDescription_storesNull() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/locations")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "name": "Vegan Garden",
+                      "address": "123 Nguyen Hue",
+                      "latitude": 10.776889,
+                      "longitude": 106.700806,
+                      "placeType": "restaurant"
+                    }
+                    """))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.data.imageUrls").doesNotExist())
+        .andExpect(jsonPath("$.data.description").doesNotExist());
+  }
+
+  @Test
+  void createLocation_withGalleryAndDescription_roundTripsArrayColumn() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/locations")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "name": "Vegan Garden",
+                      "address": "123 Nguyen Hue",
+                      "latitude": 10.776889,
+                      "longitude": 106.700806,
+                      "placeType": "restaurant",
+                      "imageUrls": ["https://example.com/a.jpg", "https://example.com/b.jpg"],
+                      "description": "Cozy all-vegan spot."
+                    }
+                    """))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.data.imageUrls[0]").value("https://example.com/a.jpg"))
+        .andExpect(jsonPath("$.data.imageUrls[1]").value("https://example.com/b.jpg"))
+        .andExpect(jsonPath("$.data.description").value("Cozy all-vegan spot."));
+
+    assertThat(locationRepository.findAll())
+        .singleElement()
+        .satisfies(
+            saved -> {
+              assertThat(saved.getImageUrls())
+                  .containsExactly("https://example.com/a.jpg", "https://example.com/b.jpg");
+              assertThat(saved.getDescription()).isEqualTo("Cozy all-vegan spot.");
+            });
+  }
+
+  @Test
+  void createLocation_nonAbsoluteImageUrl_returns400AndPersistsNothing() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/locations")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "name": "Vegan Garden",
+                      "address": "123 Nguyen Hue",
+                      "latitude": 10.776889,
+                      "longitude": 106.700806,
+                      "placeType": "restaurant",
+                      "imageUrls": ["not-a-url"]
+                    }
+                    """))
+        .andExpect(status().isBadRequest());
+
+    assertThat(locationRepository.findAll()).isEmpty();
+  }
+
+  @Test
+  void createLocation_nonAbsoluteWebsiteUrl_returns400AndPersistsNothing() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/locations")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "name": "Vegan Garden",
+                      "address": "123 Nguyen Hue",
+                      "latitude": 10.776889,
+                      "longitude": 106.700806,
+                      "placeType": "restaurant",
+                      "websiteUrl": "ftp://example.com"
+                    }
+                    """))
+        .andExpect(status().isBadRequest());
+
+    assertThat(locationRepository.findAll()).isEmpty();
+  }
+
+  @Test
   void createLocation_asNonAdmin_returns403() throws Exception {
     mockMvc
         .perform(
@@ -254,6 +356,89 @@ class AdminLocationControllerIntegrationTest {
               assertThat(log.getAction()).isEqualTo("UPDATE_LOCATION");
               assertThat(log.getTargetId()).isEqualTo(location.getId());
             });
+  }
+
+  @Test
+  void updateLocation_emptyImageUrlsArrayClearsGallery() throws Exception {
+    Location location = createLocation("Gallery Place", new BigDecimal("4.0"));
+    location.setImageUrls(java.util.List.of("https://example.com/a.jpg"));
+    locationRepository.save(location);
+
+    mockMvc
+        .perform(
+            patch("/api/admin/locations/{id}", location.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"imageUrls\": []}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.imageUrls").isArray())
+        .andExpect(jsonPath("$.data.imageUrls").isEmpty());
+
+    assertThat(locationRepository.findById(location.getId()).orElseThrow().getImageUrls())
+        .isEmpty();
+  }
+
+  @Test
+  void updateLocation_omittedImageUrlsLeavesGalleryUnchanged() throws Exception {
+    Location location = createLocation("Gallery Place", new BigDecimal("4.0"));
+    location.setImageUrls(java.util.List.of("https://example.com/a.jpg"));
+    locationRepository.save(location);
+
+    mockMvc
+        .perform(
+            patch("/api/admin/locations/{id}", location.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\": \"Renamed\"}"))
+        .andExpect(status().isOk());
+
+    assertThat(locationRepository.findById(location.getId()).orElseThrow().getImageUrls())
+        .containsExactly("https://example.com/a.jpg");
+  }
+
+  @Test
+  void updateLocation_blankDescriptionClearsToNull() throws Exception {
+    Location location = createLocation("Described Place", new BigDecimal("4.0"));
+    location.setDescription("Some text");
+    locationRepository.save(location);
+
+    mockMvc
+        .perform(
+            patch("/api/admin/locations/{id}", location.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"description\": \"   \"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.description").doesNotExist());
+
+    assertThat(locationRepository.findById(location.getId()).orElseThrow().getDescription())
+        .isNull();
+  }
+
+  @Test
+  void updateLocation_noFieldsSupplied_stillReturns400() throws Exception {
+    Location location = createLocation("Some Place", new BigDecimal("4.0"));
+
+    mockMvc
+        .perform(
+            patch("/api/admin/locations/{id}", location.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void updateLocation_nonAbsoluteImageUrl_returns400() throws Exception {
+    Location location = createLocation("Some Place", new BigDecimal("4.0"));
+
+    mockMvc
+        .perform(
+            patch("/api/admin/locations/{id}", location.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"imageUrls\": [\"not-a-url\"]}"))
+        .andExpect(status().isBadRequest());
   }
 
   @Test

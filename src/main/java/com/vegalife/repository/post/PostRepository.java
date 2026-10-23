@@ -1,6 +1,7 @@
 package com.vegalife.repository.post;
 
 import com.vegalife.model.post.Post;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -47,4 +48,19 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
           + " from Post p join p.media m"
           + " where m.id in :mediaIds and p.deletedAt is null")
   List<MediaPostRow> findPostRowsByMediaIdsIn(@Param("mediaIds") Collection<UUID> mediaIds);
+
+  /** Admin dashboard (issue #12): total non-deleted posts. */
+  long countByDeletedAtIsNull();
+
+  /** Admin dashboard (issue #12): posts created within a time range. */
+  long countByCreatedAtBetweenAndDeletedAtIsNull(Instant from, Instant to);
+
+  /** Admin dashboard (issue #12): posts awaiting moderation review. */
+  long countByFlagAndDeletedAtIsNull(Post.Flag flag);
+
+  /** Admin dashboard (issue #12): distinct authors who posted within a time range. */
+  @Query(
+      "select distinct p.user.id from Post p"
+          + " where p.createdAt between :from and :to and p.deletedAt is null")
+  List<UUID> findDistinctAuthorIdsInRange(@Param("from") Instant from, @Param("to") Instant to);
 }

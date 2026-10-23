@@ -57,7 +57,9 @@ No request body.
         },
         "websiteUrl": "https://example.com/vegan-garden",
         "rating": 4.8,
-        "priceLevel": 2
+        "priceLevel": 2,
+        "imageUrls": ["https://example.com/photos/1.jpg"],
+        "description": "Cozy all-vegan spot with a daily rotating menu."
       }
     ],
     "page": 0,
@@ -82,6 +84,8 @@ No request body.
 | data.content[].websiteUrl | string or null | Website URL, if present. |
 | data.content[].rating | decimal or null | Rating out of 5, or `null` when unrated. |
 | data.content[].priceLevel | integer or null | Price level 1–4, or `null` when unset. |
+| data.content[].imageUrls | array of strings or null | Curated image gallery, or `null` when unset (issue #159). |
+| data.content[].description | string or null | Short editorial blurb, or `null` when unset (issue #159). |
 
 `createdAt`, `updatedAt`, and `deletedAt` are never included in a result row.
 
@@ -102,7 +106,7 @@ No request body.
 - Results include only active (non-deleted) locations, sorted by `rating` descending (unrated locations sort last), then `createdAt` ascending, then `id` ascending, so paging stays stable across requests.
 - `openNow=true` is evaluated against the structured filters' matches at request time: a location's `openingHours` is parsed and checked against the server's current day and time. A location without opening hours, or whose hours are present but don't cover the current time, is excluded.
 - No matches — whether from the filters or from `openNow` — returns an empty `content` array with `200 OK`, never a `404`.
-- Creating, editing, or deleting locations is out of scope for this endpoint (issue #144, a separate Admin API); a single-location detail endpoint, distance/radius search (issue #10), semantic ranking, and external provider data (photos, reviews) are also out of scope (issue #9 non-goals).
+- Creating, editing, or deleting locations is out of scope for this endpoint (issue #144, a separate Admin API); a single-location detail endpoint, distance/radius search (issue #10), and semantic ranking are also out of scope (issue #9 non-goals). A curated `imageUrls`/`description` pair is supported (issue #159); reviews and other external provider data remain out of scope.
 
 ## Example
 

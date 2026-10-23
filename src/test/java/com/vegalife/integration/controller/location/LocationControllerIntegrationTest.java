@@ -112,6 +112,20 @@ class LocationControllerIntegrationTest {
   }
 
   @Test
+  void listLocations_includesGalleryAndDescription() throws Exception {
+    Location location = createLocation("Tofu House", new BigDecimal("4.2"), null, null, null);
+    location.setImageUrls(java.util.List.of("https://example.com/a.jpg"));
+    location.setDescription("Cozy all-vegan spot.");
+    locationRepository.save(location);
+
+    mockMvc
+        .perform(get("/api/locations").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content[0].imageUrls[0]").value("https://example.com/a.jpg"))
+        .andExpect(jsonPath("$.data.content[0].description").value("Cozy all-vegan spot."));
+  }
+
+  @Test
   void listLocations_responseNeverIncludesTimestamps() throws Exception {
     createLocation("Tofu House", new BigDecimal("4.2"), null, null, null);
 
