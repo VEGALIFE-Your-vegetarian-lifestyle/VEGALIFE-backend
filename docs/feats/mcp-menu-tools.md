@@ -48,6 +48,11 @@ menus by hand.
   exist; this feature wraps them. (Menu rules stay in BR-MENU-*.)
 - No dish/ingredient/recipe/shop discovery tools (`search_dishes` and friends
   are explicitly out — see BR-MCP-002).
+  **Amended 2026-10-25 (issue #163):** dish discovery was added afterwards as
+  `suggest_dishes`, a read-only browse that mirrors
+  `GET /api/dishes/suggestions`. This non-goal still holds for everything else
+  — ingredient search, recipe lookup by name, shop discovery — and BR-MCP-002
+  now records the six-tool surface. See `docs/feats/dish-suggestions.md`.
 - No public tool exposure, no OAuth/authorization server, no agent framework.
 - No change to AI quota mechanics (BR-AI-001/002 unchanged).
 - No frontend work; the chat UI already posts to the same endpoints.

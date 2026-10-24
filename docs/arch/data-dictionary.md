@@ -237,13 +237,12 @@ _Description: Master list of vegan food materials/ingredients available in the s
 |------------|-----------|-----|------------|-------------|
 | id | UUID | PK | No | Unique identifier for ingredient |
 | name | VARCHAR(100) | - | No | Ingredient name (e.g., Tofu, Mushroom, Spinach) |
-| calories | DECIMAL(10,2) | - | Yes | Calories per 100g |
-| protein_g | DECIMAL(10,2) | - | Yes | Protein per 100g |
-| carbohydrate_g | DECIMAL(10,2) | - | Yes | Carbohydrates per 100g |
-| fat_g | DECIMAL(10,2) | - | Yes | Fat per 100g |
-| fiber_g | DECIMAL(10,2) | - | Yes | Fiber per 100g |
 | created_at | TIMESTAMPTZ | - | No | Timestamp of creation |
 | updated_at | TIMESTAMPTZ | - | No | Timestamp of last update |
+
+_Nutrition is not stored here. Before V43 the table carried per-100 g columns
+that had no recorded basis and could not be turned into a dish figure; they
+were dropped and the concept moved to `recipe` as author-entered totals._
 
 ---
 
@@ -263,8 +262,17 @@ _Description: Manages vegan recipes, preparation steps, and calorie values._
 | cook_time_minutes | INT | - | Yes | Estimated cooking duration in minutes |
 | servings | INT | - | No | Number of servings |
 | difficulty | VARCHAR(20) | - | Yes | Difficulty: EASY, MEDIUM, HARD |
+| calories | DECIMAL(10,2) | - | Yes | Author-entered calories for the **whole** recipe |
+| protein_g | DECIMAL(10,2) | - | Yes | Author-entered protein (g) for the whole recipe |
+| carbohydrate_g | DECIMAL(10,2) | - | Yes | Author-entered carbohydrate (g) for the whole recipe |
+| fat_g | DECIMAL(10,2) | - | Yes | Author-entered fat (g) for the whole recipe |
+| fiber_g | DECIMAL(10,2) | - | Yes | Author-entered fibre (g) for the whole recipe |
 | created_at | TIMESTAMPTZ | - | No | Timestamp when the recipe is created |
 | updated_at | TIMESTAMPTZ | - | No | Timestamp when the recipe is updated |
+
+_Nutrition columns (V42) are totals for the whole recipe, not per serving, and
+are nullable on purpose: `NULL` means the author did not provide the value and
+is never coerced to `0`. Per-serving values are derived from `servings`._
 | deleted_at | TIMESTAMPTZ | - | Yes | Soft delete timestamp |
 
 **Constraints:**
