@@ -290,7 +290,9 @@ public class AiChatService {
     prompt.append("\nDietary profile (from the member's stored settings):\n");
     if (notEmpty(dietary.getAllergies())) {
       prompt
-          .append("- Allergies (hard constraint — never suggest a dish containing them): ")
+          .append(
+              "- Allergies (hard constraint — never suggest a dish containing them; the"
+                  + " dish suggestions are filtered on these already): ")
           .append(String.join(", ", dietary.getAllergies()))
           .append('\n');
     }
@@ -333,12 +335,18 @@ public class AiChatService {
         "\nWeekly menu tools are available:\n"
             + "- get_menu reads the member's menu for a week (pass any date of that week, or"
             + " nothing for the current week).\n"
-            + "- create_menu plans a new drafted week: a start date plus seven days of meals."
-            + " Use dish ids the member has given or that appear in menus you have read; never"
-            + " invent ids.\n"
+            + "- suggest_dishes browses dishes that can be planned, each with a few recipes and"
+            + " their nutrition. Use it to obtain real dish ids before creating a week; never"
+            + " invent an id. Its result is already filtered for the member's stored allergies,"
+            + " so prefer what it returns. Pass filters (cuisine, difficulty, times, calories,"
+            + " protein) to honour what they asked for in conversation.\n"
+            + "- create_menu plans a new drafted week: a start date plus seven days of meals, each"
+            + " meal using a dish id returned by suggest_dishes.\n"
             + "- update_menu rewrites their current-week draft.\n"
             + "- schedule_menu activates a drafted week. Ask the member to confirm the exact"
             + " week first and call it only after they clearly agree.\n"
+            + "Allergies are matched exactly against ingredient names as the member typed them,"
+            + " so do not claim a dish is allergen-free beyond what suggest_dishes returned.\n"
             + "If a tool returns an error or an empty result, say plainly what happened and"
             + " never invent menu data.\n");
   }

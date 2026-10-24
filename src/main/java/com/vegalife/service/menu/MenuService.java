@@ -12,7 +12,6 @@ import com.vegalife.dto.response.menu.MenuDetailResponse;
 import com.vegalife.dto.response.menu.MenuMealPlanDayResponse;
 import com.vegalife.dto.response.menu.MenuMealPlanResponse;
 import com.vegalife.dto.response.menu.MenuSummaryResponse;
-import com.vegalife.dto.response.menu.RecipeSummaryResponse;
 import com.vegalife.model.menu.Menu;
 import com.vegalife.model.menu.MenuDetail;
 import com.vegalife.model.menu.MenuStatus;
@@ -23,6 +22,7 @@ import com.vegalife.repository.menu.MenuRepository;
 import com.vegalife.repository.menu.MenuSpecifications;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.service.recipe.RecipeRecommendationService;
+import com.vegalife.service.recipe.RecipeSummaryMapper;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.InvalidMenuTransitionException;
 import com.vegalife.shared.exception.MenuNotEditableException;
@@ -403,25 +403,8 @@ public class MenuService {
                 .build())
         .recommendedRecipes(
             recommendations.getOrDefault(dish.getId(), List.of()).stream()
-                .map(MenuService::toRecipeSummary)
+                .map(RecipeSummaryMapper::toSummary)
                 .toList())
-        .build();
-  }
-
-  private static RecipeSummaryResponse toRecipeSummary(Recipe recipe) {
-    return RecipeSummaryResponse.builder()
-        .id(recipe.getId())
-        .name(recipe.getName())
-        .description(recipe.getDescription())
-        .prepTimeMinutes(recipe.getPrepTimeMinutes())
-        .cookTimeMinutes(recipe.getCookTimeMinutes())
-        .servings(recipe.getServings())
-        .difficulty(recipe.getDifficulty() == null ? null : recipe.getDifficulty().name())
-        .calories(recipe.getCalories())
-        .proteinG(recipe.getProteinG())
-        .carbohydrateG(recipe.getCarbohydrateG())
-        .fatG(recipe.getFatG())
-        .fiberG(recipe.getFiberG())
         .build();
   }
 

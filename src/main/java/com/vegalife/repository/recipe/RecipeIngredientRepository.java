@@ -18,15 +18,18 @@ public interface RecipeIngredientRepository
 
   /**
    * The ingredient lines of several recipes at once, so allergy matching does not issue one query
-   * per recipe (issue #163). Callers must not pass an empty collection — {@code IN ()} is not valid
-   * JPQL.
+   * per recipe (issue #163).
+   *
+   * <p>Joins through {@code ingredientId} rather than {@code ri.ingredient}: the association is
+   * read-only ({@code insertable = false}), so filtering on the mapped field keeps the query
+   * independent of whether the association has been populated. Callers must not pass an empty
+   * collection — {@code IN ()} is not valid JPQL.
    */
   @Query(
       """
-      SELECT ri FROM RecipeIngredient ri
-      JOIN FETCH ri.ingredient i
+      SELECT ri.recipeId, i.name FROM RecipeIngredient ri
+      JOIN Ingredient i ON i.id = ri.ingredientId
       WHERE ri.recipeId IN :recipeIds
       """)
-  List<RecipeIngredient> findByRecipeIdInWithIngredient(
-      @Param("recipeIds") Collection<UUID> recipeIds);
+  List<Object[]> findIngredientNamesByRecipeIds(@Param("recipeIds") Collection<UUID> recipeIds);
 }

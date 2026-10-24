@@ -115,13 +115,19 @@ class MenuToolsEndToEndIntegrationTest {
   // ------------------------------------------------------------------ the tool surface
 
   @Test
-  void theSurfaceIsExactlyTheFiveDocumentedMenuTools() {
+  void theSurfaceIsTheSixDocumentedTools() {
     List<String> names =
         Arrays.stream(tools).map(tool -> tool.getToolDefinition().name()).sorted().toList();
 
+    // Five menu tools plus suggest_dishes, the read-only dish browser (issue #163).
     assertThat(names)
         .containsExactlyInAnyOrder(
-            "create_menu", "get_menu", "get_meal_plan", "schedule_menu", "update_menu");
+            "create_menu",
+            "get_menu",
+            "get_meal_plan",
+            "schedule_menu",
+            "suggest_dishes",
+            "update_menu");
   }
 
   @Test

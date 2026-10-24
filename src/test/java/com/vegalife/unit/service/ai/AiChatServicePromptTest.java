@@ -81,6 +81,7 @@ class AiChatServicePromptTest {
         new MenuTools(
             mock(MenuService.class),
             new MenuQueryFilterResolver(),
+            mock(com.vegalife.service.recipe.DishSuggestionFacade.class),
             Validation.buildDefaultValidatorFactory().getValidator(),
             new ObjectMapper());
     aiChatService =

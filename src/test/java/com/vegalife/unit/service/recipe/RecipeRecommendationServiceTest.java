@@ -5,10 +5,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.model.recipe.Dish;
-import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
-import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.DietaryPreferences;
 import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
@@ -53,7 +51,7 @@ class RecipeRecommendationServiceTest {
     Recipe unsafe = recipe("Classic Pad Thai", 0.99, Instant.parse("2026-01-03T00:00:00Z"));
     givenProfile(List.of("peanut"));
     when(recipeRepository.findApprovedByDishIdIn(any())).thenReturn(List.of(safe, unsafe));
-    when(recipeIngredientRepository.findByRecipeIdInWithIngredient(any()))
+    when(recipeIngredientRepository.findIngredientNamesByRecipeIds(any()))
         .thenReturn(
             List.of(line(safe, "rice noodles"), line(unsafe, "Peanut"), line(unsafe, "tofu")));
 
@@ -69,7 +67,7 @@ class RecipeRecommendationServiceTest {
     Recipe substring = recipe("Substring", 0.6, Instant.parse("2026-01-01T00:00:00Z"));
     givenProfile(List.of("  PeAnUt "));
     when(recipeRepository.findApprovedByDishIdIn(any())).thenReturn(List.of(exact, substring));
-    when(recipeIngredientRepository.findByRecipeIdInWithIngredient(any()))
+    when(recipeIngredientRepository.findIngredientNamesByRecipeIds(any()))
         .thenReturn(List.of(line(exact, "peanut"), line(substring, "peanut butter")));
 
     Map<UUID, List<Recipe>> result = service.recommendFor(List.of(dishId), userId, null, 3);
@@ -83,7 +81,7 @@ class RecipeRecommendationServiceTest {
     Recipe two = recipe("Two", 0.6, Instant.parse("2026-01-01T00:00:00Z"));
     givenProfile(List.of("peanut"));
     when(recipeRepository.findApprovedByDishIdIn(any())).thenReturn(List.of(one, two));
-    when(recipeIngredientRepository.findByRecipeIdInWithIngredient(any()))
+    when(recipeIngredientRepository.findIngredientNamesByRecipeIds(any()))
         .thenReturn(List.of(line(one, "peanut"), line(two, "peanut")));
 
     Map<UUID, List<Recipe>> result = service.recommendFor(List.of(dishId), userId, null, 3);
@@ -177,12 +175,7 @@ class RecipeRecommendationServiceTest {
         .build();
   }
 
-  private RecipeIngredient line(Recipe recipe, String ingredientName) {
-    return RecipeIngredient.builder()
-        .recipeId(recipe.getId())
-        .ingredient(Ingredient.builder().name(ingredientName).build())
-        .amount(BigDecimal.ONE)
-        .unit("g")
-        .build();
+  private Object[] line(Recipe recipe, String ingredientName) {
+    return new Object[] {recipe.getId(), ingredientName};
   }
 }

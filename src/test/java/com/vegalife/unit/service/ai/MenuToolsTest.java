@@ -12,13 +12,16 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.request.menu.CreateMenuRequest;
+import com.vegalife.dto.request.recipe.DishSuggestionRequest;
 import com.vegalife.dto.response.menu.MenuDetailResponse;
 import com.vegalife.dto.response.menu.MenuSummaryResponse;
+import com.vegalife.dto.response.recipe.DishSuggestionResponse;
 import com.vegalife.service.ai.AiToolContext;
 import com.vegalife.service.ai.MenuTools;
 import com.vegalife.service.menu.MenuQueryFilter;
 import com.vegalife.service.menu.MenuQueryFilterResolver;
 import com.vegalife.service.menu.MenuService;
+import com.vegalife.service.recipe.DishSuggestionFacade;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import jakarta.validation.Validation;
@@ -65,13 +68,20 @@ class MenuToolsTest {
 
   @Mock private MenuService menuService;
 
+  @Mock private DishSuggestionFacade dishSuggestionFacade;
+
   private MenuTools menuTools;
 
   @BeforeEach
   void setUp() {
     Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
     menuTools =
-        new MenuTools(menuService, new MenuQueryFilterResolver(), validator, new ObjectMapper());
+        new MenuTools(
+            menuService,
+            new MenuQueryFilterResolver(),
+            dishSuggestionFacade,
+            validator,
+            new ObjectMapper());
   }
 
   @Test
@@ -162,6 +172,71 @@ class MenuToolsTest {
     String result = menuTools.getMealPlan(null, null, MENU_ID.toString(), CONTEXT);
 
     assertThat(result).isEqualTo("error: Menu not found");
+  }
+
+  @Test
+  void suggestDishes_defaultsPagingAndForwardsFilters() {
+    when(dishSuggestionFacade.suggest(eq(USER), any())).thenReturn(emptySuggestionPage());
+
+    String result =
+        menuTools.suggestDishes(
+            "pad", "Thai", "EASY", 10, 20, 30, null, null, null, null, null, null, CONTEXT);
+
+    assertThat(result).contains("\"success\":true").contains("Dish suggestions retrieved");
+    ArgumentCaptor<DishSuggestionRequest> request =
+        ArgumentCaptor.forClass(DishSuggestionRequest.class);
+    verify(dishSuggestionFacade).suggest(eq(USER), request.capture());
+    assertThat(request.getValue().getName()).isEqualTo("pad");
+    assertThat(request.getValue().getCuisineType()).isEqualTo("Thai");
+    assertThat(request.getValue().getDifficulty()).isEqualTo("EASY");
+    assertThat(request.getValue().getMaxTotalTime()).isEqualTo(30);
+    // Paging defaults are applied server-side, so the model never has to compute them.
+    assertThat(request.getValue().getPage()).isZero();
+    assertThat(request.getValue().getSize()).isEqualTo(20);
+    assertThat(request.getValue().getRecipesPerDish()).isEqualTo(3);
+  }
+
+  @Test
+  void suggestDishes_clampsRecipesPerDishAndBlankFilters() {
+    when(dishSuggestionFacade.suggest(eq(USER), any())).thenReturn(emptySuggestionPage());
+
+    menuTools.suggestDishes(
+        "   ", null, null, null, null, null, null, null, null, 0, 999, 99, CONTEXT);
+
+    ArgumentCaptor<DishSuggestionRequest> request =
+        ArgumentCaptor.forClass(DishSuggestionRequest.class);
+    verify(dishSuggestionFacade).suggest(eq(USER), request.capture());
+    // A blank string from the model means "no filter", not a filter for the empty string.
+    assertThat(request.getValue().getName()).isNull();
+    assertThat(request.getValue().getCuisineType()).isNull();
+    assertThat(request.getValue().getRecipesPerDish()).isLessThanOrEqualTo(10);
+    assertThat(request.getValue().getSize()).isLessThanOrEqualTo(50);
+  }
+
+  @Test
+  void suggestDishes_neverAcceptsAnAllergyParameter() {
+    // The tool must resolve allergies from the profile only: an allergen-shaped filter is ignored.
+    when(dishSuggestionFacade.suggest(eq(USER), any())).thenReturn(emptySuggestionPage());
+
+    menuTools.suggestDishes(
+        null, null, null, null, null, null, null, null, null, null, null, null, CONTEXT);
+
+    ArgumentCaptor<DishSuggestionRequest> request =
+        ArgumentCaptor.forClass(DishSuggestionRequest.class);
+    verify(dishSuggestionFacade).suggest(eq(USER), request.capture());
+    assertThat(request.getValue().getMinCalories()).isNull();
+    assertThat(request.getValue().getMaxCalories()).isNull();
+    assertThat(request.getValue().getMinProtein()).isNull();
+  }
+
+  @Test
+  void suggestDishes_refusesWhenTheCallerIsUnattributed() {
+    String result =
+        menuTools.suggestDishes(
+            null, null, null, null, null, null, null, null, null, null, null, null, NO_IDENTITY);
+
+    assertThat(result).isEqualTo(REFUSED_IDENTITY);
+    verifyNoInteractions(dishSuggestionFacade);
   }
 
   @Test
@@ -317,6 +392,18 @@ class MenuToolsTest {
 
   private static PageResponse<MenuSummaryResponse> emptyPage() {
     return PageResponse.<MenuSummaryResponse>builder()
+        .content(List.of())
+        .page(0)
+        .size(20)
+        .totalElements(0)
+        .totalPages(0)
+        .first(true)
+        .last(true)
+        .build();
+  }
+
+  private static PageResponse<DishSuggestionResponse> emptySuggestionPage() {
+    return PageResponse.<DishSuggestionResponse>builder()
         .content(List.of())
         .page(0)
         .size(20)

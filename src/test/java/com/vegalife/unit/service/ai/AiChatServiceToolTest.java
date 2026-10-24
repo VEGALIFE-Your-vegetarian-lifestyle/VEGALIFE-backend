@@ -55,7 +55,13 @@ import reactor.core.publisher.Flux;
 class AiChatServiceToolTest {
 
   private static final List<String> MENU_TOOL_NAMES =
-      List.of("get_menu", "get_meal_plan", "create_menu", "update_menu", "schedule_menu");
+      List.of(
+          "get_menu",
+          "get_meal_plan",
+          "create_menu",
+          "update_menu",
+          "schedule_menu",
+          "suggest_dishes");
 
   @Mock private ChatClient.Builder chatClientBuilder;
   @Mock private AiConversationRepository conversationRepository;
@@ -88,6 +94,7 @@ class AiChatServiceToolTest {
         new MenuTools(
             mock(MenuService.class),
             new MenuQueryFilterResolver(),
+            mock(com.vegalife.service.recipe.DishSuggestionFacade.class),
             Validation.buildDefaultValidatorFactory().getValidator(),
             new ObjectMapper());
 
@@ -143,7 +150,7 @@ class AiChatServiceToolTest {
   }
 
   @Test
-  void initChatClient_attachesAllFiveLocalMenuTools() {
+  void initChatClient_attachesAllSixLocalTools() {
     when(chatClientBuilder.defaultToolCallbacks(any(ToolCallback[].class)))
         .thenReturn(chatClientBuilder);
     when(chatClientBuilder.build()).thenReturn(chatClient);

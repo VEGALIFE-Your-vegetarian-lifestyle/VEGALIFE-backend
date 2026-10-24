@@ -1,7 +1,6 @@
 package com.vegalife.service.recipe;
 
 import com.vegalife.model.recipe.Recipe;
-import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.DietaryPreferences;
 import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
@@ -141,11 +140,11 @@ public class RecipeRecommendationService {
     }
     List<UUID> recipeIds = recipes.stream().map(Recipe::getId).toList();
     Set<UUID> offending = new HashSet<>();
-    for (RecipeIngredient line :
-        recipeIngredientRepository.findByRecipeIdInWithIngredient(recipeIds)) {
-      if (line.getIngredient() != null
-          && allergies.contains(normalizeName(line.getIngredient().getName()))) {
-        offending.add(line.getRecipeId());
+    for (Object[] row : recipeIngredientRepository.findIngredientNamesByRecipeIds(recipeIds)) {
+      UUID recipeId = (UUID) row[0];
+      String ingredientName = (String) row[1];
+      if (allergies.contains(normalizeName(ingredientName))) {
+        offending.add(recipeId);
       }
     }
     return offending;

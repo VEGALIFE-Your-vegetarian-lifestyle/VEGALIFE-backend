@@ -6,11 +6,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.ModerationStatus;
+import com.vegalife.model.recipe.Recipe;
+import com.vegalife.model.recipe.RecipeIngredient;
+import com.vegalife.model.user.DietaryPreferences;
 import com.vegalife.model.user.User;
+import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.recipe.DishRepository;
+import com.vegalife.repository.recipe.IngredientRepository;
+import com.vegalife.repository.recipe.RecipeIngredientRepository;
+import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,10 +71,22 @@ class DishControllerIntegrationTest {
 
   @Autowired private DishRepository dishRepository;
 
+  @Autowired private IngredientRepository ingredientRepository;
+
+  @Autowired private RecipeRepository recipeRepository;
+
+  @Autowired private RecipeIngredientRepository recipeIngredientRepository;
+
+  @Autowired private UserProfileRepository userProfileRepository;
+
   private String accessToken;
 
   @BeforeEach
   void setUp() {
+    userProfileRepository.deleteAll();
+    recipeIngredientRepository.deleteAll();
+    ingredientRepository.deleteAll();
+    recipeRepository.deleteAll();
     dishRepository.deleteAll();
     User testUser =
         User.builder()
@@ -228,12 +250,120 @@ class DishControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].name").value("pho chay"));
   }
 
+  @Test
+  void suggestDishes_withoutToken_returns401() throws Exception {
+    mockMvc.perform(get("/api/dishes/suggestions")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void suggestDishes_excludesDishesWhoseOnlyRecipeUsesAStoredAllergen() throws Exception {
+    Dish safeDish = dishRepository.save(approved("pho chay"));
+    Dish unsafeDish = dishRepository.save(approved("pad thai"));
+    recipeRepository.save(approvedRecipe(safeDish, "Pho chay", "tofu"));
+    recipeRepository.save(approvedRecipe(unsafeDish, "Pad thai", "peanut"));
+    saveAllergies("Peanut");
+
+    mockMvc
+        .perform(get("/api/dishes/suggestions").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content.length()").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("pho chay"))
+        .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].name").value("Pho chay"))
+        .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].servings").value(2))
+        .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].proteinG").value(21.50));
+  }
+
+  @Test
+  void suggestDishes_hidesDishesWithNoApprovedRecipe() throws Exception {
+    dishRepository.save(approved("pho chay"));
+
+    mockMvc
+        .perform(get("/api/dishes/suggestions").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(0))
+        .andExpect(jsonPath("$.data.content.length()").value(0));
+  }
+
+  @Test
+  void suggestDishes_reportsNutritionAsNullRatherThanZeroWhenUnknown() throws Exception {
+    Dish dish = dishRepository.save(approved("pho chay"));
+    recipeRepository.save(approvedRecipe(dish, "Pho chay", "tofu"));
+
+    mockMvc
+        .perform(get("/api/dishes/suggestions").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].calories").doesNotExist())
+        .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].fatG").doesNotExist());
+  }
+
+  @Test
+  void suggestDishes_calorieCeilingExcludesRecipesWithUnknownCalories() throws Exception {
+    Dish dish = dishRepository.save(approved("pho chay"));
+    recipeRepository.save(approvedRecipe(dish, "Pho chay", "tofu"));
+
+    mockMvc
+        .perform(
+            get("/api/dishes/suggestions")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("maxCalories", "800"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(0));
+  }
+
+  @Test
+  void suggestDishes_negativeCalories_returns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/dishes/suggestions")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("maxCalories", "-1"))
+        .andExpect(status().isBadRequest());
+  }
+
   /**
    * Catalogue fixtures model data that existed before moderation was introduced, so they are
    * approved. A PENDING dish is one a member introduced and no admin has reviewed yet (ADR-016).
    */
   private static Dish approved(String name) {
     return Dish.builder().name(name).moderationStatus(ModerationStatus.APPROVED).build();
+  }
+
+  private Recipe approvedRecipe(Dish dish, String name, String ingredientName) {
+    User owner = userRepository.findAll().get(0);
+    Ingredient ingredient =
+        ingredientRepository.saveAndFlush(Ingredient.builder().name(ingredientName).build());
+    Recipe recipe =
+        recipeRepository.saveAndFlush(
+            Recipe.builder()
+                .dish(dish)
+                .user(owner)
+                .name(name)
+                .instructions("Cook it")
+                .servings(2)
+                .proteinG(new BigDecimal("21.50"))
+                .moderationStatus(ModerationStatus.APPROVED)
+                .build());
+    recipeIngredientRepository.saveAndFlush(
+        RecipeIngredient.builder()
+            .recipeId(recipe.getId())
+            .ingredientId(ingredient.getId())
+            .amount(BigDecimal.ONE)
+            .unit("g")
+            .build());
+    return recipe;
+  }
+
+  private void saveAllergies(String... allergies) {
+    UserProfile profile =
+        UserProfile.builder()
+            .user(userRepository.findAll().get(0))
+            .dietaryPreferences(DietaryPreferences.builder().allergies(List.of(allergies)).build())
+            .build();
+    // flush: the request runs in the same transaction, so an unflushed profile would be invisible
+    // to the service's own query and the allergy filter would silently no-op.
+    userProfileRepository.saveAndFlush(profile);
   }
 
   private static Dish approved(String name, String description) {
