@@ -14,12 +14,13 @@ describe is now the backend's own `@Tool` methods, not an MCP server.
 | Rule ID | Title | Status | Last Reviewed |
 |---------|-------|--------|---------------|
 | BR-MCP-001 | Tool calls act as the authenticated caller | Active | 2026-10-12 |
-| BR-MCP-002 | Exactly five menu tools are exposed | Active | 2026-10-12 |
+| BR-MCP-002 | Exactly six tools are exposed | Active | 2026-10-25 |
 | BR-MCP-003 | Tool calls consume no AI quota | Active | 2026-10-12 |
 | BR-MCP-004 | Credentials are never model-visible or logged | Active | 2026-10-12 |
 | BR-MCP-005 | Chat edits only the caller's current-week draft | Active | 2026-10-12 |
 | BR-MCP-006 | Scheduling happens only after explicit user confirmation | Active | 2026-10-12 |
 | BR-MCP-007 | Tool failures are model-readable results, not transport errors | Active | 2026-10-12 |
+| BR-MCP-008 | Allergies come from the profile, never from a tool argument | Active | 2026-10-25 |
 
 ### BR-MCP-001 — Tool calls act as the authenticated caller
 Every menu tool call executes as the member whose authentication produced the
@@ -40,17 +41,18 @@ manipulating arguments.
   than a re-forwarded JWT. The guarantee (no caller-supplied identity input,
   backend owns row scoping) is unchanged.
 
-### BR-MCP-002 — Exactly five menu tools are exposed
+### BR-MCP-002 — Exactly six tools are exposed
 The chat exposes exactly `get_menu`, `get_meal_plan`, `create_menu`,
-`update_menu`, and `schedule_menu`. No other backend capability is reachable
-through the tool surface; adding a tool is a reviewed change to `MenuTools`
-plus this rule's table, never an emergent consequence of the backend's
-endpoint count. The two read tools each mirror one backend endpoint
-(`get_menu` → `GET /api/menus`, `get_meal_plan` → `GET /api/menus/details`)
-and deliberately do not overlap: one lists summaries, the other returns the
-day-by-day meal detail.
+`update_menu`, `schedule_menu`, and `suggest_dishes`. No other backend
+capability is reachable through the tool surface; adding a tool is a reviewed
+change to `MenuTools` plus this rule's table, never an emergent consequence of
+the backend's endpoint count. The two read tools each mirror one backend
+endpoint (`get_menu` → `GET /api/menus`, `get_meal_plan` →
+`GET /api/menus/details`) and deliberately do not overlap: one lists
+summaries, the other returns the day-by-day meal detail. `suggest_dishes`
+mirrors `GET /api/dishes/suggestions`.
 
-- Enforcement: the five `@Tool` methods on `MenuTools` — nothing is registered
+- Enforcement: the six `@Tool` methods on `MenuTools` — nothing is registered
   reflectively from the endpoint set, so no controller automatically becomes a
   tool; asserted by test
 - Related: ADR-013, FR-002
@@ -60,6 +62,41 @@ day-by-day meal detail.
   `docs/feats/meal-plan-detail-query.md`)
 - Amended: 2026-10-13 — the registry moved from the `mcp-server` module to
   `MenuTools`; the count and the names are unchanged.
+- Amended: 2026-10-25 — count raised from five to six with `suggest_dishes`
+  (issue #163). The original rule treated "no dish discovery" as a non-goal;
+  the AI could previously only plan meals from dish ids the member had already
+  named. `suggest_dishes` closes that gap with a read-only, allergy-filtered
+  browse that mirrors an existing member-facing endpoint. See
+  `docs/feats/dish-suggestions.md`.
+
+### BR-MCP-008 — Allergies come from the profile, never from a tool argument
+No tool and no endpoint accepts an allergen, allergy, or `exclude` parameter.
+The member's stored allergies are read server-side from
+`user_profile.dietary_preferences` on every call and applied to the result, so
+they cannot be omitted by the model, forged by a caller, or drift out of sync
+with the profile.
+
+Matching is **exact** on the ingredient name after trimming and case folding:
+the stored allergy string must equal an `ingredient.name`. There is no
+substring, synonym, plural, or compound matching, and no allergen vocabulary
+table. A stored `peanut` therefore does **not** exclude an ingredient named
+`peanut butter`. This limitation is deliberate and documented; it is not a bug
+to be fixed by adding vocabulary tables.
+
+A dish is suggested only when at least one of its approved recipes is free of
+every stored allergy ("block on all"): a dish with some safe variants stays,
+with only the safe ones recommended. Dishes with no safe recipe are omitted
+entirely.
+
+- Enforcement: `RecipeRecommendationService.allergiesOf` and
+  `DishSuggestionService`; asserted by `RecipeRecommendationServiceTest` and
+  `DishControllerIntegrationTest`
+- Related: `docs/feats/dish-suggestions.md`, ADR-016
+- Added: 2026-10-25
+- Note: menus already saved are **not** re-checked. A meal keeps its place in a
+  saved plan even when nothing can be recommended for it; its
+  `recommendedRecipes` is then empty. There is no allergen flag stored on a
+  menu, and changing the profile does not rewrite existing menus.
 
 ### BR-MCP-003 — Tool calls consume no AI quota
 Menu tool calls are steps inside one chat turn, not separate turns: they never

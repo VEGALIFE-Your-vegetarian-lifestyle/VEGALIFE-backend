@@ -92,15 +92,7 @@ public class AdminIngredientService {
 
     Ingredient ingredient =
         ingredientRepository.saveAndFlush(
-            Ingredient.builder()
-                .name(name)
-                .calories(request.getCalories())
-                .proteinG(request.getProteinG())
-                .carbohydrateG(request.getCarbohydrateG())
-                .fatG(request.getFatG())
-                .fiberG(request.getFiberG())
-                .moderationStatus(ModerationStatus.APPROVED)
-                .build());
+            Ingredient.builder().name(name).moderationStatus(ModerationStatus.APPROVED).build());
 
     logDecision(adminId, "CREATE_INGREDIENT", ingredient.getId(), null);
     log.info("Admin {} created ingredient {}", adminId, ingredient.getId());
@@ -137,21 +129,6 @@ public class AdminIngredientService {
                 });
         ingredient.setName(name);
       }
-    }
-    if (request.getCalories() != null) {
-      ingredient.setCalories(request.getCalories());
-    }
-    if (request.getProteinG() != null) {
-      ingredient.setProteinG(request.getProteinG());
-    }
-    if (request.getCarbohydrateG() != null) {
-      ingredient.setCarbohydrateG(request.getCarbohydrateG());
-    }
-    if (request.getFatG() != null) {
-      ingredient.setFatG(request.getFatG());
-    }
-    if (request.getFiberG() != null) {
-      ingredient.setFiberG(request.getFiberG());
     }
 
     Ingredient saved = ingredientRepository.saveAndFlush(ingredient);
@@ -225,11 +202,6 @@ public class AdminIngredientService {
         .id(ingredient.getId())
         .name(ingredient.getName())
         .moderationStatus(ingredient.getModerationStatus().name())
-        .calories(ingredient.getCalories())
-        .proteinG(ingredient.getProteinG())
-        .carbohydrateG(ingredient.getCarbohydrateG())
-        .fatG(ingredient.getFatG())
-        .fiberG(ingredient.getFiberG())
         .createdAt(ingredient.getCreatedAt())
         .updatedAt(ingredient.getUpdatedAt())
         .build();

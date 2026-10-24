@@ -27,6 +27,11 @@ postman/globals/
 # Agent ephemeral plans (never committed)
 .agents/plans/
 
+# Local build/verification scratch output
+build_output.log
+run_compile.log
+run-build.cmd
+
 # Local secrets (HF_TOKEN, DB creds — never committed)
 .env
 .env.*

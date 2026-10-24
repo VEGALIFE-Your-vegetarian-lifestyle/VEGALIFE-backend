@@ -148,6 +148,11 @@ public class RecipeService {
                 .cookTimeMinutes(request.getCookTimeMinutes())
                 .servings(request.getServings())
                 .difficulty(parseDifficulty(request.getDifficulty()))
+                .calories(request.getCalories())
+                .proteinG(request.getProteinG())
+                .carbohydrateG(request.getCarbohydrateG())
+                .fatG(request.getFatG())
+                .fiberG(request.getFiberG())
                 .build());
     recipeRepository.flush();
 

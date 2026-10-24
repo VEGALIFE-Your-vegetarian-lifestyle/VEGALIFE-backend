@@ -1,12 +1,14 @@
 package com.vegalife.dto.request.recipe;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -49,4 +51,23 @@ public class RecipeCreateRequest {
   @Size(max = 50, message = "At most 50 ingredients are allowed")
   @Valid
   private List<RecipeIngredientItem> ingredients;
+
+  /**
+   * Author-entered nutrition for the whole recipe (issue #163), not per serving. All optional: an
+   * absent value means "not provided" and must never be stored as 0.
+   */
+  @DecimalMin(value = "0", message = "calories must be >= 0")
+  private BigDecimal calories;
+
+  @DecimalMin(value = "0", message = "proteinG must be >= 0")
+  private BigDecimal proteinG;
+
+  @DecimalMin(value = "0", message = "carbohydrateG must be >= 0")
+  private BigDecimal carbohydrateG;
+
+  @DecimalMin(value = "0", message = "fatG must be >= 0")
+  private BigDecimal fatG;
+
+  @DecimalMin(value = "0", message = "fiberG must be >= 0")
+  private BigDecimal fiberG;
 }

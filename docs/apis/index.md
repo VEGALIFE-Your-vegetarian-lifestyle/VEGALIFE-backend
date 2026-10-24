@@ -64,6 +64,7 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |
 | `ingredients/get-ingredients.md` | `GET /api/ingredients` | List ingredients paginated, with case-insensitive name filter (authenticated) |
 | `recipes/get-dishes.md` | `GET /api/dishes` | List active dishes for recipe-create autocomplete (authenticated) |
+| `recipes/get-dishes-suggestions.md` | `GET /api/dishes/suggestions` | Suggest plannable dishes with allergy-filtered recipe recommendations (authenticated) |
 | `subscriptions/get-me.md` | `GET /api/subscriptions/me` | Get own AI subscription: tier, usage, plan, latest payment (authenticated) |
 | `subscriptions/get-subscriptions.md` | `GET /api/subscriptions` | List active AI plans with limits and price (public) |
 | `subscriptions/get-history.md` | `GET /api/subscriptions/me/history` | Paginated history of own AI subscription rows, newest first (authenticated) |

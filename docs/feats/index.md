@@ -50,6 +50,7 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `ai-chat-send.md`                   | AI Chat Send (JSON + SSE Streaming)      | Approved    | 2026-10-07 |
 | `query-menus-by-range.md`           | Query Menus by Week, Month, or Date Range | Superseded  | 2026-10-10 |
 | `mcp-menu-tools.md`                 | Menu Tools for AI Chat (In-Process)    | Approved    | 2026-10-13 |
+| `dish-suggestions.md`               | Dish Suggestions and Recipe Recommendations | Implemented | 2026-10-25 |
 | `meal-plan-detail-query.md`         | Meal Plan Detail Query                   | Implemented | 2026-10-12 |
 | `moderate-posts-admin-api.md`       | Moderate Posts API (Admin)                | Implemented | 2026-10-10 |
 | `embedding-provider-migration.md`   | Embedding Provider Migration to Gemini    | Draft       | 2026-10-18 |

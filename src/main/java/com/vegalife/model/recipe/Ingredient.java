@@ -8,7 +8,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
@@ -33,21 +32,6 @@ public class Ingredient {
 
   @Column(name = "name", length = 100, nullable = false)
   private String name;
-
-  @Column(name = "calories", precision = 10, scale = 2)
-  private BigDecimal calories;
-
-  @Column(name = "protein_g", precision = 10, scale = 2)
-  private BigDecimal proteinG;
-
-  @Column(name = "carbohydrate_g", precision = 10, scale = 2)
-  private BigDecimal carbohydrateG;
-
-  @Column(name = "fat_g", precision = 10, scale = 2)
-  private BigDecimal fatG;
-
-  @Column(name = "fiber_g", precision = 10, scale = 2)
-  private BigDecimal fiberG;
 
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)

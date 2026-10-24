@@ -16,6 +16,7 @@ import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -88,6 +89,26 @@ public class Recipe {
   @Column(name = "moderation_status", length = 20, nullable = false)
   @Builder.Default
   private ModerationStatus moderationStatus = ModerationStatus.PENDING;
+
+  /**
+   * Author-entered nutrition for the <em>whole</em> recipe, not per serving (issue #163). Null
+   * means "not provided" — deliberately distinct from 0, and never coerced. Per-serving values are
+   * derived from {@link #servings} by whoever needs them.
+   */
+  @Column(name = "calories", precision = 10, scale = 2)
+  private BigDecimal calories;
+
+  @Column(name = "protein_g", precision = 10, scale = 2)
+  private BigDecimal proteinG;
+
+  @Column(name = "carbohydrate_g", precision = 10, scale = 2)
+  private BigDecimal carbohydrateG;
+
+  @Column(name = "fat_g", precision = 10, scale = 2)
+  private BigDecimal fatG;
+
+  @Column(name = "fiber_g", precision = 10, scale = 2)
+  private BigDecimal fiberG;
 
   @ManyToMany
   @JoinTable(

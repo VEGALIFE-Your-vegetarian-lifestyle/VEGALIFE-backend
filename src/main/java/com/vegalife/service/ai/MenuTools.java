@@ -6,13 +6,16 @@ import com.vegalife.dto.request.menu.CreateMenuRequest;
 import com.vegalife.dto.request.menu.MealRequest;
 import com.vegalife.dto.request.menu.MenuDayRequest;
 import com.vegalife.dto.request.menu.UpdateMenuRequest;
+import com.vegalife.dto.request.recipe.DishSuggestionRequest;
 import com.vegalife.service.menu.MenuQueryFilter;
 import com.vegalife.service.menu.MenuQueryFilterResolver;
 import com.vegalife.service.menu.MenuService;
+import com.vegalife.service.recipe.DishSuggestionFacade;
 import com.vegalife.shared.dto.ApiResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -57,9 +60,11 @@ public class MenuTools {
   private static final int DEFAULT_PAGE = 0;
   private static final int DEFAULT_SIZE = 20;
   private static final int MAX_SIZE = 100;
+  private static final int DEFAULT_RECIPES_PER_DISH = 3;
 
   private final MenuService menuService;
   private final MenuQueryFilterResolver filterResolver;
+  private final DishSuggestionFacade dishSuggestionFacade;
   private final Validator validator;
   private final ObjectMapper objectMapper;
 
@@ -313,6 +318,87 @@ public class MenuTools {
 
   /** One meal slot of a day; mealType is BREAKFAST, LUNCH or DINNER (the service validates). */
   public record Meal(String mealType, String dishId, Integer servings) {}
+
+  @Tool(
+      name = "suggest_dishes",
+      resultConverter = RawTextToolResultConverter.class,
+      description =
+          "Browse dishes that can be planned, each with up to recipesPerDish recipes worth"
+              + " recommending and their nutrition. Use this BEFORE create_menu to obtain real"
+              + " dish ids: never invent one. A dish is returned only when it has at least one"
+              + " approved recipe that does not conflict with the member's stored allergies, so"
+              + " the result is already filtered for them — allergies are never a parameter."
+              + " Results are ordered by dish name and paginated. Filters narrow BOTH which dishes"
+              + " appear and which recipes are recommended, so a dish is never shown for a recipe"
+              + " that was filtered out. Nutrition values are totals for the whole recipe, not per"
+              + " serving, and may be absent; never assume a missing value is zero. The caller is"
+              + " always identified from the conversation context, never from an argument.")
+  public String suggestDishes(
+      @ToolParam(required = false, description = "Case-insensitive substring of the dish name.")
+          String name,
+      @ToolParam(required = false, description = "Cuisine to match exactly, e.g. 'Thai'.")
+          String cuisineType,
+      @ToolParam(
+              required = false,
+              description = "Recipe difficulty: EASY, MEDIUM or HARD. Omit for any.")
+          String difficulty,
+      @ToolParam(
+              required = false,
+              description = "Recipes taking at most this many minutes to prep.")
+          Integer maxPrepTime,
+      @ToolParam(
+              required = false,
+              description = "Recipes taking at most this many minutes to cook.")
+          Integer maxCookTime,
+      @ToolParam(
+              required = false,
+              description =
+                  "Recipes whose prep plus cook time is at most this many minutes, for"
+                      + " 'something quick'.")
+          Integer maxTotalTime,
+      @ToolParam(required = false, description = "Only recipes with at least this many calories.")
+          BigDecimal minCalories,
+      @ToolParam(required = false, description = "Only recipes with at most this many calories.")
+          BigDecimal maxCalories,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at least this many grams of protein per recipe.")
+          BigDecimal minProtein,
+      @ToolParam(required = false, description = "Zero-based page index. Omit for 0.") Integer page,
+      @ToolParam(required = false, description = "Dishes per page, 1 to 50. Omit for 20.")
+          Integer size,
+      @ToolParam(required = false, description = "Recipes per dish, 1 to 10. Omit for 3.")
+          Integer recipesPerDish,
+      ToolContext toolContext) {
+    UUID userId = callerUserId(toolContext);
+    if (userId == null) {
+      return MISSING_IDENTITY;
+    }
+    DishSuggestionRequest request =
+        DishSuggestionRequest.builder()
+            .name(blankToNull(name))
+            .cuisineType(blankToNull(cuisineType))
+            .difficulty(blankToNull(difficulty))
+            .maxPrepTime(maxPrepTime)
+            .maxCookTime(maxCookTime)
+            .maxTotalTime(maxTotalTime)
+            .minCalories(minCalories)
+            .maxCalories(maxCalories)
+            .minProtein(minProtein)
+            .page(page == null ? DEFAULT_PAGE : Math.max(0, page))
+            .size(size == null ? DEFAULT_SIZE : Math.min(50, Math.max(1, size)))
+            .recipesPerDish(
+                recipesPerDish == null
+                    ? DEFAULT_RECIPES_PER_DISH
+                    : Math.min(10, Math.max(1, recipesPerDish)))
+            .build();
+    try {
+      validate(request);
+      return write(dishSuggestionFacade.suggest(userId, request), "Dish suggestions retrieved");
+    } catch (RuntimeException e) {
+      return toolFailure(e);
+    }
+  }
 
   /**
    * BR-MCP-005 pre-check: update_menu may target only the caller's own current-week drafted menu.

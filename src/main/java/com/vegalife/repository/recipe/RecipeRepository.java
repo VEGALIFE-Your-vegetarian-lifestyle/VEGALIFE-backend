@@ -9,6 +9,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -33,4 +35,23 @@ public interface RecipeRepository
 
   /** Admin dashboard (issue #12): recipes awaiting moderation review. */
   long countByModerationStatusAndDeletedAtIsNull(ModerationStatus moderationStatus);
+
+  /**
+   * Batch lookup of every recipe that could be recommended for the given dishes (issue #163).
+   *
+   * <p>Deliberately unfiltered beyond visibility and dish membership: allergy matching and the
+   * caller's filter params are applied in memory by the service, because the allergy match compares
+   * against a JSONB string list that has no portable JPQL predicate. Ordering is left to the caller
+   * so the "top N" rule lives in exactly one place.
+   *
+   * <p>Callers must not pass an empty collection — {@code IN ()} is not valid JPQL.
+   */
+  @Query(
+      """
+      SELECT r FROM Recipe r
+      WHERE r.dish.id IN :dishIds
+        AND r.deletedAt IS NULL
+        AND r.moderationStatus = com.vegalife.model.recipe.ModerationStatus.APPROVED
+      """)
+  List<Recipe> findApprovedByDishIdIn(@Param("dishIds") Collection<UUID> dishIds);
 }
