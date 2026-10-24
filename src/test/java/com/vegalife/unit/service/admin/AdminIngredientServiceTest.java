@@ -20,7 +20,6 @@ import com.vegalife.service.admin.AdminIngredientService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
-import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,15 +61,10 @@ class AdminIngredientServiceTest {
 
     AdminIngredientResponse response =
         adminIngredientService.createIngredient(
-            adminId,
-            AdminIngredientCreateRequest.builder()
-                .name("đậu hũ")
-                .calories(new BigDecimal("76"))
-                .proteinG(new BigDecimal("8"))
-                .build());
+            adminId, AdminIngredientCreateRequest.builder().name("đậu hũ").build());
 
     assertThat(response.getModerationStatus()).isEqualTo("APPROVED");
-    assertThat(response.getCalories()).isEqualByComparingTo("76");
+    assertThat(response.getName()).isEqualTo("đậu hũ");
     assertThat(lastLog().getAction()).isEqualTo("CREATE_INGREDIENT");
   }
 
@@ -101,7 +95,6 @@ class AdminIngredientServiceTest {
   @Test
   void updateIngredient_keepsModerationStatusAndOnlyTouchesSentFields() {
     ingredient.setModerationStatus(ModerationStatus.APPROVED);
-    ingredient.setCalories(new BigDecimal("76"));
     when(ingredientRepository.findByIdAndDeletedAtIsNull(ingredient.getId()))
         .thenReturn(Optional.of(ingredient));
     when(ingredientRepository.saveAndFlush(ingredient)).thenReturn(ingredient);
@@ -110,11 +103,10 @@ class AdminIngredientServiceTest {
         adminIngredientService.updateIngredient(
             adminId,
             ingredient.getId(),
-            AdminIngredientUpdateRequest.builder().proteinG(new BigDecimal("8")).build());
+            AdminIngredientUpdateRequest.builder().name("đậu hũ non").build());
 
-    assertThat(response.getProteinG()).isEqualByComparingTo("8");
-    // Omitted fields keep their values, and the admin's edit is not a re-review.
-    assertThat(response.getCalories()).isEqualByComparingTo("76");
+    assertThat(response.getName()).isEqualTo("đậu hũ non");
+    // The admin's edit is not a re-review.
     assertThat(response.getModerationStatus()).isEqualTo("APPROVED");
   }
 

@@ -295,7 +295,7 @@ class AdminNameCrudIntegrationTest {
             post("/api/admin/ingredients")
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"đậu hũ\",\"calories\":76}"))
+                .content("{\"name\":\"đậu hũ\"}"))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.data.moderationStatus").value("APPROVED"));
 

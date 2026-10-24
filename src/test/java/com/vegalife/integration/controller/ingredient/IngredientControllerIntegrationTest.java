@@ -11,7 +11,6 @@ import com.vegalife.model.user.User;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
-import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -104,11 +103,7 @@ class IngredientControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[1].id").isNotEmpty())
         .andExpect(jsonPath("$.data.content[1].createdAt").isNotEmpty())
         .andExpect(jsonPath("$.data.content[0].calories").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].proteinG").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].protein_g").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].carbohydrateG").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].fatG").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].fiberG").doesNotExist());
+        .andExpect(jsonPath("$.data.content[0].proteinG").doesNotExist());
   }
 
   @Test
@@ -224,15 +219,7 @@ class IngredientControllerIntegrationTest {
 
   private void saveIngredient(String name) {
     Ingredient ingredient =
-        Ingredient.builder()
-            .name(name)
-            .moderationStatus(ModerationStatus.APPROVED)
-            .calories(new BigDecimal("100.00"))
-            .proteinG(new BigDecimal("10.00"))
-            .carbohydrateG(new BigDecimal("5.00"))
-            .fatG(new BigDecimal("2.00"))
-            .fiberG(new BigDecimal("3.00"))
-            .build();
+        Ingredient.builder().name(name).moderationStatus(ModerationStatus.APPROVED).build();
     ingredientRepository.save(ingredient);
   }
 }

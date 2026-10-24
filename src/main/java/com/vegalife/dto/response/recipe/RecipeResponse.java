@@ -1,9 +1,9 @@
 package com.vegalife.dto.response.recipe;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.math.BigDecimal;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -43,6 +43,7 @@ public class RecipeResponse {
    * the author did not provide the value — distinct from 0.
    */
   private BigDecimal calories;
+
   private BigDecimal proteinG;
   private BigDecimal carbohydrateG;
   private BigDecimal fatG;
