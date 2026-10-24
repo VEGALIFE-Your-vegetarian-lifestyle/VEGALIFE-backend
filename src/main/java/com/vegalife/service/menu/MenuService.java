@@ -12,14 +12,17 @@ import com.vegalife.dto.response.menu.MenuDetailResponse;
 import com.vegalife.dto.response.menu.MenuMealPlanDayResponse;
 import com.vegalife.dto.response.menu.MenuMealPlanResponse;
 import com.vegalife.dto.response.menu.MenuSummaryResponse;
+import com.vegalife.dto.response.menu.RecipeSummaryResponse;
 import com.vegalife.model.menu.Menu;
 import com.vegalife.model.menu.MenuDetail;
 import com.vegalife.model.menu.MenuStatus;
 import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.repository.menu.MenuDetailRepository;
 import com.vegalife.repository.menu.MenuRepository;
 import com.vegalife.repository.menu.MenuSpecifications;
 import com.vegalife.repository.recipe.DishRepository;
+import com.vegalife.service.recipe.RecipeRecommendationService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.InvalidMenuTransitionException;
 import com.vegalife.shared.exception.MenuNotEditableException;
@@ -59,6 +62,7 @@ public class MenuService {
   private final MenuDetailRepository menuDetailRepository;
   private final MenuValidator menuValidator;
   private final DishRepository dishRepository;
+  private final RecipeRecommendationService recipeRecommendationService;
 
   /**
    * BR-MENU-005: validates the week payload and persists a new {@code drafted} menu with its days
@@ -148,6 +152,10 @@ public class MenuService {
    * menu with its days, meals and dishes, ordered by start date. A {@code menuId} selects exactly
    * one menu and overrides the window entirely, so a caller holding an id never has to work out
    * which range would contain it; a missing or foreign id is a 404, never a 403.
+   *
+   * <p>Each meal also carries up to three recommended recipes (issue #163), filtered by the
+   * caller's stored allergies. A meal whose dish has no qualifying recipe keeps an empty list — the
+   * meal itself is never removed, since it is part of a plan the caller already saved.
    */
   @Transactional(readOnly = true)
   public List<MenuMealPlanResponse> listMealPlans(
@@ -157,7 +165,7 @@ public class MenuService {
           menuRepository
               .findByIdAndUserId(menuId, userId)
               .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
-      return List.of(toMealPlan(menu, detailsForMenus(List.of(menu))));
+      return List.of(toMealPlan(menu, detailsForMenus(List.of(menu)), userId));
     }
 
     List<Menu> menus =
@@ -175,7 +183,7 @@ public class MenuService {
                 Collectors.groupingBy(
                     MenuDetail::getMenuId, LinkedHashMap::new, Collectors.toList()));
     return menus.stream()
-        .map(menu -> toMealPlan(menu, byMenuId.getOrDefault(menu.getId(), List.of())))
+        .map(menu -> toMealPlan(menu, byMenuId.getOrDefault(menu.getId(), List.of()), userId))
         .toList();
   }
 
@@ -333,7 +341,14 @@ public class MenuService {
         .build();
   }
 
-  private MenuMealPlanResponse toMealPlan(Menu menu, List<MenuDetail> details) {
+  private MenuMealPlanResponse toMealPlan(Menu menu, List<MenuDetail> details, UUID userId) {
+    Map<UUID, List<Recipe>> recommendations =
+        recipeRecommendationService.recommendFor(
+            distinctDishIds(details),
+            userId,
+            null,
+            RecipeRecommendationService.DEFAULT_RECIPES_PER_DISH);
+
     Map<LocalDate, List<MenuDetail>> byDate = new LinkedHashMap<>();
     for (MenuDetail detail : details) {
       byDate.computeIfAbsent(detail.getDate(), key -> new ArrayList<>()).add(detail);
@@ -344,7 +359,10 @@ public class MenuService {
                 entry ->
                     MenuMealPlanDayResponse.builder()
                         .date(entry.getKey())
-                        .meals(entry.getValue().stream().map(this::toMealDetail).toList())
+                        .meals(
+                            entry.getValue().stream()
+                                .map(detail -> toMealDetail(detail, recommendations))
+                                .toList())
                         .build())
             .toList();
 
@@ -360,8 +378,17 @@ public class MenuService {
         .build();
   }
 
-  /** The dish is embedded in full rather than referenced by id, so a plan can be read aloud. */
-  private MealDetailResponse toMealDetail(MenuDetail detail) {
+  /** Distinct dish ids of a plan, so the recommendation lookup is one query per menu. */
+  private static List<UUID> distinctDishIds(List<MenuDetail> details) {
+    return details.stream().map(detail -> detail.getDish().getId()).distinct().toList();
+  }
+
+  /**
+   * The dish is embedded in full rather than referenced by id, so a plan can be read aloud. Its
+   * recommended recipes come from the batch lookup, never a per-meal query.
+   */
+  private MealDetailResponse toMealDetail(
+      MenuDetail detail, Map<UUID, List<Recipe>> recommendations) {
     Dish dish = detail.getDish();
     return MealDetailResponse.builder()
         .mealType(detail.getMealType().name())
@@ -374,6 +401,27 @@ public class MenuService {
                 .imageUrl(dish.getImageUrl())
                 .cuisineType(dish.getCuisineType())
                 .build())
+        .recommendedRecipes(
+            recommendations.getOrDefault(dish.getId(), List.of()).stream()
+                .map(MenuService::toRecipeSummary)
+                .toList())
+        .build();
+  }
+
+  private static RecipeSummaryResponse toRecipeSummary(Recipe recipe) {
+    return RecipeSummaryResponse.builder()
+        .id(recipe.getId())
+        .name(recipe.getName())
+        .description(recipe.getDescription())
+        .prepTimeMinutes(recipe.getPrepTimeMinutes())
+        .cookTimeMinutes(recipe.getCookTimeMinutes())
+        .servings(recipe.getServings())
+        .difficulty(recipe.getDifficulty() == null ? null : recipe.getDifficulty().name())
+        .calories(recipe.getCalories())
+        .proteinG(recipe.getProteinG())
+        .carbohydrateG(recipe.getCarbohydrateG())
+        .fatG(recipe.getFatG())
+        .fiberG(recipe.getFiberG())
         .build();
   }
 

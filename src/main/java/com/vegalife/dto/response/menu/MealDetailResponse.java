@@ -1,5 +1,6 @@
 package com.vegalife.dto.response.menu;
 
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -22,4 +23,11 @@ public class MealDetailResponse {
   private Integer servings;
 
   private DishResponse dish;
+
+  /**
+   * Up to three recipes worth recommending for {@link #dish} (issue #163), best first. Empty when
+   * none qualifies — every approved recipe of this dish is missing, deleted, or matches one of the
+   * caller's stored allergies — so a meal is never dropped just because it has no recommendation.
+   */
+  private List<RecipeSummaryResponse> recommendedRecipes;
 }

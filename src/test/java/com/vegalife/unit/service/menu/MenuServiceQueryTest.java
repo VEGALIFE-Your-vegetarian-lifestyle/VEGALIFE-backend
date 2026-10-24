@@ -3,26 +3,32 @@ package com.vegalife.unit.service.menu;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.response.menu.DishResponse;
+import com.vegalife.dto.response.menu.MealDetailResponse;
 import com.vegalife.dto.response.menu.MenuMealPlanResponse;
 import com.vegalife.dto.response.menu.MenuSummaryResponse;
+import com.vegalife.dto.response.menu.RecipeSummaryResponse;
 import com.vegalife.model.menu.MealType;
 import com.vegalife.model.menu.Menu;
 import com.vegalife.model.menu.MenuDetail;
 import com.vegalife.model.menu.MenuStatus;
 import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.repository.menu.MenuDetailRepository;
 import com.vegalife.repository.menu.MenuRepository;
 import com.vegalife.service.menu.MenuQueryFilter;
 import com.vegalife.service.menu.MenuService;
+import com.vegalife.service.recipe.RecipeRecommendationService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -47,6 +53,8 @@ class MenuServiceQueryTest {
   @Mock private MenuRepository menuRepository;
 
   @Mock private MenuDetailRepository menuDetailRepository;
+
+  @Mock private RecipeRecommendationService recipeRecommendationService;
 
   @InjectMocks private MenuService menuService;
 
@@ -174,6 +182,74 @@ class MenuServiceQueryTest {
     assertThat(embedded.getName()).isEqualTo("Chickpea salad");
     assertThat(embedded.getDescription()).isEqualTo("Chickpeas, cucumber, lemon and dill");
     assertThat(embedded.getCuisineType()).isEqualTo("Mediterranean");
+  }
+
+  @Test
+  void listMealPlansAttachesRecommendedRecipesToEachMeal() {
+    UUID menuId = UUID.randomUUID();
+    Menu menu = menu(MONDAY, SUNDAY, MenuStatus.drafted);
+    menu.setId(menuId);
+    Dish dish = Dish.builder().id(UUID.randomUUID()).name("Chickpea salad").build();
+    Recipe recommended = Recipe.builder().id(UUID.randomUUID()).name("Lemon chickpea").build();
+    when(menuRepository.findByIdAndUserId(menuId, USER)).thenReturn(Optional.of(menu));
+    when(menuDetailRepository.findByMenuIdInWithDish(List.of(menuId)))
+        .thenReturn(
+            List.of(
+                MenuDetail.builder()
+                    .menuId(menuId)
+                    .date(MONDAY)
+                    .mealType(MealType.LUNCH)
+                    .dish(dish)
+                    .servings(1)
+                    .build()));
+    when(recipeRecommendationService.recommendFor(any(), any(), any(), anyInt()))
+        .thenReturn(Map.of(dish.getId(), List.of(recommended)));
+
+    MealDetailResponse meal =
+        menuService
+            .listMealPlans(USER, MenuQueryFilter.builder().build(), menuId)
+            .get(0)
+            .getDays()
+            .get(0)
+            .getMeals()
+            .get(0);
+
+    assertThat(meal.getRecommendedRecipes())
+        .extracting(RecipeSummaryResponse::getName)
+        .containsExactly("Lemon chickpea");
+  }
+
+  @Test
+  void listMealPlansKeepsTheMealWhenNoRecipeQualifies() {
+    UUID menuId = UUID.randomUUID();
+    Menu menu = menu(MONDAY, SUNDAY, MenuStatus.drafted);
+    menu.setId(menuId);
+    Dish dish = Dish.builder().id(UUID.randomUUID()).name("Pad Thai").build();
+    when(menuRepository.findByIdAndUserId(menuId, USER)).thenReturn(Optional.of(menu));
+    when(menuDetailRepository.findByMenuIdInWithDish(List.of(menuId)))
+        .thenReturn(
+            List.of(
+                MenuDetail.builder()
+                    .menuId(menuId)
+                    .date(MONDAY)
+                    .mealType(MealType.LUNCH)
+                    .dish(dish)
+                    .servings(1)
+                    .build()));
+    when(recipeRecommendationService.recommendFor(any(), any(), any(), anyInt()))
+        .thenReturn(Map.of());
+
+    MealDetailResponse meal =
+        menuService
+            .listMealPlans(USER, MenuQueryFilter.builder().build(), menuId)
+            .get(0)
+            .getDays()
+            .get(0)
+            .getMeals()
+            .get(0);
+
+    // The meal is part of a saved plan: it stays, with an empty recommendation list.
+    assertThat(meal.getRecommendedRecipes()).isEmpty();
   }
 
   @Test
