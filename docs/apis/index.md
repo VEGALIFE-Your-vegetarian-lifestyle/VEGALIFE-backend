@@ -12,6 +12,7 @@ Shared error/response contract: [`error-responses.md`](error-responses.md).
 | `auth/post-verify-email.md` | `POST /api/auth/verify-email` | Verify email with 6-digit OTP |
 | `auth/post-resend-email.md` | `POST /api/auth/resend-email` | Resend email-verification OTP (generic 200) |
 | `auth/post-login.md` | `POST /api/auth/login` | User login |
+| `auth/post-google.md` | `POST /api/auth/google` | Sign in with a Google authorization code (creates/links account) |
 | `auth/post-refresh.md` | `POST /api/auth/refresh` | Refresh access token |
 | `auth/post-logout.md` | `POST /api/auth/logout` | User logout |
 | `auth/post-forgot-password.md` | `POST /api/auth/forgot-password` | Request password-reset OTP by email |

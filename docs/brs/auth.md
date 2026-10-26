@@ -25,6 +25,8 @@
 | BR-AUTH-019 | OTP Stored as SHA-256 Hash | Active | 2026-09-24 |
 | BR-AUTH-020 | Password Reset Revokes Refresh Tokens | Active | 2026-09-27 |
 | BR-AUTH-021 | Email Verification OTP Lifecycle and Resend | Active | 2026-09-24 |
+| BR-AUTH-022 | Google Sign-In Resolves to an Existing Identity or Auto-Links on Verified Email | Active | 2026-10-26 |
+| BR-AUTH-023 | Accounts Created Through Google Start Verified and Activated | Active | 2026-10-26 |
 
 ---
 
@@ -596,3 +598,70 @@ Applies to all email-verification OTP issuance and consumption. Rate limiting on
 
 ## Last Reviewed
 2026-09-24, by <name/role>
+
+---
+
+# Business Rule: Google Sign-In Resolves to an Existing Identity or Auto-Links on Verified Email
+
+## Rule ID
+`BR-AUTH-022`
+
+## Status
+Active
+
+## Statement
+Signing in with Google resolves to exactly one Vegalife account, in this order:
+
+1. If the Google subject (`sub`) is already recorded as a `GOOGLE` identity, that account is used. The email is not consulted.
+2. Otherwise, if the ID token's email matches an existing account **and** the ID token reports `email_verified=true` **and** that account has `email_verified=true` and `status=activated`, the Google identity is linked to that account and the user is signed in.
+3. Otherwise, if no account matches, a new account is created (BR-AUTH-023) and linked.
+4. Otherwise the sign-in is refused with the same message `AuthService.login` returns for the matched account's state ("Email not verified…", "Account is suspended", "Account is not active", or the generic "Invalid email/username or password" for a soft-deleted account), and **no identity row is inserted**.
+
+An ID token without `email_verified=true` is always refused, regardless of what it matches. An account may hold at most one `GOOGLE` identity, and a Google subject may belong to at most one account. There is no way to link Google from inside an authenticated session, and no way to unlink it.
+
+## Rationale
+Users expect "Sign in with Google" to land them in the account they already have, not a shadow duplicate — duplicating an account splits posts, comments and subscriptions. Requiring the Google token to assert a verified email, and requiring the local account to have a verified email and an activated status, means linking can only ever happen between two addresses that have each independently proven ownership. Refusing a link never creates a record, so a failed attempt leaves no residue to clean up.
+
+## Scope & Exceptions
+Applies to `POST /api/auth/google` only. Password login and password-reset are unchanged, except that an account with no local password cannot pass the password check (BR-AUTH-023). Accounts in `created`, `deactivated` or `suspended` state are never auto-linked. A soft-deleted account is never linked. Known accepted risk: a Gmail address that was deleted and later re-registered is reported as verified to its new owner, so a verified sign-in from it would auto-link to the previous owner's account; see ADR-017's "freed email" trade-off.
+
+## Enforcement
+- `service/auth/GoogleAuthService`: `resolveAccount()` implements the four-step order; the auto-link path emits `WARN` "Google identity auto-linked to existing user" with the user id
+- `infrastructure/google/GoogleIdTokenVerifier`: rejects any token whose `email_verified` claim is not `true`, before any database access
+- Database: `user_identity` with `UNIQUE(provider, provider_subject)` and `UNIQUE(user_id, provider)` (`V44`)
+- API: `POST /api/auth/google`
+
+## Last Reviewed
+2026-10-26, by Lê Đình Duy (backend)
+
+---
+
+# Business Rule: Accounts Created Through Google Start Verified and Activated
+
+## Rule ID
+`BR-AUTH-023`
+
+## Status
+Active
+
+## Statement
+A Vegalife account first created by a Google sign-in is persisted with `email_verified=true`, `status=activated` and `role=USER`, and has no local password (`password_hash IS NULL`). It receives no email-verification OTP. Its username is derived from the Google email's local part, padded to at least 3 characters and truncated to at most 50, and made unique by retrying on the unique constraint.
+
+A `POST /api/auth/login` attempt against an account whose `password_hash` is NULL is rejected with the same HTTP 400 "Invalid email/username or password" used for a wrong password — never a server error, and never a message that distinguishes a Google-only account.
+
+Such an account can obtain a local password only through the existing forgot-password flow (BR-AUTH-017, BR-AUTH-020), which overwrites the NULL hash.
+
+## Rationale
+Google has already verified the address at the moment the account is created, so sending a Vegalife OTP would ask the user to prove the same fact twice and would leave them in `created` state, where `BR-AUTH-008` / `BR-AUTH-016` would block the very login they just performed (AC#1 of issue #31). A NULL password hash is honest about the fact that no password exists, and keeping the rejection identical to a wrong password preserves BR-AUTH-018's anti-enumeration posture.
+
+## Scope & Exceptions
+Applies only to accounts created by the Google flow. Accounts created through `POST /api/auth/register` keep `email_verified=false` and `status=created` (BR-AUTH-003). An existing account that is auto-linked (BR-AUTH-022 step 2) keeps its own state and password unchanged.
+
+## Enforcement
+- `service/auth/GoogleAuthService`: new-account path sets the three fields, `password_hash = null`, and generates the username
+- `service/auth/AuthService.login()`: null `password_hash` → `InvalidTokenException("Invalid email/username or password")` before `PasswordEncoder.matches` is called
+- Database: `user.password_hash` nullable (`V44`); `user.username` / `user.email` remain UNIQUE
+- API: `POST /api/auth/google`, `POST /api/auth/login`
+
+## Last Reviewed
+2026-10-26, by Lê Đình Duy (backend)
