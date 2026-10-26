@@ -3,8 +3,10 @@ package com.vegalife.controller.ingredient;
 import com.vegalife.dto.request.ingredient.IngredientListRequest;
 import com.vegalife.dto.response.ingredient.IngredientResponse;
 import com.vegalife.service.ingredient.IngredientService;
+import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -14,11 +16,17 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Ingredient suggestions for the recipe form; authenticated-only, like dish browsing. */
+/**
+ * Ingredient suggestions for the recipe form; authenticated-only, like dish browsing.
+ *
+ * <p>The class-level {@link SecurityRequirement} keeps OpenAPI in step with that rule: without it
+ * Swagger renders the operation lock-free and sends no token, so "Try it out" returns 401.
+ */
 @RestController
 @RequestMapping("/api/ingredients")
 @RequiredArgsConstructor
 @PreAuthorize("isAuthenticated()")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class IngredientController {
 
   private final IngredientService ingredientService;

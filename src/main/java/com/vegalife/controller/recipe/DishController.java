@@ -6,8 +6,10 @@ import com.vegalife.dto.response.recipe.DishResponse;
 import com.vegalife.dto.response.recipe.DishSuggestionResponse;
 import com.vegalife.service.recipe.DishService;
 import com.vegalife.service.recipe.DishSuggestionFacade;
+import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -23,11 +25,16 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Dish browsing for the recipe form. Authenticated-only, matching {@code SecurityConfig}'s
  * catch-all rule: dishes are a member-facing catalogue, not public content.
+ *
+ * <p>The class-level {@link SecurityRequirement} keeps OpenAPI in step with that rule. {@code
+ * OpenApiConfig} registers the {@code bearerAuth} scheme but does not apply it globally, so without
+ * this annotation Swagger renders every operation lock-free and sends no token.
  */
 @RestController
 @RequestMapping("/api/dishes")
 @RequiredArgsConstructor
 @PreAuthorize("isAuthenticated()")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class DishController {
 
   private final DishService dishService;
