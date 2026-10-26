@@ -167,7 +167,11 @@ public class AuthService {
             .or(() -> userRepository.findByUsername(request.getIdentifier()))
             .orElseThrow(() -> new InvalidTokenException("Invalid email/username or password"));
 
-    if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+    // An account with no local password (created through Google, BR-AUTH-023) must fail exactly
+    // like a wrong password: passing a null hash into the encoder throws, and answering differently
+    // would reveal that the account exists and is Google-only.
+    if (user.getPasswordHash() == null
+        || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
       throw new InvalidTokenException("Invalid email/username or password");
     }
 

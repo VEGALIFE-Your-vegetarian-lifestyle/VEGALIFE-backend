@@ -26,7 +26,12 @@ public class User {
   @Column(name = "email", length = 100, nullable = false, unique = true)
   private String email;
 
-  @Column(name = "password_hash", length = 255, nullable = false)
+  /**
+   * BCrypt hash of the local password, or {@code null} when the account was created through an
+   * external provider and has never had one (BR-AUTH-023). Every caller that reads this must treat
+   * null as "no password to match", not as a malformed hash.
+   */
+  @Column(name = "password_hash", length = 255)
   private String passwordHash;
 
   @Column(name = "role", length = 20, nullable = false)
