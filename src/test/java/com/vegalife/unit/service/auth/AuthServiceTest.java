@@ -342,6 +342,20 @@ class AuthServiceTest {
   }
 
   @Test
+  void login_googleOnlyAccountWithoutPassword_throwsGenericException() {
+    user.setPasswordHash(null);
+    when(userRepository.findByEmail(validLoginRequest.getIdentifier()))
+        .thenReturn(Optional.of(user));
+
+    assertThatThrownBy(() -> authService.login(validLoginRequest))
+        .isInstanceOf(InvalidTokenException.class)
+        .hasMessage("Invalid email/username or password");
+
+    // The encoder must never see a null hash: that path throws instead of returning false.
+    verify(passwordEncoder, never()).matches(anyString(), ArgumentMatchers.isNull());
+  }
+
+  @Test
   void login_invalidPassword_throwsException() {
     when(userRepository.findByEmail(validLoginRequest.getIdentifier()))
         .thenReturn(Optional.of(user));

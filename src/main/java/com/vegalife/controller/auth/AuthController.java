@@ -1,6 +1,7 @@
 package com.vegalife.controller.auth;
 
 import com.vegalife.dto.request.auth.ForgotPasswordRequest;
+import com.vegalife.dto.request.auth.GoogleLoginRequest;
 import com.vegalife.dto.request.auth.LoginRequest;
 import com.vegalife.dto.request.auth.RefreshTokenRequest;
 import com.vegalife.dto.request.auth.RegisterRequest;
@@ -11,6 +12,7 @@ import com.vegalife.dto.request.auth.VerifyPasswordResetRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.service.auth.AuthService;
+import com.vegalife.service.auth.GoogleAuthService;
 import com.vegalife.shared.dto.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
   private final AuthService authService;
+  private final GoogleAuthService googleAuthService;
 
   @PostMapping("/register")
   public ResponseEntity<ApiResponse<RegisterResponse>> register(
@@ -58,6 +61,13 @@ public class AuthController {
       @Valid @RequestBody LoginRequest request) {
     LoginResponse response = authService.login(request);
     return ResponseEntity.ok(ApiResponse.success(response, "Login successful"));
+  }
+
+  @PostMapping("/google")
+  public ResponseEntity<ApiResponse<LoginResponse>> googleLogin(
+      @Valid @RequestBody GoogleLoginRequest request) {
+    LoginResponse response = googleAuthService.loginWithGoogle(request.getCode());
+    return ResponseEntity.ok(ApiResponse.success(response, "Google login successful"));
   }
 
   @PostMapping("/refresh")

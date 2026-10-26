@@ -20,3 +20,4 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [014-embedding-provider-gemini.md](014-embedding-provider-gemini.md) | Serve Filter Embeddings From Gemini, Retaining the HuggingFace Client Unwired | Accepted | 2026-10-18 |
 | [015-post-embedding-pgvector.md](015-post-embedding-pgvector.md) | Store Post Embeddings in pgvector and Search Them in SQL | Accepted | 2026-10-18 |
 | [016-component-level-moderation.md](016-component-level-moderation.md) | Moderate Components Without Per-Occurrence Verdict Storage | Accepted | 2026-10-23 |
+| [017-google-login.md](017-google-login.md) | Sign In With Google by Exchanging an Authorization Code and Auto-Linking on Verified Email | Accepted | 2026-10-26 |

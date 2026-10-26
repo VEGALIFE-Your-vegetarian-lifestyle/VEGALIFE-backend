@@ -43,6 +43,12 @@ approved for ADR-012's separate MCP server. ADR-013 supersedes ADR-012, the
 `mcp-server` module is deleted, and none of the three is in the pom — do not
 re-add them without a new decision.
 
+**Google sign-in (ADR-017) adds no dependency.** `spring-boot-starter-oauth2-client`
+is deliberately *not* used: the backend exchanges the authorization code itself
+over the already-present `RestClient` and verifies the ID token's RS256
+signature against Google's JWKS with `java.security` + `jjwt`. Do not add
+`oauth2-client` for this feature — see `docs/adrs/017-google-login.md`.
+
 ## Planned (approved, add when a feature needs it)
 
 These are approved in principle. Add them to pom.xml when a feature requires them, not before.

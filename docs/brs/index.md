@@ -30,6 +30,9 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-AUTH-018 | Forgot Password Does Not Reveal Account Existence | Active | 2026-09-24 |
 | BR-AUTH-019 | Password Reset OTP Stored as SHA-256 Hash | Active | 2026-09-24 |
 | BR-AUTH-020 | Password Reset Revokes Refresh Tokens | Active | 2026-09-24 |
+| BR-AUTH-021 | Email Verification OTP Lifecycle and Resend | Active | 2026-09-24 |
+| BR-AUTH-022 | Google Sign-In Resolves to an Existing Identity or Auto-Links on Verified Email | Active | 2026-10-26 |
+| BR-AUTH-023 | Accounts Created Through Google Start Verified and Activated | Active | 2026-10-26 |
 | BR-POST-001 | Post Ownership Comes from Authentication | Active | 2026-09-26 |
 | BR-POST-002 | Users List Only Their Non-Deleted Posts | Active | 2026-09-26 |
 | BR-POST-003 | User Post Lists Use Bounded Newest-First Pagination | Active | 2026-09-26 |

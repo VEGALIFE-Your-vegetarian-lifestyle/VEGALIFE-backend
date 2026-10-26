@@ -167,7 +167,11 @@ public class AuthService {
             .or(() -> userRepository.findByUsername(request.getIdentifier()))
             .orElseThrow(() -> new InvalidTokenException("Invalid email/username or password"));
 
-    if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+    // An account with no local password (created through Google, BR-AUTH-023) must fail exactly
+    // like a wrong password: passing a null hash into the encoder throws, and answering differently
+    // would reveal that the account exists and is Google-only.
+    if (user.getPasswordHash() == null
+        || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
       throw new InvalidTokenException("Invalid email/username or password");
     }
 
@@ -185,13 +189,24 @@ public class AuthService {
           "Email not verified. Please verify your email before logging in.");
     }
 
+    log.info("User logged in: {} ({})", user.getUsername(), user.getEmail());
+
+    return issueTokens(user);
+  }
+
+  /**
+   * Mints an access/refresh pair for an already-authorised user and stamps the login.
+   *
+   * <p>Shared with Google sign-in (ADR-017) so both entry points hand back an identical {@link
+   * LoginResponse} — a client cannot tell which method produced the session. Callers own the
+   * account-state gate; this method checks nothing.
+   */
+  public LoginResponse issueTokens(User user) {
     String accessToken = jwtTokenService.generateAccessToken(user);
     String refreshToken = jwtTokenService.generateRefreshToken(user);
 
     user.setLastLoginAt(Instant.now());
     userRepository.save(user);
-
-    log.info("User logged in: {} ({})", user.getUsername(), user.getEmail());
 
     return loginMapper.toLoginResponse(user).toBuilder()
         .accessToken(accessToken)
