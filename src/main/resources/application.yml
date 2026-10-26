@@ -79,6 +79,22 @@ app:
       secret: ${AUTH_JWT_SECRET:dev-auth-jwt-secret-change-in-production}
       issuer: vegalife-backend
       audience: vegalife-api
+    # Google sign-in (ADR-017). The client id/secret come from the Google Cloud
+    # console; a blank pair makes the endpoint fail closed rather than boot-fail,
+    # because password login must keep working on a deployment without it.
+    google:
+      token-url: https://oauth2.googleapis.com/token
+      jwks-url: https://www.googleapis.com/oauth2/v3/certs
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      # Must be one of the redirect URIs registered for the client; blank omits
+      # the parameter (Google requires it whenever more than one is registered).
+      redirect-uri: ${GOOGLE_REDIRECT_URI:}
+      issuer: https://accounts.google.com
+      alternate-issuer: accounts.google.com
+      clock-skew: 60s
+      timeout: 10s
+      jwks-cache-ttl: 6h
 
   password-reset:
     otp-expiry-minutes: 10

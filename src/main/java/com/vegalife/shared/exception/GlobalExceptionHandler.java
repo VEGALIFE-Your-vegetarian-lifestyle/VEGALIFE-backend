@@ -169,6 +169,17 @@ public class GlobalExceptionHandler {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.failure(ex.getMessage()));
   }
 
+  /**
+   * A Google sign-in that could not be completed is a client error in the same mould as a bad
+   * password: 400, with a message that never carries the upstream detail (NFR-SEC-001). The cause
+   * is already in the log at WARN by the time it reaches here.
+   */
+  @ExceptionHandler(GoogleAuthException.class)
+  public ResponseEntity<ApiResponse<Void>> handleGoogleAuth(
+      GoogleAuthException ex, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.failure(ex.getMessage()));
+  }
+
   @ExceptionHandler(ResourceNotFoundException.class)
   public ResponseEntity<ApiResponse<Void>> handleResourceNotFound(
       ResourceNotFoundException ex, HttpServletRequest request) {
