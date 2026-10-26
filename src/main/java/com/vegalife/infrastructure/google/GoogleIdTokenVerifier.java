@@ -2,7 +2,6 @@ package com.vegalife.infrastructure.google;
 
 import com.vegalife.shared.exception.GoogleAuthException;
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.JwsHeader;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Jwk;
@@ -105,15 +104,20 @@ public class GoogleIdTokenVerifier {
     }
     try {
       byte[] headerJson = java.util.Base64.getUrlDecoder().decode(idToken.substring(0, firstDot));
-      JwsHeader header =
-          new com.fasterxml.jackson.databind.ObjectMapper().readValue(headerJson, JwsHeader.class);
-      if (header.getKeyId() == null || header.getKeyId().isBlank()) {
+      // A Map, not JwsHeader: the interface has no Jackson creator, and the header is untrusted
+      // input anyway — read exactly the two fields needed and nothing more.
+      java.util.Map<?, ?> header =
+          new com.fasterxml.jackson.databind.ObjectMapper()
+              .readValue(headerJson, java.util.Map.class);
+      Object keyId = header.get("kid");
+      Object algorithm = header.get("alg");
+      if (!(keyId instanceof String keyIdValue) || keyIdValue.isBlank()) {
         throw new GoogleAuthException("Google sign-in failed. Please try again.");
       }
-      if (!ALGORITHM.equals(header.getAlgorithm())) {
+      if (!ALGORITHM.equals(algorithm)) {
         throw new GoogleAuthException("Google sign-in failed. Please try again.");
       }
-      return header.getKeyId();
+      return keyIdValue;
     } catch (java.io.IOException | IllegalArgumentException e) {
       throw new GoogleAuthException("Google sign-in failed. Please try again.", e);
     }
@@ -139,6 +143,18 @@ public class GoogleIdTokenVerifier {
       throw new GoogleAuthException("Google sign-in failed. Please try again.");
     }
     return cached;
+  }
+
+  /**
+   * Seeds the key cache directly.
+   *
+   * <p>Visible to the verifier's own unit test so the signature, issuer, audience, expiry and
+   * {@code email_verified} checks can be exercised against a locally generated key pair without
+   * reaching Google. Production code never calls this.
+   */
+  void cacheKeyForTest(String keyId, RSAPublicKey key) {
+    keyCache.put(keyId, key);
+    keysFetchedAt = Instant.now();
   }
 
   private boolean keysStale() {
