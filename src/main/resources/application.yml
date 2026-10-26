@@ -189,3 +189,11 @@ logging:
     org.springframework.web: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+springdoc:
+  swagger-ui:
+    # Swagger UI's tag index defaults to the order SpringDoc happens to register controllers in,
+    # which reads as random. Alphabetical order comes from OpenApiTagOrderConfig; this sorts the
+    # operations inside each tag by HTTP method, then by path.
+    tags-sorter: alpha
+    operations-sorter: method

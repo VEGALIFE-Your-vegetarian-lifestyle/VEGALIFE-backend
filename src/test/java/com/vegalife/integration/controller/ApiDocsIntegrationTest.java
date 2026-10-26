@@ -1,9 +1,14 @@
 package com.vegalife.integration.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -100,5 +105,56 @@ class ApiDocsIntegrationTest {
         .andExpect(jsonPath("$.paths['/api/categories'].get.security").doesNotExist())
         .andExpect(jsonPath("$.paths['/api/auth/login'].post.security").doesNotExist())
         .andExpect(jsonPath("$.paths['/api/posts/{postId}'].get.security").doesNotExist());
+  }
+
+  /**
+   * Swagger UI builds its index from the document's top-level {@code tags} array, and SpringDoc
+   * emits none — it only tags each operation, leaving the UI to order groups by first-seen order
+   * while walking {@code paths}, which follows the classpath scanner. {@code OpenApiTagOrderConfig}
+   * fills that array in, sorted; asserting it here proves the fix reaches the served document
+   * rather than only the customizer in isolation.
+   */
+  @Test
+  void apiDocsDeclaresATopLevelTagsListInAlphabeticalOrder() throws Exception {
+    String body =
+        mockMvc
+            .perform(get("/v3/api-docs"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    JsonNode root = new ObjectMapper().readTree(body);
+    JsonNode tags = root.path("tags");
+    assertThat(tags.isArray()).as("the document declares a top-level tags array").isTrue();
+
+    List<String> names = new ArrayList<>();
+    tags.forEach(tag -> names.add(tag.path("name").asText()));
+
+    List<String> sorted = new ArrayList<>(names);
+    sorted.sort(String.CASE_INSENSITIVE_ORDER);
+
+    assertThat(names).as("tag groups as Swagger UI renders them: %s", names).isNotEmpty();
+    assertThat(names).as("tags are alphabetical").containsExactlyElementsOf(sorted);
+
+    // Every operation's tag must be declared, or that group would be missing from the index.
+    List<String> operationTags = new ArrayList<>();
+    JsonNode paths = root.path("paths");
+    var pathNames = paths.fieldNames();
+    while (pathNames.hasNext()) {
+      String path = pathNames.next();
+      var methods = paths.path(path).fieldNames();
+      while (methods.hasNext()) {
+        paths
+            .path(path)
+            .path(methods.next())
+            .path("tags")
+            .forEach(t -> operationTags.add(t.asText()));
+      }
+    }
+    assertThat(operationTags).as("operations carry tags").isNotEmpty();
+    assertThat(names)
+        .as("every operation tag is declared in the index")
+        .containsAll(new java.util.LinkedHashSet<>(operationTags));
   }
 }
