@@ -51,13 +51,13 @@ only point to a strictly lower rank.**
 
 | Rank | Package | May import | Notes |
 |---|---|---|---|
-| 1 | `shared/` (`exception/`, `validation/`, `dto/` → `ApiResponse`, `PageResponse`) and top-level `enums/` | — | The kernel. No internal imports. |
+| 1 | `shared/` (`exception/`, `validation/`, `dto/` → `ApiResponse`, `PageResponse`) and top-level `enums/` | — | The kernel. No internal imports. Holds exception **types** only — never a Spring-web handler. |
 | 2 | `model/` (entities only) | 1 | Loses all enum types; nested entity enums move to `enums/<domain>/`. |
 | 3 | `repository/` | 1–2 | Unchanged — already compliant. |
 | 4 | `dto/` (`request/`, `response/`, `mapper/`) | 1–2 | Single shared DTO layer for `service` + `controller`. |
 | 5 | `service/` (absorbs `filter/` as `service/filter/`; owns its ports: `OutboundChannelAdapter`, `EmailService`, new `GoogleIdentityProvider`, relocated `PaymentGateway`) | 1–4 | Defines interfaces; never imports rank 6. |
-| 6 | `infrastructure/` (+ `security/` ← `shared/security/`; email, google, vnpay, embedding adapters) | 1–5 | Implements rank-5 ports only. |
-| 7 | `controller/`, `scheduled/` | 1–6 | The only entry points; `scheduled/` may reach `repository/` directly. |
+| 6 | `infrastructure/` (+ `security/` ← `shared/security/`; email, google, vnpay, embedding, **media/Cloudinary** adapters) | 1–5 | Implements rank-5 ports only. Anything importing a vendor SDK lives here. |
+| 7 | `controller/` (incl. `advice/`), `scheduled/` | 1–6 | The only entry points; `scheduled/` may reach `repository/` directly. `controller/advice/` holds `@RestControllerAdvice` handlers — HTTP mapping concerns, so they sit here, not in the kernel. |
 | 8 | `config/` (Spring `@Configuration` classes only) | 1–7 | Split out of `shared/`. `*Properties` records move down beside their consumer (`MediaProperties → service/media`, `PaymentProperties → service/payment`, `OutboundMessageProperties → service/outbound`). |
 
 Concretely this means:
@@ -80,6 +80,46 @@ Concretely this means:
 6. **Rank 8 is exempt from the "no upward import" check only for
    `@Configuration` wiring** — configuration classes necessarily reference the
    beans they configure.
+
+### Amendment (boundary-cleanup branch)
+
+Two clarifications added while closing the remaining boundary faults this ADR
+left open. Both are placement rules, not new decisions — they make explicit
+what the rank table already implies.
+
+1. **Kernel purity: exception *types* rank 1, exception *handlers* rank 7.**
+   `shared/exception/` keeps `NotFoundException`, `BadRequestException`, the
+   `ErrorCode` enum and friends — plain Java, zero framework imports. The
+   `@RestControllerAdvice` that maps them to `ResponseEntity` is a Spring-MVC
+   concern and therefore lives at `controller/advice/GlobalExceptionHandler`,
+   rank 7. Rank 1 had been importing `org.springframework.web` and
+   `org.springframework.http`, which made the innermost layer depend on the
+   web framework.
+
+2. **Ports/adapters placement is decided by dependency direction, not by
+   naming.** A rank-6 class is one that imports a vendor SDK or otherwise
+   reaches outside the process. A class that implements a rank-5 port using
+   only repositories and other rank-5 services stays at rank 5 — the
+   `*Adapter` suffix is then a statement about intent, not about rank.
+   Concretely:
+   - `infrastructure/media/CloudinaryUploadProvider` (imports
+     `com.cloudinary.*`) is rank 6; its port `service/media/
+     PresignedUploadProvider` stays rank 5.
+   - `service/outbound/ContentFilterOutboundAdapter` and
+     `service/outbound/MediaPurgeOutboundAdapter` are rank 5 despite the
+     suffix, because they touch only repositories.
+   - The same port may legitimately have impls at both ranks
+     (`OutboundChannelAdapter` at 5 via the two above, at 6 via
+     `EmailChannelAdapter`).
+
+   **Self-correction:** an earlier audit report flagged the two
+   `service/outbound/*Adapter` names as misleading. That finding is withdrawn —
+   the naming is correct and the report conflated "adapter" with "rank 6".
+
+3. **Mappers live in `dto/mapper/`, with no domain exception.** The rank-4 row
+   already lists `mapper/` as part of `dto/`; `service/recipe/
+   RecipeSummaryMapper` was the one mapper left behind in `service/`. It moves
+   to `dto/mapper/recipe/` so the rule has no carve-out.
 
 ### Considered options
 

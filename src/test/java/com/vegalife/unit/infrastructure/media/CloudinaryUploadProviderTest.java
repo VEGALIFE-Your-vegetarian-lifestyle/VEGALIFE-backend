@@ -1,8 +1,8 @@
-package com.vegalife.unit.service.media;
+package com.vegalife.unit.infrastructure.media;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.vegalife.service.media.CloudinaryUploadProvider;
+import com.vegalife.infrastructure.media.CloudinaryUploadProvider;
 import com.vegalife.service.media.MediaProperties;
 import com.vegalife.service.media.UploadGrant;
 import java.nio.charset.StandardCharsets;

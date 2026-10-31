@@ -46,7 +46,7 @@ src/main/java/com/vegalife/
 │
 ├── shared/                           # (1) Kernel — depends on nothing in this app
 │   ├── dto/                          #   Cross-layer response envelopes (ApiResponse, PageResponse)
-│   ├── exception/                    #   Custom exceptions + GlobalExceptionHandler
+│   ├── exception/                    #   Custom exceptions (the handler lives in controller/advice/)
 │   ├── openapi/                      #   OpenAPI scheme name constants (OpenApiSchemeNames)
 │   └── validation/                   #   Reusable constraint annotations + validators
 │
@@ -81,10 +81,12 @@ src/main/java/com/vegalife/
 │   ├── email/                        #   SMTP, outbound channel adapter
 │   ├── embedding/                    #   Gemini/HF embedding clients
 │   ├── google/                       #   Google OAuth exchange + ID-token verification
+│   ├── media/                        #   Cloudinary upload provider
 │   ├── payment/vnpay/                #   VNPay client + signer
 │   └── security/                     #   JWT authentication filter/provider/token
 │
 ├── controller/                       # (7) REST API layer — thin, no business logic
+│   ├── advice/                       #   GlobalExceptionHandler (@RestControllerAdvice)
 │   └── <domain>/<Domain>Controller.java
 ├── scheduled/                        # (7) @Scheduled jobs
 │
@@ -106,6 +108,10 @@ src/test/java/com/vegalife/
 │   ├── service/                          # Unit tests with Mockito
 │   │   └── <domain>/
 │   │       └── <Domain>ServiceTest.java
+│   │
+│   ├── infrastructure/                   # Adapter unit tests (vendor clients mocked)
+│   │   └── <adapter>/
+│   │       └── <Adapter>Test.java
 │   │
 │   └── repository/                       # @DataJpaTest + H2 in-memory DB
 │       └── <domain>/
@@ -130,7 +136,7 @@ Imports must point at the same rank or lower.
 | Rank | Package | Responsibility | Key annotations |
 |---|---|---|---|
 | 1 | `shared/dto/` | Cross-layer response envelopes (`ApiResponse`, `PageResponse`). | — |
-| 1 | `shared/exception/` | Custom exceptions and the global error handler. | `@RestControllerAdvice` |
+| 1 | `shared/exception/` | Custom exception types — plain Java, no framework imports. The `@RestControllerAdvice` that maps them lives at rank 7. | — |
 | 1 | `shared/openapi/` | OpenAPI security-scheme names, so controllers need not import a config class. | — |
 | 1 | `shared/validation/` | Reusable constraint annotations and their validators. | `@Constraint` |
 | 1 | `enums/` | All enumerations, grouped by domain — including ones that began life nested in an entity. | — |
@@ -138,10 +144,11 @@ Imports must point at the same rank or lower.
 | 3 | `repository/` | Data access via Spring Data JPA interfaces, plus `*Specifications`. | `@Repository` (optional), extends `JpaRepository` |
 | 4 | `dto/request/` | Inbound API contracts — what the client sends. | `@Data` (Lombok) |
 | 4 | `dto/response/` | Outbound API contracts — what the client receives. | `@Data` (Lombok) |
-| 4 | `dto/mapper/` | Entity↔DTO mappers. | MapStruct-generated |
+| 4 | `dto/mapper/` | Entity↔DTO mappers. MapStruct-generated, plus hand-written ones like `RecipeSummaryMapper` where a generated mapper would change null handling. | MapStruct-generated |
 | 5 | `service/` | Business logic, transaction boundaries, orchestration. | `@Service`, `@Transactional` |
 | 5 | `service/<domain>/*Properties.java` | `@ConfigurationProperties` live beside the service that reads them, never in `config/`. | `@Component`, `@ConfigurationProperties` |
-| 6 | `infrastructure/` | Adapters to external systems (email, embedding, Google, VNPay, JWT). | `@Component`, `@Configuration` (adapter wiring) |
+| 6 | `infrastructure/` | Adapters to external systems (email, embedding, Google, Cloudinary, VNPay, JWT). A class here may import a vendor SDK; a rank-5 class may not. | `@Component`, `@Configuration` (adapter wiring) |
+| 7 | `controller/advice/` | `GlobalExceptionHandler` — maps kernel exceptions and Spring MVC errors onto `ApiResponse`. | `@RestControllerAdvice` |
 | 7 | `controller/` | HTTP routing, request validation, response mapping. No business logic. | `@RestController`, `@RequestMapping` |
 | 7 | `scheduled/` | Scheduled jobs. | `@Component`, `@Scheduled` |
 | 8 | `config/` | Composition root: Spring `@Configuration` classes only. Nothing may import it except itself. | `@Configuration` |
@@ -156,7 +163,13 @@ consumed by a service is a *port* and lives in `service/`, so the dependency poi
 | `service/outbound/OutboundChannelAdapter` | `infrastructure/email/EmailChannelAdapter` |
 | `service/email/EmailService` | `infrastructure/email/SmtpEmailServiceImpl` |
 | `service/auth/GoogleIdentityProvider` | `infrastructure/google/GoogleIdentityProviderAdapter` |
+| `service/media/PresignedUploadProvider` | `infrastructure/media/CloudinaryUploadProvider` |
 | `service/payment/PaymentGateway` | `infrastructure/payment/vnpay/VnpayClient` |
+
+The adapter suffix alone does not decide the rank — dependency direction does. A class that
+implements a rank-5 port using only repositories and other rank-5 services stays at rank 5 (e.g.
+`service/outbound/ContentFilterOutboundAdapter`); one that imports a vendor SDK goes to rank 6. The
+same port may legitimately have implementations at both ranks.
 
 A third-party interface the service consumes directly (for example Spring AI's
 `org.springframework.ai.embedding.EmbeddingModel`) is not a project port: it stays as-is and the

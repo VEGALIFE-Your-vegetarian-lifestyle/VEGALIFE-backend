@@ -1,5 +1,6 @@
 package com.vegalife.service.menu;
 
+import com.vegalife.dto.mapper.recipe.RecipeSummaryMapper;
 import com.vegalife.dto.request.menu.CreateMenuRequest;
 import com.vegalife.dto.request.menu.MealRequest;
 import com.vegalife.dto.request.menu.MenuDayRequest;
@@ -22,7 +23,6 @@ import com.vegalife.repository.menu.MenuRepository;
 import com.vegalife.repository.menu.MenuSpecifications;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.service.recipe.RecipeRecommendationService;
-import com.vegalife.service.recipe.RecipeSummaryMapper;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.InvalidMenuTransitionException;
 import com.vegalife.shared.exception.MenuNotEditableException;
