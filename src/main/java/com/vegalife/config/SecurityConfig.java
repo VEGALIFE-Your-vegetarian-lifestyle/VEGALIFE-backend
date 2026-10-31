@@ -1,4 +1,4 @@
-package com.vegalife.shared.config;
+package com.vegalife.config;
 
 import com.vegalife.infrastructure.security.JwtAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;

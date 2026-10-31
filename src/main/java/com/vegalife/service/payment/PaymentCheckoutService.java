@@ -9,7 +9,6 @@ import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.service.subscription.PlanPurchasePolicy;
-import com.vegalife.shared.config.PaymentProperties;
 import com.vegalife.shared.exception.PaymentGatewayException;
 import java.time.Duration;
 import java.time.Instant;

@@ -1,8 +1,8 @@
-package com.vegalife.unit.shared.config;
+package com.vegalife.unit.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.vegalife.shared.config.OpenApiTagOrderConfig;
+import com.vegalife.config.OpenApiTagOrderConfig;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.PathItem;

@@ -7,9 +7,9 @@ import com.vegalife.dto.response.subscription.SubscriptionCancelResponse;
 import com.vegalife.dto.response.subscription.SubscriptionHistoryResponse;
 import com.vegalife.dto.response.subscription.SubscriptionMeResponse;
 import com.vegalife.service.subscription.SubscriptionService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -41,7 +41,7 @@ public class SubscriptionController {
 
   @GetMapping("/me")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<SubscriptionMeResponse>> getMySubscription(
       @AuthenticationPrincipal UUID userId) {
 
@@ -51,7 +51,7 @@ public class SubscriptionController {
 
   @PostMapping("/me/cancel")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<SubscriptionCancelResponse>> cancelMySubscription(
       @AuthenticationPrincipal UUID userId) {
 
@@ -61,7 +61,7 @@ public class SubscriptionController {
 
   @GetMapping("/me/history")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<SubscriptionHistoryResponse>>>
       getMySubscriptionHistory(
           @AuthenticationPrincipal UUID userId,
@@ -75,7 +75,7 @@ public class SubscriptionController {
 
   @PostMapping("/me/purchase/eligibility")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<Map<String, Boolean>>> checkPurchaseEligibility(
       @AuthenticationPrincipal UUID userId,
       @Valid @RequestBody PurchaseEligibilityRequest request) {

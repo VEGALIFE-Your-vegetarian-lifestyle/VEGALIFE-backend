@@ -1,4 +1,4 @@
-package com.vegalife.shared.config;
+package com.vegalife.service.outbound;
 
 import java.time.Duration;
 import java.util.ArrayList;

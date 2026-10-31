@@ -1,4 +1,4 @@
-package com.vegalife.shared.config;
+package com.vegalife.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

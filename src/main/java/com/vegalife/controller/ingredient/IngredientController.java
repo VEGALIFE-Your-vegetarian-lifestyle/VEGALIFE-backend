@@ -3,9 +3,9 @@ package com.vegalife.controller.ingredient;
 import com.vegalife.dto.request.ingredient.IngredientListRequest;
 import com.vegalife.dto.response.ingredient.IngredientResponse;
 import com.vegalife.service.ingredient.IngredientService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/ingredients")
 @RequiredArgsConstructor
 @PreAuthorize("isAuthenticated()")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
 public class IngredientController {
 
   private final IngredientService ingredientService;

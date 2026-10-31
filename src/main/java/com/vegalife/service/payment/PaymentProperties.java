@@ -1,4 +1,4 @@
-package com.vegalife.shared.config;
+package com.vegalife.service.payment;
 
 import java.time.Duration;
 import lombok.Data;

@@ -1,9 +1,9 @@
 package com.vegalife.integration.config;
 
+import com.vegalife.service.media.MediaProperties;
 import com.vegalife.service.media.PresignedUploadProvider;
 import com.vegalife.service.media.UploadGrant;
 import com.vegalife.service.media.VerifiedUpload;
-import com.vegalife.shared.config.MediaProperties;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;

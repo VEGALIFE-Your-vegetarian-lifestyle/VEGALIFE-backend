@@ -1,4 +1,4 @@
-package com.vegalife.shared.config;
+package com.vegalife.service.media;
 
 import java.time.Duration;
 import java.util.List;

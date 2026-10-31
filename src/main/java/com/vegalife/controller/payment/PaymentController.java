@@ -8,10 +8,10 @@ import com.vegalife.dto.response.payment.PaymentStatusResponse;
 import com.vegalife.service.payment.PaymentCheckoutService;
 import com.vegalife.service.payment.PaymentHistoryService;
 import com.vegalife.service.payment.PaymentStatusService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -39,7 +39,7 @@ public class PaymentController {
   private final PaymentHistoryService paymentHistoryService;
 
   @PostMapping("/checkout")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<CheckoutResponse>> checkout(
       @AuthenticationPrincipal UUID userId,
       @Valid @RequestBody CheckoutRequest request,
@@ -51,7 +51,7 @@ public class PaymentController {
 
   /** Exact-path route; Spring MVC resolves it ahead of the {@code /{paymentId}} template. */
   @GetMapping
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<PaymentHistoryItemResponse>>> listMyPayments(
       @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute PaymentListRequest request) {
     PageResponse<PaymentHistoryItemResponse> response =
@@ -61,7 +61,7 @@ public class PaymentController {
   }
 
   @GetMapping("/{paymentId}")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PaymentStatusResponse>> getPaymentStatus(
       @AuthenticationPrincipal UUID userId, @PathVariable String paymentId) {
     PaymentStatusResponse response =

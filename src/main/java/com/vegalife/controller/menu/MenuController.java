@@ -11,9 +11,9 @@ import com.vegalife.dto.response.menu.MenuSummaryResponse;
 import com.vegalife.service.menu.MenuQueryFilter;
 import com.vegalife.service.menu.MenuQueryFilterResolver;
 import com.vegalife.service.menu.MenuService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -42,7 +42,7 @@ public class MenuController {
 
   @GetMapping
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<MenuSummaryResponse>>> listMenus(
       @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute MenuQueryRequest request) {
     MenuQueryFilter filter =
@@ -61,7 +61,7 @@ public class MenuController {
    */
   @GetMapping("/details")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<List<MenuMealPlanResponse>>> getMealPlans(
       @AuthenticationPrincipal UUID userId,
       @Valid @ModelAttribute MenuMealPlanQueryRequest request) {
@@ -74,7 +74,7 @@ public class MenuController {
   /** BR-MENU-005: creates a drafted weekly menu owned by the authenticated caller. */
   @PostMapping
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<MenuDetailResponse>> createMenu(
       @AuthenticationPrincipal UUID userId, @Valid @RequestBody CreateMenuRequest request) {
     MenuDetailResponse created = menuService.createMenu(userId, request);
@@ -85,7 +85,7 @@ public class MenuController {
   /** BR-MENU-006: updates an owned drafted or scheduled menu; cancelled/completed return 409. */
   @PatchMapping("/{menuId}")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<MenuDetailResponse>> updateMenu(
       @AuthenticationPrincipal UUID userId,
       @PathVariable UUID menuId,
@@ -100,7 +100,7 @@ public class MenuController {
    */
   @PostMapping("/{menuId}/status")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<MenuDetailResponse>> changeMenuStatus(
       @AuthenticationPrincipal UUID userId,
       @PathVariable UUID menuId,

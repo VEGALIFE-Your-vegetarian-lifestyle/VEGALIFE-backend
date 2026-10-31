@@ -14,7 +14,6 @@ import com.vegalife.model.post.Media;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.user.UserRepository;
-import com.vegalife.shared.config.MediaProperties;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ForbiddenException;
 import com.vegalife.shared.exception.ResourceNotFoundException;

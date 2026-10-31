@@ -3,8 +3,8 @@ package com.vegalife.controller.post;
 import com.vegalife.dto.request.post.VoteRequest;
 import com.vegalife.dto.response.post.VoteResponse;
 import com.vegalife.service.post.VoteService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -36,7 +36,7 @@ public class VoteController {
 
   @PutMapping
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<VoteResponse>> castVote(
       Authentication authentication,
       @PathVariable UUID postId,

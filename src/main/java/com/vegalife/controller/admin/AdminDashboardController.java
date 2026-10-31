@@ -3,8 +3,8 @@ package com.vegalife.controller.admin;
 import com.vegalife.dto.request.admin.DashboardRequest;
 import com.vegalife.dto.response.admin.DashboardResponse;
 import com.vegalife.service.admin.AdminDashboardService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/dashboard")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
 public class AdminDashboardController {
 
   private final AdminDashboardService adminDashboardService;

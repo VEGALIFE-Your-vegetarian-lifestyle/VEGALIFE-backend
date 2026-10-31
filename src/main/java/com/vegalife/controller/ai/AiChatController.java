@@ -6,8 +6,8 @@ import com.vegalife.dto.response.ai.ConversationSummaryResponse;
 import com.vegalife.dto.response.ai.SendMessageResponse;
 import com.vegalife.service.ai.AiChatService;
 import com.vegalife.service.ai.AiConversationService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -35,7 +35,7 @@ public class AiChatController {
   private final AiConversationService aiConversationService;
 
   @PostMapping(path = "/messages")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<SendMessageResponse>> sendMessage(
       @AuthenticationPrincipal UUID userId, @Valid @RequestBody SendMessageRequest request) {
 
@@ -44,7 +44,7 @@ public class AiChatController {
   }
 
   @PostMapping(path = "/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public SseEmitter streamMessage(
       @AuthenticationPrincipal UUID userId, @Valid @RequestBody SendMessageRequest request) {
 
@@ -52,7 +52,7 @@ public class AiChatController {
   }
 
   @GetMapping(path = "/conversations")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<List<ConversationSummaryResponse>>> listConversations(
       @AuthenticationPrincipal UUID userId) {
 
@@ -62,7 +62,7 @@ public class AiChatController {
   }
 
   @GetMapping(path = "/conversations/{id}")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<ConversationDetailResponse>> getConversation(
       @AuthenticationPrincipal UUID userId, @PathVariable UUID id) {
 

@@ -10,9 +10,9 @@ import com.vegalife.dto.request.post.RelatedPostsRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.dto.response.post.RelatedPostResponse;
 import com.vegalife.service.post.PostService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -42,7 +42,7 @@ public class PostController {
 
   @PostMapping
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PostListResponse>> createPost(
       @AuthenticationPrincipal UUID userId, @Valid @RequestBody PostCreateRequest request) {
     PostListResponse post = postService.createPost(userId, request);
@@ -65,7 +65,7 @@ public class PostController {
 
   @PatchMapping("/{postId}")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PostListResponse>> updatePost(
       @AuthenticationPrincipal UUID userId,
       Authentication authentication,
@@ -78,7 +78,7 @@ public class PostController {
 
   @PostMapping("/{postId}/media")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PostListResponse>> attachMedia(
       @AuthenticationPrincipal UUID userId,
       Authentication authentication,
@@ -91,7 +91,7 @@ public class PostController {
 
   @PostMapping("/{postId}/recipes")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PostListResponse>> attachRecipes(
       @AuthenticationPrincipal UUID userId,
       Authentication authentication,
@@ -104,7 +104,7 @@ public class PostController {
 
   @PatchMapping("/{postId}/visibility")
   @PreAuthorize("hasRole('ADMIN')")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PostListResponse>> updateVisibility(
       @AuthenticationPrincipal UUID adminId,
       @PathVariable UUID postId,
@@ -116,7 +116,7 @@ public class PostController {
 
   @DeleteMapping("/{postId}")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<Void>> deletePost(
       @AuthenticationPrincipal UUID userId,
       Authentication authentication,
@@ -127,7 +127,7 @@ public class PostController {
 
   @GetMapping
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listUserPosts(
       @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute PostListRequest request) {
     PageResponse<PostListResponse> posts = postService.listUserPosts(userId, request);

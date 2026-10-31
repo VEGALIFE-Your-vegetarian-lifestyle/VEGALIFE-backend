@@ -1,10 +1,10 @@
-package com.vegalife.unit.shared.config;
+package com.vegalife.unit.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+import com.vegalife.config.SecurityConfig;
 import com.vegalife.infrastructure.security.JwtAuthenticationFilter;
-import com.vegalife.shared.config.SecurityConfig;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

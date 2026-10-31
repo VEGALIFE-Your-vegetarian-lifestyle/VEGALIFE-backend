@@ -3,8 +3,8 @@ package com.vegalife.unit.service.media;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.vegalife.service.media.CloudinaryUploadProvider;
+import com.vegalife.service.media.MediaProperties;
 import com.vegalife.service.media.UploadGrant;
-import com.vegalife.shared.config.MediaProperties;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;

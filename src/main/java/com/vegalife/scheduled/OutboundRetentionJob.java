@@ -2,7 +2,7 @@ package com.vegalife.scheduled;
 
 import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
-import com.vegalife.shared.config.OutboundMessageProperties;
+import com.vegalife.service.outbound.OutboundMessageProperties;
 import java.time.Instant;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;

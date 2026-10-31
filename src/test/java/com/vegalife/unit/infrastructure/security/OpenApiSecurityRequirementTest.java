@@ -2,7 +2,7 @@ package com.vegalife.unit.infrastructure.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.vegalife.shared.config.OpenApiConfig;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
@@ -20,10 +20,10 @@ import org.springframework.web.bind.annotation.RestController;
  * declare {@code @SecurityRequirement(bearerAuth)}, otherwise the endpoint returns 401 in
  * production while Swagger renders it lock-free and sends no token.
  *
- * <p>{@link OpenApiConfig} registers the {@code bearerAuth} scheme but does not apply it globally,
- * so the requirement has to travel with each protected controller. That makes the two annotations
- * easy to drift apart, which is exactly how {@code DishController} and {@code IngredientController}
- * ended up authenticated at runtime and public-looking in the docs.
+ * <p>OpenApiConfig registers the {@code bearerAuth} scheme but does not apply it globally, so the
+ * requirement has to travel with each protected controller. That makes the two annotations easy to
+ * drift apart, which is exactly how {@code DishController} and {@code IngredientController} ended
+ * up authenticated at runtime and public-looking in the docs.
  *
  * <p>Handlers covered by a {@code permitAll} path rule carry no {@code @PreAuthorize} and are
  * therefore out of scope here; their absence from OpenAPI is correct.
@@ -62,7 +62,7 @@ class OpenApiSecurityRequirementTest {
     assertThat(missing)
         .as(
             "Handlers guarded by @PreAuthorize must also declare"
-                + " @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH) so Swagger sends the"
+                + " @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH) so Swagger sends the"
                 + " token — see ADR-009. Missing: %s",
             missing)
         .isEmpty();
@@ -85,7 +85,7 @@ class OpenApiSecurityRequirementTest {
   private static boolean declaresBearer(AnnotatedElement element) {
     for (SecurityRequirement requirement :
         element.getAnnotationsByType(SecurityRequirement.class)) {
-      if (OpenApiConfig.BEARER_AUTH.equals(requirement.name())) {
+      if (OpenApiSchemeNames.BEARER_AUTH.equals(requirement.name())) {
         return true;
       }
     }

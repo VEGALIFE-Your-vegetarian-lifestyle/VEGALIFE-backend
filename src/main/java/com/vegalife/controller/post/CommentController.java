@@ -6,9 +6,9 @@ import com.vegalife.dto.request.post.CommentUpdateRequest;
 import com.vegalife.dto.response.post.CommentResponse;
 import com.vegalife.dto.response.post.CommentThreadResponse;
 import com.vegalife.service.post.CommentService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -43,7 +43,7 @@ public class CommentController {
 
   @PostMapping
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<CommentResponse>> createComment(
       Authentication authentication,
       @PathVariable UUID postId,
@@ -56,7 +56,7 @@ public class CommentController {
 
   @PatchMapping("/{commentId}")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<CommentResponse>> updateComment(
       Authentication authentication,
       @PathVariable UUID postId,
@@ -69,7 +69,7 @@ public class CommentController {
 
   @DeleteMapping("/{commentId}")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<Void>> deleteComment(
       Authentication authentication, @PathVariable UUID postId, @PathVariable UUID commentId) {
     UUID userId = (UUID) authentication.getPrincipal();
@@ -79,7 +79,7 @@ public class CommentController {
 
   @PostMapping("/{commentId}/report")
   @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<Void>> reportComment(
       @PathVariable UUID postId, @PathVariable UUID commentId) {
     commentService.reportComment(postId, commentId);

@@ -1,6 +1,7 @@
-package com.vegalife.shared.config;
+package com.vegalife.config;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.vegalife.service.admin.AdminDashboardCacheNames;
 import java.util.concurrent.TimeUnit;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
@@ -13,13 +14,12 @@ import org.springframework.context.annotation.Configuration;
 @EnableCaching
 public class CacheConfig {
 
-  public static final String ADMIN_DASHBOARD_CACHE = "adminDashboard";
-
   private static final int TTL_MINUTES = 5;
 
   @Bean
   public CacheManager cacheManager() {
-    CaffeineCacheManager cacheManager = new CaffeineCacheManager(ADMIN_DASHBOARD_CACHE);
+    CaffeineCacheManager cacheManager =
+        new CaffeineCacheManager(AdminDashboardCacheNames.ADMIN_DASHBOARD_CACHE);
     cacheManager.setCaffeine(
         Caffeine.newBuilder().expireAfterWrite(TTL_MINUTES, TimeUnit.MINUTES).maximumSize(100));
     return cacheManager;
