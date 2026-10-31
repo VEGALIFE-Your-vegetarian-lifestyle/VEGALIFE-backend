@@ -4,6 +4,7 @@ import com.vegalife.dto.mapper.subscription.SubscriptionMapper;
 import com.vegalife.dto.request.admin.AdminPaymentListRequest;
 import com.vegalife.dto.request.payment.PaymentListRequest;
 import com.vegalife.dto.response.payment.PaymentHistoryItemResponse;
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
@@ -65,7 +66,7 @@ public class PaymentHistoryService {
    */
   @Transactional(readOnly = true)
   public PageResponse<PaymentHistoryItemResponse> listPayments(AdminPaymentListRequest request) {
-    PaymentLedger.Status status = parseStatus(request.getStatus());
+    PaymentLedgerStatus status = parseStatus(request.getStatus());
     if (request.getCreatedFrom() != null
         && request.getCreatedTo() != null
         && request.getCreatedFrom().isAfter(request.getCreatedTo())) {
@@ -83,12 +84,12 @@ public class PaymentHistoryService {
     return hydrate(page, true);
   }
 
-  private PaymentLedger.Status parseStatus(String status) {
+  private PaymentLedgerStatus parseStatus(String status) {
     if (status == null || status.isBlank()) {
       return null;
     }
     try {
-      return PaymentLedger.Status.valueOf(status);
+      return PaymentLedgerStatus.valueOf(status);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException("Status must be one of: pending, succeeded, failed, refunded");
     }

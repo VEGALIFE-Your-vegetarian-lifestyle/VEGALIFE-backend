@@ -4,6 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.PostRepository;
@@ -129,12 +133,12 @@ class PostEmbeddingSchemaIntegrationTest {
   @Test
   void postFlagAdmitsTheDuplicateVerdict() {
     Post post = publishablePost();
-    post.setFlag(Post.Flag.DUPLICATE);
+    post.setFlag(PostFlag.DUPLICATE);
 
     postRepository.saveAndFlush(post);
 
     Post reloaded = postRepository.findById(post.getId()).orElseThrow();
-    assertThat(reloaded.getFlag()).isEqualTo(Post.Flag.DUPLICATE);
+    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.DUPLICATE);
   }
 
   /** A persisted post in the default state: no flag, so the insert does not depend on V36. */
@@ -145,8 +149,8 @@ class PostEmbeddingSchemaIntegrationTest {
                 .username("embeddingowner")
                 .email("embeddingowner@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
 
@@ -157,7 +161,7 @@ class PostEmbeddingSchemaIntegrationTest {
             .content("Món chay đơn giản cho bữa tối.")
             .rawContent(OBJECT_MAPPER.createObjectNode().put("type", "doc"))
             .viewCount(0)
-            .status(Post.Status.created)
+            .status(PostStatus.created)
             .build());
   }
 

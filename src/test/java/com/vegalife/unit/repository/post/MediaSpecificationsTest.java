@@ -2,6 +2,9 @@ package com.vegalife.unit.repository.post;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.vegalife.enums.post.MediaStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.MediaRepository;
@@ -46,12 +49,12 @@ class MediaSpecificationsTest {
     alice = createUser("alice", "alice@example.com");
     bob = createUser("bob", "bob@example.com");
 
-    aliceVideo = createVideo(alice, "video/mp4", Media.Status.succeed, null);
-    aliceUploadingVideo = createVideo(alice, "video/webm", Media.Status.uploading, null);
-    bobVideo = createVideo(bob, "video/mp4", Media.Status.failed, null);
-    aliceImage = createMedia(alice, "image/png", Media.Status.succeed, null, null);
-    aliceDeletedVideo = createVideo(alice, "video/mp4", Media.Status.succeed, Instant.now());
-    orphanVideo = createVideo(null, "video/mp4", Media.Status.succeed, null);
+    aliceVideo = createVideo(alice, "video/mp4", MediaStatus.succeed, null);
+    aliceUploadingVideo = createVideo(alice, "video/webm", MediaStatus.uploading, null);
+    bobVideo = createVideo(bob, "video/mp4", MediaStatus.failed, null);
+    aliceImage = createMedia(alice, "image/png", MediaStatus.succeed, null, null);
+    aliceDeletedVideo = createVideo(alice, "video/mp4", MediaStatus.succeed, Instant.now());
+    orphanVideo = createVideo(null, "video/mp4", MediaStatus.succeed, null);
 
     entityManager.flush();
     setCreatedAt(aliceVideo, CREATED_MARCH);
@@ -96,7 +99,7 @@ class MediaSpecificationsTest {
 
   @Test
   void allVideosWithFilters_byStatus_returnsOnlyThatStatus() {
-    Page<Media> result = findAll(Media.Status.uploading, null, null, null);
+    Page<Media> result = findAll(MediaStatus.uploading, null, null, null);
 
     assertThat(result.getContent())
         .extracting(Media::getId)
@@ -145,7 +148,7 @@ class MediaSpecificationsTest {
 
   @Test
   void allVideosWithFilters_withCombinedFilters_appliesEveryPredicate() {
-    Page<Media> result = findAll(Media.Status.succeed, alice.getId(), CREATED_MARCH, CREATED_JUNE);
+    Page<Media> result = findAll(MediaStatus.succeed, alice.getId(), CREATED_MARCH, CREATED_JUNE);
 
     assertThat(result.getContent()).extracting(Media::getId).containsExactly(aliceVideo.getId());
     assertThat(result.getTotalElements()).isOne();
@@ -153,14 +156,14 @@ class MediaSpecificationsTest {
 
   @Test
   void allVideosWithFilters_withFilterMatchingNothing_returnsEmptyPage() {
-    Page<Media> result = findAll(Media.Status.uploading, bob.getId(), null, null);
+    Page<Media> result = findAll(MediaStatus.uploading, bob.getId(), null, null);
 
     assertThat(result.getContent()).isEmpty();
     assertThat(result.getTotalElements()).isZero();
   }
 
   private Page<Media> findAll(
-      Media.Status status, UUID userId, Instant createdFrom, Instant createdTo) {
+      MediaStatus status, UUID userId, Instant createdFrom, Instant createdTo) {
     Specification<Media> spec =
         MediaSpecifications.allVideosWithFilters(status, userId, createdFrom, createdTo);
     Sort sort = Sort.by(Sort.Direction.ASC, "createdAt");
@@ -173,21 +176,20 @@ class MediaSpecificationsTest {
             .username(username)
             .email(email)
             .passwordHash("password-hash")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     entityManager.persist(user);
     return user;
   }
 
-  private Media createVideo(
-      User uploader, String mimeType, Media.Status status, Instant deletedAt) {
+  private Media createVideo(User uploader, String mimeType, MediaStatus status, Instant deletedAt) {
     return createMedia(uploader, mimeType, status, deletedAt, "https://cdn.example.com/video.mp4");
   }
 
   private Media createMedia(
-      User uploader, String mimeType, Media.Status status, Instant deletedAt, String mediaUrl) {
+      User uploader, String mimeType, MediaStatus status, Instant deletedAt, String mediaUrl) {
     Media media =
         Media.builder()
             .mediaUrl(mediaUrl)

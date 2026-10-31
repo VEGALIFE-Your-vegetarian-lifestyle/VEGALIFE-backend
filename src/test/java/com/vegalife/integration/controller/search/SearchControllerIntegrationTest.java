@@ -6,7 +6,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.vegalife.enums.post.MediaStatus;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
@@ -86,8 +90,8 @@ class SearchControllerIntegrationTest {
                 .username("author")
                 .email("author@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
   }
@@ -141,7 +145,7 @@ class SearchControllerIntegrationTest {
 
   @Test
   void search_draftPostIsNeverReturned() throws Exception {
-    createPost("Tofu draft", "Not published yet.", Post.Status.created);
+    createPost("Tofu draft", "Not published yet.", PostStatus.created);
 
     mockMvc
         .perform(get("/api/search").param("q", "tofu"))
@@ -154,7 +158,7 @@ class SearchControllerIntegrationTest {
     Post videoPost = createPublishedPost("Tofu cooking video", "Watch and learn.");
     Media video =
         mediaRepository.save(
-            Media.builder().mimeType("video/mp4").status(Media.Status.succeed).build());
+            Media.builder().mimeType("video/mp4").status(MediaStatus.succeed).build());
     videoPost.setMedia(new java.util.HashSet<>(Set.of(video)));
     postRepository.save(videoPost);
     createPublishedPost("Tofu written guide", "Read and learn.");
@@ -221,7 +225,7 @@ class SearchControllerIntegrationTest {
   }
 
   private Post createPublishedPost(String title, String content) {
-    return createPost(title, content, Post.Status.published);
+    return createPost(title, content, PostStatus.published);
   }
 
   private Post createPublishedPostWithCategory(String title, String content, Category category) {
@@ -232,7 +236,7 @@ class SearchControllerIntegrationTest {
                 .title(title)
                 .content(content)
                 .rawContent(JsonNodeFactory.instance.objectNode())
-                .status(Post.Status.published)
+                .status(PostStatus.published)
                 .viewCount(0)
                 .categories(new java.util.HashSet<>(Set.of(category)))
                 .build());
@@ -240,7 +244,7 @@ class SearchControllerIntegrationTest {
     return postRepository.save(post);
   }
 
-  private Post createPost(String title, String content, Post.Status status) {
+  private Post createPost(String title, String content, PostStatus status) {
     return postRepository.save(
         Post.builder()
             .user(user)

@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiUsage;
 import com.vegalife.model.user.User;
@@ -101,8 +103,8 @@ class AiChatControllerIntegrationTest {
                 .username("aichat" + UUID.randomUUID())
                 .email(UUID.randomUUID() + "@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     accessToken = jwtTokenService.generateAccessToken(user);
@@ -192,8 +194,8 @@ class AiChatControllerIntegrationTest {
                 .username("aichatother" + UUID.randomUUID())
                 .email(UUID.randomUUID() + "@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     com.vegalife.model.ai.AiConversation foreign =

@@ -7,7 +7,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
@@ -120,8 +124,8 @@ class ModeratePostIntegrationTest {
     categoryRepository.deleteAll();
     userRepository.deleteAll();
 
-    admin = createUser("adminmod", "admin.mod@example.com", User.Role.ADMIN);
-    member = createUser("membermod", "member.mod@example.com", User.Role.USER);
+    admin = createUser("adminmod", "admin.mod@example.com", UserRole.ADMIN);
+    member = createUser("membermod", "member.mod@example.com", UserRole.USER);
     adminToken = jwtTokenService.generateAccessToken(admin);
     userToken = jwtTokenService.generateAccessToken(member);
     category = categoryRepository.saveAndFlush(Category.builder().name("Dinner").build());
@@ -131,7 +135,7 @@ class ModeratePostIntegrationTest {
   void approve_publishesAndLogsReason_leavingFlagUntouched() throws Exception {
     Post post =
         createPost(
-            member, Post.Status.unpublished, Post.Flag.REJECTED, new HashSet<>(Set.of(category)));
+            member, PostStatus.unpublished, PostFlag.REJECTED, new HashSet<>(Set.of(category)));
 
     approve(post, "{\"reason\":\"Vegan recipe false positive\"}")
         .andExpect(status().isOk())
@@ -141,10 +145,10 @@ class ModeratePostIntegrationTest {
         .andExpect(jsonPath("$.data.flag").value("REJECTED"));
 
     Post reloaded = postRepository.findById(post.getId()).orElseThrow();
-    assertThat(reloaded.getStatus()).isEqualTo(Post.Status.published);
+    assertThat(reloaded.getStatus()).isEqualTo(PostStatus.published);
     assertThat(reloaded.getPublishedAt()).isNotNull();
     // Auto-REJECTED records what the filter decided; approving does not rewrite that history.
-    assertThat(reloaded.getFlag()).isEqualTo(Post.Flag.REJECTED);
+    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.REJECTED);
 
     ModerationLog entry = singlePostLog();
     assertThat(entry.getActorId()).isEqualTo(admin.getId());
@@ -156,10 +160,7 @@ class ModeratePostIntegrationTest {
   void approve_approvesEveryPendingComponentOfThePost() throws Exception {
     Post post =
         createPost(
-            member,
-            Post.Status.unpublished,
-            Post.Flag.NEEDS_REVIEW,
-            new HashSet<>(Set.of(category)));
+            member, PostStatus.unpublished, PostFlag.NEEDS_REVIEW, new HashSet<>(Set.of(category)));
     Dish dish = saveDish("bún chả chay", ModerationStatus.PENDING);
     Ingredient ingredient = saveIngredient("đậu hũ", ModerationStatus.PENDING);
     Recipe recipe = saveRecipe(post, dish, ModerationStatus.PENDING);
@@ -180,10 +181,7 @@ class ModeratePostIntegrationTest {
   void approve_doesNotResurrectARejectedName() throws Exception {
     Post post =
         createPost(
-            member,
-            Post.Status.unpublished,
-            Post.Flag.NEEDS_REVIEW,
-            new HashSet<>(Set.of(category)));
+            member, PostStatus.unpublished, PostFlag.NEEDS_REVIEW, new HashSet<>(Set.of(category)));
     Dish rejected = saveDish("món bị từ chối", ModerationStatus.REJECTED);
     Recipe recipe = saveRecipe(post, rejected, ModerationStatus.PENDING);
 
@@ -198,8 +196,7 @@ class ModeratePostIntegrationTest {
   @Test
   void reject_unpublishesAndRejectsOnlyPendingComponents() throws Exception {
     Post post =
-        createPost(
-            member, Post.Status.published, Post.Flag.PASSED, new HashSet<>(Set.of(category)));
+        createPost(member, PostStatus.published, PostFlag.PASSED, new HashSet<>(Set.of(category)));
     Dish pendingDish = saveDish("món lạ", ModerationStatus.PENDING);
     Ingredient pendingIngredient = saveIngredient("nguyên liệu lạ", ModerationStatus.PENDING);
     Recipe pendingRecipe = saveRecipe(post, pendingDish, ModerationStatus.PENDING);
@@ -216,7 +213,7 @@ class ModeratePostIntegrationTest {
         .andExpect(jsonPath("$.data.status").value("unpublished"));
 
     Post reloaded = postRepository.findById(post.getId()).orElseThrow();
-    assertThat(reloaded.getStatus()).isEqualTo(Post.Status.unpublished);
+    assertThat(reloaded.getStatus()).isEqualTo(PostStatus.unpublished);
     assertThat(reloaded.getPublishedAt()).isNull();
     assertThat(pendingDish.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
     assertThat(pendingIngredient.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
@@ -228,8 +225,7 @@ class ModeratePostIntegrationTest {
   @Test
   void reject_leavesAnAlreadyApprovedNameApproved() throws Exception {
     Post post =
-        createPost(
-            member, Post.Status.published, Post.Flag.PASSED, new HashSet<>(Set.of(category)));
+        createPost(member, PostStatus.published, PostFlag.PASSED, new HashSet<>(Set.of(category)));
     Dish approvedDish = saveDish("phở chay", ModerationStatus.APPROVED);
     saveRecipe(post, approvedDish, ModerationStatus.APPROVED);
 
@@ -250,10 +246,7 @@ class ModeratePostIntegrationTest {
   void getPostDetail_returnsScoresAndComponentStates() throws Exception {
     Post post =
         createPost(
-            member,
-            Post.Status.unpublished,
-            Post.Flag.NEEDS_REVIEW,
-            new HashSet<>(Set.of(category)));
+            member, PostStatus.unpublished, PostFlag.NEEDS_REVIEW, new HashSet<>(Set.of(category)));
     post.setContentScore(0.64);
     postRepository.saveAndFlush(post);
     Dish dish = saveDish("bún chả chay", ModerationStatus.PENDING);
@@ -278,8 +271,7 @@ class ModeratePostIntegrationTest {
   @Test
   void getPostDetail_withoutJwt_returns401() throws Exception {
     Post post =
-        createPost(
-            member, Post.Status.published, Post.Flag.PASSED, new HashSet<>(Set.of(category)));
+        createPost(member, PostStatus.published, PostFlag.PASSED, new HashSet<>(Set.of(category)));
 
     mockMvc.perform(get("/api/admin/posts/" + post.getId())).andExpect(status().isUnauthorized());
   }
@@ -287,8 +279,7 @@ class ModeratePostIntegrationTest {
   @Test
   void getPostDetail_withNonAdminJwt_returns403() throws Exception {
     Post post =
-        createPost(
-            member, Post.Status.published, Post.Flag.PASSED, new HashSet<>(Set.of(category)));
+        createPost(member, PostStatus.published, PostFlag.PASSED, new HashSet<>(Set.of(category)));
 
     mockMvc
         .perform(
@@ -298,7 +289,7 @@ class ModeratePostIntegrationTest {
 
   @Test
   void approve_withoutCategory_returns400AndNoLog() throws Exception {
-    Post post = createPost(member, Post.Status.unpublished, Post.Flag.REJECTED, new HashSet<>());
+    Post post = createPost(member, PostStatus.unpublished, PostFlag.REJECTED, new HashSet<>());
 
     approve(post, "{\"reason\":\"trying\"}")
         .andExpect(status().isBadRequest())
@@ -311,7 +302,7 @@ class ModeratePostIntegrationTest {
   @Test
   void approve_hiddenPost_returns400() throws Exception {
     Post post =
-        createPost(member, Post.Status.hidden, Post.Flag.REJECTED, new HashSet<>(Set.of(category)));
+        createPost(member, PostStatus.hidden, PostFlag.REJECTED, new HashSet<>(Set.of(category)));
 
     approve(post, "{}").andExpect(status().isBadRequest());
   }
@@ -319,7 +310,7 @@ class ModeratePostIntegrationTest {
   @Test
   void reject_hiddenPost_returns400() throws Exception {
     Post post =
-        createPost(member, Post.Status.hidden, Post.Flag.REJECTED, new HashSet<>(Set.of(category)));
+        createPost(member, PostStatus.hidden, PostFlag.REJECTED, new HashSet<>(Set.of(category)));
 
     mockMvc
         .perform(
@@ -345,10 +336,7 @@ class ModeratePostIntegrationTest {
   void approve_withoutBody_succeedsBecauseReasonIsOptional() throws Exception {
     Post post =
         createPost(
-            member,
-            Post.Status.unpublished,
-            Post.Flag.NEEDS_REVIEW,
-            new HashSet<>(Set.of(category)));
+            member, PostStatus.unpublished, PostFlag.NEEDS_REVIEW, new HashSet<>(Set.of(category)));
 
     mockMvc
         .perform(
@@ -363,10 +351,7 @@ class ModeratePostIntegrationTest {
   void approve_withReasonTooLong_returns400() throws Exception {
     Post post =
         createPost(
-            member,
-            Post.Status.unpublished,
-            Post.Flag.NEEDS_REVIEW,
-            new HashSet<>(Set.of(category)));
+            member, PostStatus.unpublished, PostFlag.NEEDS_REVIEW, new HashSet<>(Set.of(category)));
 
     approve(post, "{\"reason\":\"" + "x".repeat(1001) + "\"}").andExpect(status().isBadRequest());
   }
@@ -375,10 +360,7 @@ class ModeratePostIntegrationTest {
   void moderateEndpointNoLongerExists() throws Exception {
     Post post =
         createPost(
-            member,
-            Post.Status.unpublished,
-            Post.Flag.NEEDS_REVIEW,
-            new HashSet<>(Set.of(category)));
+            member, PostStatus.unpublished, PostFlag.NEEDS_REVIEW, new HashSet<>(Set.of(category)));
 
     // Removed outright rather than deprecated: leaving it would let a client keep publishing
     // without ever deciding on the components (ADR-016).
@@ -395,7 +377,7 @@ class ModeratePostIntegrationTest {
   void approve_withNonAdminJwt_returns403() throws Exception {
     Post post =
         createPost(
-            member, Post.Status.unpublished, Post.Flag.REJECTED, new HashSet<>(Set.of(category)));
+            member, PostStatus.unpublished, PostFlag.REJECTED, new HashSet<>(Set.of(category)));
 
     mockMvc
         .perform(
@@ -412,7 +394,7 @@ class ModeratePostIntegrationTest {
   void approve_withoutJwt_returns401() throws Exception {
     Post post =
         createPost(
-            member, Post.Status.unpublished, Post.Flag.REJECTED, new HashSet<>(Set.of(category)));
+            member, PostStatus.unpublished, PostFlag.REJECTED, new HashSet<>(Set.of(category)));
 
     mockMvc
         .perform(
@@ -440,20 +422,19 @@ class ModeratePostIntegrationTest {
     return postLogs.get(0);
   }
 
-  private User createUser(String username, String email, User.Role role) {
+  private User createUser(String username, String email, UserRole role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)
-            .status(User.Status.activated)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }
 
-  private Post createPost(
-      User owner, Post.Status status, Post.Flag flag, Set<Category> categories) {
+  private Post createPost(User owner, PostStatus status, PostFlag flag, Set<Category> categories) {
     return postRepository.saveAndFlush(
         Post.builder()
             .user(owner)
@@ -463,7 +444,7 @@ class ModeratePostIntegrationTest {
             .categories(categories)
             .status(status)
             .flag(flag)
-            .publishedAt(status == Post.Status.published ? Instant.now() : null)
+            .publishedAt(status == PostStatus.published ? Instant.now() : null)
             .viewCount(0)
             .build());
   }

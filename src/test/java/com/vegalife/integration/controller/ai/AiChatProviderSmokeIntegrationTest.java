@@ -5,6 +5,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.ai.AiConversationRepository;
 import com.vegalife.repository.ai.AiMessageRepository;
@@ -81,8 +83,8 @@ class AiChatProviderSmokeIntegrationTest {
                 .username("smoke" + UUID.randomUUID())
                 .email(UUID.randomUUID() + "@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     accessToken = jwtTokenService.generateAccessToken(user);

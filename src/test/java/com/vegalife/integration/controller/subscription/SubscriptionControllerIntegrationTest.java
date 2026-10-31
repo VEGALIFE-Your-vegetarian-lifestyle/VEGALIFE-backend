@@ -6,6 +6,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.enums.subscription.SubscriptionStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.AiUsage;
@@ -93,8 +97,8 @@ class SubscriptionControllerIntegrationTest {
             .username("subuser")
             .email("sub@example.com")
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     testUser = userRepository.save(testUser);
@@ -156,7 +160,7 @@ class SubscriptionControllerIntegrationTest {
             .planId(proPlan.getId())
             .amount(proPlan.getPriceAmount())
             .currency(proPlan.getPriceCurrency())
-            .status(PaymentLedger.Status.succeeded)
+            .status(PaymentLedgerStatus.succeeded)
             .provider("vnpay")
             .paidAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
             .build());
@@ -179,7 +183,7 @@ class SubscriptionControllerIntegrationTest {
         AiSubscription.builder()
             .userId(testUser.getId())
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .renewalDate(renewalDate)
             .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
             .build());
@@ -213,7 +217,7 @@ class SubscriptionControllerIntegrationTest {
             .planId(proPlan.getId())
             .amount(proPlan.getPriceAmount())
             .currency(proPlan.getPriceCurrency())
-            .status(PaymentLedger.Status.succeeded)
+            .status(PaymentLedgerStatus.succeeded)
             .provider("vnpay")
             .paidAt(latestPaidAt.minus(1, ChronoUnit.DAYS))
             .build());
@@ -223,7 +227,7 @@ class SubscriptionControllerIntegrationTest {
             .planId(proPlan.getId())
             .amount(proPlan.getPriceAmount())
             .currency(proPlan.getPriceCurrency())
-            .status(PaymentLedger.Status.succeeded)
+            .status(PaymentLedgerStatus.succeeded)
             .provider("vnpay")
             .paidAt(latestPaidAt)
             .build());
@@ -234,7 +238,7 @@ class SubscriptionControllerIntegrationTest {
             .planId(proPlan.getId())
             .amount(proPlan.getPriceAmount())
             .currency(proPlan.getPriceCurrency())
-            .status(PaymentLedger.Status.pending)
+            .status(PaymentLedgerStatus.pending)
             .provider("vnpay")
             .paidAt(latestPaidAt.plus(1, ChronoUnit.MINUTES))
             .build());
@@ -348,7 +352,7 @@ class SubscriptionControllerIntegrationTest {
         AiSubscription.builder()
             .userId(testUser.getId())
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
             .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
             .build());
@@ -356,7 +360,7 @@ class SubscriptionControllerIntegrationTest {
         AiSubscription.builder()
             .userId(testUser.getId())
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.scheduled)
+            .status(SubscriptionStatus.scheduled)
             .startedAt(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
             .renewalDate(Instant.now().plus(60, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
             .build());
@@ -376,7 +380,7 @@ class SubscriptionControllerIntegrationTest {
     assertThat(rows)
         .allSatisfy(
             row -> {
-              assertThat(row.getStatus()).isEqualTo(AiSubscription.Status.cancelled);
+              assertThat(row.getStatus()).isEqualTo(SubscriptionStatus.cancelled);
               assertThat(row.getCancelledAt()).isNotNull();
             });
     assertThat(rows.get(0).getCancelledAt().truncatedTo(ChronoUnit.SECONDS))
@@ -433,7 +437,7 @@ class SubscriptionControllerIntegrationTest {
             AiSubscription.builder()
                 .userId(testUser.getId())
                 .planId(freePlan.getId())
-                .status(AiSubscription.Status.cancelled)
+                .status(SubscriptionStatus.cancelled)
                 .startedAt(Instant.parse("2026-01-01T00:00:00Z"))
                 .cancelledAt(Instant.parse("2026-02-01T00:00:00Z"))
                 .build());
@@ -442,7 +446,7 @@ class SubscriptionControllerIntegrationTest {
             AiSubscription.builder()
                 .userId(testUser.getId())
                 .planId(proPlan.getId())
-                .status(AiSubscription.Status.active)
+                .status(SubscriptionStatus.active)
                 .startedAt(Instant.parse("2026-02-01T00:00:00Z"))
                 .renewalDate(Instant.parse("2026-03-01T00:00:00Z"))
                 .build());
@@ -451,7 +455,7 @@ class SubscriptionControllerIntegrationTest {
             AiSubscription.builder()
                 .userId(testUser.getId())
                 .planId(proPlan.getId())
-                .status(AiSubscription.Status.scheduled)
+                .status(SubscriptionStatus.scheduled)
                 .startedAt(Instant.parse("2026-03-01T00:00:00Z"))
                 .renewalDate(Instant.parse("2026-04-01T00:00:00Z"))
                 .build());
@@ -463,15 +467,15 @@ class SubscriptionControllerIntegrationTest {
                 .username("subuser2")
                 .email("sub2@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     subscriptionRepository.save(
         AiSubscription.builder()
             .userId(otherUser.getId())
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
             .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
             .build());
@@ -512,7 +516,7 @@ class SubscriptionControllerIntegrationTest {
         AiSubscription.builder()
             .userId(testUser.getId())
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
             .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
             .build());
@@ -637,7 +641,7 @@ class SubscriptionControllerIntegrationTest {
         AiSubscription.builder()
             .userId(testUser.getId())
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
             .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
             .build());
@@ -655,7 +659,7 @@ class SubscriptionControllerIntegrationTest {
     entityManager.clear();
     List<AiSubscription> rows = subscriptionRepository.findAllByUserId(testUser.getId());
     assertThat(rows).hasSize(1);
-    assertThat(rows.get(0).getStatus()).isEqualTo(AiSubscription.Status.active);
+    assertThat(rows.get(0).getStatus()).isEqualTo(SubscriptionStatus.active);
   }
 
   @Test
@@ -665,7 +669,7 @@ class SubscriptionControllerIntegrationTest {
         AiSubscription.builder()
             .userId(testUser.getId())
             .planId(freePlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
             .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
             .build());
@@ -685,7 +689,7 @@ class SubscriptionControllerIntegrationTest {
     entityManager.clear();
     List<AiSubscription> rows = subscriptionRepository.findAllByUserId(testUser.getId());
     assertThat(rows).hasSize(1);
-    assertThat(rows.get(0).getStatus()).isEqualTo(AiSubscription.Status.active);
+    assertThat(rows.get(0).getStatus()).isEqualTo(SubscriptionStatus.active);
     assertThat(rows.get(0).getCancelledAt()).isNull();
   }
 
@@ -697,7 +701,7 @@ class SubscriptionControllerIntegrationTest {
         AiSubscription.builder()
             .userId(testUser.getId())
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
             .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
             .build());
@@ -705,7 +709,7 @@ class SubscriptionControllerIntegrationTest {
         AiSubscription.builder()
             .userId(testUser.getId())
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.scheduled)
+            .status(SubscriptionStatus.scheduled)
             .startedAt(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
             .renewalDate(Instant.now().plus(60, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
             .build());
@@ -725,7 +729,7 @@ class SubscriptionControllerIntegrationTest {
     assertThat(rows).hasSize(2);
     assertThat(rows)
         .extracting(AiSubscription::getStatus)
-        .containsExactlyInAnyOrder(AiSubscription.Status.active, AiSubscription.Status.scheduled);
+        .containsExactlyInAnyOrder(SubscriptionStatus.active, SubscriptionStatus.scheduled);
   }
 
   private void backdate(UUID subscriptionId, Instant when) {

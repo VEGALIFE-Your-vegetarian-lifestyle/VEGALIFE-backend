@@ -2,6 +2,8 @@ package com.vegalife.unit.repository.user;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.user.UserRepository;
 import java.util.Optional;
@@ -26,8 +28,8 @@ class UserRepositoryTest {
             .username("testuser")
             .email("test@example.com")
             .passwordHash("hash")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
 
@@ -54,8 +56,8 @@ class UserRepositoryTest {
             .username("testuser")
             .email("test@example.com")
             .passwordHash("hash")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
 
@@ -74,8 +76,8 @@ class UserRepositoryTest {
             .username("testuser")
             .email("test@example.com")
             .passwordHash("hash")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
 
@@ -100,8 +102,8 @@ class UserRepositoryTest {
             .username("testuser")
             .email("test@example.com")
             .passwordHash("hash")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
 
@@ -119,8 +121,8 @@ class UserRepositoryTest {
             .username("testuser")
             .email("test@example.com")
             .passwordHash("hash")
-            .role(User.Role.USER)
-            .status(User.Status.created)
+            .role(UserRole.USER)
+            .status(UserStatus.created)
             .emailVerified(false)
             .build();
 
@@ -132,8 +134,8 @@ class UserRepositoryTest {
     assertThat(saved.getUpdatedAt()).isNotNull();
     assertThat(saved.getUsername()).isEqualTo("testuser");
     assertThat(saved.getEmail()).isEqualTo("test@example.com");
-    assertThat(saved.getRole()).isEqualTo(User.Role.USER);
-    assertThat(saved.getStatus()).isEqualTo(User.Status.created);
+    assertThat(saved.getRole()).isEqualTo(UserRole.USER);
+    assertThat(saved.getStatus()).isEqualTo(UserStatus.created);
     assertThat(saved.getEmailVerified()).isFalse();
   }
 }

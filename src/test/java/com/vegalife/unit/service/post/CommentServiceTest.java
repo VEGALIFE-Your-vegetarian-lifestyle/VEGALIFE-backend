@@ -13,6 +13,7 @@ import com.vegalife.dto.request.post.CommentListRequest;
 import com.vegalife.dto.request.post.CommentUpdateRequest;
 import com.vegalife.dto.response.post.CommentResponse;
 import com.vegalife.dto.response.post.CommentThreadResponse;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
@@ -61,7 +62,7 @@ class CommentServiceTest {
   void setUp() {
     userId = UUID.randomUUID();
     postId = UUID.randomUUID();
-    post = Post.builder().id(postId).status(Post.Status.published).build();
+    post = Post.builder().id(postId).status(PostStatus.published).build();
   }
 
   @Test
@@ -73,7 +74,7 @@ class CommentServiceTest {
             .postId(postId)
             .content("Nice post")
             .build();
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
         .thenReturn(Optional.of(post));
     when(commentRepository.saveAndFlush(any(Comment.class))).thenReturn(saved);
 
@@ -99,7 +100,7 @@ class CommentServiceTest {
             .parentId(parentId)
             .content("Reply")
             .build();
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
         .thenReturn(Optional.of(post));
     when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(parentId, postId))
         .thenReturn(Optional.of(Comment.builder().id(parentId).postId(postId).build()));
@@ -117,7 +118,7 @@ class CommentServiceTest {
   @Test
   void createComment_rejectsParentFromAnotherPost() {
     UUID parentId = UUID.randomUUID();
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
         .thenReturn(Optional.of(post));
     when(commentRepository.findByIdAndPostIdAndDeletedAtIsNull(parentId, postId))
         .thenReturn(Optional.empty());
@@ -134,7 +135,7 @@ class CommentServiceTest {
 
   @Test
   void createComment_rejectsMissingOrUnpublishedPost() {
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
         .thenReturn(Optional.empty());
 
     assertThatThrownBy(
@@ -321,7 +322,7 @@ class CommentServiceTest {
             .parentId(rootId)
             .content("Reply")
             .build();
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
         .thenReturn(Optional.of(post));
     when(commentRepository.findByPostIdOrderByCreatedAtAsc(postId))
         .thenReturn(List.of(root, reply));
@@ -361,7 +362,7 @@ class CommentServiceTest {
             .parentId(rootId)
             .content("Still here")
             .build();
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
         .thenReturn(Optional.of(post));
     when(commentRepository.findByPostIdOrderByCreatedAtAsc(postId))
         .thenReturn(List.of(deletedRoot, reply));
@@ -393,7 +394,7 @@ class CommentServiceTest {
                         .content("Root " + i)
                         .build())
             .toList();
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
         .thenReturn(Optional.of(post));
     when(commentRepository.findByPostIdOrderByCreatedAtAsc(postId)).thenReturn(roots);
     when(userRepository.findAllById(any())).thenReturn(List.of());
@@ -411,7 +412,7 @@ class CommentServiceTest {
 
   @Test
   void getComments_missingOrUnpublishedPostReturnsNotFound() {
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
         .thenReturn(Optional.empty());
 
     assertThatThrownBy(

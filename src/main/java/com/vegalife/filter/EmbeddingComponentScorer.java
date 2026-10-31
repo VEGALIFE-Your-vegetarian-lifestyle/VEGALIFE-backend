@@ -1,6 +1,6 @@
 package com.vegalife.filter;
 
-import com.vegalife.model.post.Post;
+import com.vegalife.enums.post.PostFlag;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -93,8 +93,8 @@ public class EmbeddingComponentScorer implements ComponentScorer {
       return ComponentResult.failed(component);
     }
     RelevanceScore relevance = scorer.score(embedding);
-    Post.Flag flag =
-        relevance.band() == RelevanceScore.Band.PASS ? Post.Flag.PASSED : Post.Flag.NEEDS_REVIEW;
+    PostFlag flag =
+        relevance.band() == RelevanceScore.Band.PASS ? PostFlag.PASSED : PostFlag.NEEDS_REVIEW;
     return new ComponentResult(
         component, flag, Optional.of(relevance.score()), Optional.of(embedding));
   }

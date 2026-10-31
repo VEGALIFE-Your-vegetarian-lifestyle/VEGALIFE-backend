@@ -1,5 +1,6 @@
 package com.vegalife.repository.subscription;
 
+import com.vegalife.enums.subscription.SubscriptionStatus;
 import com.vegalife.model.subscription.AiSubscription;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
@@ -35,7 +36,7 @@ public interface AiSubscriptionRepository extends JpaRepository<AiSubscription, 
           + " where s.userId = :userId and s.status in ('active', 'past_due')")
   Optional<AiSubscription> findInEffectForUpdate(@Param("userId") UUID userId);
 
-  boolean existsByUserIdAndPlanIdAndStatus(UUID userId, UUID planId, AiSubscription.Status status);
+  boolean existsByUserIdAndPlanIdAndStatus(UUID userId, UUID planId, SubscriptionStatus status);
 
   @Query(
       "select s from AiSubscription s"
@@ -56,6 +57,6 @@ public interface AiSubscriptionRepository extends JpaRepository<AiSubscription, 
   int cancelScheduledForUser(
       @Param("userId") UUID userId,
       @Param("cancelledAt") Instant cancelledAt,
-      @Param("cancelled") AiSubscription.Status cancelled,
-      @Param("scheduled") AiSubscription.Status scheduled);
+      @Param("cancelled") SubscriptionStatus cancelled,
+      @Param("scheduled") SubscriptionStatus scheduled);
 }

@@ -1,5 +1,6 @@
 package com.vegalife.scheduled;
 
+import com.vegalife.enums.subscription.SubscriptionStatus;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import java.time.Instant;
@@ -47,14 +48,14 @@ public class SubscriptionExpirySweepJob {
     int expired = 0;
     int promoted = 0;
     for (AiSubscription subscription : due) {
-      subscription.setStatus(AiSubscription.Status.expired);
+      subscription.setStatus(SubscriptionStatus.expired);
       subscriptionRepository.save(subscription);
       expired++;
       List<AiSubscription> successors =
           subscriptionRepository.findScheduledForUser(subscription.getUserId());
       if (!successors.isEmpty()) {
         AiSubscription successor = successors.getFirst();
-        successor.setStatus(AiSubscription.Status.active);
+        successor.setStatus(SubscriptionStatus.active);
         subscriptionRepository.save(successor);
         promoted++;
         log.info(

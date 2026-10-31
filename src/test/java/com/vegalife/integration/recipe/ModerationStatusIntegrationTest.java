@@ -3,6 +3,8 @@ package com.vegalife.integration.recipe;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
@@ -88,8 +90,8 @@ class ModerationStatusIntegrationTest {
                 .username("moderator")
                 .email("moderator@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
   }

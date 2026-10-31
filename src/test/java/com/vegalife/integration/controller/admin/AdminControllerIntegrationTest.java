@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
@@ -75,8 +77,8 @@ class AdminControllerIntegrationTest {
                 .username("adminuser")
                 .email("admin@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.ADMIN)
-                .status(User.Status.activated)
+                .role(UserRole.ADMIN)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     adminId = admin.getId();
@@ -87,8 +89,8 @@ class AdminControllerIntegrationTest {
                 .username("regularuser")
                 .email("user@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     regularId = regular.getId();
@@ -99,8 +101,8 @@ class AdminControllerIntegrationTest {
                 .username("suspendeduser")
                 .email("suspended@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.suspended)
+                .role(UserRole.USER)
+                .status(UserStatus.suspended)
                 .emailVerified(true)
                 .build());
     suspendedId = suspendedUser.getId();
@@ -111,8 +113,8 @@ class AdminControllerIntegrationTest {
                 .username("deleteduser")
                 .email("deleted@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .deletedAt(Instant.now())
                 .build());
@@ -220,8 +222,7 @@ class AdminControllerIntegrationTest {
         .andExpect(jsonPath("$.data.id").value(regularId.toString()));
 
     User updated = userRepository.findById(regularId).orElseThrow();
-    org.assertj.core.api.Assertions.assertThat(updated.getStatus())
-        .isEqualTo(User.Status.suspended);
+    org.assertj.core.api.Assertions.assertThat(updated.getStatus()).isEqualTo(UserStatus.suspended);
   }
 
   @Test
@@ -285,8 +286,7 @@ class AdminControllerIntegrationTest {
         .andExpect(jsonPath("$.data.id").value(suspendedId.toString()));
 
     User updated = userRepository.findById(suspendedId).orElseThrow();
-    org.assertj.core.api.Assertions.assertThat(updated.getStatus())
-        .isEqualTo(User.Status.activated);
+    org.assertj.core.api.Assertions.assertThat(updated.getStatus()).isEqualTo(UserStatus.activated);
   }
 
   @Test
@@ -376,7 +376,7 @@ class AdminControllerIntegrationTest {
   @Test
   void listUsers_withSuspendedAdminToken_returns401() throws Exception {
     User admin = userRepository.findById(adminId).orElseThrow();
-    admin.setStatus(User.Status.suspended);
+    admin.setStatus(UserStatus.suspended);
     userRepository.save(admin);
 
     mockMvc

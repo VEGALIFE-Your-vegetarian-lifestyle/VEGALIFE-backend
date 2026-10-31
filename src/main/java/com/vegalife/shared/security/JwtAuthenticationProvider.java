@@ -1,6 +1,6 @@
 package com.vegalife.shared.security;
 
-import com.vegalife.model.user.User;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.repository.user.UserAccountAuthState;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
@@ -51,7 +51,7 @@ public class JwtAuthenticationProvider implements AuthenticationProvider {
       throw new AccountInactiveException("Account is not active");
     }
 
-    if (account.getStatus() != User.Status.activated) {
+    if (account.getStatus() != UserStatus.activated) {
       throw new AccountInactiveException("Account is not active");
     }
 

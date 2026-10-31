@@ -7,8 +7,8 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.request.admin.DashboardRequest;
 import com.vegalife.dto.response.admin.DashboardResponse;
+import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.post.Post;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.post.VoteRepository;
@@ -43,7 +43,7 @@ class AdminDashboardServiceTest {
     when(userRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(5L);
     when(postRepository.countByDeletedAtIsNull()).thenReturn(50L);
     when(postRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(3L);
-    when(postRepository.countByFlagAndDeletedAtIsNull(Post.Flag.NEEDS_REVIEW)).thenReturn(2L);
+    when(postRepository.countByFlagAndDeletedAtIsNull(PostFlag.NEEDS_REVIEW)).thenReturn(2L);
     when(postRepository.findDistinctAuthorIdsInRange(any(), any()))
         .thenReturn(List.of(UUID.randomUUID(), UUID.randomUUID()));
     when(recipeRepository.countByDeletedAtIsNull()).thenReturn(20L);

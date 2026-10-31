@@ -2,6 +2,7 @@ package com.vegalife.unit.repository.subscription;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.subscription.PaymentLedgerSpecifications;
@@ -29,9 +30,9 @@ class PaymentLedgerSpecificationsTest {
 
   @Test
   void withFilters_noFilters_returnsAllRows() {
-    createLedger(userA, PaymentLedger.Status.succeeded, null);
-    createLedger(userA, PaymentLedger.Status.failed, null);
-    createLedger(userB, PaymentLedger.Status.pending, null);
+    createLedger(userA, PaymentLedgerStatus.succeeded, null);
+    createLedger(userA, PaymentLedgerStatus.failed, null);
+    createLedger(userB, PaymentLedgerStatus.pending, null);
     flushAndClear();
 
     List<PaymentLedger> result = findAll(null, null, null, null);
@@ -41,9 +42,9 @@ class PaymentLedgerSpecificationsTest {
 
   @Test
   void withFilters_byUser_returnsOnlyThatUsersRows() {
-    createLedger(userA, PaymentLedger.Status.succeeded, null);
-    createLedger(userA, PaymentLedger.Status.failed, null);
-    createLedger(userB, PaymentLedger.Status.succeeded, null);
+    createLedger(userA, PaymentLedgerStatus.succeeded, null);
+    createLedger(userA, PaymentLedgerStatus.failed, null);
+    createLedger(userB, PaymentLedgerStatus.succeeded, null);
     flushAndClear();
 
     List<PaymentLedger> result = findAll(userA, null, null, null);
@@ -53,21 +54,21 @@ class PaymentLedgerSpecificationsTest {
 
   @Test
   void withFilters_byStatus_returnsOnlyMatchingStatus() {
-    createLedger(userA, PaymentLedger.Status.succeeded, null);
-    createLedger(userA, PaymentLedger.Status.succeeded, null);
-    createLedger(userB, PaymentLedger.Status.refunded, null);
+    createLedger(userA, PaymentLedgerStatus.succeeded, null);
+    createLedger(userA, PaymentLedgerStatus.succeeded, null);
+    createLedger(userB, PaymentLedgerStatus.refunded, null);
     flushAndClear();
 
-    List<PaymentLedger> result = findAll(null, PaymentLedger.Status.succeeded, null, null);
+    List<PaymentLedger> result = findAll(null, PaymentLedgerStatus.succeeded, null, null);
 
-    assertThat(result).hasSize(2).allMatch(l -> l.getStatus() == PaymentLedger.Status.succeeded);
+    assertThat(result).hasSize(2).allMatch(l -> l.getStatus() == PaymentLedgerStatus.succeeded);
   }
 
   @Test
   void withFilters_createdFromInclusive_includesRowExactlyOnBound() {
-    PaymentLedger onBound = createLedger(userA, PaymentLedger.Status.succeeded, null);
-    PaymentLedger before = createLedger(userA, PaymentLedger.Status.succeeded, null);
-    PaymentLedger after = createLedger(userA, PaymentLedger.Status.succeeded, null);
+    PaymentLedger onBound = createLedger(userA, PaymentLedgerStatus.succeeded, null);
+    PaymentLedger before = createLedger(userA, PaymentLedgerStatus.succeeded, null);
+    PaymentLedger after = createLedger(userA, PaymentLedgerStatus.succeeded, null);
     setCreatedAt(onBound, Instant.parse("2026-03-01T00:00:00Z"));
     setCreatedAt(before, Instant.parse("2026-02-28T23:59:59Z"));
     setCreatedAt(after, Instant.parse("2026-03-02T00:00:00Z"));
@@ -82,9 +83,9 @@ class PaymentLedgerSpecificationsTest {
 
   @Test
   void withFilters_createdToInclusive_includesRowExactlyOnBound() {
-    PaymentLedger onBound = createLedger(userA, PaymentLedger.Status.succeeded, null);
-    PaymentLedger before = createLedger(userA, PaymentLedger.Status.succeeded, null);
-    PaymentLedger after = createLedger(userA, PaymentLedger.Status.succeeded, null);
+    PaymentLedger onBound = createLedger(userA, PaymentLedgerStatus.succeeded, null);
+    PaymentLedger before = createLedger(userA, PaymentLedgerStatus.succeeded, null);
+    PaymentLedger after = createLedger(userA, PaymentLedgerStatus.succeeded, null);
     setCreatedAt(onBound, Instant.parse("2026-03-01T00:00:00Z"));
     setCreatedAt(before, Instant.parse("2026-02-28T23:59:59Z"));
     setCreatedAt(after, Instant.parse("2026-03-01T00:00:01Z"));
@@ -99,9 +100,9 @@ class PaymentLedgerSpecificationsTest {
 
   @Test
   void withFilters_createdRange_excludesRowsOutsideBounds() {
-    PaymentLedger old = createLedger(userA, PaymentLedger.Status.succeeded, null);
-    PaymentLedger inRange = createLedger(userA, PaymentLedger.Status.succeeded, null);
-    PaymentLedger future = createLedger(userA, PaymentLedger.Status.succeeded, null);
+    PaymentLedger old = createLedger(userA, PaymentLedgerStatus.succeeded, null);
+    PaymentLedger inRange = createLedger(userA, PaymentLedgerStatus.succeeded, null);
+    PaymentLedger future = createLedger(userA, PaymentLedgerStatus.succeeded, null);
     setCreatedAt(old, Instant.now().minus(30, ChronoUnit.DAYS));
     setCreatedAt(inRange, Instant.now().minus(1, ChronoUnit.DAYS));
     setCreatedAt(future, Instant.now().plus(30, ChronoUnit.DAYS));
@@ -119,26 +120,26 @@ class PaymentLedgerSpecificationsTest {
 
   @Test
   void withFilters_combinedFilters_narrowsToIntersection() {
-    createLedger(userA, PaymentLedger.Status.succeeded, null);
-    createLedger(userA, PaymentLedger.Status.failed, null);
-    createLedger(userB, PaymentLedger.Status.succeeded, null);
-    createLedger(userB, PaymentLedger.Status.failed, null);
+    createLedger(userA, PaymentLedgerStatus.succeeded, null);
+    createLedger(userA, PaymentLedgerStatus.failed, null);
+    createLedger(userB, PaymentLedgerStatus.succeeded, null);
+    createLedger(userB, PaymentLedgerStatus.failed, null);
     flushAndClear();
 
-    List<PaymentLedger> result = findAll(userA, PaymentLedger.Status.succeeded, null, null);
+    List<PaymentLedger> result = findAll(userA, PaymentLedgerStatus.succeeded, null, null);
 
     assertThat(result).hasSize(1);
     assertThat(result.getFirst().getUserId()).isEqualTo(userA);
-    assertThat(result.getFirst().getStatus()).isEqualTo(PaymentLedger.Status.succeeded);
+    assertThat(result.getFirst().getStatus()).isEqualTo(PaymentLedgerStatus.succeeded);
   }
 
   private List<PaymentLedger> findAll(
-      UUID userId, PaymentLedger.Status status, Instant createdFrom, Instant createdTo) {
+      UUID userId, PaymentLedgerStatus status, Instant createdFrom, Instant createdTo) {
     return paymentLedgerRepository.findAll(
         PaymentLedgerSpecifications.withFilters(userId, status, createdFrom, createdTo));
   }
 
-  private PaymentLedger createLedger(UUID userId, PaymentLedger.Status status, Instant createdAt) {
+  private PaymentLedger createLedger(UUID userId, PaymentLedgerStatus status, Instant createdAt) {
     PaymentLedger ledger =
         PaymentLedger.builder()
             .userId(userId)

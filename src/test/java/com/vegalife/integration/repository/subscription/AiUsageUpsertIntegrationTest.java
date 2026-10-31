@@ -2,6 +2,8 @@ package com.vegalife.integration.repository.subscription;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.subscription.AiUsage;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.subscription.AiUsageRepository;
@@ -67,8 +69,8 @@ class AiUsageUpsertIntegrationTest {
                 .username("aiusage" + UUID.randomUUID())
                 .email(UUID.randomUUID() + "@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     userId = user.getId();

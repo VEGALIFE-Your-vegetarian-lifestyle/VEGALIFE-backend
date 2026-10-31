@@ -1,6 +1,6 @@
 package com.vegalife.filter;
 
-import com.vegalife.model.post.Post;
+import com.vegalife.enums.post.PostFlag;
 import java.util.Optional;
 
 /**
@@ -15,7 +15,7 @@ import java.util.Optional;
  * the only implementation of the cosine/centering formula, and is constructed twice with different
  * centroid pairs.
  *
- * <p>A component that could not be scored is reported as {@link Post.Flag#NEEDS_REVIEW} with an
+ * <p>A component that could not be scored is reported as {@link PostFlag#NEEDS_REVIEW} with an
  * empty score rather than as a pass. Content that nobody has looked at must not publish itself.
  */
 public interface ComponentScorer {
@@ -41,21 +41,21 @@ public interface ComponentScorer {
    * Result of scoring one component.
    *
    * @param component the component scored
-   * @param flag {@link Post.Flag#PASSED} when the score cleared the accept threshold, otherwise
-   *     {@link Post.Flag#NEEDS_REVIEW}
+   * @param flag {@link PostFlag#PASSED} when the score cleared the accept threshold, otherwise
+   *     {@link PostFlag#NEEDS_REVIEW}
    * @param score the relevance score, or empty when the component was never scored
    * @param embedding the raw embedding, present only when a model call happened
    */
   record ComponentResult(
-      Component component, Post.Flag flag, Optional<Double> score, Optional<float[]> embedding) {
+      Component component, PostFlag flag, Optional<Double> score, Optional<float[]> embedding) {
 
     public boolean needsReview() {
-      return flag == Post.Flag.NEEDS_REVIEW;
+      return flag == PostFlag.NEEDS_REVIEW;
     }
 
     /** A component that was deliberately not scored (no text to score, or no recipe attached). */
     public static ComponentResult notScored(Component component) {
-      return new ComponentResult(component, Post.Flag.PASSED, Optional.empty(), Optional.empty());
+      return new ComponentResult(component, PostFlag.PASSED, Optional.empty(), Optional.empty());
     }
 
     /**
@@ -64,7 +64,7 @@ public interface ComponentScorer {
      */
     public static ComponentResult failed(Component component) {
       return new ComponentResult(
-          component, Post.Flag.NEEDS_REVIEW, Optional.empty(), Optional.empty());
+          component, PostFlag.NEEDS_REVIEW, Optional.empty(), Optional.empty());
     }
   }
 }

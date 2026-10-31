@@ -1,5 +1,6 @@
 package com.vegalife.model.post;
 
+import com.vegalife.enums.post.VoteType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -42,9 +43,4 @@ public class Vote {
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
-
-  public enum VoteType {
-    UPVOTE,
-    DOWNVOTE
-  }
 }

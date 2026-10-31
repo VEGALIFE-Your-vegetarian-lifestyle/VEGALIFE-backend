@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import com.vegalife.dto.mapper.subscription.SubscriptionMapper;
 import com.vegalife.dto.response.payment.PaymentStatusResponse;
 import com.vegalife.dto.response.subscription.PlanSummaryResponse;
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.repository.subscription.AiPlanRepository;
@@ -79,7 +80,7 @@ class PaymentStatusServiceTest {
   void getPaymentStatus_fulfilledRow_exposesPaidAtFromLedger() {
     Instant paidAt = Instant.parse("2026-03-01T10:05:00Z");
     PaymentLedger ledger = pendingLedger(Instant.parse("2026-03-01T10:00:00Z"));
-    ledger.setStatus(PaymentLedger.Status.succeeded);
+    ledger.setStatus(PaymentLedgerStatus.succeeded);
     ledger.setPaidAt(paidAt);
     when(paymentLedgerRepository.findByIdAndUserId(paymentId, userId))
         .thenReturn(Optional.of(ledger));
@@ -124,7 +125,7 @@ class PaymentStatusServiceTest {
         .planId(proPlan.getId())
         .amount(49000L)
         .currency("VND")
-        .status(PaymentLedger.Status.pending)
+        .status(PaymentLedgerStatus.pending)
         .provider("vnpay")
         .createdAt(createdAt)
         .build();

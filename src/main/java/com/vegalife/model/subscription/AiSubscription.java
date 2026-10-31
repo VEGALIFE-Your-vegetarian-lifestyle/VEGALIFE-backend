@@ -1,5 +1,6 @@
 package com.vegalife.model.subscription;
 
+import com.vegalife.enums.subscription.SubscriptionStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -39,7 +40,7 @@ public class AiSubscription {
   @Enumerated(EnumType.STRING)
   @Column(name = "status", length = 20, nullable = false)
   @Builder.Default
-  private Status status = Status.active;
+  private SubscriptionStatus status = SubscriptionStatus.active;
 
   @Column(name = "renewal_date")
   private Instant renewalDate;
@@ -60,12 +61,4 @@ public class AiSubscription {
   @UpdateTimestamp
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
-
-  public enum Status {
-    active,
-    cancelled,
-    past_due,
-    scheduled,
-    expired
-  }
 }

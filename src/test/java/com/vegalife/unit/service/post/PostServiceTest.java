@@ -16,6 +16,9 @@ import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.dto.response.post.RelatedPostResponse;
 import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.enums.outbound.OutboundStatus;
+import com.vegalife.enums.post.MediaStatus;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.filter.ActiveEmbeddingModel;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
@@ -124,7 +127,7 @@ class PostServiceTest {
 
     assertThat(response).isSameAs(expectedResponse);
     assertThat(post.getUser()).isSameAs(user);
-    assertThat(post.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(post.getStatus()).isEqualTo(PostStatus.created);
     assertThat(post.getViewCount()).isZero();
     assertThat(post.getPublishedAt()).isNull();
     assertThat(post.getFlag()).isNull();
@@ -144,9 +147,9 @@ class PostServiceTest {
 
     postService.createPost(userId, request);
 
-    assertThat(post.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(post.getStatus()).isEqualTo(PostStatus.created);
     assertThat(post.getPublishedAt()).isNull();
-    assertThat(post.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(post.getFlag()).isEqualTo(PostFlag.PENDING);
     assertThat(post.getCategories()).containsExactly(category);
     assertContentFilterQueued(post);
   }
@@ -164,8 +167,8 @@ class PostServiceTest {
 
     postService.createPost(userId, request);
 
-    assertThat(post.getStatus()).isEqualTo(Post.Status.unpublished);
-    assertThat(post.getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
+    assertThat(post.getStatus()).isEqualTo(PostStatus.unpublished);
+    assertThat(post.getFlag()).isEqualTo(PostFlag.NEEDS_REVIEW);
     assertThat(post.getPublishedAt()).isNull();
     verifyContentFilterNotQueued();
   }
@@ -218,7 +221,7 @@ class PostServiceTest {
             .rawContent(objectMapper.createObjectNode())
             .featuredImageUrl("https://example.com/old.jpg")
             .categories(new java.util.HashSet<>(Set.of(category)))
-            .status(Post.Status.published)
+            .status(PostStatus.published)
             .viewCount(12)
             .build();
     PostUpdateRequest updateRequest =
@@ -240,9 +243,9 @@ class PostServiceTest {
     assertThat(existingPost.getContent()).isEqualTo("Keep this content");
     assertThat(existingPost.getFeaturedImageUrl()).isEqualTo("https://example.com/old.jpg");
     assertThat(existingPost.getUser()).isSameAs(user);
-    assertThat(existingPost.getStatus()).isEqualTo(Post.Status.published);
+    assertThat(existingPost.getStatus()).isEqualTo(PostStatus.published);
     assertThat(existingPost.getViewCount()).isEqualTo(12);
-    assertThat(existingPost.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(existingPost.getFlag()).isEqualTo(PostFlag.PENDING);
     verify(postRepository).saveAndFlush(existingPost);
     assertContentFilterQueued(existingPost);
   }
@@ -265,7 +268,7 @@ class PostServiceTest {
   @Test
   void getPost_publishedPostIsReturnedRegardlessOfOwnership() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.published);
+    Post existing = ownedPost(postId, PostStatus.published);
     PostListResponse expectedResponse = PostListResponse.builder().id(postId).build();
     when(postRepository.findDetailById(postId)).thenReturn(Optional.of(existing));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
@@ -279,7 +282,7 @@ class PostServiceTest {
   @Test
   void getPost_nonPublishedPostIsReturned() {
     UUID postId = UUID.randomUUID();
-    Post draft = ownedPost(postId, Post.Status.created);
+    Post draft = ownedPost(postId, PostStatus.created);
     PostListResponse expectedResponse = PostListResponse.builder().id(postId).build();
     when(postRepository.findDetailById(postId)).thenReturn(Optional.of(draft));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
@@ -304,8 +307,8 @@ class PostServiceTest {
   void getRelatedPosts_returnsNearestPublishedMatchesRankedBySimilarity() {
     UUID postId = UUID.randomUUID();
     UUID matchId = UUID.randomUUID();
-    Post source = ownedPost(postId, Post.Status.published);
-    Post match = ownedPost(matchId, Post.Status.published);
+    Post source = ownedPost(postId, PostStatus.published);
+    Post match = ownedPost(matchId, PostStatus.published);
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(source));
     when(postEmbeddingRepository.findStoredEmbedding(postId))
         .thenReturn(
@@ -328,7 +331,7 @@ class PostServiceTest {
   @Test
   void getRelatedPosts_sourceWithNoEmbeddingReturnsEmptyList() {
     UUID postId = UUID.randomUUID();
-    Post source = ownedPost(postId, Post.Status.published);
+    Post source = ownedPost(postId, PostStatus.published);
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(source));
     when(postEmbeddingRepository.findStoredEmbedding(postId)).thenReturn(Optional.empty());
 
@@ -349,7 +352,7 @@ class PostServiceTest {
         .hasMessage("Post not found");
   }
 
-  private Post ownedPost(UUID postId, Post.Status status) {
+  private Post ownedPost(UUID postId, PostStatus status) {
     return Post.builder()
         .id(postId)
         .user(user)
@@ -382,7 +385,7 @@ class PostServiceTest {
   @Test
   void updatePost_publishQueuesDraftForFiltering() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -390,16 +393,16 @@ class PostServiceTest {
     postService.updatePost(
         userId, false, postId, PostUpdateRequest.builder().content("Body").publish(true).build());
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.created);
     assertThat(existing.getPublishedAt()).isNull();
-    assertThat(existing.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(existing.getFlag()).isEqualTo(PostFlag.PENDING);
     assertContentFilterQueued(existing);
   }
 
   @Test
   void updatePost_rejectsPublishWithoutCategory() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     existing.setCategories(new java.util.HashSet<>());
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
@@ -419,7 +422,7 @@ class PostServiceTest {
   @Test
   void updatePost_rejectsRemovingLastCategoryFromPublishedPost() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.published);
+    Post existing = ownedPost(postId, PostStatus.published);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
 
@@ -437,7 +440,7 @@ class PostServiceTest {
   @Test
   void updatePost_unpublishReturnsPostToDraft() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.published);
+    Post existing = ownedPost(postId, PostStatus.published);
     existing.setPublishedAt(java.time.Instant.now());
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
@@ -446,7 +449,7 @@ class PostServiceTest {
     postService.updatePost(
         userId, false, postId, PostUpdateRequest.builder().content("Body").publish(false).build());
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.created);
     assertThat(existing.getPublishedAt()).isNull();
     assertThat(existing.getFlag()).isNull();
     verifyContentFilterNotQueued();
@@ -455,9 +458,9 @@ class PostServiceTest {
   @Test
   void updatePost_contentChangeOnPublishedPostRequeuesForFiltering() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.published);
+    Post existing = ownedPost(postId, PostStatus.published);
     existing.setPublishedAt(java.time.Instant.now());
-    existing.setFlag(Post.Flag.PASSED);
+    existing.setFlag(PostFlag.PASSED);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -465,16 +468,16 @@ class PostServiceTest {
     postService.updatePost(
         userId, false, postId, PostUpdateRequest.builder().content("New body").build());
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.published);
-    assertThat(existing.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.published);
+    assertThat(existing.getFlag()).isEqualTo(PostFlag.PENDING);
     assertContentFilterQueued(existing);
   }
 
   @Test
   void updatePost_contentChangeOnUnpublishedPostRequeuesForFiltering() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.unpublished);
-    existing.setFlag(Post.Flag.REJECTED);
+    Post existing = ownedPost(postId, PostStatus.unpublished);
+    existing.setFlag(PostFlag.REJECTED);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -482,8 +485,8 @@ class PostServiceTest {
     postService.updatePost(
         userId, false, postId, PostUpdateRequest.builder().content("Revised body").build());
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.unpublished);
-    assertThat(existing.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.unpublished);
+    assertThat(existing.getFlag()).isEqualTo(PostFlag.PENDING);
     assertContentFilterQueued(existing);
   }
 
@@ -491,7 +494,7 @@ class PostServiceTest {
   void updatePost_publishForwardsToAdminReviewWhenFilterDisabled() {
     when(filterProperties.isEnabled()).thenReturn(false);
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -499,8 +502,8 @@ class PostServiceTest {
     postService.updatePost(
         userId, false, postId, PostUpdateRequest.builder().content("Body").publish(true).build());
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.unpublished);
-    assertThat(existing.getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.unpublished);
+    assertThat(existing.getFlag()).isEqualTo(PostFlag.NEEDS_REVIEW);
     assertThat(existing.getPublishedAt()).isNull();
     verifyContentFilterNotQueued();
   }
@@ -508,8 +511,8 @@ class PostServiceTest {
   @Test
   void updatePost_contentChangeOnPendingDraftIsNotRequeued() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
-    existing.setFlag(Post.Flag.PENDING);
+    Post existing = ownedPost(postId, PostStatus.created);
+    existing.setFlag(PostFlag.PENDING);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -520,15 +523,15 @@ class PostServiceTest {
         postId,
         PostUpdateRequest.builder().title("New title").content("Body").build());
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
-    assertThat(existing.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.created);
+    assertThat(existing.getFlag()).isEqualTo(PostFlag.PENDING);
     verifyContentFilterNotQueued();
   }
 
   @Test
   void updatePost_withdrawWithContentChangeDoesNotRequeue() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.published);
+    Post existing = ownedPost(postId, PostStatus.published);
     existing.setPublishedAt(java.time.Instant.now());
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
@@ -540,7 +543,7 @@ class PostServiceTest {
         postId,
         PostUpdateRequest.builder().title("Withdrawn").content("Body").publish(false).build());
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.created);
     assertThat(existing.getPublishedAt()).isNull();
     assertThat(existing.getFlag()).isNull();
     verifyContentFilterNotQueued();
@@ -549,8 +552,8 @@ class PostServiceTest {
   @Test
   void updatePost_withdrawUnpublishedPostReturnsToDraftKeepingFlagAndDoesNotRequeue() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.unpublished);
-    existing.setFlag(Post.Flag.NEEDS_REVIEW);
+    Post existing = ownedPost(postId, PostStatus.unpublished);
+    existing.setFlag(PostFlag.NEEDS_REVIEW);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -561,17 +564,17 @@ class PostServiceTest {
         postId,
         PostUpdateRequest.builder().title("Withdrawn").content("Body").publish(false).build());
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
-    assertThat(existing.getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.created);
+    assertThat(existing.getFlag()).isEqualTo(PostFlag.NEEDS_REVIEW);
     verifyContentFilterNotQueued();
   }
 
   @Test
   void updatePost_publishTrueOnPublishedPostRequeuesForFiltering() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.published);
+    Post existing = ownedPost(postId, PostStatus.published);
     existing.setPublishedAt(java.time.Instant.now());
-    existing.setFlag(Post.Flag.PASSED);
+    existing.setFlag(PostFlag.PASSED);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -579,8 +582,8 @@ class PostServiceTest {
     postService.updatePost(
         userId, false, postId, PostUpdateRequest.builder().content("Body").publish(true).build());
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.published);
-    assertThat(existing.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.published);
+    assertThat(existing.getFlag()).isEqualTo(PostFlag.PENDING);
     assertThat(existing.getPublishedAt()).isNotNull();
     assertContentFilterQueued(existing);
   }
@@ -588,7 +591,7 @@ class PostServiceTest {
   @Test
   void updatePost_ownerCannotRepublishHiddenPost() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.hidden);
+    Post existing = ownedPost(postId, PostStatus.hidden);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
 
@@ -607,7 +610,7 @@ class PostServiceTest {
   void updatePost_adminEditingAnotherUsersPostIsRecorded() {
     UUID postId = UUID.randomUUID();
     UUID adminId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
 
@@ -630,7 +633,7 @@ class PostServiceTest {
   @Test
   void updatePost_adminEditingOwnPostIsNotLogged() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
 
@@ -643,7 +646,7 @@ class PostServiceTest {
   @Test
   void deletePost_softDeletesOwnPost() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.published);
+    Post existing = ownedPost(postId, PostStatus.published);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -670,7 +673,7 @@ class PostServiceTest {
   void deletePost_adminDeletingAnotherUsersPostIsRecorded() {
     UUID postId = UUID.randomUUID();
     UUID adminId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.published);
+    Post existing = ownedPost(postId, PostStatus.published);
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
 
@@ -690,14 +693,14 @@ class PostServiceTest {
   void updateVisibility_hidesPostClearsPublishedAtAndLogs() {
     UUID postId = UUID.randomUUID();
     UUID adminId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.published);
+    Post existing = ownedPost(postId, PostStatus.published);
     existing.setPublishedAt(java.time.Instant.now());
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
 
     postService.updateVisibility(adminId, postId, true);
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.hidden);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.hidden);
     assertThat(existing.getPublishedAt()).isNull();
     verify(moderationLogRepository)
         .save(
@@ -711,7 +714,7 @@ class PostServiceTest {
   @Test
   void updateVisibility_hidingAlreadyHiddenPostIsNoOp() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.hidden);
+    Post existing = ownedPost(postId, PostStatus.hidden);
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
 
     postService.updateVisibility(UUID.randomUUID(), postId, true);
@@ -723,13 +726,13 @@ class PostServiceTest {
   @Test
   void updateVisibility_unhideReturnsPostToDraftAndLogs() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.hidden);
+    Post existing = ownedPost(postId, PostStatus.hidden);
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
 
     postService.updateVisibility(UUID.randomUUID(), postId, false);
 
-    assertThat(existing.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.created);
     verify(moderationLogRepository)
         .save(org.mockito.ArgumentMatchers.argThat(log -> "UNHIDE_POST".equals(log.getAction())));
   }
@@ -737,7 +740,7 @@ class PostServiceTest {
   @Test
   void updateVisibility_rejectsUnhidingPostThatIsNotHidden() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.published);
+    Post existing = ownedPost(postId, PostStatus.published);
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
 
     assertThatThrownBy(() -> postService.updateVisibility(UUID.randomUUID(), postId, false))
@@ -761,7 +764,7 @@ class PostServiceTest {
     Page<Post> page = new PageImpl<>(List.of(), pageable, 0);
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
     when(postRepository.findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            userId, Post.Status.published, pageable))
+            userId, PostStatus.published, pageable))
         .thenReturn(page);
 
     postService.listPostsOfUser(null, false, userId, new PostListRequest());
@@ -807,7 +810,7 @@ class PostServiceTest {
     Pageable pageable = PageRequest.of(0, 20);
     Page<Post> page = new PageImpl<>(List.of(), pageable, 0);
     when(postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            Post.Status.published, pageable))
+            PostStatus.published, pageable))
         .thenReturn(page);
 
     PageResponse<PostListResponse> response = postService.listFeed(new PostListRequest());
@@ -815,7 +818,7 @@ class PostServiceTest {
     assertThat(response.getTotalElements()).isZero();
     verify(postRepository)
         .findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            Post.Status.published, pageable);
+            PostStatus.published, pageable);
   }
 
   @Test
@@ -823,22 +826,22 @@ class PostServiceTest {
     Pageable pageable = PageRequest.of(2, 5);
     Page<Post> page = new PageImpl<>(List.of(), pageable, 0);
     when(postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            Post.Status.published, pageable))
+            PostStatus.published, pageable))
         .thenReturn(page);
 
     postService.listFeed(PostListRequest.builder().page(2).size(5).build());
 
     verify(postRepository)
         .findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            Post.Status.published, pageable);
+            PostStatus.published, pageable);
   }
 
   @Test
   void attachMedia_replacesWholeSet() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     UUID mediaId = UUID.randomUUID();
-    Media media = Media.builder().id(mediaId).status(Media.Status.succeed).build();
+    Media media = Media.builder().id(mediaId).status(MediaStatus.succeed).build();
     PostListResponse expectedResponse = PostListResponse.builder().id(postId).build();
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
@@ -857,10 +860,10 @@ class PostServiceTest {
   @Test
   void attachMedia_emptySetDetachesAll() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     existing.setMedia(
         new java.util.HashSet<>(
-            Set.of(Media.builder().id(UUID.randomUUID()).status(Media.Status.succeed).build())));
+            Set.of(Media.builder().id(UUID.randomUUID()).status(MediaStatus.succeed).build())));
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -876,9 +879,9 @@ class PostServiceTest {
   @Test
   void attachMedia_rejectsMediaThatIsNotSucceeded() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     UUID mediaId = UUID.randomUUID();
-    Media uploading = Media.builder().id(mediaId).status(Media.Status.uploading).build();
+    Media uploading = Media.builder().id(mediaId).status(MediaStatus.uploading).build();
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(mediaRepository.findByIdInAndDeletedAtIsNull(Set.of(mediaId)))
@@ -893,7 +896,7 @@ class PostServiceTest {
   @Test
   void attachMedia_rejectsUnknownMedia() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     UUID mediaId = UUID.randomUUID();
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
@@ -919,7 +922,7 @@ class PostServiceTest {
   @Test
   void attachRecipes_replacesWholeSetDetachingPreviouslyAttached() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     UUID keptId = UUID.randomUUID();
     UUID droppedId = UUID.randomUUID();
     Recipe kept =
@@ -945,7 +948,7 @@ class PostServiceTest {
   @Test
   void attachRecipes_emptySetDetachesAll() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     Recipe attached =
         Recipe.builder()
             .id(UUID.randomUUID())
@@ -965,7 +968,7 @@ class PostServiceTest {
   @Test
   void attachRecipes_rejectsUnknownOrDeletedRecipe() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, Post.Status.created);
+    Post existing = ownedPost(postId, PostStatus.created);
     UUID recipeId = UUID.randomUUID();
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));

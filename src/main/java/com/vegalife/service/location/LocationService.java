@@ -11,6 +11,7 @@ import com.vegalife.dto.request.location.LocationNearbyRequest;
 import com.vegalife.dto.request.location.LocationUpdateRequest;
 import com.vegalife.dto.response.admin.AdminLocationResponse;
 import com.vegalife.dto.response.location.LocationResponse;
+import com.vegalife.enums.post.PlaceType;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Location;
 import com.vegalife.repository.admin.ModerationLogRepository;
@@ -67,7 +68,7 @@ public class LocationService {
 
   @Transactional(readOnly = true)
   public PageResponse<LocationResponse> listLocations(LocationListRequest request) {
-    Location.PlaceType placeType = parsePlaceType(request.getPlaceType());
+    PlaceType placeType = parsePlaceType(request.getPlaceType());
     Specification<Location> spec =
         LocationSpecifications.activeWithFilters(
             request.getMinRating(), placeType, request.getMaxPriceLevel());
@@ -96,8 +97,8 @@ public class LocationService {
     return new PageImpl<>(pageContent, PageRequest.of(page, size), locations.size());
   }
 
-  private Location.PlaceType parsePlaceType(String placeType) {
-    return placeType == null || placeType.isBlank() ? null : Location.PlaceType.valueOf(placeType);
+  private PlaceType parsePlaceType(String placeType) {
+    return placeType == null || placeType.isBlank() ? null : PlaceType.valueOf(placeType);
   }
 
   /**
@@ -164,7 +165,7 @@ public class LocationService {
             .latitude(request.getLatitude())
             .longitude(request.getLongitude())
             .phoneNumber(normalize(request.getPhoneNumber()))
-            .placeType(Location.PlaceType.valueOf(request.getPlaceType()))
+            .placeType(PlaceType.valueOf(request.getPlaceType()))
             .openingHours(serializeOpeningHours(request.getOpeningHours()))
             .websiteUrl(normalize(request.getWebsiteUrl()))
             .rating(request.getRating())
@@ -200,7 +201,7 @@ public class LocationService {
       location.setPhoneNumber(normalize(request.getPhoneNumber()));
     }
     if (request.getPlaceType() != null) {
-      location.setPlaceType(Location.PlaceType.valueOf(request.getPlaceType()));
+      location.setPlaceType(PlaceType.valueOf(request.getPlaceType()));
     }
     if (request.getOpeningHours() != null) {
       location.setOpeningHours(serializeOpeningHours(request.getOpeningHours()));

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.infrastructure.payment.PaymentGateway;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiSubscription;
@@ -59,7 +60,7 @@ class PaymentWebhookServiceTest {
             .planId(planId)
             .amount(49000L)
             .currency("VND")
-            .status(PaymentLedger.Status.pending)
+            .status(PaymentLedgerStatus.pending)
             .txnRef(txnRef)
             .build();
   }
@@ -76,7 +77,7 @@ class PaymentWebhookServiceTest {
     Map<String, String> ack = paymentWebhookService.handleNotification(params);
 
     assertThat(ack.get("RspCode")).isEqualTo("00");
-    assertThat(ledger.getStatus()).isEqualTo(PaymentLedger.Status.succeeded);
+    assertThat(ledger.getStatus()).isEqualTo(PaymentLedgerStatus.succeeded);
     assertThat(ledger.getSubscriptionId()).isEqualTo(subscription.getId());
     verify(emailService).sendPaymentReceipt(eq("member@example.com"), eq("member"), any());
   }
@@ -91,7 +92,7 @@ class PaymentWebhookServiceTest {
     Map<String, String> ack = paymentWebhookService.handleNotification(params);
 
     assertThat(ack.get("RspCode")).isEqualTo("00");
-    assertThat(ledger.getStatus()).isEqualTo(PaymentLedger.Status.succeeded);
+    assertThat(ledger.getStatus()).isEqualTo(PaymentLedgerStatus.succeeded);
     assertThat(ledger.getSubscriptionId()).isNull();
   }
 
@@ -108,7 +109,7 @@ class PaymentWebhookServiceTest {
     Map<String, String> ack = paymentWebhookService.handleNotification(params);
 
     assertThat(ack.get("RspCode")).isEqualTo("00");
-    assertThat(ledger.getStatus()).isEqualTo(PaymentLedger.Status.failed);
+    assertThat(ledger.getStatus()).isEqualTo(PaymentLedgerStatus.failed);
     assertThat(ledger.getSubscriptionId()).isNull();
     verifyNoInteractions(subscriptionService, planRepository, userRepository, emailService);
   }

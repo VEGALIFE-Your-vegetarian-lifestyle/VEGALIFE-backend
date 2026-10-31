@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.token.RefreshToken;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.token.BlacklistTokenRepository;
@@ -51,8 +53,8 @@ class JwtTokenServiceTest {
             .username("testuser")
             .email("test@example.com")
             .passwordHash("encodedPassword")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
 

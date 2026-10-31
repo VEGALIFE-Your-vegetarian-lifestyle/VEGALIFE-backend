@@ -3,6 +3,8 @@ package com.vegalife.filter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.filter.ContentFilterService.FilterResult;
 import com.vegalife.model.outbound.OutboundMessage;
@@ -85,14 +87,14 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
     // additional, independent checks. A component that needs review escalates the post, but never
     // downgrades a REJECTED verdict.
     ComponentOutcome recipe = scoreAttachedRecipes(post);
-    if (recipe.needsReview() && verdict.flag() != Post.Flag.REJECTED) {
+    if (recipe.needsReview() && verdict.flag() != PostFlag.REJECTED) {
       verdict = escalateToReview(verdict, recipe);
     }
 
     // Dish and ingredient names carry no score: an unreviewed name is forwarded on its state
     // alone, because a member introduced it and no admin has approved it yet (BR-DISH-001).
     List<String> pendingNames = pendingComponentNames(post);
-    if (!pendingNames.isEmpty() && verdict.flag() != Post.Flag.REJECTED) {
+    if (!pendingNames.isEmpty() && verdict.flag() != PostFlag.REJECTED) {
       verdict = escalateToReview(verdict, new ComponentOutcome(true, pendingNames));
     }
 
@@ -102,7 +104,7 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
     float[] embedding = result.embedding();
 
     Optional<NearestMatch> duplicate =
-        verdict.flag() == Post.Flag.REJECTED
+        verdict.flag() == PostFlag.REJECTED
             ? Optional.empty()
             : duplicateDetector.findDuplicate(embedding, post.getId());
 
@@ -112,7 +114,7 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
       // Deliberately not stored: this post is unpublished, and only published posts are targets.
     } else {
       apply(post, verdict);
-      if (verdict.flag() != Post.Flag.REJECTED) {
+      if (verdict.flag() != PostFlag.REJECTED) {
         storeEmbedding(post.getId(), embedding);
       }
     }
@@ -143,18 +145,18 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
     post.setFlag(verdict.flag());
     switch (verdict.flag()) {
       case PASSED -> {
-        post.setStatus(Post.Status.published);
+        post.setStatus(PostStatus.published);
         if (post.getPublishedAt() == null) {
           post.setPublishedAt(Instant.now());
         }
         log.info("Content filter passed post {} (score {})", post.getId(), verdict.score());
       }
       case REJECTED -> {
-        post.setStatus(Post.Status.unpublished);
+        post.setStatus(PostStatus.unpublished);
         log.warn("Content filter rejected post {}: {}", post.getId(), verdict.reasons());
       }
       case NEEDS_REVIEW -> {
-        post.setStatus(Post.Status.unpublished);
+        post.setStatus(PostStatus.unpublished);
         log.warn(
             "Content filter needs review for post {} (score between bands: {})",
             post.getId(),
@@ -169,8 +171,8 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
    * admin can see which post it resembles — without them the flag is unactionable.
    */
   private static void applyDuplicate(Post post, NearestMatch match) {
-    post.setFlag(Post.Flag.DUPLICATE);
-    post.setStatus(Post.Status.unpublished);
+    post.setFlag(PostFlag.DUPLICATE);
+    post.setStatus(PostStatus.unpublished);
     log.warn(
         "Content filter flagged post {} as a near-duplicate of published post {} (similarity {})",
         post.getId(),
@@ -281,7 +283,7 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   private static FilterVerdict escalateToReview(FilterVerdict verdict, ComponentOutcome component) {
     List<String> reasons = new ArrayList<>(verdict.reasons());
     reasons.addAll(component.reasons());
-    return new FilterVerdict(Post.Flag.NEEDS_REVIEW, verdict.score(), reasons);
+    return new FilterVerdict(PostFlag.NEEDS_REVIEW, verdict.score(), reasons);
   }
 
   private static String formatReason(String code, double score) {

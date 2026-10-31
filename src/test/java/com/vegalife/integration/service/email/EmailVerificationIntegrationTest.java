@@ -10,9 +10,9 @@ import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.enums.token.OtpPurpose;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.token.OtpCode;
 import com.vegalife.model.user.User;
-import com.vegalife.model.user.User.Status;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.auth.AuthService;
@@ -107,7 +107,7 @@ class EmailVerificationIntegrationTest {
 
     User user = userRepository.findByEmail(email).orElseThrow();
     assertThat(user.getEmailVerified()).isFalse();
-    assertThat(user.getStatus()).isEqualTo(Status.created);
+    assertThat(user.getStatus()).isEqualTo(UserStatus.created);
 
     OtpCode otpRow =
         otpCodeRepository
@@ -121,7 +121,7 @@ class EmailVerificationIntegrationTest {
 
     User verifiedUser = userRepository.findById(user.getId()).orElseThrow();
     assertThat(verifiedUser.getEmailVerified()).isTrue();
-    assertThat(verifiedUser.getStatus()).isEqualTo(Status.activated);
+    assertThat(verifiedUser.getStatus()).isEqualTo(UserStatus.activated);
 
     assertThat(
             otpCodeRepository.findLatestUnusedByUserIdAndPurpose(
@@ -172,7 +172,7 @@ class EmailVerificationIntegrationTest {
 
     User unchanged = userRepository.findById(user.getId()).orElseThrow();
     assertThat(unchanged.getEmailVerified()).isFalse();
-    assertThat(unchanged.getStatus()).isEqualTo(Status.created);
+    assertThat(unchanged.getStatus()).isEqualTo(UserStatus.created);
     assertThat(
             otpCodeRepository.findLatestUnusedByUserIdAndPurpose(
                 user.getId(), OtpPurpose.EMAIL_VERIFICATION))

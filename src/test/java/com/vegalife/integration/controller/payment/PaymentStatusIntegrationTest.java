@@ -12,6 +12,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.infrastructure.payment.PaymentGateway;
 import com.vegalife.infrastructure.payment.vnpay.VnpayProperties;
 import com.vegalife.infrastructure.payment.vnpay.VnpaySigner;
@@ -98,8 +101,8 @@ class PaymentStatusIntegrationTest {
             .username("statususer")
             .email("status@example.com")
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     testUser = userRepository.save(testUser);
@@ -146,8 +149,8 @@ class PaymentStatusIntegrationTest {
                 .username("otherstatususer")
                 .email("other-status@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     PaymentLedger foreignLedger = pendingLedger(otherUser.getId());
@@ -208,7 +211,7 @@ class PaymentStatusIntegrationTest {
 
     // NFR-SEC-002: reading changes nothing — the row is still the untouched pending one.
     PaymentLedger reloaded = paymentLedgerRepository.findById(ledger.getId()).orElseThrow();
-    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedger.Status.pending);
+    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedgerStatus.pending);
     assertThat(reloaded.getPaidAt()).isNull();
     assertThat(reloaded.getResponseCode()).isNull();
   }
@@ -247,7 +250,7 @@ class PaymentStatusIntegrationTest {
                 .planId(proPlan.getId())
                 .amount(proPlan.getPriceAmount())
                 .currency(proPlan.getPriceCurrency())
-                .status(PaymentLedger.Status.pending)
+                .status(PaymentLedgerStatus.pending)
                 .provider("vnpay")
                 .build());
     ledger.setTxnRef(ledger.getId().toString().replace("-", ""));

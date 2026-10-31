@@ -8,6 +8,7 @@ import com.icegreen.greenmail.util.ServerSetup;
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.enums.outbound.OutboundStatus;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
@@ -140,7 +141,7 @@ class OutboundMessageDeliveryIntegrationTest {
 
     User verified = userRepository.findById(user.getId()).orElseThrow();
     assertThat(verified.getEmailVerified()).isTrue();
-    assertThat(verified.getStatus()).isEqualTo(User.Status.activated);
+    assertThat(verified.getStatus()).isEqualTo(UserStatus.activated);
   }
 
   private static GreenMail startGreenMail() {

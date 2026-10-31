@@ -5,6 +5,7 @@ import com.vegalife.dto.request.post.CommentListRequest;
 import com.vegalife.dto.request.post.CommentUpdateRequest;
 import com.vegalife.dto.response.post.CommentResponse;
 import com.vegalife.dto.response.post.CommentThreadResponse;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
@@ -45,7 +46,7 @@ public class CommentService {
   public CommentResponse createComment(UUID userId, UUID postId, CommentCreateRequest request) {
     Post post =
         postRepository
-            .findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published)
+            .findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
     UUID parentId = request.getParentId();
@@ -146,7 +147,7 @@ public class CommentService {
   @Transactional(readOnly = true)
   public PageResponse<CommentThreadResponse> getComments(UUID postId, CommentListRequest request) {
     postRepository
-        .findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published)
+        .findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published)
         .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
     List<Comment> all = commentRepository.findByPostIdOrderByCreatedAtAsc(postId);

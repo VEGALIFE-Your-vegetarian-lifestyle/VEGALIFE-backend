@@ -4,6 +4,7 @@ import com.vegalife.dto.mapper.admin.AdminVideoMapper;
 import com.vegalife.dto.request.admin.VideoListRequest;
 import com.vegalife.dto.response.admin.AdminVideoListResponse;
 import com.vegalife.dto.response.admin.AdminVideoPostResponse;
+import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.model.post.Media;
 import com.vegalife.repository.post.MediaPostRow;
 import com.vegalife.repository.post.MediaRepository;
@@ -44,7 +45,7 @@ public class AdminVideoService {
 
   @Transactional(readOnly = true)
   public PageResponse<AdminVideoListResponse> listVideos(VideoListRequest request) {
-    Media.Status status = parseStatus(request.getStatus());
+    MediaStatus status = parseStatus(request.getStatus());
     UUID userId = request.getUserId();
     Instant createdFrom = request.getCreatedFrom();
     Instant createdTo = request.getCreatedTo();
@@ -92,12 +93,12 @@ public class AdminVideoService {
                     row -> adminVideoMapper.toPostResponse(row.post()), Collectors.toList())));
   }
 
-  private Media.Status parseStatus(String status) {
+  private MediaStatus parseStatus(String status) {
     if (status == null || status.isBlank()) {
       return null;
     }
     try {
-      return Media.Status.valueOf(status);
+      return MediaStatus.valueOf(status);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException("Status must be one of: uploading, succeed, failed");
     }

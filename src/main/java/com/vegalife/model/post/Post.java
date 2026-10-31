@@ -1,6 +1,8 @@
 package com.vegalife.model.post;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.model.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -77,11 +79,11 @@ public class Post {
 
   @Enumerated(EnumType.STRING)
   @Column(name = "status", length = 20, nullable = false)
-  private Status status;
+  private PostStatus status;
 
   @Enumerated(EnumType.STRING)
   @Column(name = "flag", length = 16)
-  private Flag flag;
+  private PostFlag flag;
 
   /**
    * Relevance score of {@code title + content} as produced by the content filter. {@code null}
@@ -107,23 +109,4 @@ public class Post {
 
   @Column(name = "deleted_at")
   private Instant deletedAt;
-
-  public enum Status {
-    created,
-    processed,
-    published,
-    unpublished,
-    hidden
-  }
-
-  public enum Flag {
-    PENDING,
-    PASSED,
-    REJECTED,
-    NEEDS_REVIEW,
-    /**
-     * Near-duplicate of an existing published post; always routed to admin, never auto-rejected.
-     */
-    DUPLICATE
-  }
 }

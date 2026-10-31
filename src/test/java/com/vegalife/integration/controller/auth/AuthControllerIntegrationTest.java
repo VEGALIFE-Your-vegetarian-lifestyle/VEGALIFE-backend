@@ -14,10 +14,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.enums.token.OtpPurpose;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.token.OtpCode;
 import com.vegalife.model.token.RefreshToken;
 import com.vegalife.model.user.User;
-import com.vegalife.model.user.User.Status;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.token.RefreshTokenRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -94,8 +95,8 @@ class AuthControllerIntegrationTest {
             .username(username)
             .email(email)
             .passwordHash(passwordEncoder.encode("oldPassword1"))
-            .role(User.Role.USER)
-            .status(Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }
@@ -141,7 +142,7 @@ class AuthControllerIntegrationTest {
 
     User user = userRepository.findByEmail("integration@test.com").orElseThrow();
     assertThat(user.getEmailVerified()).isFalse();
-    assertThat(user.getStatus()).isEqualTo(Status.created);
+    assertThat(user.getStatus()).isEqualTo(UserStatus.created);
 
     String otp = captureVerificationOtp("integration@test.com");
     assertThat(otp).matches("\\d{6}");
@@ -158,7 +159,7 @@ class AuthControllerIntegrationTest {
 
     User verifiedUser = userRepository.findById(user.getId()).orElseThrow();
     assertThat(verifiedUser.getEmailVerified()).isTrue();
-    assertThat(verifiedUser.getStatus()).isEqualTo(Status.activated);
+    assertThat(verifiedUser.getStatus()).isEqualTo(UserStatus.activated);
 
     OtpCode consumed =
         otpCodeRepository
@@ -332,7 +333,7 @@ class AuthControllerIntegrationTest {
 
     User user = userRepository.findByEmail("resend@test.com").orElseThrow();
     assertThat(user.getEmailVerified()).isTrue();
-    assertThat(user.getStatus()).isEqualTo(Status.activated);
+    assertThat(user.getStatus()).isEqualTo(UserStatus.activated);
   }
 
   @Test
@@ -383,8 +384,8 @@ class AuthControllerIntegrationTest {
                 .username("suspendedlogin")
                 .email("suspendedlogin@test.com")
                 .passwordHash(passwordEncoder.encode("password123"))
-                .role(User.Role.USER)
-                .status(User.Status.suspended)
+                .role(UserRole.USER)
+                .status(UserStatus.suspended)
                 .emailVerified(true)
                 .build());
 
@@ -397,7 +398,7 @@ class AuthControllerIntegrationTest {
         .andExpect(jsonPath("$.message").value("Account is suspended"));
 
     assertThat(userRepository.findById(suspendedUser.getId()).orElseThrow().getStatus())
-        .isEqualTo(User.Status.suspended);
+        .isEqualTo(UserStatus.suspended);
   }
 
   @Test
@@ -407,8 +408,8 @@ class AuthControllerIntegrationTest {
             .username("deactlogin")
             .email("deactlogin@test.com")
             .passwordHash(passwordEncoder.encode("password123"))
-            .role(User.Role.USER)
-            .status(User.Status.deactivated)
+            .role(UserRole.USER)
+            .status(UserStatus.deactivated)
             .emailVerified(true)
             .build());
 
@@ -429,8 +430,8 @@ class AuthControllerIntegrationTest {
                 .username("refreshsuspended")
                 .email("refreshsuspended@test.com")
                 .passwordHash(passwordEncoder.encode("password123"))
-                .role(User.Role.USER)
-                .status(User.Status.suspended)
+                .role(UserRole.USER)
+                .status(UserStatus.suspended)
                 .emailVerified(true)
                 .build());
     com.vegalife.model.token.RefreshToken stored =

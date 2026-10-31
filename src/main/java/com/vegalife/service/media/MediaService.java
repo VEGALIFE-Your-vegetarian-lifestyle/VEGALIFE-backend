@@ -8,6 +8,7 @@ import com.vegalife.dto.response.media.MediaResponse;
 import com.vegalife.dto.response.media.MediaUploadGrantResponse;
 import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.enums.outbound.OutboundStatus;
+import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Media;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
@@ -67,7 +68,7 @@ public class MediaService {
 
     Media media =
         Media.builder()
-            .status(Media.Status.uploading)
+            .status(MediaStatus.uploading)
             .mimeType(contentType)
             .uploadedBy(user)
             .build();
@@ -93,10 +94,10 @@ public class MediaService {
   public MediaResponse confirm(UUID mediaId) {
     Media media = find(mediaId);
 
-    if (media.getStatus() == Media.Status.succeed) {
+    if (media.getStatus() == MediaStatus.succeed) {
       throw new DuplicateResourceException("Media upload has already been confirmed");
     }
-    if (media.getStatus() == Media.Status.failed) {
+    if (media.getStatus() == MediaStatus.failed) {
       throw new ValidationException("Upload verification failed");
     }
     if (media.getExternalId() == null || media.getExternalId().isBlank()) {
@@ -118,12 +119,12 @@ public class MediaService {
             .orElseThrow(() -> new ValidationException("Upload verification failed"));
 
     if (upload.fileSizeBytes() > mediaProperties.getUpload().maxBytesFor(contentType)) {
-      media.setStatus(Media.Status.failed);
+      media.setStatus(MediaStatus.failed);
       mediaRepository.saveAndFlush(media);
       throw new ValidationException(sizeLimitMessage(contentType));
     }
 
-    media.setStatus(Media.Status.succeed);
+    media.setStatus(MediaStatus.succeed);
     media.setMediaUrl(upload.mediaUrl());
     media.setMimeType(upload.mimeType());
     media.setFileSizeBytes(upload.fileSizeBytes());

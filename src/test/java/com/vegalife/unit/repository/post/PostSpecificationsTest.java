@@ -2,6 +2,10 @@ package com.vegalife.unit.repository.post;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
@@ -54,28 +58,28 @@ class PostSpecificationsTest {
         createPost(
             alice,
             "Alice published",
-            Post.Status.published,
-            Post.Flag.PASSED,
+            PostStatus.published,
+            PostFlag.PASSED,
             null,
             Set.of(vegan, quick));
     aliceUnpublished =
         createPost(
             alice,
             "Alice unpublished",
-            Post.Status.unpublished,
-            Post.Flag.REJECTED,
+            PostStatus.unpublished,
+            PostFlag.REJECTED,
             null,
             Set.of(quick));
     aliceDeleted =
         createPost(
             alice,
             "Alice deleted",
-            Post.Status.published,
-            Post.Flag.PASSED,
+            PostStatus.published,
+            PostFlag.PASSED,
             Instant.now(),
             Set.of(vegan));
     bobCreated =
-        createPost(bob, "Bob created", Post.Status.created, Post.Flag.PENDING, null, Set.of());
+        createPost(bob, "Bob created", PostStatus.created, PostFlag.PENDING, null, Set.of());
 
     entityManager.flush();
     setCreatedAt(alicePublished, CREATED_MARCH);
@@ -98,7 +102,7 @@ class PostSpecificationsTest {
 
   @Test
   void allWithFilters_byStatus_returnsOnlyThatStatus() {
-    Page<Post> result = findAll(Post.Status.unpublished, null, null, null, null, null);
+    Page<Post> result = findAll(PostStatus.unpublished, null, null, null, null, null);
 
     assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice unpublished");
     assertThat(result.getTotalElements()).isOne();
@@ -106,7 +110,7 @@ class PostSpecificationsTest {
 
   @Test
   void allWithFilters_byFlag_returnsOnlyThatFlag() {
-    Page<Post> result = findAll(null, Post.Flag.REJECTED, null, null, null, null);
+    Page<Post> result = findAll(null, PostFlag.REJECTED, null, null, null, null);
 
     assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice unpublished");
     assertThat(result.getTotalElements()).isOne();
@@ -114,14 +118,13 @@ class PostSpecificationsTest {
 
   @Test
   void allWithFilters_byStatusAndFlag_appliesBothPredicates() {
-    Page<Post> result =
-        findAll(Post.Status.unpublished, Post.Flag.REJECTED, null, null, null, null);
+    Page<Post> result = findAll(PostStatus.unpublished, PostFlag.REJECTED, null, null, null, null);
 
     assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice unpublished");
     assertThat(result.getTotalElements()).isOne();
 
     Page<Post> contradictory =
-        findAll(Post.Status.unpublished, Post.Flag.PASSED, null, null, null, null);
+        findAll(PostStatus.unpublished, PostFlag.PASSED, null, null, null, null);
     assertThat(contradictory.getContent()).isEmpty();
   }
 
@@ -178,8 +181,8 @@ class PostSpecificationsTest {
   void allWithFilters_withCombinedFilters_appliesEveryPredicate() {
     Page<Post> result =
         findAll(
-            Post.Status.published,
-            Post.Flag.PASSED,
+            PostStatus.published,
+            PostFlag.PASSED,
             alice.getId(),
             vegan.getId(),
             CREATED_MARCH,
@@ -191,15 +194,15 @@ class PostSpecificationsTest {
 
   @Test
   void allWithFilters_withFilterMatchingNothing_returnsEmptyPage() {
-    Page<Post> result = findAll(Post.Status.hidden, null, null, null, null, null);
+    Page<Post> result = findAll(PostStatus.hidden, null, null, null, null, null);
 
     assertThat(result.getContent()).isEmpty();
     assertThat(result.getTotalElements()).isZero();
   }
 
   private Page<Post> findAll(
-      Post.Status status,
-      Post.Flag flag,
+      PostStatus status,
+      PostFlag flag,
       UUID userId,
       UUID categoryId,
       Instant createdFrom,
@@ -216,8 +219,8 @@ class PostSpecificationsTest {
             .username(username)
             .email(email)
             .passwordHash("password-hash")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     entityManager.persist(user);
@@ -233,8 +236,8 @@ class PostSpecificationsTest {
   private Post createPost(
       User owner,
       String title,
-      Post.Status status,
-      Post.Flag flag,
+      PostStatus status,
+      PostFlag flag,
       Instant deletedAt,
       Set<Category> categories) {
     Post post =

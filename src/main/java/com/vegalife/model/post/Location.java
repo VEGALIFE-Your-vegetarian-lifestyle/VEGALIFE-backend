@@ -1,5 +1,6 @@
 package com.vegalife.model.post;
 
+import com.vegalife.enums.post.PlaceType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -89,11 +90,4 @@ public class Location {
 
   @Column(name = "deleted_at")
   private Instant deletedAt;
-
-  public enum PlaceType {
-    restaurant,
-    grocery,
-    cafe,
-    market
-  }
 }

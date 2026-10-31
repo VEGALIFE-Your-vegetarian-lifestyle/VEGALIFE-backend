@@ -9,6 +9,8 @@ import com.vegalife.dto.response.subscription.SubscriptionCancelResponse;
 import com.vegalife.dto.response.subscription.SubscriptionHistoryResponse;
 import com.vegalife.dto.response.subscription.SubscriptionMeResponse;
 import com.vegalife.dto.response.subscription.SubscriptionUsageResponse;
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.enums.subscription.SubscriptionStatus;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
@@ -75,7 +77,7 @@ public class SubscriptionService {
           planRepository
               .findByCode(FREE_PLAN_CODE)
               .orElseThrow(() -> new IllegalStateException("Seeded FREE plan not found"));
-      status = AiSubscription.Status.active.name();
+      status = SubscriptionStatus.active.name();
       renewalDate = null;
     }
 
@@ -107,7 +109,7 @@ public class SubscriptionService {
   private PaymentResponse resolveLatestPayment(UUID userId, AiPlan plan) {
     Optional<PaymentLedger> latest =
         paymentLedgerRepository.findFirstByUserIdAndPlanIdAndStatusOrderByPaidAtDesc(
-            userId, plan.getId(), PaymentLedger.Status.succeeded);
+            userId, plan.getId(), PaymentLedgerStatus.succeeded);
     if (latest.isEmpty()) {
       return null;
     }
@@ -167,12 +169,12 @@ public class SubscriptionService {
 
     Instant cancelledAt = Instant.now();
     AiSubscription subscription = inEffect.get();
-    subscription.setStatus(AiSubscription.Status.cancelled);
+    subscription.setStatus(SubscriptionStatus.cancelled);
     subscription.setCancelledAt(cancelledAt);
     subscriptionRepository.save(subscription);
     int cascaded =
         subscriptionRepository.cancelScheduledForUser(
-            userId, cancelledAt, AiSubscription.Status.cancelled, AiSubscription.Status.scheduled);
+            userId, cancelledAt, SubscriptionStatus.cancelled, SubscriptionStatus.scheduled);
     log.info(
         "Cancelled subscription {} for user {} (cancelledAt={}, scheduledCascaded={})",
         subscription.getId(),
@@ -181,7 +183,7 @@ public class SubscriptionService {
         cascaded);
 
     return SubscriptionCancelResponse.builder()
-        .status(AiSubscription.Status.cancelled.name())
+        .status(SubscriptionStatus.cancelled.name())
         .cancelledAt(cancelledAt)
         .build();
   }
@@ -231,7 +233,7 @@ public class SubscriptionService {
                 AiSubscription.builder()
                     .userId(userId)
                     .planId(planId)
-                    .status(AiSubscription.Status.active)
+                    .status(SubscriptionStatus.active)
                     .startedAt(paidAt)
                     .renewalDate(paidAt.atZone(ZoneOffset.UTC).plusMonths(1).toInstant())
                     .build());
@@ -251,7 +253,7 @@ public class SubscriptionService {
                 AiSubscription.builder()
                     .userId(userId)
                     .planId(planId)
-                    .status(AiSubscription.Status.scheduled)
+                    .status(SubscriptionStatus.scheduled)
                     .startedAt(base)
                     .renewalDate(base.atZone(ZoneOffset.UTC).plusMonths(1).toInstant())
                     .extendedFromId(current.getId())
@@ -284,7 +286,7 @@ public class SubscriptionService {
     }
     boolean scheduledExists =
         subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
-            userId, planId, AiSubscription.Status.scheduled);
+            userId, planId, SubscriptionStatus.scheduled);
     return scheduledExists ? GateOutcome.DENY_ALREADY_SCHEDULED : GateOutcome.EXTENSION;
   }
 

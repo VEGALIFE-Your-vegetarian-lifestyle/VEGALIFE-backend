@@ -1,5 +1,7 @@
 package com.vegalife.repository.post;
 
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.model.post.Post;
 import java.time.Instant;
 import java.util.Collection;
@@ -27,17 +29,17 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
   @Query("select p from Post p where p.id = :id and p.deletedAt is null")
   Optional<Post> findDetailById(@Param("id") UUID id);
 
-  Optional<Post> findByIdAndStatusAndDeletedAtIsNull(UUID id, Post.Status status);
+  Optional<Post> findByIdAndStatusAndDeletedAtIsNull(UUID id, PostStatus status);
 
   Optional<Post> findByIdAndUser_IdAndDeletedAtIsNull(UUID id, UUID userId);
 
   Page<Post> findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
   Page<Post> findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-      UUID userId, Post.Status status, Pageable pageable);
+      UUID userId, PostStatus status, Pageable pageable);
 
   Page<Post> findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-      Post.Status status, Pageable pageable);
+      PostStatus status, Pageable pageable);
 
   /**
    * Non-deleted posts attached to any of the given media, paired with the media they belong to so a
@@ -56,7 +58,7 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
   long countByCreatedAtBetweenAndDeletedAtIsNull(Instant from, Instant to);
 
   /** Admin dashboard (issue #12): posts awaiting moderation review. */
-  long countByFlagAndDeletedAtIsNull(Post.Flag flag);
+  long countByFlagAndDeletedAtIsNull(PostFlag flag);
 
   /** Admin dashboard (issue #12): distinct authors who posted within a time range. */
   @Query(

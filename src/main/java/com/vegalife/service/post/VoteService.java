@@ -1,7 +1,8 @@
 package com.vegalife.service.post;
 
 import com.vegalife.dto.response.post.VoteResponse;
-import com.vegalife.model.post.Post;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.post.VoteType;
 import com.vegalife.model.post.Vote;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.post.VoteRepository;
@@ -25,11 +26,11 @@ public class VoteService {
    * resulting vote (null once removed).
    */
   @Transactional
-  public VoteResponse castVote(UUID userId, UUID postId, Vote.VoteType voteType) {
+  public VoteResponse castVote(UUID userId, UUID postId, VoteType voteType) {
     requirePublishedPost(postId);
 
     Optional<Vote> existing = voteRepository.findByUserIdAndPostId(userId, postId);
-    Vote.VoteType resultingVote;
+    VoteType resultingVote;
     if (existing.isEmpty()) {
       voteRepository.saveAndFlush(
           Vote.builder().userId(userId).postId(postId).voteType(voteType).build());
@@ -51,7 +52,7 @@ public class VoteService {
   public VoteResponse getVotes(UUID postId, UUID viewerId) {
     requirePublishedPost(postId);
 
-    Vote.VoteType userVote =
+    VoteType userVote =
         viewerId == null
             ? null
             : voteRepository
@@ -64,13 +65,13 @@ public class VoteService {
 
   private void requirePublishedPost(UUID postId) {
     postRepository
-        .findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published)
+        .findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published)
         .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
   }
 
-  private VoteResponse buildResponse(UUID postId, Vote.VoteType userVote) {
-    long likeCount = voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.UPVOTE);
-    long dislikeCount = voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.DOWNVOTE);
+  private VoteResponse buildResponse(UUID postId, VoteType userVote) {
+    long likeCount = voteRepository.countByPostIdAndVoteType(postId, VoteType.UPVOTE);
+    long dislikeCount = voteRepository.countByPostIdAndVoteType(postId, VoteType.DOWNVOTE);
     return VoteResponse.builder()
         .postId(postId)
         .likeCount(likeCount)

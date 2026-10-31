@@ -5,6 +5,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.PostRepository;
@@ -123,11 +126,11 @@ class RelatedPostsIntegrationTest {
   }
 
   private Post publishedPost(String title) {
-    return postRepository.saveAndFlush(basePost(title).status(Post.Status.published).build());
+    return postRepository.saveAndFlush(basePost(title).status(PostStatus.published).build());
   }
 
   private Post draftPost(String title) {
-    return postRepository.saveAndFlush(basePost(title).status(Post.Status.created).build());
+    return postRepository.saveAndFlush(basePost(title).status(PostStatus.created).build());
   }
 
   private Post.PostBuilder basePost(String title) {
@@ -137,8 +140,8 @@ class RelatedPostsIntegrationTest {
                 .username("author" + java.util.UUID.randomUUID().toString().substring(0, 8))
                 .email("author" + java.util.UUID.randomUUID() + "@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     return Post.builder()

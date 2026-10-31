@@ -22,6 +22,8 @@ import com.vegalife.dto.request.auth.VerifyPasswordResetRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.enums.token.OtpPurpose;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.token.OtpCode;
 import com.vegalife.model.token.RefreshToken;
 import com.vegalife.model.user.User;
@@ -96,8 +98,8 @@ class AuthServiceTest {
             .username("testuser")
             .email("test@example.com")
             .passwordHash("encoded")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
 
@@ -177,7 +179,7 @@ class AuthServiceTest {
   @Test
   void verifyEmail_success() {
     user.setEmailVerified(false);
-    user.setStatus(User.Status.created);
+    user.setStatus(UserStatus.created);
     String otp = "482913";
     OtpCode otpRow =
         OtpCode.builder()
@@ -205,7 +207,7 @@ class AuthServiceTest {
 
     assertThat(response).isNotNull();
     assertThat(user.getEmailVerified()).isTrue();
-    assertThat(user.getStatus()).isEqualTo(User.Status.activated);
+    assertThat(user.getStatus()).isEqualTo(UserStatus.activated);
     assertThat(otpRow.getUsedAt()).isNotNull();
     verify(otpCodeRepository).save(otpRow);
   }
@@ -213,7 +215,7 @@ class AuthServiceTest {
   @Test
   void verifyEmail_alreadyVerified_returnsSuccess_withoutConsumingOtp() {
     user.setEmailVerified(true);
-    user.setStatus(User.Status.activated);
+    user.setStatus(UserStatus.activated);
 
     when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
     when(authMapper.toRegisterResponse(user))
@@ -382,7 +384,7 @@ class AuthServiceTest {
 
   @Test
   void login_inactiveStatus_throwsException() {
-    user.setStatus(User.Status.deactivated);
+    user.setStatus(UserStatus.deactivated);
     when(userRepository.findByEmail(validLoginRequest.getIdentifier()))
         .thenReturn(Optional.of(user));
     when(passwordEncoder.matches(validLoginRequest.getPassword(), user.getPasswordHash()))
@@ -395,7 +397,7 @@ class AuthServiceTest {
 
   @Test
   void login_suspendedStatus_throwsException() {
-    user.setStatus(User.Status.suspended);
+    user.setStatus(UserStatus.suspended);
     when(userRepository.findByEmail(validLoginRequest.getIdentifier()))
         .thenReturn(Optional.of(user));
     when(passwordEncoder.matches(validLoginRequest.getPassword(), user.getPasswordHash()))
@@ -408,7 +410,7 @@ class AuthServiceTest {
 
   @Test
   void refreshToken_nonActivatedAccount_throwsException() {
-    user.setStatus(User.Status.suspended);
+    user.setStatus(UserStatus.suspended);
     RefreshToken storedToken =
         RefreshToken.builder()
             .id(UUID.randomUUID())
@@ -607,8 +609,8 @@ class AuthServiceTest {
             .username("testuser")
             .email("test@example.com")
             .passwordHash("encoded")
-            .role(User.Role.USER)
-            .status(User.Status.created)
+            .role(UserRole.USER)
+            .status(UserStatus.created)
             .emailVerified(false)
             .build();
 

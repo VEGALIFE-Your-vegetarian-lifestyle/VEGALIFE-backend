@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
@@ -87,8 +89,8 @@ class FilterBypassForwardsToAdminIntegrationTest {
     categoryRepository.deleteAll();
     userRepository.deleteAll();
 
-    admin = createUser("bypassadmin", "bypass.admin@example.com", User.Role.ADMIN);
-    member = createUser("bypassmember", "bypass.member@example.com", User.Role.USER);
+    admin = createUser("bypassadmin", "bypass.admin@example.com", UserRole.ADMIN);
+    member = createUser("bypassmember", "bypass.member@example.com", UserRole.USER);
     adminToken = jwtTokenService.generateAccessToken(admin);
     memberToken = jwtTokenService.generateAccessToken(member);
     category = categoryRepository.saveAndFlush(Category.builder().name("Dinner").build());
@@ -141,14 +143,14 @@ class FilterBypassForwardsToAdminIntegrationTest {
         .andExpect(jsonPath("$.data.flag").value("NEEDS_REVIEW"));
   }
 
-  private User createUser(String username, String email, User.Role role) {
+  private User createUser(String username, String email, UserRole role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)
-            .status(User.Status.activated)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }

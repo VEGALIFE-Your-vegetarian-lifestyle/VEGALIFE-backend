@@ -1,5 +1,6 @@
 package com.vegalife.model.ai;
 
+import com.vegalife.enums.ai.AiMessageRole;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -34,7 +35,7 @@ public class AiMessage {
 
   @Enumerated(EnumType.STRING)
   @Column(name = "role", length = 20, nullable = false)
-  private Role role;
+  private AiMessageRole role;
 
   @Column(name = "content", nullable = false, columnDefinition = "TEXT")
   private String content;
@@ -42,10 +43,4 @@ public class AiMessage {
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
-
-  public enum Role {
-    user,
-    assistant,
-    system
-  }
 }

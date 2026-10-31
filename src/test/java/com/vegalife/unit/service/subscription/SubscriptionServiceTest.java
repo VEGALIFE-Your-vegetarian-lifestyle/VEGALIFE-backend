@@ -19,6 +19,8 @@ import com.vegalife.dto.response.subscription.SubscriptionCancelResponse;
 import com.vegalife.dto.response.subscription.SubscriptionHistoryResponse;
 import com.vegalife.dto.response.subscription.SubscriptionMeResponse;
 import com.vegalife.dto.response.subscription.SubscriptionUsageResponse;
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.enums.subscription.SubscriptionStatus;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
@@ -155,7 +157,7 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .renewalDate(renewalDate)
             .build();
     PaymentLedger ledger =
@@ -165,7 +167,7 @@ class SubscriptionServiceTest {
             .planId(proPlan.getId())
             .amount(49000)
             .currency("VND")
-            .status(PaymentLedger.Status.succeeded)
+            .status(PaymentLedgerStatus.succeeded)
             .provider("vnpay")
             .paidAt(Instant.parse("2026-10-01T10:00:00Z"))
             .build();
@@ -185,7 +187,7 @@ class SubscriptionServiceTest {
             eq(userId), any(Instant.class), any(Instant.class)))
         .thenReturn(7L);
     when(paymentLedgerRepository.findFirstByUserIdAndPlanIdAndStatusOrderByPaidAtDesc(
-            userId, proPlan.getId(), PaymentLedger.Status.succeeded))
+            userId, proPlan.getId(), PaymentLedgerStatus.succeeded))
         .thenReturn(Optional.of(ledger));
     when(subscriptionMapper.toUsageResponse(
             eq(7L), eq(proPlan), any(Instant.class), any(Instant.class)))
@@ -211,7 +213,7 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .renewalDate(null)
             .build();
 
@@ -221,7 +223,7 @@ class SubscriptionServiceTest {
             eq(userId), any(Instant.class), any(Instant.class)))
         .thenReturn(0L);
     when(paymentLedgerRepository.findFirstByUserIdAndPlanIdAndStatusOrderByPaidAtDesc(
-            userId, proPlan.getId(), PaymentLedger.Status.succeeded))
+            userId, proPlan.getId(), PaymentLedgerStatus.succeeded))
         .thenReturn(Optional.empty());
     when(subscriptionMapper.toUsageResponse(
             eq(0L), eq(proPlan), any(Instant.class), any(Instant.class)))
@@ -233,7 +235,7 @@ class SubscriptionServiceTest {
     assertThat(result.getLatestPayment()).isNull();
     verify(paymentLedgerRepository)
         .findFirstByUserIdAndPlanIdAndStatusOrderByPaidAtDesc(
-            userId, proPlan.getId(), PaymentLedger.Status.succeeded);
+            userId, proPlan.getId(), PaymentLedgerStatus.succeeded);
     verify(planRepository, never()).findById(freePlan.getId());
     verify(subscriptionMapper, never()).toPaymentResponse(any(PaymentLedger.class), any());
   }
@@ -257,7 +259,7 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(UUID.randomUUID())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .renewalDate(null)
             .build();
     when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.of(subscription));
@@ -315,7 +317,7 @@ class SubscriptionServiceTest {
     AiSubscription saved = result.get();
     assertThat(saved.getUserId()).isEqualTo(userId);
     assertThat(saved.getPlanId()).isEqualTo(proPlan.getId());
-    assertThat(saved.getStatus()).isEqualTo(AiSubscription.Status.active);
+    assertThat(saved.getStatus()).isEqualTo(SubscriptionStatus.active);
     assertThat(saved.getStartedAt()).isEqualTo(paidAt);
     assertThat(saved.getRenewalDate()).isEqualTo(Instant.parse("2026-11-05T12:00:00Z"));
     assertThat(saved.getExtendedFromId()).isNull();
@@ -330,13 +332,13 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .startedAt(Instant.parse("2026-09-20T00:00:00Z"))
             .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
             .build();
     when(subscriptionRepository.findInEffectForUpdate(userId)).thenReturn(Optional.of(current));
     when(subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
-            userId, proPlan.getId(), AiSubscription.Status.scheduled))
+            userId, proPlan.getId(), SubscriptionStatus.scheduled))
         .thenReturn(false);
     when(subscriptionRepository.save(any(AiSubscription.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
@@ -346,7 +348,7 @@ class SubscriptionServiceTest {
 
     assertThat(result).isPresent();
     AiSubscription saved = result.get();
-    assertThat(saved.getStatus()).isEqualTo(AiSubscription.Status.scheduled);
+    assertThat(saved.getStatus()).isEqualTo(SubscriptionStatus.scheduled);
     assertThat(saved.getStartedAt()).isEqualTo(Instant.parse("2026-10-20T00:00:00Z"));
     assertThat(saved.getRenewalDate()).isEqualTo(Instant.parse("2026-11-20T00:00:00Z"));
     assertThat(saved.getExtendedFromId()).isEqualTo(current.getId());
@@ -362,12 +364,12 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .renewalDate(null)
             .build();
     when(subscriptionRepository.findInEffectForUpdate(userId)).thenReturn(Optional.of(current));
     when(subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
-            userId, proPlan.getId(), AiSubscription.Status.scheduled))
+            userId, proPlan.getId(), SubscriptionStatus.scheduled))
         .thenReturn(false);
     when(subscriptionRepository.save(any(AiSubscription.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
@@ -388,7 +390,7 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
             .build();
     when(subscriptionRepository.findInEffectForUpdate(userId)).thenReturn(Optional.of(current));
@@ -409,12 +411,12 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
             .build();
     when(subscriptionRepository.findInEffectForUpdate(userId)).thenReturn(Optional.of(current));
     when(subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
-            userId, proPlan.getId(), AiSubscription.Status.scheduled))
+            userId, proPlan.getId(), SubscriptionStatus.scheduled))
         .thenReturn(true);
 
     Optional<AiSubscription> result =
@@ -442,12 +444,12 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
             .build();
     when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.of(current));
     when(subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
-            userId, proPlan.getId(), AiSubscription.Status.scheduled))
+            userId, proPlan.getId(), SubscriptionStatus.scheduled))
         .thenReturn(false);
 
     subscriptionService.checkPurchaseEligibility(userId, proPlan.getId());
@@ -463,7 +465,7 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
             .build();
     when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.of(current));
@@ -482,12 +484,12 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
             .build();
     when(subscriptionRepository.findInEffect(userId)).thenReturn(Optional.of(current));
     when(subscriptionRepository.existsByUserIdAndPlanIdAndStatus(
-            userId, proPlan.getId(), AiSubscription.Status.scheduled))
+            userId, proPlan.getId(), SubscriptionStatus.scheduled))
         .thenReturn(true);
 
     assertThatThrownBy(() -> subscriptionService.checkPurchaseEligibility(userId, proPlan.getId()))
@@ -504,7 +506,7 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .startedAt(Instant.parse("2026-09-20T00:00:00Z"))
             .renewalDate(Instant.parse("2026-10-20T00:00:00Z"))
             .build();
@@ -516,14 +518,14 @@ class SubscriptionServiceTest {
 
     assertThat(response.getStatus()).isEqualTo("cancelled");
     assertThat(response.getCancelledAt()).isNotNull();
-    assertThat(current.getStatus()).isEqualTo(AiSubscription.Status.cancelled);
+    assertThat(current.getStatus()).isEqualTo(SubscriptionStatus.cancelled);
     assertThat(current.getCancelledAt()).isEqualTo(response.getCancelledAt());
     verify(subscriptionRepository)
         .cancelScheduledForUser(
             eq(userId),
             eq(response.getCancelledAt()),
-            eq(AiSubscription.Status.cancelled),
-            eq(AiSubscription.Status.scheduled));
+            eq(SubscriptionStatus.cancelled),
+            eq(SubscriptionStatus.scheduled));
   }
 
   @Test
@@ -570,7 +572,7 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .startedAt(Instant.parse("2026-10-01T00:00:00Z"))
             .renewalDate(Instant.parse("2026-11-01T00:00:00Z"))
             .createdAt(Instant.parse("2026-10-01T00:00:00Z"))
@@ -580,7 +582,7 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(freePlan.getId())
-            .status(AiSubscription.Status.cancelled)
+            .status(SubscriptionStatus.cancelled)
             .startedAt(Instant.parse("2026-01-01T00:00:00Z"))
             .cancelledAt(Instant.parse("2026-02-01T00:00:00Z"))
             .createdAt(Instant.parse("2026-01-01T00:00:00Z"))
@@ -625,7 +627,7 @@ class SubscriptionServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(UUID.randomUUID())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .createdAt(Instant.parse("2026-10-01T00:00:00Z"))
             .build();
     when(subscriptionRepository.findByUserId(eq(userId), any(Pageable.class)))

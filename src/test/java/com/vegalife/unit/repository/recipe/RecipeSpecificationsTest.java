@@ -2,6 +2,11 @@ package com.vegalife.unit.repository.recipe;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.recipe.Difficulty;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
@@ -170,8 +175,8 @@ class RecipeSpecificationsTest {
             .username(username)
             .email(email)
             .passwordHash("password-hash")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     entityManager.persist(user);
@@ -197,8 +202,8 @@ class RecipeSpecificationsTest {
             .title(title)
             .content("Post content")
             .rawContent(com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
-            .status(Post.Status.published)
-            .flag(Post.Flag.PENDING)
+            .status(PostStatus.published)
+            .flag(PostFlag.PENDING)
             .viewCount(0)
             .categories(categories)
             .build();
@@ -214,7 +219,7 @@ class RecipeSpecificationsTest {
             .name(name)
             .instructions("Stir and serve")
             .servings(2)
-            .difficulty(Recipe.Difficulty.EASY)
+            .difficulty(Difficulty.EASY)
             .posts(posts)
             .deletedAt(deletedAt)
             .build();

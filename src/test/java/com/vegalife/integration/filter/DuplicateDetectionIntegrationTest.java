@@ -5,6 +5,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.filter.ContentFilterOutboundAdapter;
 import com.vegalife.filter.ContentFilterPayload;
 import com.vegalife.filter.ContentFilterService;
@@ -100,8 +104,8 @@ class DuplicateDetectionIntegrationTest {
                 .username("dupowner")
                 .email("dupowner@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
   }
@@ -201,7 +205,7 @@ class DuplicateDetectionIntegrationTest {
     when(contentFilterService.filter(any()))
         .thenReturn(
             new ContentFilterService.FilterResult(
-                new FilterVerdict(Post.Flag.PASSED, 0.9, List.of()), embedding));
+                new FilterVerdict(PostFlag.PASSED, 0.9, List.of()), embedding));
     OutboundMessage message =
         OutboundMessage.builder()
             .id(UUID.randomUUID())
@@ -217,7 +221,7 @@ class DuplicateDetectionIntegrationTest {
 
   private Post published(String title, String content) {
     Post post = queued(title, content);
-    post.setStatus(Post.Status.published);
+    post.setStatus(PostStatus.published);
     return postRepository.saveAndFlush(post);
   }
 
@@ -229,8 +233,8 @@ class DuplicateDetectionIntegrationTest {
             .content(content)
             .rawContent(OBJECT_MAPPER.createObjectNode().put("type", "doc"))
             .viewCount(0)
-            .status(Post.Status.created)
-            .flag(Post.Flag.PENDING)
+            .status(PostStatus.created)
+            .flag(PostFlag.PENDING)
             .build());
   }
 

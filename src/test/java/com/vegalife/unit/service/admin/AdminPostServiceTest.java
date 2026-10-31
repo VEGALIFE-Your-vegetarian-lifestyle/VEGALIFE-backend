@@ -13,7 +13,11 @@ import com.vegalife.dto.mapper.admin.AdminPostMapper;
 import com.vegalife.dto.request.admin.PostListRequest;
 import com.vegalife.dto.response.admin.AdminPostDetailResponse;
 import com.vegalife.dto.response.admin.AdminPostListResponse;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
@@ -83,8 +87,8 @@ class AdminPostServiceTest {
             .username("janedoe")
             .email("jane@example.com")
             .passwordHash("$2a$10$secret")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     post =
@@ -93,8 +97,8 @@ class AdminPostServiceTest {
             .user(author)
             .title("Vegan chili")
             .content("A hearty chili recipe")
-            .status(Post.Status.published)
-            .flag(Post.Flag.PASSED)
+            .status(PostStatus.published)
+            .flag(PostFlag.PASSED)
             .viewCount(7)
             .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
             .build();
@@ -241,18 +245,18 @@ class AdminPostServiceTest {
   @Test
   void approvePost_publishesAndLogsWithReason() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(Post.Status.unpublished);
-    post.setFlag(Post.Flag.REJECTED);
+    post.setStatus(PostStatus.unpublished);
+    post.setFlag(PostFlag.REJECTED);
     post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId())).thenReturn(List.of());
 
     adminPostService.approvePost(adminId, post.getId(), "Vegetarian recipe, filter false positive");
 
-    assertThat(post.getStatus()).isEqualTo(Post.Status.published);
+    assertThat(post.getStatus()).isEqualTo(PostStatus.published);
     assertThat(post.getPublishedAt()).isNotNull();
     // Auto-REJECTED is a record of what the filter decided; approving does not rewrite history.
-    assertThat(post.getFlag()).isEqualTo(Post.Flag.REJECTED);
+    assertThat(post.getFlag()).isEqualTo(PostFlag.REJECTED);
 
     ModerationLog entry = lastPostLog();
     assertThat(entry.getActorId()).isEqualTo(adminId);
@@ -335,7 +339,7 @@ class AdminPostServiceTest {
   @Test
   void rejectPost_unpublishesAndRejectsPendingComponents() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(Post.Status.published);
+    post.setStatus(PostStatus.published);
     post.setPublishedAt(Instant.parse("2026-09-21T10:00:00Z"));
     Dish dish =
         Dish.builder()
@@ -360,7 +364,7 @@ class AdminPostServiceTest {
 
     adminPostService.rejectPost(adminId, post.getId(), "not vegan");
 
-    assertThat(post.getStatus()).isEqualTo(Post.Status.unpublished);
+    assertThat(post.getStatus()).isEqualTo(PostStatus.unpublished);
     assertThat(post.getPublishedAt()).isNull();
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
     assertThat(dish.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
@@ -375,7 +379,7 @@ class AdminPostServiceTest {
   @Test
   void rejectPost_leavesAnApprovedNameApproved() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(Post.Status.published);
+    post.setStatus(PostStatus.published);
     Dish approvedDish =
         Dish.builder()
             .id(UUID.randomUUID())
@@ -410,7 +414,7 @@ class AdminPostServiceTest {
   @Test
   void approvePost_withoutCategory_throwsValidationException() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(Post.Status.unpublished);
+    post.setStatus(PostStatus.unpublished);
     post.setCategories(Set.of());
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
@@ -425,7 +429,7 @@ class AdminPostServiceTest {
   @Test
   void approvePost_hiddenPost_throwsValidationException() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(Post.Status.hidden);
+    post.setStatus(PostStatus.hidden);
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
     assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId(), null))
@@ -436,7 +440,7 @@ class AdminPostServiceTest {
   @Test
   void rejectPost_hiddenPost_throwsValidationException() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(Post.Status.hidden);
+    post.setStatus(PostStatus.hidden);
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
     assertThatThrownBy(() -> adminPostService.rejectPost(adminId, post.getId(), null))
@@ -519,7 +523,7 @@ class AdminPostServiceTest {
             .moderationStatus(ModerationStatus.APPROVED)
             .build();
     post.setContentScore(0.63);
-    post.setFlag(Post.Flag.NEEDS_REVIEW);
+    post.setFlag(PostFlag.NEEDS_REVIEW);
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));

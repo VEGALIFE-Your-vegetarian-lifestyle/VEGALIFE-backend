@@ -2,10 +2,10 @@ package com.vegalife.unit.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.vegalife.enums.post.PostFlag;
 import com.vegalife.filter.ContentFilterService;
 import com.vegalife.filter.EmbeddingRelevanceScorer;
 import com.vegalife.filter.FilterVerdict;
-import com.vegalife.model.post.Post;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,7 +41,7 @@ class ContentFilterServiceTest {
   void shortContentStillEmbedsAndIsScored() {
     embeddingModel.next = new float[] {0f, 1f};
     FilterVerdict verdict = service.filter("a").verdict();
-    assertEquals(Post.Flag.REJECTED, verdict.flag());
+    assertEquals(PostFlag.REJECTED, verdict.flag());
     assertEquals(0.0, verdict.score(), 1e-9);
     assertEquals(List.of("RELEVANCE_LOW: 0.000"), verdict.reasons());
     assertEquals(1, embeddingModel.calls());
@@ -51,7 +51,7 @@ class ContentFilterServiceTest {
   void acceptBandReturnsPassedWithEmptyReasons() {
     embeddingModel.next = new float[] {1f, 0f};
     FilterVerdict verdict = service.filter(VALID_CONTENT).verdict();
-    assertEquals(Post.Flag.PASSED, verdict.flag());
+    assertEquals(PostFlag.PASSED, verdict.flag());
     assertEquals(1.0, verdict.score(), 1e-9);
     assertEquals(List.of(), verdict.reasons());
     assertEquals(1, embeddingModel.calls());
@@ -61,7 +61,7 @@ class ContentFilterServiceTest {
   void rejectBandReturnsRejectedWithLowReason() {
     embeddingModel.next = new float[] {0f, 1f};
     FilterVerdict verdict = service.filter(VALID_CONTENT).verdict();
-    assertEquals(Post.Flag.REJECTED, verdict.flag());
+    assertEquals(PostFlag.REJECTED, verdict.flag());
     assertEquals(0.0, verdict.score(), 1e-9);
     assertEquals(List.of("RELEVANCE_LOW: 0.000"), verdict.reasons());
   }
@@ -70,7 +70,7 @@ class ContentFilterServiceTest {
   void reviewBandReturnsNeedsReviewWithReason() {
     embeddingModel.next = new float[] {1f, 1f};
     FilterVerdict verdict = service.filter(VALID_CONTENT).verdict();
-    assertEquals(Post.Flag.NEEDS_REVIEW, verdict.flag());
+    assertEquals(PostFlag.NEEDS_REVIEW, verdict.flag());
     assertEquals(0.5, verdict.score(), 1e-9);
     assertEquals(List.of("RELEVANCE_REVIEW: 0.500"), verdict.reasons());
   }

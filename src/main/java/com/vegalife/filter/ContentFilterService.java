@@ -1,6 +1,6 @@
 package com.vegalife.filter;
 
-import com.vegalife.model.post.Post;
+import com.vegalife.enums.post.PostFlag;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
  * Runs the filter pipeline for one post body: semantic relevance scoring against the committed
  * centroids (FR-005/FR-006). Maps the resulting band to the post flag: PASS → PASSED, REJECT →
  * REJECTED, REVIEW → NEEDS_REVIEW, carrying the score and reason codes. Never returns {@link
- * Post.Flag#PENDING}; embedding failures propagate so the queue layer can retry.
+ * PostFlag#PENDING}; embedding failures propagate so the queue layer can retry.
  */
 @Service
 public class ContentFilterService {
@@ -32,22 +32,22 @@ public class ContentFilterService {
    * provider cost for no benefit.
    *
    * @param content the post body (title/content already composed by the caller)
-   * @return the verdict; never {@link Post.Flag#PENDING}
+   * @return the verdict; never {@link PostFlag#PENDING}
    */
   public FilterResult filter(String content) {
     float[] embedding = embeddingModel.embed(content);
     RelevanceScore relevance = relevanceScorer.score(embedding);
     FilterVerdict verdict =
         switch (relevance.band()) {
-          case PASS -> new FilterVerdict(Post.Flag.PASSED, relevance.score(), List.of());
+          case PASS -> new FilterVerdict(PostFlag.PASSED, relevance.score(), List.of());
           case REJECT ->
               new FilterVerdict(
-                  Post.Flag.REJECTED,
+                  PostFlag.REJECTED,
                   relevance.score(),
                   List.of(formatReason("RELEVANCE_LOW", relevance.score())));
           case REVIEW ->
               new FilterVerdict(
-                  Post.Flag.NEEDS_REVIEW,
+                  PostFlag.NEEDS_REVIEW,
                   relevance.score(),
                   List.of(formatReason("RELEVANCE_REVIEW", relevance.score())));
         };

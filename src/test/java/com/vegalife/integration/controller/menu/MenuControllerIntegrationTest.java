@@ -12,6 +12,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.menu.MealType;
 import com.vegalife.enums.menu.MenuStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.menu.Menu;
 import com.vegalife.model.menu.MenuDetail;
 import com.vegalife.model.recipe.Dish;
@@ -1177,8 +1179,8 @@ class MenuControllerIntegrationTest {
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }

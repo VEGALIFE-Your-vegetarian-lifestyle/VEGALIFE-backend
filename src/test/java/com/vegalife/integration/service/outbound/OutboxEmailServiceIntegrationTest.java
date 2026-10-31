@@ -11,6 +11,7 @@ import com.vegalife.dto.request.auth.ResendVerificationOtpRequest;
 import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.enums.outbound.OutboundStatus;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.infrastructure.email.SmtpEmailServiceImpl;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.user.User;
@@ -199,7 +200,7 @@ class OutboxEmailServiceIntegrationTest {
 
     User verified = userRepository.findById(user.getId()).orElseThrow();
     assertThat(verified.getEmailVerified()).isTrue();
-    assertThat(verified.getStatus()).isEqualTo(User.Status.activated);
+    assertThat(verified.getStatus()).isEqualTo(UserStatus.activated);
   }
 
   private OutboundEmailPayload parsePayload(OutboundMessage row) throws Exception {

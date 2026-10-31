@@ -1,5 +1,7 @@
 package com.vegalife.repository.user;
 
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.User;
 import jakarta.persistence.criteria.Predicate;
 import java.time.Instant;
@@ -12,7 +14,7 @@ public final class UserSpecifications {
   private UserSpecifications() {}
 
   public static Specification<User> activeWithFilters(
-      User.Status status, User.Role role, Instant createdFrom, Instant createdTo) {
+      UserStatus status, UserRole role, Instant createdFrom, Instant createdTo) {
     return (root, query, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
       predicates.add(cb.isNull(root.get("deletedAt")));

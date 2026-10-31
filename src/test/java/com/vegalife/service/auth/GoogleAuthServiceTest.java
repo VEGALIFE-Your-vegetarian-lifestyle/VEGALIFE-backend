@@ -11,6 +11,8 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.enums.user.AuthProvider;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.infrastructure.google.GoogleIdTokenVerifier;
 import com.vegalife.infrastructure.google.GoogleTokenExchanger;
 import com.vegalife.infrastructure.google.GoogleUserInfo;
@@ -57,8 +59,8 @@ class GoogleAuthServiceTest {
             .username("johndoe")
             .email(EMAIL)
             .emailVerified(true)
-            .status(User.Status.activated)
-            .role(User.Role.USER)
+            .status(UserStatus.activated)
+            .role(UserRole.USER)
             .passwordHash("$2a$12$hash")
             .build();
     expectedResponse =
@@ -110,7 +112,7 @@ class GoogleAuthServiceTest {
   @Test
   void loginWithGoogle_unverifiedLocalAccount_refusesAndLinksNothing() {
     verifiedUser.setEmailVerified(false);
-    verifiedUser.setStatus(User.Status.created);
+    verifiedUser.setStatus(UserStatus.created);
     when(userIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, SUBJECT))
         .thenReturn(Optional.empty());
     when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(verifiedUser));
@@ -125,7 +127,7 @@ class GoogleAuthServiceTest {
 
   @Test
   void loginWithGoogle_suspendedAccount_refusesAndLinksNothing() {
-    verifiedUser.setStatus(User.Status.suspended);
+    verifiedUser.setStatus(UserStatus.suspended);
     when(userIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, SUBJECT))
         .thenReturn(Optional.empty());
     when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(verifiedUser));
@@ -139,7 +141,7 @@ class GoogleAuthServiceTest {
 
   @Test
   void loginWithGoogle_deactivatedAccount_refuses() {
-    verifiedUser.setStatus(User.Status.deactivated);
+    verifiedUser.setStatus(UserStatus.deactivated);
     when(userIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, SUBJECT))
         .thenReturn(Optional.empty());
     when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(verifiedUser));
@@ -175,8 +177,8 @@ class GoogleAuthServiceTest {
     assertThat(created.getEmail()).isEqualTo(EMAIL);
     assertThat(created.getUsername()).isEqualTo("johndoe");
     assertThat(created.getEmailVerified()).isTrue();
-    assertThat(created.getStatus()).isEqualTo(User.Status.activated);
-    assertThat(created.getRole()).isEqualTo(User.Role.USER);
+    assertThat(created.getStatus()).isEqualTo(UserStatus.activated);
+    assertThat(created.getRole()).isEqualTo(UserRole.USER);
     assertThat(created.getPasswordHash()).isNull();
     verify(userIdentityRepository).saveAndFlush(any(UserIdentity.class));
     verify(authService).issueTokens(created);

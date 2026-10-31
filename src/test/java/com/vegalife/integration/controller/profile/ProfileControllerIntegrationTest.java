@@ -6,6 +6,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import com.vegalife.enums.user.Gender;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.DietaryPreferences;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserProfile;
@@ -73,8 +76,8 @@ class ProfileControllerIntegrationTest {
             .username("profileuser")
             .email("profile@example.com")
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     testUser = userRepository.save(testUser);
@@ -118,7 +121,7 @@ class ProfileControllerIntegrationTest {
     assertThat(profile.getHeightCm()).isEqualByComparingTo("175.5");
     assertThat(profile.getWeightKg()).isEqualByComparingTo("70.2");
     assertThat(profile.getAge()).isEqualTo(25);
-    assertThat(profile.getGender()).isEqualTo(UserProfile.Gender.male);
+    assertThat(profile.getGender()).isEqualTo(Gender.male);
     assertThat(profile.getDescription()).isEqualTo("Vegan enthusiast");
     assertThat(profile.getAvatarUrl()).isEqualTo("https://example.com/avatar.jpg");
   }
@@ -132,7 +135,7 @@ class ProfileControllerIntegrationTest {
             .heightCm(new BigDecimal("170.0"))
             .weightKg(new BigDecimal("65.0"))
             .age(30)
-            .gender(UserProfile.Gender.female)
+            .gender(Gender.female)
             .description("Old description")
             .avatarUrl("https://old.com")
             .build();

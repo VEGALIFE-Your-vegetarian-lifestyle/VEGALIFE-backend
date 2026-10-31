@@ -9,6 +9,7 @@ import static org.mockito.Mockito.*;
 import com.vegalife.dto.mapper.profile.ProfileMapper;
 import com.vegalife.dto.request.profile.UpdateProfileRequest;
 import com.vegalife.dto.response.profile.ProfileResponse;
+import com.vegalife.enums.user.Gender;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.user.UserProfileRepository;
@@ -54,7 +55,7 @@ class UserProfileServiceTest {
             .heightCm(new BigDecimal("170.0"))
             .weightKg(new BigDecimal("65.0"))
             .age(25)
-            .gender(UserProfile.Gender.male)
+            .gender(Gender.male)
             .description("Old description")
             .avatarUrl("https://old-avatar.com")
             .build();

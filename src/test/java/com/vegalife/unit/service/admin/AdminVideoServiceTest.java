@@ -13,6 +13,11 @@ import com.vegalife.dto.mapper.admin.AdminVideoMapper;
 import com.vegalife.dto.request.admin.VideoListRequest;
 import com.vegalife.dto.response.admin.AdminVideoListResponse;
 import com.vegalife.dto.response.admin.AdminVideoPostResponse;
+import com.vegalife.enums.post.MediaStatus;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
@@ -64,8 +69,8 @@ class AdminVideoServiceTest {
             .username("janedoe")
             .email("jane@example.com")
             .passwordHash("$2a$10$secret")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     video =
@@ -74,7 +79,7 @@ class AdminVideoServiceTest {
             .mediaUrl("https://cdn.example.com/cooking.mp4")
             .thumbnailUrl("https://cdn.example.com/cooking.jpg")
             .description("Stir fry tutorial")
-            .status(Media.Status.succeed)
+            .status(MediaStatus.succeed)
             .durationSeconds(300)
             .fileSizeBytes(1024L)
             .mimeType("video/mp4")
@@ -91,8 +96,8 @@ class AdminVideoServiceTest {
             .user(uploader)
             .title("Vegan chili")
             .content("A hearty chili recipe")
-            .status(Post.Status.published)
-            .flag(Post.Flag.PASSED)
+            .status(PostStatus.published)
+            .flag(PostFlag.PASSED)
             .viewCount(7)
             .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
             .build();

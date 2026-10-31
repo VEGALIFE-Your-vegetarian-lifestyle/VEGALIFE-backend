@@ -5,6 +5,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.enums.subscription.SubscriptionStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
@@ -95,9 +99,9 @@ class PaymentHistoryIntegrationTest {
     aiSubscriptionRepository.deleteAll();
     userRepository.deleteAll();
 
-    User admin = saveUser("adminuser", "admin@example.com", User.Role.ADMIN);
-    User member = saveUser("memberuser", "member@example.com", User.Role.USER);
-    User second = saveUser("seconduser", "second@example.com", User.Role.USER);
+    User admin = saveUser("adminuser", "admin@example.com", UserRole.ADMIN);
+    User member = saveUser("memberuser", "member@example.com", UserRole.USER);
+    User second = saveUser("seconduser", "second@example.com", UserRole.USER);
     memberId = member.getId();
     secondId = second.getId();
     adminToken = jwtTokenService.generateAccessToken(admin);
@@ -111,7 +115,7 @@ class PaymentHistoryIntegrationTest {
             AiSubscription.builder()
                 .userId(memberId)
                 .planId(pro.getId())
-                .status(AiSubscription.Status.active)
+                .status(SubscriptionStatus.active)
                 .startedAt(Instant.now().minus(3, ChronoUnit.DAYS))
                 .renewalDate(Instant.now().plus(27, ChronoUnit.DAYS))
                 .build());
@@ -125,7 +129,7 @@ class PaymentHistoryIntegrationTest {
                 .subscriptionId(subscriptionId)
                 .amount(49000L)
                 .currency("VND")
-                .status(PaymentLedger.Status.succeeded)
+                .status(PaymentLedgerStatus.succeeded)
                 .provider("vnpay")
                 .txnRef("txn-member-new")
                 .paidAt(Instant.now().minus(1, ChronoUnit.HOURS))
@@ -139,7 +143,7 @@ class PaymentHistoryIntegrationTest {
                 .planId(pro.getId())
                 .amount(49000L)
                 .currency("VND")
-                .status(PaymentLedger.Status.succeeded)
+                .status(PaymentLedgerStatus.succeeded)
                 .provider("vnpay")
                 .txnRef("txn-member-old")
                 .paidAt(Instant.now().minus(2, ChronoUnit.DAYS))
@@ -154,7 +158,7 @@ class PaymentHistoryIntegrationTest {
                 .planId(pro.getId())
                 .amount(49000L)
                 .currency("VND")
-                .status(PaymentLedger.Status.pending)
+                .status(PaymentLedgerStatus.pending)
                 .provider("vnpay")
                 .txnRef("txn-second-pending")
                 .build());
@@ -310,14 +314,14 @@ class PaymentHistoryIntegrationTest {
         .andExpect(jsonPath("$.message").value("createdFrom must be before createdTo"));
   }
 
-  private User saveUser(String username, String email, User.Role role) {
+  private User saveUser(String username, String email, UserRole role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)
-            .status(User.Status.activated)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }

@@ -7,6 +7,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.post.PlaceType;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Location;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.admin.ModerationLogRepository;
@@ -76,8 +79,8 @@ class AdminLocationControllerIntegrationTest {
                 .username("adminuser")
                 .email("admin@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.ADMIN)
-                .status(User.Status.activated)
+                .role(UserRole.ADMIN)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     User regular =
@@ -86,8 +89,8 @@ class AdminLocationControllerIntegrationTest {
                 .username("regularuser")
                 .email("user@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     adminToken = jwtTokenService.generateAccessToken(admin);
@@ -528,7 +531,7 @@ class AdminLocationControllerIntegrationTest {
             .address("123 Vegan St")
             .latitude(new BigDecimal("10.776889"))
             .longitude(new BigDecimal("106.700806"))
-            .placeType(Location.PlaceType.restaurant)
+            .placeType(PlaceType.restaurant)
             .rating(rating)
             .build());
   }

@@ -2,6 +2,8 @@ package com.vegalife.service.auth;
 
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.enums.user.AuthProvider;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.infrastructure.google.GoogleIdTokenVerifier;
 import com.vegalife.infrastructure.google.GoogleTokenExchanger;
 import com.vegalife.infrastructure.google.GoogleUserInfo;
@@ -102,14 +104,13 @@ public class GoogleAuthService {
     if (user.getDeletedAt() != null) {
       throw new InvalidTokenException(INVALID_CREDENTIALS);
     }
-    if (user.getStatus() == User.Status.suspended) {
+    if (user.getStatus() == UserStatus.suspended) {
       throw new InvalidTokenException(SUSPENDED);
     }
-    if (user.getStatus() == User.Status.deactivated) {
+    if (user.getStatus() == UserStatus.deactivated) {
       throw new InvalidTokenException(DEACTIVATED);
     }
-    if (!Boolean.TRUE.equals(user.getEmailVerified())
-        || user.getStatus() != User.Status.activated) {
+    if (!Boolean.TRUE.equals(user.getEmailVerified()) || user.getStatus() != UserStatus.activated) {
       throw new InvalidTokenException(EMAIL_NOT_VERIFIED);
     }
   }
@@ -152,8 +153,8 @@ public class GoogleAuthService {
               .username(candidateUsername(info.email(), attempt))
               .email(info.email())
               .passwordHash(null)
-              .role(User.Role.USER)
-              .status(User.Status.activated)
+              .role(UserRole.USER)
+              .status(UserStatus.activated)
               .emailVerified(true)
               .build();
       try {

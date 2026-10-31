@@ -13,7 +13,10 @@ import com.vegalife.dto.mapper.admin.AdminRecipeMapper;
 import com.vegalife.dto.request.admin.AdminRecipeUpdateRequest;
 import com.vegalife.dto.request.admin.RecipeListRequest;
 import com.vegalife.dto.response.admin.AdminRecipeListResponse;
+import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Recipe;
@@ -66,8 +69,8 @@ class AdminRecipeServiceTest {
             .username("janedoe")
             .email("jane@example.com")
             .passwordHash("$2a$10$secret")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     Dish dish = Dish.builder().id(UUID.randomUUID()).name("Bowl").build();
@@ -79,7 +82,7 @@ class AdminRecipeServiceTest {
             .name("Vegan chili")
             .instructions("Simmer everything")
             .servings(4)
-            .difficulty(Recipe.Difficulty.MEDIUM)
+            .difficulty(Difficulty.MEDIUM)
             .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
             .build();
     recipeResponse =
@@ -255,7 +258,7 @@ class AdminRecipeServiceTest {
     assertThat(recipe.getName()).isEqualTo("Vegan chilli");
     assertThat(recipe.getInstructions()).isEqualTo("Simmer longer");
     assertThat(recipe.getServings()).isEqualTo(6);
-    assertThat(recipe.getDifficulty()).isEqualTo(Recipe.Difficulty.HARD);
+    assertThat(recipe.getDifficulty()).isEqualTo(Difficulty.HARD);
     // The admin is the approver, so an edit is not a reason to re-queue the recipe...
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.PENDING);
     // ...and the score records why it was queued, so editing must not rewrite it.

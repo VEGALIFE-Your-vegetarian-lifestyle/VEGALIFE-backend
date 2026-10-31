@@ -2,6 +2,9 @@ package com.vegalife.unit.repository.post;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.PostRepository;
@@ -26,9 +29,9 @@ class PostRepositoryTest {
   void findByUserIdAndDeletedAtIsNull_returnsOnlyOwnersNonDeletedPosts() {
     User owner = createUser("owner", "owner@example.com");
     User anotherUser = createUser("another", "another@example.com");
-    createPost(owner, "Owner's post", Post.Status.published, null);
-    createPost(owner, "Owner's deleted post", Post.Status.published, Instant.now());
-    createPost(anotherUser, "Another user's post", Post.Status.published, null);
+    createPost(owner, "Owner's post", PostStatus.published, null);
+    createPost(owner, "Owner's deleted post", PostStatus.published, Instant.now());
+    createPost(anotherUser, "Another user's post", PostStatus.published, null);
     entityManager.flush();
     entityManager.clear();
 
@@ -60,15 +63,15 @@ class PostRepositoryTest {
             .username(username)
             .email(email)
             .passwordHash("password-hash")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     entityManager.persist(user);
     return user;
   }
 
-  private void createPost(User owner, String title, Post.Status status, Instant deletedAt) {
+  private void createPost(User owner, String title, PostStatus status, Instant deletedAt) {
     entityManager.persist(
         Post.builder()
             .user(owner)

@@ -6,7 +6,8 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.vegalife.model.user.User;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.repository.user.UserAccountAuthState;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
@@ -54,13 +55,13 @@ class JwtAuthenticationProviderTest {
           }
 
           @Override
-          public User.Status getStatus() {
-            return User.Status.activated;
+          public UserStatus getStatus() {
+            return UserStatus.activated;
           }
 
           @Override
-          public User.Role getRole() {
-            return User.Role.USER;
+          public UserRole getRole() {
+            return UserRole.USER;
           }
 
           @Override
@@ -97,13 +98,13 @@ class JwtAuthenticationProviderTest {
           }
 
           @Override
-          public User.Status getStatus() {
-            return User.Status.activated;
+          public UserStatus getStatus() {
+            return UserStatus.activated;
           }
 
           @Override
-          public User.Role getRole() {
-            return User.Role.ADMIN;
+          public UserRole getRole() {
+            return UserRole.ADMIN;
           }
 
           @Override
@@ -132,13 +133,13 @@ class JwtAuthenticationProviderTest {
           }
 
           @Override
-          public User.Status getStatus() {
-            return User.Status.suspended;
+          public UserStatus getStatus() {
+            return UserStatus.suspended;
           }
 
           @Override
-          public User.Role getRole() {
-            return User.Role.USER;
+          public UserRole getRole() {
+            return UserRole.USER;
           }
 
           @Override
@@ -165,13 +166,13 @@ class JwtAuthenticationProviderTest {
           }
 
           @Override
-          public User.Status getStatus() {
-            return User.Status.deactivated;
+          public UserStatus getStatus() {
+            return UserStatus.deactivated;
           }
 
           @Override
-          public User.Role getRole() {
-            return User.Role.USER;
+          public UserRole getRole() {
+            return UserRole.USER;
           }
 
           @Override
@@ -198,13 +199,13 @@ class JwtAuthenticationProviderTest {
           }
 
           @Override
-          public User.Status getStatus() {
-            return User.Status.activated;
+          public UserStatus getStatus() {
+            return UserStatus.activated;
           }
 
           @Override
-          public User.Role getRole() {
-            return User.Role.USER;
+          public UserRole getRole() {
+            return UserRole.USER;
           }
 
           @Override

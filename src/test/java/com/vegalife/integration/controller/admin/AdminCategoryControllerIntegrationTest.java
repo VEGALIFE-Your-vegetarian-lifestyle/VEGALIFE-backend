@@ -8,6 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
@@ -86,8 +89,8 @@ class AdminCategoryControllerIntegrationTest {
                 .username("adminuser")
                 .email("admin@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.ADMIN)
-                .status(User.Status.activated)
+                .role(UserRole.ADMIN)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
 
@@ -97,8 +100,8 @@ class AdminCategoryControllerIntegrationTest {
                 .username("regularuser")
                 .email("user@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
 
@@ -332,8 +335,8 @@ class AdminCategoryControllerIntegrationTest {
                 .username("author")
                 .email("author@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     Post post =
@@ -344,7 +347,7 @@ class AdminCategoryControllerIntegrationTest {
                 .content("Post content")
                 .rawContent(
                     com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
-                .status(Post.Status.published)
+                .status(PostStatus.published)
                 .viewCount(0)
                 .categories(Set.of(category))
                 .build());

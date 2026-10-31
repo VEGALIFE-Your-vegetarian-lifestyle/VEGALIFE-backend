@@ -19,6 +19,7 @@ import com.vegalife.dto.mapper.recipe.RecipeMapper;
 import com.vegalife.dto.request.recipe.RecipeCreateRequest;
 import com.vegalife.dto.request.recipe.RecipeIngredientItem;
 import com.vegalife.dto.response.recipe.RecipeResponse;
+import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
@@ -125,7 +126,7 @@ class RecipeServiceTest {
     Recipe saved = recipeCaptor.getValue();
     assertThat(saved.getName()).isEqualTo("Rainbow Bowl");
     assertThat(saved.getDescription()).isNull();
-    assertThat(saved.getDifficulty()).isEqualTo(Recipe.Difficulty.EASY);
+    assertThat(saved.getDifficulty()).isEqualTo(Difficulty.EASY);
     assertThat(saved.getServings()).isEqualTo(2);
     assertThat(saved.getDish()).isNotNull();
     assertThat(saved.getUser()).isSameAs(user);

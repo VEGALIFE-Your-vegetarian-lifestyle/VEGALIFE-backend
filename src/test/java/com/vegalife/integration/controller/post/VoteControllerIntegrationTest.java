@@ -7,6 +7,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.post.VoteType;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.post.Vote;
 import com.vegalife.model.user.User;
@@ -83,7 +87,7 @@ class VoteControllerIntegrationTest {
 
   @Test
   void castVote_firstVoteIsRecorded() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
 
     mockMvc
         .perform(
@@ -102,13 +106,9 @@ class VoteControllerIntegrationTest {
 
   @Test
   void castVote_sameTypeAgainRemovesVote() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     voteRepository.saveAndFlush(
-        Vote.builder()
-            .userId(user.getId())
-            .postId(post.getId())
-            .voteType(Vote.VoteType.UPVOTE)
-            .build());
+        Vote.builder().userId(user.getId()).postId(post.getId()).voteType(VoteType.UPVOTE).build());
 
     mockMvc
         .perform(
@@ -125,13 +125,9 @@ class VoteControllerIntegrationTest {
 
   @Test
   void castVote_differentTypeSwitchesVote() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     voteRepository.saveAndFlush(
-        Vote.builder()
-            .userId(user.getId())
-            .postId(post.getId())
-            .voteType(Vote.VoteType.UPVOTE)
-            .build());
+        Vote.builder().userId(user.getId()).postId(post.getId()).voteType(VoteType.UPVOTE).build());
 
     mockMvc
         .perform(
@@ -147,7 +143,7 @@ class VoteControllerIntegrationTest {
 
   @Test
   void castVote_withoutAuthenticationReturns401() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
 
     mockMvc
         .perform(
@@ -159,7 +155,7 @@ class VoteControllerIntegrationTest {
 
   @Test
   void castVote_unpublishedPostReturns404() throws Exception {
-    Post post = savePost(otherUser, Post.Status.created);
+    Post post = savePost(otherUser, PostStatus.created);
 
     mockMvc
         .perform(
@@ -173,12 +169,12 @@ class VoteControllerIntegrationTest {
 
   @Test
   void getVotes_withoutAuthenticationSucceedsWithNullUserVote() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     voteRepository.saveAndFlush(
         Vote.builder()
             .userId(otherUser.getId())
             .postId(post.getId())
-            .voteType(Vote.VoteType.UPVOTE)
+            .voteType(VoteType.UPVOTE)
             .build());
 
     mockMvc
@@ -190,12 +186,12 @@ class VoteControllerIntegrationTest {
 
   @Test
   void getVotes_withAuthenticationShowsOwnVote() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     voteRepository.saveAndFlush(
         Vote.builder()
             .userId(user.getId())
             .postId(post.getId())
-            .voteType(Vote.VoteType.DOWNVOTE)
+            .voteType(VoteType.DOWNVOTE)
             .build());
 
     mockMvc
@@ -221,13 +217,13 @@ class VoteControllerIntegrationTest {
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }
 
-  private Post savePost(User owner, Post.Status status) {
+  private Post savePost(User owner, PostStatus status) {
     return postRepository.saveAndFlush(
         Post.builder()
             .user(owner)

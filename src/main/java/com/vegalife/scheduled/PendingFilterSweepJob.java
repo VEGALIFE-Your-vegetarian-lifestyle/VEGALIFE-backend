@@ -1,6 +1,8 @@
 package com.vegalife.scheduled;
 
 import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.filter.FilterProperties;
 import com.vegalife.model.post.Post;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
@@ -58,12 +60,12 @@ public class PendingFilterSweepJob {
     }
     List<Post> stalePosts =
         postRepository.findAllById(stalePostIds).stream()
-            .filter(post -> post.getFlag() == Post.Flag.PENDING)
+            .filter(post -> post.getFlag() == PostFlag.PENDING)
             .filter(post -> post.getDeletedAt() == null)
             .toList();
     for (Post post : stalePosts) {
-      post.setFlag(Post.Flag.NEEDS_REVIEW);
-      post.setStatus(Post.Status.unpublished);
+      post.setFlag(PostFlag.NEEDS_REVIEW);
+      post.setStatus(PostStatus.unpublished);
       postRepository.save(post);
       log.error(
           "Post {} still pending while its content-filter queue row is older than {} — moved to"

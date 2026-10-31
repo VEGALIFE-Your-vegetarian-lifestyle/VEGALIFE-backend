@@ -7,6 +7,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.response.post.VoteResponse;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.post.VoteType;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.post.Vote;
 import com.vegalife.repository.post.PostRepository;
@@ -40,25 +42,25 @@ class VoteServiceTest {
   void setUp() {
     userId = UUID.randomUUID();
     postId = UUID.randomUUID();
-    post = Post.builder().id(postId).status(Post.Status.published).build();
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+    post = Post.builder().id(postId).status(PostStatus.published).build();
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
         .thenReturn(Optional.of(post));
   }
 
   @Test
   void castVote_firstVoteIsInserted() {
     when(voteRepository.findByUserIdAndPostId(userId, postId)).thenReturn(Optional.empty());
-    when(voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.UPVOTE)).thenReturn(1L);
-    when(voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.DOWNVOTE)).thenReturn(0L);
+    when(voteRepository.countByPostIdAndVoteType(postId, VoteType.UPVOTE)).thenReturn(1L);
+    when(voteRepository.countByPostIdAndVoteType(postId, VoteType.DOWNVOTE)).thenReturn(0L);
 
-    VoteResponse response = voteService.castVote(userId, postId, Vote.VoteType.UPVOTE);
+    VoteResponse response = voteService.castVote(userId, postId, VoteType.UPVOTE);
 
     ArgumentCaptor<Vote> captor = ArgumentCaptor.forClass(Vote.class);
     verify(voteRepository).saveAndFlush(captor.capture());
     assertThat(captor.getValue().getUserId()).isEqualTo(userId);
     assertThat(captor.getValue().getPostId()).isEqualTo(postId);
-    assertThat(captor.getValue().getVoteType()).isEqualTo(Vote.VoteType.UPVOTE);
-    assertThat(response.getUserVote()).isEqualTo(Vote.VoteType.UPVOTE);
+    assertThat(captor.getValue().getVoteType()).isEqualTo(VoteType.UPVOTE);
+    assertThat(response.getUserVote()).isEqualTo(VoteType.UPVOTE);
     assertThat(response.getLikeCount()).isEqualTo(1L);
     assertThat(response.getDislikeCount()).isEqualTo(0L);
   }
@@ -70,13 +72,13 @@ class VoteServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .postId(postId)
-            .voteType(Vote.VoteType.UPVOTE)
+            .voteType(VoteType.UPVOTE)
             .build();
     when(voteRepository.findByUserIdAndPostId(userId, postId)).thenReturn(Optional.of(existing));
-    when(voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.UPVOTE)).thenReturn(0L);
-    when(voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.DOWNVOTE)).thenReturn(0L);
+    when(voteRepository.countByPostIdAndVoteType(postId, VoteType.UPVOTE)).thenReturn(0L);
+    when(voteRepository.countByPostIdAndVoteType(postId, VoteType.DOWNVOTE)).thenReturn(0L);
 
-    VoteResponse response = voteService.castVote(userId, postId, Vote.VoteType.UPVOTE);
+    VoteResponse response = voteService.castVote(userId, postId, VoteType.UPVOTE);
 
     verify(voteRepository).delete(existing);
     verify(voteRepository, never()).saveAndFlush(org.mockito.ArgumentMatchers.any());
@@ -90,35 +92,35 @@ class VoteServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .postId(postId)
-            .voteType(Vote.VoteType.UPVOTE)
+            .voteType(VoteType.UPVOTE)
             .build();
     when(voteRepository.findByUserIdAndPostId(userId, postId)).thenReturn(Optional.of(existing));
     when(voteRepository.saveAndFlush(existing)).thenReturn(existing);
-    when(voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.UPVOTE)).thenReturn(0L);
-    when(voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.DOWNVOTE)).thenReturn(1L);
+    when(voteRepository.countByPostIdAndVoteType(postId, VoteType.UPVOTE)).thenReturn(0L);
+    when(voteRepository.countByPostIdAndVoteType(postId, VoteType.DOWNVOTE)).thenReturn(1L);
 
-    VoteResponse response = voteService.castVote(userId, postId, Vote.VoteType.DOWNVOTE);
+    VoteResponse response = voteService.castVote(userId, postId, VoteType.DOWNVOTE);
 
-    assertThat(existing.getVoteType()).isEqualTo(Vote.VoteType.DOWNVOTE);
+    assertThat(existing.getVoteType()).isEqualTo(VoteType.DOWNVOTE);
     verify(voteRepository, never()).delete(org.mockito.ArgumentMatchers.any());
-    assertThat(response.getUserVote()).isEqualTo(Vote.VoteType.DOWNVOTE);
+    assertThat(response.getUserVote()).isEqualTo(VoteType.DOWNVOTE);
     assertThat(response.getDislikeCount()).isEqualTo(1L);
   }
 
   @Test
   void castVote_missingOrUnpublishedPostReturnsNotFound() {
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
         .thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> voteService.castVote(userId, postId, Vote.VoteType.UPVOTE))
+    assertThatThrownBy(() -> voteService.castVote(userId, postId, VoteType.UPVOTE))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
   }
 
   @Test
   void getVotes_anonymousViewerHasNullUserVote() {
-    when(voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.UPVOTE)).thenReturn(3L);
-    when(voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.DOWNVOTE)).thenReturn(2L);
+    when(voteRepository.countByPostIdAndVoteType(postId, VoteType.UPVOTE)).thenReturn(3L);
+    when(voteRepository.countByPostIdAndVoteType(postId, VoteType.DOWNVOTE)).thenReturn(2L);
 
     VoteResponse response = voteService.getVotes(postId, null);
 
@@ -133,19 +135,19 @@ class VoteServiceTest {
   @Test
   void getVotes_identifiedViewerSeesOwnVote() {
     Vote existing =
-        Vote.builder().userId(userId).postId(postId).voteType(Vote.VoteType.DOWNVOTE).build();
+        Vote.builder().userId(userId).postId(postId).voteType(VoteType.DOWNVOTE).build();
     when(voteRepository.findByUserIdAndPostId(userId, postId)).thenReturn(Optional.of(existing));
-    when(voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.UPVOTE)).thenReturn(0L);
-    when(voteRepository.countByPostIdAndVoteType(postId, Vote.VoteType.DOWNVOTE)).thenReturn(1L);
+    when(voteRepository.countByPostIdAndVoteType(postId, VoteType.UPVOTE)).thenReturn(0L);
+    when(voteRepository.countByPostIdAndVoteType(postId, VoteType.DOWNVOTE)).thenReturn(1L);
 
     VoteResponse response = voteService.getVotes(postId, userId);
 
-    assertThat(response.getUserVote()).isEqualTo(Vote.VoteType.DOWNVOTE);
+    assertThat(response.getUserVote()).isEqualTo(VoteType.DOWNVOTE);
   }
 
   @Test
   void getVotes_missingOrUnpublishedPostReturnsNotFound() {
-    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, Post.Status.published))
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
         .thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> voteService.getVotes(postId, userId))
