@@ -1,7 +1,6 @@
 package com.vegalife.service.payment;
 
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
-import com.vegalife.infrastructure.payment.PaymentGateway;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.model.user.User;

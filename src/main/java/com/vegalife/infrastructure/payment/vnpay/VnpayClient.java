@@ -1,7 +1,8 @@
 package com.vegalife.infrastructure.payment.vnpay;
 
-import com.vegalife.infrastructure.payment.PaymentGateway;
+import com.vegalife.service.payment.PaymentGateway;
 import com.vegalife.service.payment.PaymentProperties;
+import com.vegalife.service.payment.VnpayProperties;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;

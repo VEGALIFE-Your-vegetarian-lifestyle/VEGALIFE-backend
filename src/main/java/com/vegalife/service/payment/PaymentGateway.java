@@ -1,4 +1,4 @@
-package com.vegalife.infrastructure.payment;
+package com.vegalife.service.payment;
 
 import java.util.Map;
 

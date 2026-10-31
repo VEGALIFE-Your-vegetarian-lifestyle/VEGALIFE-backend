@@ -8,7 +8,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
-import com.vegalife.infrastructure.payment.PaymentGateway;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
@@ -17,6 +16,7 @@ import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.email.EmailService;
+import com.vegalife.service.payment.PaymentGateway;
 import com.vegalife.service.payment.PaymentWebhookService;
 import com.vegalife.service.subscription.SubscriptionService;
 import java.time.Instant;

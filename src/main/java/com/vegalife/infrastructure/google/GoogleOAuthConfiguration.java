@@ -1,5 +1,6 @@
 package com.vegalife.infrastructure.google;
 
+import com.vegalife.service.auth.GoogleIdentityProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,6 +26,12 @@ public class GoogleOAuthConfiguration {
   @Bean
   public GoogleIdTokenVerifier googleIdTokenVerifier(GoogleOAuthProperties properties) {
     return new GoogleIdTokenVerifier(restClient(properties), properties);
+  }
+
+  @Bean
+  public GoogleIdentityProvider googleIdentityProvider(
+      GoogleTokenExchanger tokenExchanger, GoogleIdTokenVerifier idTokenVerifier) {
+    return new GoogleIdentityProviderAdapter(tokenExchanger, idTokenVerifier);
   }
 
   private RestClient restClient(GoogleOAuthProperties properties) {

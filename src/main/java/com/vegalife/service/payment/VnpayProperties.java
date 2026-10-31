@@ -1,4 +1,4 @@
-package com.vegalife.infrastructure.payment.vnpay;
+package com.vegalife.service.payment;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;

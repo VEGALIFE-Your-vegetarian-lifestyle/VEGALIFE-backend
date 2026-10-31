@@ -15,8 +15,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.infrastructure.payment.PaymentGateway;
-import com.vegalife.infrastructure.payment.vnpay.VnpayProperties;
 import com.vegalife.infrastructure.payment.vnpay.VnpaySigner;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.PaymentLedger;
@@ -24,6 +22,8 @@ import com.vegalife.model.user.User;
 import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.payment.PaymentGateway;
+import com.vegalife.service.payment.VnpayProperties;
 import com.vegalife.service.token.JwtTokenService;
 import java.util.LinkedHashMap;
 import java.util.Map;

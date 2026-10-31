@@ -13,9 +13,6 @@ import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.enums.user.AuthProvider;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.infrastructure.google.GoogleIdTokenVerifier;
-import com.vegalife.infrastructure.google.GoogleTokenExchanger;
-import com.vegalife.infrastructure.google.GoogleUserInfo;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserIdentity;
 import com.vegalife.repository.user.UserIdentityRepository;
@@ -36,12 +33,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class GoogleAuthServiceTest {
 
   private static final String CODE = "google-auth-code";
-  private static final String ID_TOKEN = "raw.id.token";
   private static final String SUBJECT = "google-sub-1";
   private static final String EMAIL = "johndoe@gmail.com";
 
-  @Mock private GoogleTokenExchanger tokenExchanger;
-  @Mock private GoogleIdTokenVerifier idTokenVerifier;
+  @Mock private GoogleIdentityProvider identityProvider;
   @Mock private UserIdentityRepository userIdentityRepository;
   @Mock private UserRepository userRepository;
   @Mock private AuthService authService;
@@ -70,10 +65,9 @@ class GoogleAuthServiceTest {
             .refreshToken("refresh")
             .build();
 
-    lenient().when(tokenExchanger.exchangeForIdToken(CODE)).thenReturn(ID_TOKEN);
     lenient()
-        .when(idTokenVerifier.verify(ID_TOKEN))
-        .thenReturn(new GoogleUserInfo(SUBJECT, EMAIL, true, "J"));
+        .when(identityProvider.resolve(CODE))
+        .thenReturn(new GoogleIdentityProvider.GoogleIdentity(SUBJECT, EMAIL, true, "J"));
     lenient().when(authService.issueTokens(any(User.class))).thenReturn(expectedResponse);
   }
 
