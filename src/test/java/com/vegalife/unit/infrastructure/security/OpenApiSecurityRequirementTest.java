@@ -1,4 +1,4 @@
-package com.vegalife.unit.shared.security;
+package com.vegalife.unit.infrastructure.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

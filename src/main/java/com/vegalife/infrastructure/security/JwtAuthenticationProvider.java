@@ -1,4 +1,4 @@
-package com.vegalife.shared.security;
+package com.vegalife.infrastructure.security;
 
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.repository.user.UserAccountAuthState;

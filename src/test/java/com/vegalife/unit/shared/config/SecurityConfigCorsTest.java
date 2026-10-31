@@ -3,8 +3,8 @@ package com.vegalife.unit.shared.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+import com.vegalife.infrastructure.security.JwtAuthenticationFilter;
 import com.vegalife.shared.config.SecurityConfig;
-import com.vegalife.shared.security.JwtAuthenticationFilter;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

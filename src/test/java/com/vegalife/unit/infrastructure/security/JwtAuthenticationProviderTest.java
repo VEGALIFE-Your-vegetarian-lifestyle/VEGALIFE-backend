@@ -1,4 +1,4 @@
-package com.vegalife.unit.shared.security;
+package com.vegalife.unit.infrastructure.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -8,12 +8,12 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
+import com.vegalife.infrastructure.security.JwtAuthenticationProvider;
+import com.vegalife.infrastructure.security.JwtAuthenticationToken;
 import com.vegalife.repository.user.UserAccountAuthState;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
 import com.vegalife.shared.exception.AccountInactiveException;
-import com.vegalife.shared.security.JwtAuthenticationProvider;
-import com.vegalife.shared.security.JwtAuthenticationToken;
 import io.jsonwebtoken.Claims;
 import java.time.Instant;
 import java.util.Optional;

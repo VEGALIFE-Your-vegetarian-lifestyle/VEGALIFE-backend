@@ -1,6 +1,6 @@
 package com.vegalife.shared.config;
 
-import com.vegalife.shared.security.JwtAuthenticationFilter;
+import com.vegalife.infrastructure.security.JwtAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;

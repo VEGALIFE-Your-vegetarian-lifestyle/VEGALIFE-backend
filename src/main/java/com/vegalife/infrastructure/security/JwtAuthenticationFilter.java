@@ -1,4 +1,4 @@
-package com.vegalife.shared.security;
+package com.vegalife.infrastructure.security;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

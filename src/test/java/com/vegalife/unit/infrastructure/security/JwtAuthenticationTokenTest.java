@@ -1,8 +1,8 @@
-package com.vegalife.unit.shared.security;
+package com.vegalife.unit.infrastructure.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.vegalife.shared.security.JwtAuthenticationToken;
+import com.vegalife.infrastructure.security.JwtAuthenticationToken;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
