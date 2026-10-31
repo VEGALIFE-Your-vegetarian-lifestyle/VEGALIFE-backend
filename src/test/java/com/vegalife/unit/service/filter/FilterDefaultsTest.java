@@ -1,10 +1,10 @@
-package com.vegalife.unit.filter;
+package com.vegalife.unit.service.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.vegalife.filter.FilterProperties;
+import com.vegalife.service.filter.FilterProperties;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;

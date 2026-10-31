@@ -1,4 +1,4 @@
-package com.vegalife.filter;
+package com.vegalife.service.filter;
 
 import com.vegalife.enums.post.PostFlag;
 import java.util.List;

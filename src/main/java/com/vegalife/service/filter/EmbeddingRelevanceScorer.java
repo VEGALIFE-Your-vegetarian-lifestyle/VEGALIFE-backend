@@ -1,4 +1,4 @@
-package com.vegalife.filter;
+package com.vegalife.service.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;

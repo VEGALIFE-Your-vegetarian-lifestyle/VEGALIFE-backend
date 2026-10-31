@@ -1,4 +1,4 @@
-package com.vegalife.unit.filter;
+package com.vegalife.unit.service.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -6,10 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vegalife.filter.EmbeddingRelevanceScorer;
-import com.vegalife.filter.FilterProperties;
-import com.vegalife.filter.RelevanceScore;
-import com.vegalife.filter.RelevanceScore.Band;
+import com.vegalife.service.filter.EmbeddingRelevanceScorer;
+import com.vegalife.service.filter.FilterProperties;
+import com.vegalife.service.filter.RelevanceScore;
+import com.vegalife.service.filter.RelevanceScore.Band;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;

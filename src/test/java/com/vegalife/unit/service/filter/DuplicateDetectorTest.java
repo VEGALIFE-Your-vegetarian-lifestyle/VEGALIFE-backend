@@ -1,4 +1,4 @@
-package com.vegalife.unit.filter;
+package com.vegalife.unit.service.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -7,11 +7,11 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.vegalife.filter.ActiveEmbeddingModel;
-import com.vegalife.filter.DuplicateDetector;
-import com.vegalife.filter.FilterProperties;
 import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
+import com.vegalife.service.filter.ActiveEmbeddingModel;
+import com.vegalife.service.filter.DuplicateDetector;
+import com.vegalife.service.filter.FilterProperties;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;

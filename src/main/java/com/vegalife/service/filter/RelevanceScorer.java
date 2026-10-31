@@ -1,4 +1,4 @@
-package com.vegalife.filter;
+package com.vegalife.service.filter;
 
 /**
  * Maps an embedding vector to a semantic relevance score and its threshold band. Implementations

@@ -1,12 +1,12 @@
-package com.vegalife.unit.filter;
+package com.vegalife.unit.service.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.vegalife.filter.EmbeddingRelevanceScorer;
 import com.vegalife.infrastructure.embedding.GeminiEmbeddingModel;
 import com.vegalife.infrastructure.embedding.GeminiEmbeddingProperties;
+import com.vegalife.service.filter.EmbeddingRelevanceScorer;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

@@ -19,7 +19,6 @@ import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
-import com.vegalife.filter.ActiveEmbeddingModel;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
@@ -33,6 +32,7 @@ import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.filter.ActiveEmbeddingModel;
 import com.vegalife.service.post.PostService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -74,7 +74,7 @@ class PostServiceTest {
 
   @Spy private ObjectMapper objectMapper = new ObjectMapper();
 
-  @Mock private com.vegalife.filter.FilterProperties filterProperties;
+  @Mock private com.vegalife.service.filter.FilterProperties filterProperties;
 
   @Mock private PostEmbeddingRepository postEmbeddingRepository;
 

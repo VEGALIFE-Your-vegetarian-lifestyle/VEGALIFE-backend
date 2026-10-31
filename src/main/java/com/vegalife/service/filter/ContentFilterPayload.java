@@ -1,4 +1,4 @@
-package com.vegalife.filter;
+package com.vegalife.service.filter;
 
 import java.util.UUID;
 

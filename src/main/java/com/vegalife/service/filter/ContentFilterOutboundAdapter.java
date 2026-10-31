@@ -1,4 +1,4 @@
-package com.vegalife.filter;
+package com.vegalife.service.filter;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -6,7 +6,6 @@ import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.filter.ContentFilterService.FilterResult;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
@@ -18,6 +17,7 @@ import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.service.filter.ContentFilterService.FilterResult;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
 import java.time.Instant;
 import java.util.ArrayList;

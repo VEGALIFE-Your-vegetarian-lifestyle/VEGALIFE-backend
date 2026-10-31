@@ -1,4 +1,4 @@
-package com.vegalife.filter;
+package com.vegalife.service.filter;
 
 /**
  * Semantic relevance score for one embedding, paired with the threshold band it falls into

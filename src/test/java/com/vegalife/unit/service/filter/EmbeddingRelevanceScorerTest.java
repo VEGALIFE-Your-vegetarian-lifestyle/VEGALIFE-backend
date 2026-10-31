@@ -1,14 +1,14 @@
-package com.vegalife.unit.filter;
+package com.vegalife.unit.service.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.vegalife.filter.EmbeddingRelevanceScorer;
-import com.vegalife.filter.EmbeddingRelevanceScorer.Centroids;
-import com.vegalife.filter.FilterProperties;
-import com.vegalife.filter.RelevanceScore;
-import com.vegalife.filter.RelevanceScore.Band;
+import com.vegalife.service.filter.EmbeddingRelevanceScorer;
+import com.vegalife.service.filter.EmbeddingRelevanceScorer.Centroids;
+import com.vegalife.service.filter.FilterProperties;
+import com.vegalife.service.filter.RelevanceScore;
+import com.vegalife.service.filter.RelevanceScore.Band;
 import org.junit.jupiter.api.Test;
 
 /**

@@ -1,4 +1,4 @@
-package com.vegalife.unit.filter;
+package com.vegalife.unit.service.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -6,15 +6,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vegalife.filter.EmbeddingRelevanceScorer;
-import com.vegalife.filter.EmbeddingRelevanceScorer.Centroids;
-import com.vegalife.filter.FilterProperties;
-import com.vegalife.filter.RelevanceScore;
-import com.vegalife.filter.RelevanceScore.Band;
 import com.vegalife.infrastructure.embedding.GeminiEmbeddingModel;
 import com.vegalife.infrastructure.embedding.GeminiEmbeddingProperties;
 import com.vegalife.infrastructure.embedding.HfEmbeddingModel;
 import com.vegalife.infrastructure.embedding.HfEmbeddingProperties;
+import com.vegalife.service.filter.EmbeddingRelevanceScorer;
+import com.vegalife.service.filter.EmbeddingRelevanceScorer.Centroids;
+import com.vegalife.service.filter.FilterProperties;
+import com.vegalife.service.filter.RelevanceScore;
+import com.vegalife.service.filter.RelevanceScore.Band;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

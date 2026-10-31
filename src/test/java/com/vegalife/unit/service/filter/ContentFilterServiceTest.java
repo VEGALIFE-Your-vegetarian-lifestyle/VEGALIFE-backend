@@ -1,11 +1,11 @@
-package com.vegalife.unit.filter;
+package com.vegalife.unit.service.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.vegalife.enums.post.PostFlag;
-import com.vegalife.filter.ContentFilterService;
-import com.vegalife.filter.EmbeddingRelevanceScorer;
-import com.vegalife.filter.FilterVerdict;
+import com.vegalife.service.filter.ContentFilterService;
+import com.vegalife.service.filter.EmbeddingRelevanceScorer;
+import com.vegalife.service.filter.FilterVerdict;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

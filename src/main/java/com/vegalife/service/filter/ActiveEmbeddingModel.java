@@ -1,4 +1,4 @@
-package com.vegalife.filter;
+package com.vegalife.service.filter;
 
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
