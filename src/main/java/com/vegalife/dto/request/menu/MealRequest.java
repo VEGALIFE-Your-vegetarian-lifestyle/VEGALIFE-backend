@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * One meal of a create-menu payload. {@code mealType} is a plain string validated against {@link
- * com.vegalife.model.menu.MealType} so a bad value gets a clear 400 message instead of a parse
+ * com.vegalife.enums.menu.MealType} so a bad value gets a clear 400 message instead of a parse
  * error.
  */
 @Data

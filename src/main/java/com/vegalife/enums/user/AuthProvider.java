@@ -1,4 +1,4 @@
-package com.vegalife.model.user;
+package com.vegalife.enums.user;
 
 /**
  * An external identity provider that may authenticate a {@link User} (ADR-017).

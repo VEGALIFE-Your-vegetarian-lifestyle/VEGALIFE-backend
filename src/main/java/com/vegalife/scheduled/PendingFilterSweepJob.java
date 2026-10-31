@@ -1,7 +1,7 @@
 package com.vegalife.scheduled;
 
+import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.filter.FilterProperties;
-import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.post.Post;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.PostRepository;

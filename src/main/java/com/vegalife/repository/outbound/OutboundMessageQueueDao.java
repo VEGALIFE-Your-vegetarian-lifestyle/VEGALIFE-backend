@@ -1,8 +1,8 @@
 package com.vegalife.repository.outbound;
 
-import com.vegalife.model.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.model.outbound.OutboundMessage;
-import com.vegalife.model.outbound.OutboundStatus;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;

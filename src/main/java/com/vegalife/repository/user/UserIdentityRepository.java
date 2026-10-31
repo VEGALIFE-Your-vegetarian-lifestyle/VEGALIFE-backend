@@ -1,6 +1,6 @@
 package com.vegalife.repository.user;
 
-import com.vegalife.model.user.AuthProvider;
+import com.vegalife.enums.user.AuthProvider;
 import com.vegalife.model.user.UserIdentity;
 import java.util.Optional;
 import java.util.UUID;

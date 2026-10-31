@@ -1,5 +1,6 @@
 package com.vegalife.model.menu;
 
+import com.vegalife.enums.menu.MealType;
 import com.vegalife.model.recipe.Dish;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

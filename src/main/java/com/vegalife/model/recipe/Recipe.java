@@ -1,5 +1,6 @@
 package com.vegalife.model.recipe;
 
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import jakarta.persistence.Column;

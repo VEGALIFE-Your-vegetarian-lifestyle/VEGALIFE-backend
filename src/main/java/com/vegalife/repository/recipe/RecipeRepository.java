@@ -1,6 +1,6 @@
 package com.vegalife.repository.recipe;
 
-import com.vegalife.model.recipe.ModerationStatus;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import java.time.Instant;
 import java.util.Collection;
@@ -51,7 +51,7 @@ public interface RecipeRepository
       SELECT r FROM Recipe r
       WHERE r.dish.id IN :dishIds
         AND r.deletedAt IS NULL
-        AND r.moderationStatus = com.vegalife.model.recipe.ModerationStatus.APPROVED
+        AND r.moderationStatus = com.vegalife.enums.recipe.ModerationStatus.APPROVED
       """)
   List<Recipe> findApprovedByDishIdIn(@Param("dishIds") Collection<UUID> dishIds);
 }

@@ -1,6 +1,6 @@
 package com.vegalife.service.menu;
 
-import com.vegalife.model.menu.MenuStatus;
+import com.vegalife.enums.menu.MenuStatus;
 import java.time.LocalDate;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

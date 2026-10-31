@@ -1,10 +1,10 @@
 package com.vegalife.service.auth;
 
 import com.vegalife.dto.response.auth.LoginResponse;
+import com.vegalife.enums.user.AuthProvider;
 import com.vegalife.infrastructure.google.GoogleIdTokenVerifier;
 import com.vegalife.infrastructure.google.GoogleTokenExchanger;
 import com.vegalife.infrastructure.google.GoogleUserInfo;
-import com.vegalife.model.user.AuthProvider;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserIdentity;
 import com.vegalife.repository.user.UserIdentityRepository;

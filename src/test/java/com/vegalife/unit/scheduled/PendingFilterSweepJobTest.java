@@ -9,8 +9,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.filter.FilterProperties;
-import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.post.Post;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.PostRepository;

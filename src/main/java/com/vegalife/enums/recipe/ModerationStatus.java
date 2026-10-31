@@ -1,4 +1,4 @@
-package com.vegalife.model.recipe;
+package com.vegalife.enums.recipe;
 
 /**
  * Review state of a globally shared name — a dish, an ingredient, or a recipe (ADR-016).

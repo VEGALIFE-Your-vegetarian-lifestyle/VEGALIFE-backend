@@ -1,4 +1,4 @@
-package com.vegalife.model.menu;
+package com.vegalife.enums.menu;
 
 public enum MealType {
   BREAKFAST,

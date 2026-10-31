@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.filter.ActiveEmbeddingModel;
 import com.vegalife.filter.ComponentScorer;
 import com.vegalife.filter.ContentFilterOutboundAdapter;
@@ -28,7 +29,6 @@ import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
-import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.repository.post.PostEmbeddingRepository;

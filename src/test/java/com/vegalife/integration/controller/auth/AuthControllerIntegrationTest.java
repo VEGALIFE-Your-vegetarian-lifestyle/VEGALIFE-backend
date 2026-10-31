@@ -13,8 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.request.auth.RegisterRequest;
+import com.vegalife.enums.token.OtpPurpose;
 import com.vegalife.model.token.OtpCode;
-import com.vegalife.model.token.OtpPurpose;
 import com.vegalife.model.token.RefreshToken;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.User.Status;

@@ -1,6 +1,6 @@
 package com.vegalife.service.menu;
 
-import com.vegalife.model.menu.MenuStatus;
+import com.vegalife.enums.menu.MenuStatus;
 import com.vegalife.shared.exception.InvalidMenuFilterException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;

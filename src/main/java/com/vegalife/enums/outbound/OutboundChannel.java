@@ -1,4 +1,4 @@
-package com.vegalife.model.outbound;
+package com.vegalife.enums.outbound;
 
 public enum OutboundChannel {
   EMAIL,

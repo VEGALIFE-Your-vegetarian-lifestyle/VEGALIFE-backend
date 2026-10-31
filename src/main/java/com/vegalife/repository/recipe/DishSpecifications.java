@@ -1,7 +1,7 @@
 package com.vegalife.repository.recipe;
 
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Dish;
-import com.vegalife.model.recipe.ModerationStatus;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;

@@ -7,8 +7,8 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.request.admin.DashboardRequest;
 import com.vegalife.dto.response.admin.DashboardResponse;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.post.Post;
-import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.post.VoteRepository;

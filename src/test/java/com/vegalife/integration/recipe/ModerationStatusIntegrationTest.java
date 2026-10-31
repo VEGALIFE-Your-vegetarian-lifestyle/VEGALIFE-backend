@@ -2,9 +2,9 @@ package com.vegalife.integration.recipe;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
-import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.recipe.DishRepository;

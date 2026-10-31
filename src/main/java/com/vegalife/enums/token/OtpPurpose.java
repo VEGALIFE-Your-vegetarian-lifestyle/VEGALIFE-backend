@@ -1,4 +1,4 @@
-package com.vegalife.model.token;
+package com.vegalife.enums.token;
 
 /** Purpose discriminator for OTP codes stored in {@code otp_code}. */
 public enum OtpPurpose {

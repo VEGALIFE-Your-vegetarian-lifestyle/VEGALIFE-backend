@@ -1,8 +1,8 @@
 package com.vegalife.repository.recipe;
 
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
-import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;

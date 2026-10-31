@@ -3,7 +3,7 @@ package com.vegalife.service.menu;
 import com.vegalife.dto.request.menu.CreateMenuRequest;
 import com.vegalife.dto.request.menu.MealRequest;
 import com.vegalife.dto.request.menu.MenuDayRequest;
-import com.vegalife.model.menu.MealType;
+import com.vegalife.enums.menu.MealType;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.shared.exception.MenuValidationException;

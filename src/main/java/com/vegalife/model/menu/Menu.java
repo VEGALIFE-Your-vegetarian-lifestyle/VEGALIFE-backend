@@ -1,5 +1,6 @@
 package com.vegalife.model.menu;
 
+import com.vegalife.enums.menu.MenuStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

@@ -9,8 +9,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.response.menu.MenuDetailResponse;
+import com.vegalife.enums.menu.MenuStatus;
 import com.vegalife.model.menu.Menu;
-import com.vegalife.model.menu.MenuStatus;
 import com.vegalife.repository.menu.MenuDetailRepository;
 import com.vegalife.repository.menu.MenuRepository;
 import com.vegalife.repository.recipe.DishRepository;

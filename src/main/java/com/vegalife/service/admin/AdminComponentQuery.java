@@ -1,6 +1,6 @@
 package com.vegalife.service.admin;
 
-import com.vegalife.model.recipe.ModerationStatus;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.shared.exception.ValidationException;
 import java.util.Locale;
 import java.util.Set;

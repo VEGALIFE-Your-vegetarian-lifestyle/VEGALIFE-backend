@@ -1,5 +1,7 @@
 package com.vegalife.model.outbound;
 
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
