@@ -43,13 +43,13 @@ Packages are **ranked** and a package may import only from its own rank or lower
 
 | Rank | Packages |
 |------|----------|
-| 1 | `shared/` (`dto`, `exception`, `openapi`, `validation`), `enums/` |
+| 1 | `shared/` (`dto`, `exception` — exception *types* only, `openapi`, `validation`), `enums/` |
 | 2 | `model/` — JPA entities only, no enums or DTOs |
 | 3 | `repository/` |
 | 4 | `dto/` (`request`, `response`, `mapper`) |
 | 5 | `service/` — business logic, `*Properties`, and outbound *ports* (interfaces the service calls) |
-| 6 | `infrastructure/` — adapters implementing those ports (email, embedding, google, payment, security) |
-| 7 | `controller/`, `scheduled/` |
+| 6 | `infrastructure/` — adapters that import vendor SDKs (email, embedding, google, media, payment, security) |
+| 7 | `controller/` (incl. `advice/` — the `@RestControllerAdvice` exception handler), `scheduled/` |
 | 8 | `config/` — Spring `@Configuration` only |
 
 `docs/adrs/018-clean-architecture-package-dependencies.md` records the ranking and its rationale; `tools/rank-check.ps1` verifies it (`pwsh tools/rank-check.ps1`, zero upward edges required).
@@ -116,7 +116,7 @@ branch I'm on right now" → `.agents/plans/`.
 - **Formatting**: Spotless enforces consistent style — run `./mvnw spotless:apply` before committing.
 - **Style rules**: Checkstyle enforced — run `./mvnw checkstyle:check` to verify.
 - **Patterns**: Prefer composition over inheritance. Use constructor injection (not `@Autowired` on fields). Keep controllers thin — business logic belongs in services. Use DTOs for API boundaries, never expose entities directly.
-- **Exceptions**: Use custom exception classes in `shared/exception/`, global `@ControllerException` handler.
+- **Exceptions**: Use custom exception classes in `shared/exception/` (plain types, no framework imports); the global `@RestControllerAdvice` handler lives in `controller/advice/GlobalExceptionHandler`.
 - **Nullability**: Prefer `Optional` over null returns. Use `@NonNull` / `@Nullable` annotations where helpful.
 - **Logging**: Use SLF4J via Lombok's `@Slf4j`. Log errors at ERROR level, business warnings at WARN, debug info at DEBUG. Never log secrets, passwords, or tokens.
 - **Avoid**: `@SuppressWarnings` without justification, raw types, catching generic `Exception`, System.out/System.err.
