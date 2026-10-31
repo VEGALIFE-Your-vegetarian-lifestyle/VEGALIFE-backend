@@ -109,9 +109,10 @@ Concretely this means:
 
 ## Consequences
 
-- The dependency rule becomes mechanically checkable (an import-lint or
-  ArchUnit-style test can assert rank ordering) and can be added as a follow-up
-  gate; this ADR defines the ranks that check would enforce.
+- The dependency rule becomes mechanically checkable, and that check ships with
+  this ADR: `tools/rank-check.ps1` reads the `import` statements under
+  `src/main/java` and fails on any edge from a lower rank to a higher one, so
+  the rule no longer depends on review discipline.
 - `service/` grows port interfaces for Google OAuth and VNPay; adding a second
   provider or gateway becomes an implementation-only change at rank 6.
 - Cross-domain imports inside a layer (violation #9) remain permitted — they
@@ -138,9 +139,19 @@ Concretely this means:
 The decision is right when an import-level scan of
 `src/main/java/com/vegalife/` (package → package, from `import` statements)
 reports **zero edges pointing from a lower rank to a higher rank**, and the
-existing suite — `./mvnw test` (780 tests at baseline) plus
-`./mvnw checkstyle:check` and `./mvnw spotless:check` — passes unchanged
-before and after the move. Revisit if a future change needs a documented
+existing suite passes unchanged before and after the move.
+
+Concretely, from the repository root:
+
+```
+pwsh tools/rank-check.ps1                 # prints "upward edges: 0", exit 0
+.\mvnw.cmd test                           # 780 unit tests, 0 failures, 2 skipped
+.\mvnw.cmd checkstyle:check               # 0 violations
+.\mvnw.cmd spotless:check                 # nothing to change
+.\mvnw.cmd verify -Pintegration-test      # 625 integration tests, 0 failures
+```
+
+Revisit if a future change needs a documented
 exemption beyond rank-8 wiring or the accepted `service/email ↔
 service/outbound` same-rank cycle — two exemptions is the point where the
 rank model should be re-derived rather than patched.
