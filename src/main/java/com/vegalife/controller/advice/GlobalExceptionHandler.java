@@ -1,6 +1,22 @@
-package com.vegalife.shared.exception;
+package com.vegalife.controller.advice;
 
 import com.vegalife.shared.dto.ApiResponse;
+import com.vegalife.shared.exception.AiProviderException;
+import com.vegalife.shared.exception.AiQuotaExceededException;
+import com.vegalife.shared.exception.DuplicateResourceException;
+import com.vegalife.shared.exception.EmbeddingClientException;
+import com.vegalife.shared.exception.ExpiredTokenException;
+import com.vegalife.shared.exception.ForbiddenException;
+import com.vegalife.shared.exception.GoogleAuthException;
+import com.vegalife.shared.exception.InvalidMenuFilterException;
+import com.vegalife.shared.exception.InvalidMenuTransitionException;
+import com.vegalife.shared.exception.InvalidTokenException;
+import com.vegalife.shared.exception.MenuNotEditableException;
+import com.vegalife.shared.exception.MenuOverlapException;
+import com.vegalife.shared.exception.MenuValidationException;
+import com.vegalife.shared.exception.PaymentGatewayException;
+import com.vegalife.shared.exception.ResourceNotFoundException;
+import com.vegalife.shared.exception.ValidationException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.util.LinkedHashMap;
