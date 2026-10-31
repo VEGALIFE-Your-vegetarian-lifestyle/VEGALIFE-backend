@@ -1,8 +1,12 @@
-package com.vegalife.service.media;
+package com.vegalife.infrastructure.media;
 
 import com.cloudinary.Cloudinary;
 import com.cloudinary.api.ApiResponse;
 import com.cloudinary.api.exceptions.NotFound;
+import com.vegalife.service.media.MediaProperties;
+import com.vegalife.service.media.PresignedUploadProvider;
+import com.vegalife.service.media.UploadGrant;
+import com.vegalife.service.media.VerifiedUpload;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
