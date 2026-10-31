@@ -52,8 +52,10 @@ foreach ($f in (Get-ChildItem -Path $root -Recurse -Filter *.java)) {
   }
   $rf = Get-Rank $fromPkg
   foreach ($line in (Get-Content $f.FullName)) {
-    if ($line -notmatch '^\s*import\s+(static\s+)?(com\.vegalife\.[\w\.]+);') { continue }
+    if ($line -notmatch '^\s*import\s+(static\s+)?(com\.vegalife\.[\w\.\*]+);') { continue }
     $imp = $Matches[2]
+    # A wildcard import names a package, not a class; drop the marker before ranking it.
+    if ($imp.EndsWith('.*')) { $imp = $imp.Substring(0, $imp.Length - 2) }
     $rt = Get-ImportRank $imp
     if ($rt -eq -1 -or $rf -eq -1 -or $rt -eq 0) { continue }
     if ($rt -gt $rf) {
