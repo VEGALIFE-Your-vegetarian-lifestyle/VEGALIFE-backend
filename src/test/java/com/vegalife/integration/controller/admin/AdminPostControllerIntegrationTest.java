@@ -6,6 +6,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.vegalife.enums.post.MediaStatus;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
@@ -83,9 +88,9 @@ class AdminPostControllerIntegrationTest {
     categoryRepository.deleteAll();
     userRepository.deleteAll();
 
-    admin = createUser("adminposter", "admin.poster@example.com", User.Role.ADMIN);
-    member = createUser("memberposter", "member.poster@example.com", User.Role.USER);
-    author2 = createUser("secondauthor", "second.author@example.com", User.Role.USER);
+    admin = createUser("adminposter", "admin.poster@example.com", UserRole.ADMIN);
+    member = createUser("memberposter", "member.poster@example.com", UserRole.USER);
+    author2 = createUser("secondauthor", "second.author@example.com", UserRole.USER);
     adminToken = jwtTokenService.generateAccessToken(admin);
     userToken = jwtTokenService.generateAccessToken(member);
   }
@@ -101,13 +106,13 @@ class AdminPostControllerIntegrationTest {
             .rawContent(JsonNodeFactory.instance.objectNode())
             .featuredImageUrl("https://example.com/tofu.jpg")
             .categories(new HashSet<>(Set.of(recipes)))
-            .status(Post.Status.published)
-            .flag(Post.Flag.PASSED)
+            .status(PostStatus.published)
+            .flag(PostFlag.PASSED)
             .viewCount(7)
             .publishedAt(Instant.now())
             .build());
-    createPost(member, "Zebra draft", Post.Status.created, null, null);
-    createPost(member, "Soft deleted", Post.Status.published, null, Instant.now());
+    createPost(member, "Zebra draft", PostStatus.created, null, null);
+    createPost(member, "Soft deleted", PostStatus.published, null, Instant.now());
 
     mockMvc
         .perform(
@@ -146,12 +151,12 @@ class AdminPostControllerIntegrationTest {
 
   @Test
   void listPosts_returnsAllAuthorsAndAllStatuses() throws Exception {
-    createPost(member, "P1", Post.Status.created, null, null);
-    createPost(member, "P2", Post.Status.processed, null, null);
-    createPost(member, "P3", Post.Status.published, null, null);
-    createPost(author2, "P4", Post.Status.unpublished, Post.Flag.REJECTED, null);
-    createPost(author2, "P5", Post.Status.hidden, null, null);
-    createPost(admin, "P6", Post.Status.published, null, null);
+    createPost(member, "P1", PostStatus.created, null, null);
+    createPost(member, "P2", PostStatus.processed, null, null);
+    createPost(member, "P3", PostStatus.published, null, null);
+    createPost(author2, "P4", PostStatus.unpublished, PostFlag.REJECTED, null);
+    createPost(author2, "P5", PostStatus.hidden, null, null);
+    createPost(admin, "P6", PostStatus.published, null, null);
 
     mockMvc
         .perform(
@@ -180,9 +185,9 @@ class AdminPostControllerIntegrationTest {
 
   @Test
   void listPosts_filterByStatus_returnsOnlyMatchingPosts() throws Exception {
-    createPost(member, "Draft", Post.Status.created, null, null);
-    createPost(member, "Rejected", Post.Status.unpublished, Post.Flag.REJECTED, null);
-    createPost(member, "Live", Post.Status.published, null, null);
+    createPost(member, "Draft", PostStatus.created, null, null);
+    createPost(member, "Rejected", PostStatus.unpublished, PostFlag.REJECTED, null);
+    createPost(member, "Live", PostStatus.published, null, null);
 
     mockMvc
         .perform(
@@ -200,10 +205,10 @@ class AdminPostControllerIntegrationTest {
 
   @Test
   void listPosts_filterByFlag_returnsOnlyMatchingPosts() throws Exception {
-    createPost(member, "Draft", Post.Status.created, Post.Flag.PENDING, null);
-    createPost(member, "Rejected", Post.Status.unpublished, Post.Flag.REJECTED, null);
-    createPost(member, "Held", Post.Status.unpublished, Post.Flag.NEEDS_REVIEW, null);
-    createPost(member, "Live", Post.Status.published, Post.Flag.PASSED, null);
+    createPost(member, "Draft", PostStatus.created, PostFlag.PENDING, null);
+    createPost(member, "Rejected", PostStatus.unpublished, PostFlag.REJECTED, null);
+    createPost(member, "Held", PostStatus.unpublished, PostFlag.NEEDS_REVIEW, null);
+    createPost(member, "Live", PostStatus.published, PostFlag.PASSED, null);
 
     mockMvc
         .perform(
@@ -219,10 +224,10 @@ class AdminPostControllerIntegrationTest {
 
   @Test
   void listPosts_withoutFlagParam_defaultsToNeedsReview() throws Exception {
-    createPost(member, "Draft", Post.Status.created, Post.Flag.PENDING, null);
-    createPost(member, "Rejected", Post.Status.unpublished, Post.Flag.REJECTED, null);
-    createPost(member, "Held", Post.Status.unpublished, Post.Flag.NEEDS_REVIEW, null);
-    createPost(member, "Live", Post.Status.published, Post.Flag.PASSED, null);
+    createPost(member, "Draft", PostStatus.created, PostFlag.PENDING, null);
+    createPost(member, "Rejected", PostStatus.unpublished, PostFlag.REJECTED, null);
+    createPost(member, "Held", PostStatus.unpublished, PostFlag.NEEDS_REVIEW, null);
+    createPost(member, "Live", PostStatus.published, PostFlag.PASSED, null);
 
     mockMvc
         .perform(get("/api/admin/posts").header("Authorization", "Bearer " + adminToken))
@@ -235,8 +240,8 @@ class AdminPostControllerIntegrationTest {
 
   @Test
   void listPosts_filterByUserId_returnsOnlyThatAuthorsPosts() throws Exception {
-    createPost(member, "Member post", Post.Status.published, null, null);
-    createPost(author2, "Author post", Post.Status.created, null, null);
+    createPost(member, "Member post", PostStatus.published, null, null);
+    createPost(author2, "Author post", PostStatus.created, null, null);
 
     mockMvc
         .perform(
@@ -264,7 +269,7 @@ class AdminPostControllerIntegrationTest {
             .content("Content")
             .rawContent(JsonNodeFactory.instance.objectNode())
             .categories(new HashSet<>(Set.of(recipes, snacks)))
-            .status(Post.Status.published)
+            .status(PostStatus.published)
             .viewCount(0)
             .build());
     postRepository.save(
@@ -274,7 +279,7 @@ class AdminPostControllerIntegrationTest {
             .content("Content")
             .rawContent(JsonNodeFactory.instance.objectNode())
             .categories(new HashSet<>(Set.of(recipes)))
-            .status(Post.Status.published)
+            .status(PostStatus.published)
             .viewCount(0)
             .build());
     postRepository.save(
@@ -284,7 +289,7 @@ class AdminPostControllerIntegrationTest {
             .content("Content")
             .rawContent(JsonNodeFactory.instance.objectNode())
             .categories(new HashSet<>(Set.of(snacks)))
-            .status(Post.Status.published)
+            .status(PostStatus.published)
             .viewCount(0)
             .build());
     postRepository.save(
@@ -294,7 +299,7 @@ class AdminPostControllerIntegrationTest {
             .content("Content")
             .rawContent(JsonNodeFactory.instance.objectNode())
             .categories(new HashSet<>(Set.of(recipes)))
-            .status(Post.Status.published)
+            .status(PostStatus.published)
             .viewCount(0)
             .deletedAt(Instant.now())
             .build());
@@ -315,8 +320,8 @@ class AdminPostControllerIntegrationTest {
 
   @Test
   void listPosts_filterByCreatedDateRange_returnsOnlyMatchingPosts() throws Exception {
-    createPost(member, "First", Post.Status.published, null, null);
-    createPost(author2, "Second", Post.Status.published, null, null);
+    createPost(member, "First", PostStatus.published, null, null);
+    createPost(author2, "Second", PostStatus.published, null, null);
 
     mockMvc
         .perform(
@@ -343,11 +348,11 @@ class AdminPostControllerIntegrationTest {
   void listPosts_mediaIds_excludesSoftDeletedMedia() throws Exception {
     Media live =
         mediaRepository.save(
-            Media.builder().status(Media.Status.succeed).uploadedBy(member).build());
+            Media.builder().status(MediaStatus.succeed).uploadedBy(member).build());
     Media gone =
         mediaRepository.save(
             Media.builder()
-                .status(Media.Status.succeed)
+                .status(MediaStatus.succeed)
                 .uploadedBy(member)
                 .deletedAt(Instant.now())
                 .build());
@@ -358,7 +363,7 @@ class AdminPostControllerIntegrationTest {
             .content("Post content")
             .rawContent(JsonNodeFactory.instance.objectNode())
             .media(new HashSet<>(Set.of(live, gone)))
-            .status(Post.Status.published)
+            .status(PostStatus.published)
             .viewCount(0)
             .build());
 
@@ -388,9 +393,9 @@ class AdminPostControllerIntegrationTest {
 
   @Test
   void listPosts_withPagination_returnsSinglePageItem() throws Exception {
-    createPost(member, "Aardvark post", Post.Status.published, null, null);
-    createPost(member, "Mid post", Post.Status.published, null, null);
-    createPost(member, "Zebra post", Post.Status.published, null, null);
+    createPost(member, "Aardvark post", PostStatus.published, null, null);
+    createPost(member, "Mid post", PostStatus.published, null, null);
+    createPost(member, "Zebra post", PostStatus.published, null, null);
 
     mockMvc
         .perform(
@@ -486,20 +491,20 @@ class AdminPostControllerIntegrationTest {
         .andExpect(status().isBadRequest());
   }
 
-  private User createUser(String username, String email, User.Role role) {
+  private User createUser(String username, String email, UserRole role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)
-            .status(User.Status.activated)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }
 
   private Post createPost(
-      User owner, String title, Post.Status status, Post.Flag flag, Instant deletedAt) {
+      User owner, String title, PostStatus status, PostFlag flag, Instant deletedAt) {
     return postRepository.save(
         Post.builder()
             .user(owner)

@@ -7,14 +7,13 @@ import com.vegalife.dto.response.admin.DashboardModerationQueueMetrics;
 import com.vegalife.dto.response.admin.DashboardRangeResponse;
 import com.vegalife.dto.response.admin.DashboardResponse;
 import com.vegalife.dto.response.admin.DashboardUserMetrics;
-import com.vegalife.model.post.Post;
-import com.vegalife.model.recipe.ModerationStatus;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.post.VoteRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
-import com.vegalife.shared.config.CacheConfig;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -29,8 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Aggregate platform-health metrics for the admin dashboard (issue #12). Results are cached for
- * {@link com.vegalife.shared.config.CacheConfig}'s TTL, keyed by the resolved time range, so
- * repeated dashboard loads within the window don't re-run every count query.
+ * {@code CacheConfig}'s TTL, keyed by the resolved time range, so repeated dashboard loads within
+ * the window don't re-run every count query.
  */
 @Service
 @RequiredArgsConstructor
@@ -44,7 +43,7 @@ public class AdminDashboardService {
 
   @Transactional(readOnly = true)
   @Cacheable(
-      cacheNames = CacheConfig.ADMIN_DASHBOARD_CACHE,
+      cacheNames = AdminDashboardCacheNames.ADMIN_DASHBOARD_CACHE,
       key = "#request.range + ':' + #request.from + ':' + #request.to")
   public DashboardResponse getDashboard(DashboardRequest request) {
     Instant from = resolveFrom(request);
@@ -94,7 +93,7 @@ public class AdminDashboardService {
 
   private DashboardModerationQueueMetrics moderationQueueMetrics() {
     return DashboardModerationQueueMetrics.builder()
-        .pendingPosts(postRepository.countByFlagAndDeletedAtIsNull(Post.Flag.NEEDS_REVIEW))
+        .pendingPosts(postRepository.countByFlagAndDeletedAtIsNull(PostFlag.NEEDS_REVIEW))
         .pendingRecipes(
             recipeRepository.countByModerationStatusAndDeletedAtIsNull(ModerationStatus.PENDING))
         .reportedComments(commentRepository.countByReportCountGreaterThanAndDeletedAtIsNull(0))

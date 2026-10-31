@@ -4,6 +4,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.post.PlaceType;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Location;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.LocationRepository;
@@ -75,8 +78,8 @@ class LocationControllerIntegrationTest {
                 .username("diner")
                 .email("diner@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     accessToken = jwtTokenService.generateAccessToken(user);
@@ -155,8 +158,8 @@ class LocationControllerIntegrationTest {
 
   @Test
   void listLocations_placeTypeFilterNarrowsResults() throws Exception {
-    Location cafe = createLocation("Vegan Cafe", null, Location.PlaceType.cafe, null, null);
-    createLocation("Vegan Diner", null, Location.PlaceType.restaurant, null, null);
+    Location cafe = createLocation("Vegan Cafe", null, PlaceType.cafe, null, null);
+    createLocation("Vegan Diner", null, PlaceType.restaurant, null, null);
 
     mockMvc
         .perform(
@@ -365,11 +368,10 @@ class LocationControllerIntegrationTest {
 
   @Test
   void listLocations_combinedFiltersApplyWithAndLogic() throws Exception {
-    Location match =
-        createLocation("Match", new BigDecimal("4.5"), Location.PlaceType.cafe, 2, null);
-    createLocation("WrongType", new BigDecimal("4.5"), Location.PlaceType.restaurant, 2, null);
-    createLocation("TooExpensive", new BigDecimal("4.5"), Location.PlaceType.cafe, 4, null);
-    createLocation("TooLowRated", new BigDecimal("2.0"), Location.PlaceType.cafe, 2, null);
+    Location match = createLocation("Match", new BigDecimal("4.5"), PlaceType.cafe, 2, null);
+    createLocation("WrongType", new BigDecimal("4.5"), PlaceType.restaurant, 2, null);
+    createLocation("TooExpensive", new BigDecimal("4.5"), PlaceType.cafe, 4, null);
+    createLocation("TooLowRated", new BigDecimal("2.0"), PlaceType.cafe, 2, null);
 
     mockMvc
         .perform(
@@ -384,18 +386,14 @@ class LocationControllerIntegrationTest {
   }
 
   private Location createLocation(
-      String name,
-      BigDecimal rating,
-      Location.PlaceType placeType,
-      Integer priceLevel,
-      Instant deletedAt) {
+      String name, BigDecimal rating, PlaceType placeType, Integer priceLevel, Instant deletedAt) {
     return createLocation(name, rating, placeType, priceLevel, deletedAt, null);
   }
 
   private Location createLocation(
       String name,
       BigDecimal rating,
-      Location.PlaceType placeType,
+      PlaceType placeType,
       Integer priceLevel,
       Instant deletedAt,
       String openingHours) {
@@ -405,7 +403,7 @@ class LocationControllerIntegrationTest {
             .address("123 Vegan St")
             .latitude(new BigDecimal("10.776889"))
             .longitude(new BigDecimal("106.700806"))
-            .placeType(placeType == null ? Location.PlaceType.restaurant : placeType)
+            .placeType(placeType == null ? PlaceType.restaurant : placeType)
             .rating(rating)
             .priceLevel(priceLevel)
             .openingHours(openingHours)
@@ -420,7 +418,7 @@ class LocationControllerIntegrationTest {
             .address("123 Vegan St")
             .latitude(lat)
             .longitude(lng)
-            .placeType(Location.PlaceType.restaurant)
+            .placeType(PlaceType.restaurant)
             .build());
   }
 

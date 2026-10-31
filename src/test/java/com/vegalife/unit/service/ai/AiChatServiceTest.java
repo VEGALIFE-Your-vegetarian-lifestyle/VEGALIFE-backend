@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.profile.ProfileMapper;
 import com.vegalife.dto.request.ai.SendMessageRequest;
 import com.vegalife.dto.response.ai.SendMessageResponse;
+import com.vegalife.enums.ai.AiMessageRole;
 import com.vegalife.model.ai.AiConversation;
 import com.vegalife.model.ai.AiMessage;
 import com.vegalife.model.user.UserProfile;
@@ -153,7 +154,7 @@ class AiChatServiceTest {
     verify(messageRepository, org.mockito.Mockito.times(2)).save(saved.capture());
     assertThat(saved.getAllValues())
         .extracting(AiMessage::getRole)
-        .containsExactly(AiMessage.Role.user, AiMessage.Role.assistant);
+        .containsExactly(AiMessageRole.user, AiMessageRole.assistant);
     verify(quotaGuard).record(eq(userId), eq(window));
   }
 
@@ -233,13 +234,13 @@ class AiChatServiceTest {
             List.of(
                 AiMessage.builder()
                     .conversationId(conversationId)
-                    .role(AiMessage.Role.assistant)
+                    .role(AiMessageRole.assistant)
                     .content("earlier reply")
                     .createdAt(base.plusSeconds(1))
                     .build(),
                 AiMessage.builder()
                     .conversationId(conversationId)
-                    .role(AiMessage.Role.user)
+                    .role(AiMessageRole.user)
                     .content("earlier question")
                     .createdAt(base)
                     .build()));

@@ -6,9 +6,9 @@ import com.vegalife.dto.response.recipe.DishResponse;
 import com.vegalife.dto.response.recipe.DishSuggestionResponse;
 import com.vegalife.service.recipe.DishService;
 import com.vegalife.service.recipe.DishSuggestionFacade;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -34,7 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/dishes")
 @RequiredArgsConstructor
 @PreAuthorize("isAuthenticated()")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
 public class DishController {
 
   private final DishService dishService;

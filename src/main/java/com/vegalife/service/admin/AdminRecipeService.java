@@ -4,8 +4,9 @@ import com.vegalife.dto.mapper.admin.AdminRecipeMapper;
 import com.vegalife.dto.request.admin.AdminRecipeUpdateRequest;
 import com.vegalife.dto.request.admin.RecipeListRequest;
 import com.vegalife.dto.response.admin.AdminRecipeListResponse;
+import com.vegalife.enums.recipe.Difficulty;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.admin.ModerationLog;
-import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
@@ -195,9 +196,9 @@ public class AdminRecipeService {
         .orElseThrow(() -> new ResourceNotFoundException("Recipe not found"));
   }
 
-  private Recipe.Difficulty parseDifficulty(String difficulty) {
+  private Difficulty parseDifficulty(String difficulty) {
     try {
-      return Recipe.Difficulty.valueOf(difficulty.trim().toUpperCase(Locale.ROOT));
+      return Difficulty.valueOf(difficulty.trim().toUpperCase(Locale.ROOT));
     } catch (IllegalArgumentException ex) {
       throw new ValidationException("Difficulty must be EASY, MEDIUM, or HARD");
     }

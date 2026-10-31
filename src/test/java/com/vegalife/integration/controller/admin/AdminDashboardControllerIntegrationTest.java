@@ -4,6 +4,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
@@ -64,8 +66,8 @@ class AdminDashboardControllerIntegrationTest {
                 .username("adminuser")
                 .email("admin@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.ADMIN)
-                .status(User.Status.activated)
+                .role(UserRole.ADMIN)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     User regular =
@@ -74,8 +76,8 @@ class AdminDashboardControllerIntegrationTest {
                 .username("regularuser")
                 .email("user@example.com")
                 .passwordHash("$2a$10$test")
-                .role(User.Role.USER)
-                .status(User.Status.activated)
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
     adminToken = jwtTokenService.generateAccessToken(admin);

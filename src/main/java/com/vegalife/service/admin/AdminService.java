@@ -6,6 +6,8 @@ import com.vegalife.dto.request.admin.CommentListRequest;
 import com.vegalife.dto.request.admin.UserListRequest;
 import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.user.User;
@@ -48,8 +50,8 @@ public class AdminService {
 
   @Transactional(readOnly = true)
   public PageResponse<UserListResponse> listUsers(UserListRequest request) {
-    User.Status status = parseStatus(request.getStatus());
-    User.Role role = parseRole(request.getRole());
+    UserStatus status = parseStatus(request.getStatus());
+    UserRole role = parseRole(request.getRole());
     Instant createdFrom = request.getCreatedFrom();
     Instant createdTo = request.getCreatedTo();
 
@@ -150,11 +152,11 @@ public class AdminService {
             .filter(u -> u.getDeletedAt() == null)
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-    if (user.getStatus() == User.Status.suspended) {
+    if (user.getStatus() == UserStatus.suspended) {
       throw new DuplicateResourceException("User is already suspended");
     }
 
-    user.setStatus(User.Status.suspended);
+    user.setStatus(UserStatus.suspended);
     userRepository.save(user);
 
     int revoked = jwtTokenService.revokeAllUserRefreshTokens(userId);
@@ -171,11 +173,11 @@ public class AdminService {
             .filter(u -> u.getDeletedAt() == null)
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-    if (user.getStatus() != User.Status.suspended) {
+    if (user.getStatus() != UserStatus.suspended) {
       throw new DuplicateResourceException("User is not suspended");
     }
 
-    user.setStatus(User.Status.activated);
+    user.setStatus(UserStatus.activated);
     userRepository.save(user);
 
     log.info("User {} restored; status set to activated", userId);
@@ -183,24 +185,24 @@ public class AdminService {
     return adminUserMapper.toResponse(user);
   }
 
-  private User.Status parseStatus(String status) {
+  private UserStatus parseStatus(String status) {
     if (status == null || status.isBlank()) {
       return null;
     }
     try {
-      return User.Status.valueOf(status);
+      return UserStatus.valueOf(status);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException(
           "Status must be one of: created, activated, deactivated, suspended");
     }
   }
 
-  private User.Role parseRole(String role) {
+  private UserRole parseRole(String role) {
     if (role == null || role.isBlank()) {
       return null;
     }
     try {
-      return User.Role.valueOf(role);
+      return UserRole.valueOf(role);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException("Role must be ADMIN or USER");
     }

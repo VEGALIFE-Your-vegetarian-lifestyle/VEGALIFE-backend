@@ -1,6 +1,6 @@
 package com.vegalife.service.payment;
 
-import com.vegalife.infrastructure.payment.PaymentGateway;
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.model.user.User;
@@ -108,7 +108,7 @@ public class PaymentWebhookService {
     String transactionStatus = params.get("vnp_TransactionStatus");
     boolean paid = RESPONSE_APPROVED.equals(responseCode) && STATUS_PAID.equals(transactionStatus);
 
-    if (ledger.getStatus() != PaymentLedger.Status.pending) {
+    if (ledger.getStatus() != PaymentLedgerStatus.pending) {
       logReplay(ledger, paid, responseCode, transactionStatus);
       return ack(RSP_SUCCESS, "Confirm Success");
     }
@@ -130,7 +130,7 @@ public class PaymentWebhookService {
   /** FR-011/BR-PAY-004: the only branch that mutates anything beyond the ledger itself. */
   private void fulfil(PaymentLedger ledger, Map<String, String> params) {
     Instant paidAt = Instant.now();
-    ledger.setStatus(PaymentLedger.Status.succeeded);
+    ledger.setStatus(PaymentLedgerStatus.succeeded);
     ledger.setPaidAt(paidAt);
     ledger.setProvider(PROVIDER);
     ledger.setProviderReference(params.get("vnp_TransactionNo"));
@@ -174,7 +174,7 @@ public class PaymentWebhookService {
       Map<String, String> params,
       String responseCode,
       String transactionStatus) {
-    ledger.setStatus(PaymentLedger.Status.failed);
+    ledger.setStatus(PaymentLedgerStatus.failed);
     ledger.setResponseCode(responseCode);
     ledger.setBankCode(params.get("vnp_BankCode"));
     paymentLedgerRepository.save(ledger);
@@ -197,7 +197,7 @@ public class PaymentWebhookService {
   /** FR-014: terminal rows are never re-fulfilled; a disagreeing payload is only logged. */
   private void logReplay(
       PaymentLedger ledger, boolean paid, String responseCode, String transactionStatus) {
-    if ((ledger.getStatus() == PaymentLedger.Status.succeeded) != paid) {
+    if ((ledger.getStatus() == PaymentLedgerStatus.succeeded) != paid) {
       log.warn(
           "IPN: replay for txn {} disagrees with recorded status {} "
               + "(responseCode {}, transactionStatus {}), no state change",

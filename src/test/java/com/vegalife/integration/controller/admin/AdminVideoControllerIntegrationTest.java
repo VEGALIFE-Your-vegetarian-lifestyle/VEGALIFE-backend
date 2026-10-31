@@ -5,6 +5,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.post.MediaStatus;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
@@ -76,17 +81,17 @@ class AdminVideoControllerIntegrationTest {
     mediaRepository.deleteAll();
     userRepository.deleteAll();
 
-    admin = createUser("adminvideo", "admin.video@example.com", User.Role.ADMIN);
-    member = createUser("membervideo", "member.video@example.com", User.Role.USER);
-    uploader = createUser("chefvideo", "chef.video@example.com", User.Role.USER);
+    admin = createUser("adminvideo", "admin.video@example.com", UserRole.ADMIN);
+    member = createUser("membervideo", "member.video@example.com", UserRole.USER);
+    uploader = createUser("chefvideo", "chef.video@example.com", UserRole.USER);
     adminToken = jwtTokenService.generateAccessToken(admin);
     userToken = jwtTokenService.generateAccessToken(member);
   }
 
   @Test
   void listVideos_asAdmin_returns200WithFullItemFieldsAndAttachedPosts() throws Exception {
-    Media withPost = createVideo(uploader, "video/mp4", Media.Status.succeed, 100);
-    Media withoutPost = createVideo(uploader, "video/webm", Media.Status.uploading, 200);
+    Media withPost = createVideo(uploader, "video/mp4", MediaStatus.succeed, 100);
+    Media withoutPost = createVideo(uploader, "video/webm", MediaStatus.uploading, 200);
     Post attached =
         postRepository.save(
             Post.builder()
@@ -96,12 +101,12 @@ class AdminVideoControllerIntegrationTest {
                 .rawContent(
                     com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .media(Set.of(withPost))
-                .status(Post.Status.published)
-                .flag(Post.Flag.PASSED)
+                .status(PostStatus.published)
+                .flag(PostFlag.PASSED)
                 .viewCount(3)
                 .build());
-    createVideo(uploader, "image/png", Media.Status.succeed, 300);
-    createVideo(uploader, "video/mp4", Media.Status.succeed, 400, Instant.now());
+    createVideo(uploader, "image/png", MediaStatus.succeed, 300);
+    createVideo(uploader, "video/mp4", MediaStatus.succeed, 400, Instant.now());
 
     mockMvc
         .perform(
@@ -140,9 +145,9 @@ class AdminVideoControllerIntegrationTest {
 
   @Test
   void listVideos_returnsAllUploadersAndAllMediaStatuses() throws Exception {
-    createVideo(uploader, "video/mp4", Media.Status.uploading, 100);
-    createVideo(member, "video/mp4", Media.Status.succeed, 200);
-    createVideo(member, "video/webm", Media.Status.failed, 300);
+    createVideo(uploader, "video/mp4", MediaStatus.uploading, 100);
+    createVideo(member, "video/mp4", MediaStatus.succeed, 200);
+    createVideo(member, "video/webm", MediaStatus.failed, 300);
 
     mockMvc
         .perform(get("/api/admin/videos").header("Authorization", "Bearer " + adminToken))
@@ -159,9 +164,9 @@ class AdminVideoControllerIntegrationTest {
 
   @Test
   void listVideos_filterByStatus_returnsOnlyMatchingVideos() throws Exception {
-    createVideo(uploader, "video/mp4", Media.Status.succeed, 100);
-    createVideo(uploader, "video/mp4", Media.Status.failed, 200);
-    createVideo(uploader, "video/mp4", Media.Status.uploading, 300);
+    createVideo(uploader, "video/mp4", MediaStatus.succeed, 100);
+    createVideo(uploader, "video/mp4", MediaStatus.failed, 200);
+    createVideo(uploader, "video/mp4", MediaStatus.uploading, 300);
 
     mockMvc
         .perform(
@@ -177,8 +182,8 @@ class AdminVideoControllerIntegrationTest {
 
   @Test
   void listVideos_filterByUserId_returnsOnlyThatUploadersVideos() throws Exception {
-    createVideo(uploader, "video/mp4", Media.Status.succeed, 100);
-    createVideo(member, "video/mp4", Media.Status.succeed, 200);
+    createVideo(uploader, "video/mp4", MediaStatus.succeed, 100);
+    createVideo(member, "video/mp4", MediaStatus.succeed, 200);
 
     mockMvc
         .perform(
@@ -194,8 +199,8 @@ class AdminVideoControllerIntegrationTest {
 
   @Test
   void listVideos_filterByCreatedDateRange_returnsOnlyMatchingVideos() throws Exception {
-    createVideo(uploader, "video/mp4", Media.Status.succeed, 100);
-    createVideo(member, "video/mp4", Media.Status.succeed, 200);
+    createVideo(uploader, "video/mp4", MediaStatus.succeed, 100);
+    createVideo(member, "video/mp4", MediaStatus.succeed, 200);
 
     mockMvc
         .perform(
@@ -231,9 +236,9 @@ class AdminVideoControllerIntegrationTest {
 
   @Test
   void listVideos_withPagination_returnsSinglePageItem() throws Exception {
-    createVideo(uploader, "video/mp4", Media.Status.succeed, 100);
-    createVideo(uploader, "video/mp4", Media.Status.succeed, 200);
-    createVideo(uploader, "video/mp4", Media.Status.succeed, 300);
+    createVideo(uploader, "video/mp4", MediaStatus.succeed, 100);
+    createVideo(uploader, "video/mp4", MediaStatus.succeed, 200);
+    createVideo(uploader, "video/mp4", MediaStatus.succeed, 300);
 
     mockMvc
         .perform(
@@ -328,24 +333,24 @@ class AdminVideoControllerIntegrationTest {
         .andExpect(status().isBadRequest());
   }
 
-  private User createUser(String username, String email, User.Role role) {
+  private User createUser(String username, String email, UserRole role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)
-            .status(User.Status.activated)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }
 
-  private Media createVideo(User uploaderUser, String mimeType, Media.Status status, int duration) {
+  private Media createVideo(User uploaderUser, String mimeType, MediaStatus status, int duration) {
     return createVideo(uploaderUser, mimeType, status, duration, null);
   }
 
   private Media createVideo(
-      User uploaderUser, String mimeType, Media.Status status, int duration, Instant deletedAt) {
+      User uploaderUser, String mimeType, MediaStatus status, int duration, Instant deletedAt) {
     boolean video = mimeType.startsWith("video/");
     return mediaRepository.save(
         Media.builder()

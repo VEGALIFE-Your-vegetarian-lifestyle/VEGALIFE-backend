@@ -9,10 +9,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
+import com.vegalife.enums.post.MediaStatus;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.integration.config.FakeUploadProvider;
-import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
-import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
@@ -20,9 +24,9 @@ import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.media.MediaProperties;
 import com.vegalife.service.media.VerifiedUpload;
 import com.vegalife.service.token.JwtTokenService;
-import com.vegalife.shared.config.MediaProperties;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -140,7 +144,7 @@ class MediaControllerIntegrationTest {
 
     assertThat(mediaRepository.count()).isEqualTo(rowsBefore + 1);
     Media row = mediaRepository.findByIdAndDeletedAtIsNull(mediaId).orElseThrow();
-    assertThat(row.getStatus()).isEqualTo(Media.Status.uploading);
+    assertThat(row.getStatus()).isEqualTo(MediaStatus.uploading);
     assertThat(row.getMimeType()).isEqualTo("image/jpeg");
     assertThat(row.getExternalId()).isEqualTo(expectedPublicId);
     assertThat(row.getUploadedBy().getId()).isEqualTo(user.getId());
@@ -211,7 +215,7 @@ class MediaControllerIntegrationTest {
         .andExpect(jsonPath("$.data.thumbnailUrl").doesNotExist());
 
     Media row = mediaRepository.findByIdAndDeletedAtIsNull(mediaId).orElseThrow();
-    assertThat(row.getStatus()).isEqualTo(Media.Status.succeed);
+    assertThat(row.getStatus()).isEqualTo(MediaStatus.succeed);
     assertThat(row.getUploadedBy().getId()).isEqualTo(user.getId());
   }
 
@@ -226,7 +230,7 @@ class MediaControllerIntegrationTest {
         .andExpect(jsonPath("$.message").value("Upload verification failed"));
 
     Media row = mediaRepository.findByIdAndDeletedAtIsNull(mediaId).orElseThrow();
-    assertThat(row.getStatus()).isEqualTo(Media.Status.uploading);
+    assertThat(row.getStatus()).isEqualTo(MediaStatus.uploading);
     assertThat(row.getMediaUrl()).isNull();
   }
 
@@ -261,7 +265,7 @@ class MediaControllerIntegrationTest {
         .andExpect(jsonPath("$.message").value("Upload grant has expired"));
 
     assertThat(mediaRepository.findByIdAndDeletedAtIsNull(mediaId).orElseThrow().getStatus())
-        .isEqualTo(Media.Status.uploading);
+        .isEqualTo(MediaStatus.uploading);
   }
 
   @Test
@@ -278,7 +282,7 @@ class MediaControllerIntegrationTest {
           .andExpect(jsonPath("$.message").value("File exceeds the 5 MB image limit"));
 
       assertThat(mediaRepository.findByIdAndDeletedAtIsNull(mediaId).orElseThrow().getStatus())
-          .isEqualTo(Media.Status.failed);
+          .isEqualTo(MediaStatus.failed);
     } finally {
       mediaRepository.deleteById(mediaId);
       userRepository.deleteById(user.getId());
@@ -366,7 +370,7 @@ class MediaControllerIntegrationTest {
     User admin =
         userRepository
             .findByEmail("mediaadmin@example.com")
-            .orElseGet(() -> createUser("mediaadmin", "mediaadmin@example.com", User.Role.ADMIN));
+            .orElseGet(() -> createUser("mediaadmin", "mediaadmin@example.com", UserRole.ADMIN));
     String adminToken = jwtTokenService.generateAccessToken(admin);
 
     mockMvc
@@ -448,7 +452,7 @@ class MediaControllerIntegrationTest {
                 .content("Body")
                 .rawContent(
                     com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
-                .status(Post.Status.published)
+                .status(PostStatus.published)
                 .viewCount(0)
                 .media(new HashSet<>(Set.of(live, deleted)))
                 .build());
@@ -538,17 +542,17 @@ class MediaControllerIntegrationTest {
   }
 
   private User createUser(String username, String email) {
-    return createUser(username, email, User.Role.USER);
+    return createUser(username, email, UserRole.USER);
   }
 
-  private User createUser(String username, String email, User.Role role) {
+  private User createUser(String username, String email, UserRole role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)
-            .status(User.Status.activated)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }

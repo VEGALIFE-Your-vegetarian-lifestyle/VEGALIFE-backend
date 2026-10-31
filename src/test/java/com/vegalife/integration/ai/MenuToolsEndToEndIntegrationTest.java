@@ -7,8 +7,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.vegalife.enums.menu.MenuStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.menu.Menu;
-import com.vegalife.model.menu.MenuStatus;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.menu.MenuRepository;
@@ -316,8 +318,8 @@ class MenuToolsEndToEndIntegrationTest {
             .username("tools" + unique)
             .email(unique + "@example.com")
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }

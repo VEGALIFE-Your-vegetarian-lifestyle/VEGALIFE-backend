@@ -6,10 +6,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.vegalife.model.outbound.OutboundStatus;
+import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.scheduled.OutboundRetentionJob;
-import com.vegalife.shared.config.OutboundMessageProperties;
+import com.vegalife.service.outbound.OutboundMessageProperties;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;

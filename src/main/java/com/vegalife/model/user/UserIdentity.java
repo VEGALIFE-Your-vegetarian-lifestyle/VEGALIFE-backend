@@ -1,5 +1,6 @@
 package com.vegalife.model.user;
 
+import com.vegalife.enums.user.AuthProvider;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;

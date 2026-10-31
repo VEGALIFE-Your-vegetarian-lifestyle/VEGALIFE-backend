@@ -6,9 +6,9 @@ import com.vegalife.dto.request.admin.AdminIngredientUpdateRequest;
 import com.vegalife.dto.request.admin.ComponentModerationRequest;
 import com.vegalife.dto.response.admin.AdminIngredientResponse;
 import com.vegalife.service.admin.AdminIngredientService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/ingredients")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
 public class AdminIngredientController {
 
   private final AdminIngredientService adminIngredientService;

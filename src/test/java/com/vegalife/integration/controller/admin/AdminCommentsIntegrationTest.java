@@ -9,6 +9,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
@@ -95,9 +98,9 @@ class AdminCommentsIntegrationTest {
     postRepository.deleteAll();
     userRepository.deleteAll();
 
-    User admin = saveUser("adminuser", "admin@example.com", User.Role.ADMIN);
-    User regular = saveUser("regularuser", "user@example.com", User.Role.USER);
-    User second = saveUser("seconduser", "second@example.com", User.Role.USER);
+    User admin = saveUser("adminuser", "admin@example.com", UserRole.ADMIN);
+    User regular = saveUser("regularuser", "user@example.com", UserRole.USER);
+    User second = saveUser("seconduser", "second@example.com", UserRole.USER);
     regularId = regular.getId();
     secondId = second.getId();
     adminToken = jwtTokenService.generateAccessToken(admin);
@@ -396,14 +399,14 @@ class AdminCommentsIntegrationTest {
         .andExpect(status().isUnauthorized());
   }
 
-  private User saveUser(String username, String email, User.Role role) {
+  private User saveUser(String username, String email, UserRole role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)
-            .status(User.Status.activated)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }
@@ -415,7 +418,7 @@ class AdminCommentsIntegrationTest {
             .title(title)
             .content("Post content")
             .rawContent(com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
-            .status(Post.Status.created)
+            .status(PostStatus.created)
             .viewCount(0)
             .build());
   }

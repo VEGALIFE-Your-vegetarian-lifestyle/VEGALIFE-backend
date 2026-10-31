@@ -1,5 +1,6 @@
 package com.vegalife.model.subscription;
 
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -47,7 +48,7 @@ public class PaymentLedger {
 
   @Enumerated(EnumType.STRING)
   @Column(name = "status", length = 20, nullable = false)
-  private Status status;
+  private PaymentLedgerStatus status;
 
   @Column(name = "provider", length = 30)
   private String provider;
@@ -74,11 +75,4 @@ public class PaymentLedger {
   @UpdateTimestamp
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
-
-  public enum Status {
-    pending,
-    succeeded,
-    failed,
-    refunded
-  }
 }

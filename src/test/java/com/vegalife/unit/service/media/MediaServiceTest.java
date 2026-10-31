@@ -14,16 +14,17 @@ import com.vegalife.dto.mapper.media.MediaMapper;
 import com.vegalife.dto.request.media.MediaUploadRequest;
 import com.vegalife.dto.response.media.MediaResponse;
 import com.vegalife.dto.response.media.MediaUploadGrantResponse;
+import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.media.MediaProperties;
 import com.vegalife.service.media.MediaService;
 import com.vegalife.service.media.PresignedUploadProvider;
 import com.vegalife.service.media.UploadGrant;
 import com.vegalife.service.media.VerifiedUpload;
-import com.vegalife.shared.config.MediaProperties;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -174,7 +175,7 @@ class MediaServiceTest {
     MediaResponse response = mediaService.confirm(mediaId);
 
     assertThat(response).isSameAs(expected);
-    assertThat(row.getStatus()).isEqualTo(Media.Status.succeed);
+    assertThat(row.getStatus()).isEqualTo(MediaStatus.succeed);
     assertThat(row.getMediaUrl()).isEqualTo(SEED_URL);
     assertThat(row.getMimeType()).isEqualTo("image/jpeg");
     assertThat(row.getFileSizeBytes()).isEqualTo(2048L);
@@ -194,7 +195,7 @@ class MediaServiceTest {
         .isInstanceOf(ValidationException.class)
         .hasMessage("Upload verification failed");
 
-    assertThat(row.getStatus()).isEqualTo(Media.Status.uploading);
+    assertThat(row.getStatus()).isEqualTo(MediaStatus.uploading);
     verify(mediaRepository, never()).saveAndFlush(any(Media.class));
   }
 
@@ -215,7 +216,7 @@ class MediaServiceTest {
   @Test
   void confirm_alreadySucceed_throwsDuplicate() {
     Media row = uploadingRow();
-    row.setStatus(Media.Status.succeed);
+    row.setStatus(MediaStatus.succeed);
     when(mediaRepository.findByIdAndDeletedAtIsNull(mediaId)).thenReturn(Optional.of(row));
 
     assertThatThrownBy(() -> mediaService.confirm(mediaId))
@@ -229,7 +230,7 @@ class MediaServiceTest {
   @Test
   void confirm_failedRow_rejectsAsVerificationFailure() {
     Media row = uploadingRow();
-    row.setStatus(Media.Status.failed);
+    row.setStatus(MediaStatus.failed);
     when(mediaRepository.findByIdAndDeletedAtIsNull(mediaId)).thenReturn(Optional.of(row));
 
     assertThatThrownBy(() -> mediaService.confirm(mediaId))
@@ -268,7 +269,7 @@ class MediaServiceTest {
         .isInstanceOf(ValidationException.class)
         .hasMessage("File exceeds the 5 MB image limit");
 
-    assertThat(row.getStatus()).isEqualTo(Media.Status.failed);
+    assertThat(row.getStatus()).isEqualTo(MediaStatus.failed);
     verify(mediaRepository).saveAndFlush(row);
   }
 
@@ -330,7 +331,7 @@ class MediaServiceTest {
   private Media uploadingRow() {
     return Media.builder()
         .id(mediaId)
-        .status(Media.Status.uploading)
+        .status(MediaStatus.uploading)
         .mimeType("image/jpeg")
         .externalId("testcloud/" + userId + "/" + mediaId)
         .uploadedBy(user)

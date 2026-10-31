@@ -8,10 +8,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.vegalife.infrastructure.payment.vnpay.VnpayProperties;
+import com.vegalife.enums.outbound.OutboundStatus;
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.enums.subscription.SubscriptionStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.infrastructure.payment.vnpay.VnpaySigner;
 import com.vegalife.model.outbound.OutboundMessage;
-import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
@@ -21,6 +24,7 @@ import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.payment.VnpayProperties;
 import com.vegalife.service.token.JwtTokenService;
 import java.time.Duration;
 import java.time.Instant;
@@ -101,8 +105,8 @@ class VnpayIpnIntegrationTest {
             .username("ipnuser")
             .email("ipn@example.com")
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     testUser = userRepository.save(testUser);
@@ -124,7 +128,7 @@ class VnpayIpnIntegrationTest {
         .andExpect(jsonPath("$.success").doesNotExist());
 
     PaymentLedger reloaded = paymentLedgerRepository.findByTxnRef(ledger.getTxnRef()).orElseThrow();
-    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedger.Status.succeeded);
+    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedgerStatus.succeeded);
     assertThat(reloaded.getPaidAt()).isNotNull();
     assertThat(reloaded.getPaidAt()).isAfter(beforeFulfil);
     assertThat(reloaded.getProvider()).isEqualTo("vnpay");
@@ -136,7 +140,7 @@ class VnpayIpnIntegrationTest {
     AiSubscription subscription =
         subscriptionRepository.findByUserId(testUser.getId()).orElseThrow();
     assertThat(subscription.getPlanId()).isEqualTo(proPlan.getId());
-    assertThat(subscription.getStatus()).isEqualTo(AiSubscription.Status.active);
+    assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.active);
     // BR-PAY-008: renewal is paid_at plus one calendar month in UTC.
     Instant expectedRenewal = reloaded.getPaidAt().atZone(ZoneOffset.UTC).plusMonths(1).toInstant();
     assertThat(subscription.getRenewalDate())
@@ -168,7 +172,7 @@ class VnpayIpnIntegrationTest {
         .andExpect(jsonPath("$.Message").value("Confirm Success"));
 
     PaymentLedger reloaded = paymentLedgerRepository.findByTxnRef(ledger.getTxnRef()).orElseThrow();
-    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedger.Status.succeeded);
+    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedgerStatus.succeeded);
     assertThat(reloaded.getPaidAt()).isEqualTo(firstPaidAt);
     assertThat(subscriptionRepository.findByUserId(testUser.getId())).isPresent();
     assertThat(receipts()).hasSize(1);
@@ -186,7 +190,7 @@ class VnpayIpnIntegrationTest {
         .andExpect(jsonPath("$.Message").value("Invalid Checksum"));
 
     PaymentLedger reloaded = paymentLedgerRepository.findByTxnRef(ledger.getTxnRef()).orElseThrow();
-    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedger.Status.pending);
+    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedgerStatus.pending);
     assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
     assertThat(receipts()).isEmpty();
   }
@@ -211,7 +215,7 @@ class VnpayIpnIntegrationTest {
         .andExpect(jsonPath("$.Message").value("Invalid Amount"));
 
     PaymentLedger reloaded = paymentLedgerRepository.findByTxnRef(ledger.getTxnRef()).orElseThrow();
-    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedger.Status.pending);
+    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedgerStatus.pending);
     assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
     assertThat(receipts()).isEmpty();
   }
@@ -229,7 +233,7 @@ class VnpayIpnIntegrationTest {
         .andExpect(jsonPath("$.Message").value("Confirm Success"));
 
     PaymentLedger reloaded = paymentLedgerRepository.findByTxnRef(ledger.getTxnRef()).orElseThrow();
-    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedger.Status.pending);
+    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedgerStatus.pending);
     assertThat(reloaded.getPaidAt()).isNull();
     assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
     assertThat(receipts()).isEmpty();
@@ -245,7 +249,7 @@ class VnpayIpnIntegrationTest {
         .andExpect(jsonPath("$.Message").value("Confirm Success"));
 
     PaymentLedger reloaded = paymentLedgerRepository.findByTxnRef(ledger.getTxnRef()).orElseThrow();
-    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedger.Status.failed);
+    assertThat(reloaded.getStatus()).isEqualTo(PaymentLedgerStatus.failed);
     assertThat(reloaded.getResponseCode()).isEqualTo("24");
     assertThat(reloaded.getBankCode()).isEqualTo("NCB");
     assertThat(reloaded.getPaidAt()).isNull();
@@ -261,7 +265,7 @@ class VnpayIpnIntegrationTest {
                 .planId(proPlan.getId())
                 .amount(proPlan.getPriceAmount())
                 .currency(proPlan.getPriceCurrency())
-                .status(PaymentLedger.Status.pending)
+                .status(PaymentLedgerStatus.pending)
                 .provider("vnpay")
                 .build());
     ledger.setTxnRef(ledger.getId().toString().replace("-", ""));

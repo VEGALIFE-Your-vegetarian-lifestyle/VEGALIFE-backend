@@ -1,6 +1,6 @@
 package com.vegalife.service.outbound;
 
-import com.vegalife.model.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
 
 /**

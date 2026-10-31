@@ -1,5 +1,6 @@
 package com.vegalife.repository.post;
 
+import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.model.post.Media;
 import jakarta.persistence.criteria.Predicate;
 import java.time.Instant;
@@ -17,7 +18,7 @@ public final class MediaSpecifications {
    * The MIME predicate keeps image rows out of the admin video list without a second table.
    */
   public static Specification<Media> allVideosWithFilters(
-      Media.Status status, UUID userId, Instant createdFrom, Instant createdTo) {
+      MediaStatus status, UUID userId, Instant createdFrom, Instant createdTo) {
     return (root, query, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
       predicates.add(cb.isNull(root.get("deletedAt")));

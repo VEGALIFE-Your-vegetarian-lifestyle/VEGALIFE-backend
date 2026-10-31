@@ -4,6 +4,7 @@ import com.vegalife.dto.mapper.profile.ProfileMapper;
 import com.vegalife.dto.request.ai.SendMessageRequest;
 import com.vegalife.dto.response.ai.AiUsageQuotaResponse;
 import com.vegalife.dto.response.ai.SendMessageResponse;
+import com.vegalife.enums.ai.AiMessageRole;
 import com.vegalife.model.ai.AiConversation;
 import com.vegalife.model.ai.AiMessage;
 import com.vegalife.model.user.DietaryPreferences;
@@ -410,13 +411,13 @@ public class AiChatService {
               messageRepository.save(
                   AiMessage.builder()
                       .conversationId(conversation.getId())
-                      .role(AiMessage.Role.user)
+                      .role(AiMessageRole.user)
                       .content(userText)
                       .build());
               messageRepository.save(
                   AiMessage.builder()
                       .conversationId(conversation.getId())
-                      .role(AiMessage.Role.assistant)
+                      .role(AiMessageRole.assistant)
                       .content(reply)
                       .build());
 

@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Dish;
-import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.DietaryPreferences;
 import com.vegalife.model.user.UserProfile;

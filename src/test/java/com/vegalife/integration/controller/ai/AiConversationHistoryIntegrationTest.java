@@ -4,6 +4,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.ai.AiMessageRole;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.ai.AiConversation;
 import com.vegalife.model.ai.AiMessage;
 import com.vegalife.model.user.User;
@@ -81,8 +84,8 @@ class AiConversationHistoryIntegrationTest {
             .username(prefix + UUID.randomUUID())
             .email(UUID.randomUUID() + "@example.com")
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }
@@ -95,7 +98,7 @@ class AiConversationHistoryIntegrationTest {
     return conversationRepository.save(conversation);
   }
 
-  private AiMessage saveMessage(AiConversation conversation, AiMessage.Role role, String content) {
+  private AiMessage saveMessage(AiConversation conversation, AiMessageRole role, String content) {
     return messageRepository.save(
         AiMessage.builder()
             .conversationId(conversation.getId())
@@ -132,8 +135,8 @@ class AiConversationHistoryIntegrationTest {
   @Test
   void getConversation_returnsMessagesChronologically() throws Exception {
     AiConversation conversation = saveConversation(user, "breakfast", Instant.now());
-    saveMessage(conversation, AiMessage.Role.user, "What for breakfast?");
-    saveMessage(conversation, AiMessage.Role.assistant, "A tofu scramble.");
+    saveMessage(conversation, AiMessageRole.user, "What for breakfast?");
+    saveMessage(conversation, AiMessageRole.assistant, "A tofu scramble.");
 
     mockMvc
         .perform(
@@ -152,7 +155,7 @@ class AiConversationHistoryIntegrationTest {
   @Test
   void getConversation_forAnotherUsersConversation_returns404WithoutLeaking() throws Exception {
     AiConversation foreign = saveConversation(other, "private", Instant.now());
-    saveMessage(foreign, AiMessage.Role.user, "secret");
+    saveMessage(foreign, AiMessageRole.user, "secret");
 
     mockMvc
         .perform(

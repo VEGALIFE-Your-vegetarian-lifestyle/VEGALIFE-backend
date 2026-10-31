@@ -13,6 +13,8 @@ import com.vegalife.dto.request.admin.AdminPaymentListRequest;
 import com.vegalife.dto.request.payment.PaymentListRequest;
 import com.vegalife.dto.response.payment.PaymentHistoryItemResponse;
 import com.vegalife.dto.response.subscription.PlanSummaryResponse;
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.enums.subscription.SubscriptionStatus;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
@@ -73,7 +75,7 @@ class PaymentHistoryServiceTest {
             .id(UUID.randomUUID())
             .userId(userId)
             .planId(proPlan.getId())
-            .status(AiSubscription.Status.active)
+            .status(SubscriptionStatus.active)
             .startedAt(Instant.parse("2026-03-01T10:00:00Z"))
             .renewalDate(Instant.parse("2026-04-01T10:00:00Z"))
             .build();
@@ -133,7 +135,7 @@ class PaymentHistoryServiceTest {
             .subscriptionId(null)
             .amount(49000L)
             .currency("VND")
-            .status(PaymentLedger.Status.failed)
+            .status(PaymentLedgerStatus.failed)
             .createdAt(Instant.parse("2026-03-01T10:00:00Z"))
             .build();
     when(paymentLedgerRepository.findByUserId(any(UUID.class), any(Pageable.class)))
@@ -240,7 +242,7 @@ class PaymentHistoryServiceTest {
         .subscriptionId(subscription.getId())
         .amount(49000L)
         .currency("VND")
-        .status(PaymentLedger.Status.succeeded)
+        .status(PaymentLedgerStatus.succeeded)
         .provider("vnpay")
         .txnRef("TXN-1")
         .paidAt(createdAt)

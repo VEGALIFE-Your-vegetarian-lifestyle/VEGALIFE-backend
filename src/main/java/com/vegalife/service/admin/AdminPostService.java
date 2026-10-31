@@ -4,11 +4,13 @@ import com.vegalife.dto.mapper.admin.AdminPostMapper;
 import com.vegalife.dto.request.admin.PostListRequest;
 import com.vegalife.dto.response.admin.AdminPostDetailResponse;
 import com.vegalife.dto.response.admin.AdminPostListResponse;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
-import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.repository.admin.ModerationLogRepository;
@@ -61,8 +63,8 @@ public class AdminPostService {
 
   @Transactional(readOnly = true)
   public PageResponse<AdminPostListResponse> listPosts(PostListRequest request) {
-    Post.Status status = parseStatus(request.getStatus());
-    Post.Flag flag = parseFlag(request.getFlag());
+    PostStatus status = parseStatus(request.getStatus());
+    PostFlag flag = parseFlag(request.getFlag());
     UUID userId = request.getUserId();
     UUID categoryId = request.getCategoryId();
     Instant createdFrom = request.getCreatedFrom();
@@ -174,7 +176,7 @@ public class AdminPostService {
       throw new ValidationException(CATEGORY_REQUIRED_TO_PUBLISH);
     }
 
-    post.setStatus(Post.Status.published);
+    post.setStatus(PostStatus.published);
     post.setPublishedAt(post.getPublishedAt() == null ? Instant.now() : post.getPublishedAt());
     postRepository.saveAndFlush(post);
 
@@ -208,7 +210,7 @@ public class AdminPostService {
   public AdminPostDetailResponse rejectPost(UUID adminId, UUID postId, String reason) {
     Post post = requireModeratablePost(postId);
 
-    post.setStatus(Post.Status.unpublished);
+    post.setStatus(PostStatus.unpublished);
     post.setPublishedAt(null);
     postRepository.saveAndFlush(post);
 
@@ -240,7 +242,7 @@ public class AdminPostService {
         postRepository
             .findByIdAndDeletedAtIsNull(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-    if (post.getStatus() == Post.Status.hidden) {
+    if (post.getStatus() == PostStatus.hidden) {
       throw new ValidationException(
           "A hidden post is moderated through the visibility endpoint, not approve/reject");
     }
@@ -393,24 +395,24 @@ public class AdminPostService {
             .build());
   }
 
-  private Post.Status parseStatus(String status) {
+  private PostStatus parseStatus(String status) {
     if (status == null || status.isBlank()) {
       return null;
     }
     try {
-      return Post.Status.valueOf(status);
+      return PostStatus.valueOf(status);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException(
           "Status must be one of: created, processed, published, unpublished, hidden");
     }
   }
 
-  private Post.Flag parseFlag(String flag) {
+  private PostFlag parseFlag(String flag) {
     if (flag == null || flag.isBlank() || "all".equalsIgnoreCase(flag)) {
       return null;
     }
     try {
-      return Post.Flag.valueOf(flag);
+      return PostFlag.valueOf(flag);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException(
           "Flag must be one of: all, PENDING, PASSED, REJECTED, NEEDS_REVIEW");

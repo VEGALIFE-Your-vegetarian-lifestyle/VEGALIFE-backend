@@ -1,5 +1,7 @@
 package com.vegalife.model.user;
 
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
@@ -36,11 +38,11 @@ public class User {
 
   @Column(name = "role", length = 20, nullable = false)
   @Enumerated(EnumType.STRING)
-  private Role role;
+  private UserRole role;
 
   @Column(name = "status", length = 20, nullable = false)
   @Enumerated(EnumType.STRING)
-  private Status status;
+  private UserStatus status;
 
   @Column(name = "email_verified", nullable = false)
   private Boolean emailVerified;
@@ -58,16 +60,4 @@ public class User {
 
   @Column(name = "deleted_at")
   private Instant deletedAt;
-
-  public enum Role {
-    ADMIN,
-    USER
-  }
-
-  public enum Status {
-    created,
-    activated,
-    deactivated,
-    suspended
-  }
 }

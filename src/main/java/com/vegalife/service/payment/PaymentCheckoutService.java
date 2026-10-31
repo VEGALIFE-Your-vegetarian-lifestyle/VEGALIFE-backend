@@ -2,13 +2,11 @@ package com.vegalife.service.payment;
 
 import com.vegalife.dto.request.payment.CheckoutRequest;
 import com.vegalife.dto.response.payment.CheckoutResponse;
-import com.vegalife.infrastructure.payment.PaymentGateway;
-import com.vegalife.infrastructure.payment.vnpay.VnpayProperties;
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.service.subscription.PlanPurchasePolicy;
-import com.vegalife.shared.config.PaymentProperties;
 import com.vegalife.shared.exception.PaymentGatewayException;
 import java.time.Duration;
 import java.time.Instant;
@@ -106,7 +104,7 @@ public class PaymentCheckoutService {
     Duration ttl = paymentProperties.getCheckoutTtl();
     return paymentLedgerRepository
         .findFirstByUserIdAndPlanIdAndStatusAndCreatedAtAfterOrderByCreatedAtDesc(
-            userId, plan.getId(), PaymentLedger.Status.pending, Instant.now().minus(ttl));
+            userId, plan.getId(), PaymentLedgerStatus.pending, Instant.now().minus(ttl));
   }
 
   private PaymentLedger createPendingRow(UUID userId, AiPlan plan) {
@@ -116,7 +114,7 @@ public class PaymentCheckoutService {
             .planId(plan.getId())
             .amount(plan.getPriceAmount())
             .currency(plan.getPriceCurrency())
-            .status(PaymentLedger.Status.pending)
+            .status(PaymentLedgerStatus.pending)
             .provider(PROVIDER)
             .build();
     ledger = paymentLedgerRepository.saveAndFlush(ledger);

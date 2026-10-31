@@ -3,10 +3,12 @@ package com.vegalife.integration.repository.menu;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.vegalife.model.menu.MealType;
+import com.vegalife.enums.menu.MealType;
+import com.vegalife.enums.menu.MenuStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.menu.Menu;
 import com.vegalife.model.menu.MenuDetail;
-import com.vegalife.model.menu.MenuStatus;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.menu.MenuDetailRepository;
@@ -206,8 +208,8 @@ class MenuOverlapConstraintIntegrationTest {
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }

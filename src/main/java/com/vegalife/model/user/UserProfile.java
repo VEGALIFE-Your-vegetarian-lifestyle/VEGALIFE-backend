@@ -1,5 +1,6 @@
 package com.vegalife.model.user;
 
+import com.vegalife.enums.user.Gender;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -52,10 +53,4 @@ public class UserProfile {
   @UpdateTimestamp
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
-
-  public enum Gender {
-    male,
-    female,
-    other
-  }
 }

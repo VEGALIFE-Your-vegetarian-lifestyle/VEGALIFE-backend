@@ -5,6 +5,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.recipe.Difficulty;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
@@ -96,9 +101,9 @@ class AdminRecipeControllerIntegrationTest {
     categoryRepository.deleteAll();
     userRepository.deleteAll();
 
-    admin = createUser("admincook", "admin.cook@example.com", User.Role.ADMIN);
-    member = createUser("membercook", "member.cook@example.com", User.Role.USER);
-    author2 = createUser("secondcook", "second.cook@example.com", User.Role.USER);
+    admin = createUser("admincook", "admin.cook@example.com", UserRole.ADMIN);
+    member = createUser("membercook", "member.cook@example.com", UserRole.USER);
+    author2 = createUser("secondcook", "second.cook@example.com", UserRole.USER);
     adminToken = jwtTokenService.generateAccessToken(admin);
     userToken = jwtTokenService.generateAccessToken(member);
   }
@@ -115,8 +120,8 @@ class AdminRecipeControllerIntegrationTest {
                 .rawContent(
                     com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .categories(new HashSet<>(Set.of(recipes)))
-                .status(Post.Status.published)
-                .flag(Post.Flag.PASSED)
+                .status(PostStatus.published)
+                .flag(PostFlag.PASSED)
                 .viewCount(3)
                 .build());
     Recipe tofuBowl = createRecipe(author2, "Aardvark tofu bowl", null, Set.of(linkedPost), true);
@@ -210,7 +215,7 @@ class AdminRecipeControllerIntegrationTest {
                 .rawContent(
                     com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .categories(new HashSet<>(Set.of(recipes)))
-                .status(Post.Status.published)
+                .status(PostStatus.published)
                 .viewCount(0)
                 .build());
     Post secondPost =
@@ -222,7 +227,7 @@ class AdminRecipeControllerIntegrationTest {
                 .rawContent(
                     com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .categories(new HashSet<>(Set.of(recipes)))
-                .status(Post.Status.published)
+                .status(PostStatus.published)
                 .viewCount(0)
                 .build());
     Post snackPost =
@@ -234,7 +239,7 @@ class AdminRecipeControllerIntegrationTest {
                 .rawContent(
                     com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .categories(new HashSet<>(Set.of(snacks)))
-                .status(Post.Status.published)
+                .status(PostStatus.published)
                 .viewCount(0)
                 .build());
 
@@ -381,14 +386,14 @@ class AdminRecipeControllerIntegrationTest {
         .andExpect(status().isBadRequest());
   }
 
-  private User createUser(String username, String email, User.Role role) {
+  private User createUser(String username, String email, UserRole role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)
-            .status(User.Status.activated)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }
@@ -411,7 +416,7 @@ class AdminRecipeControllerIntegrationTest {
                 .prepTimeMinutes(10)
                 .cookTimeMinutes(15)
                 .servings(2)
-                .difficulty(Recipe.Difficulty.EASY)
+                .difficulty(Difficulty.EASY)
                 .posts(new HashSet<>(posts))
                 .deletedAt(deletedAt)
                 .build());

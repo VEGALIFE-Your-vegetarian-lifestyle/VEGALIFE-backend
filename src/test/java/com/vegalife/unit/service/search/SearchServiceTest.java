@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.request.search.SearchRequest;
 import com.vegalife.dto.response.search.SearchResultItem;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
@@ -180,7 +181,7 @@ class SearchServiceTest {
             .id(UUID.randomUUID())
             .title(title)
             .content(content)
-            .status(Post.Status.published)
+            .status(PostStatus.published)
             .categories(Set.of(Category.builder().id(UUID.randomUUID()).build()))
             .build();
     post.setCreatedAt(createdAt);

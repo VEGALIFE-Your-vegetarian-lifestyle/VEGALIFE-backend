@@ -1,5 +1,6 @@
 package com.vegalife.model.token;
 
+import com.vegalife.enums.token.OtpPurpose;
 import com.vegalife.model.user.User;
 import jakarta.persistence.*;
 import java.time.Instant;

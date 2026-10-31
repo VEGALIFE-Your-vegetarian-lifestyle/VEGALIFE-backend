@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.vegalife.enums.subscription.SubscriptionStatus;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.scheduled.SubscriptionExpirySweepJob;
@@ -41,8 +42,8 @@ class SubscriptionExpirySweepJobTest {
               return store.stream()
                   .filter(
                       row ->
-                          (row.getStatus() == AiSubscription.Status.active
-                                  || row.getStatus() == AiSubscription.Status.past_due)
+                          (row.getStatus() == SubscriptionStatus.active
+                                  || row.getStatus() == SubscriptionStatus.past_due)
                               && row.getRenewalDate() != null
                               && !row.getRenewalDate().isAfter(now))
                   .toList();
@@ -53,13 +54,13 @@ class SubscriptionExpirySweepJobTest {
                 store.stream()
                     .filter(
                         row ->
-                            row.getStatus() == AiSubscription.Status.scheduled
+                            row.getStatus() == SubscriptionStatus.scheduled
                                 && row.getUserId().equals(invocation.<UUID>getArgument(0)))
                     .toList());
   }
 
   private AiSubscription row(
-      AiSubscription.Status status, Instant renewalDate, UUID userId, Instant startedAt) {
+      SubscriptionStatus status, Instant renewalDate, UUID userId, Instant startedAt) {
     AiSubscription subscription = new AiSubscription();
     subscription.setId(UUID.randomUUID());
     subscription.setUserId(userId);
@@ -80,18 +81,18 @@ class SubscriptionExpirySweepJobTest {
     Instant successorStarted = Instant.now().minus(5, ChronoUnit.MINUTES);
     AiSubscription due =
         row(
-            AiSubscription.Status.active,
+            SubscriptionStatus.active,
             dueRenewal,
             userId,
             Instant.now().minus(30, ChronoUnit.DAYS));
     AiSubscription successor =
-        row(AiSubscription.Status.scheduled, successorRenewal, userId, successorStarted);
+        row(SubscriptionStatus.scheduled, successorRenewal, userId, successorStarted);
     SubscriptionExpirySweepJob job = new SubscriptionExpirySweepJob(subscriptionRepository, true);
 
     job.expireDueSubscriptions();
 
-    assertThat(due.getStatus()).isEqualTo(AiSubscription.Status.expired);
-    assertThat(successor.getStatus()).isEqualTo(AiSubscription.Status.active);
+    assertThat(due.getStatus()).isEqualTo(SubscriptionStatus.expired);
+    assertThat(successor.getStatus()).isEqualTo(SubscriptionStatus.active);
     assertThat(successor.getRenewalDate()).isEqualTo(successorRenewal);
     assertThat(successor.getStartedAt()).isEqualTo(successorStarted);
     verify(subscriptionRepository).save(due);
@@ -103,7 +104,7 @@ class SubscriptionExpirySweepJobTest {
     stubQueries();
     AiSubscription due =
         row(
-            AiSubscription.Status.past_due,
+            SubscriptionStatus.past_due,
             Instant.now().minus(1, ChronoUnit.HOURS),
             UUID.randomUUID(),
             Instant.now().minus(60, ChronoUnit.DAYS));
@@ -111,7 +112,7 @@ class SubscriptionExpirySweepJobTest {
 
     job.expireDueSubscriptions();
 
-    assertThat(due.getStatus()).isEqualTo(AiSubscription.Status.expired);
+    assertThat(due.getStatus()).isEqualTo(SubscriptionStatus.expired);
     verify(subscriptionRepository).save(due);
     verify(subscriptionRepository, times(1)).save(any(AiSubscription.class));
   }
@@ -122,13 +123,13 @@ class SubscriptionExpirySweepJobTest {
     UUID userId = UUID.randomUUID();
     AiSubscription due =
         row(
-            AiSubscription.Status.active,
+            SubscriptionStatus.active,
             Instant.now().minus(3, ChronoUnit.HOURS),
             userId,
             Instant.now().minus(30, ChronoUnit.DAYS));
     AiSubscription successor =
         row(
-            AiSubscription.Status.scheduled,
+            SubscriptionStatus.scheduled,
             Instant.now().plus(30, ChronoUnit.DAYS),
             userId,
             Instant.now().minus(5, ChronoUnit.MINUTES));
@@ -137,8 +138,8 @@ class SubscriptionExpirySweepJobTest {
     job.expireDueSubscriptions();
     job.expireDueSubscriptions();
 
-    assertThat(due.getStatus()).isEqualTo(AiSubscription.Status.expired);
-    assertThat(successor.getStatus()).isEqualTo(AiSubscription.Status.active);
+    assertThat(due.getStatus()).isEqualTo(SubscriptionStatus.expired);
+    assertThat(successor.getStatus()).isEqualTo(SubscriptionStatus.active);
     verify(subscriptionRepository, times(2)).findDueForExpiry(any());
     verify(subscriptionRepository, times(2)).save(any(AiSubscription.class));
   }

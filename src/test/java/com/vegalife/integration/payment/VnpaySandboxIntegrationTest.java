@@ -2,10 +2,10 @@ package com.vegalife.integration.payment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.vegalife.infrastructure.payment.PaymentGateway.PaymentOrder;
 import com.vegalife.infrastructure.payment.vnpay.VnpayClient;
-import com.vegalife.infrastructure.payment.vnpay.VnpayProperties;
-import com.vegalife.shared.config.PaymentProperties;
+import com.vegalife.service.payment.PaymentGateway.PaymentOrder;
+import com.vegalife.service.payment.PaymentProperties;
+import com.vegalife.service.payment.VnpayProperties;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;

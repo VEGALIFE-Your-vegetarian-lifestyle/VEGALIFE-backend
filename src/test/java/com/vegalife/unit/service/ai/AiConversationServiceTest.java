@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.response.ai.ConversationDetailResponse;
 import com.vegalife.dto.response.ai.ConversationSummaryResponse;
+import com.vegalife.enums.ai.AiMessageRole;
 import com.vegalife.model.ai.AiConversation;
 import com.vegalife.model.ai.AiMessage;
 import com.vegalife.repository.ai.AiConversationRepository;
@@ -65,13 +66,13 @@ class AiConversationServiceTest {
     AiMessage userMessage =
         AiMessage.builder()
             .conversationId(conversationId)
-            .role(AiMessage.Role.user)
+            .role(AiMessageRole.user)
             .content("hi")
             .build();
     AiMessage assistantMessage =
         AiMessage.builder()
             .conversationId(conversationId)
-            .role(AiMessage.Role.assistant)
+            .role(AiMessageRole.assistant)
             .content("hello")
             .build();
     when(messageRepository.findByConversationIdOrderByCreatedAtAscIdAsc(conversationId))
@@ -82,8 +83,8 @@ class AiConversationServiceTest {
     assertThat(result.getId()).isEqualTo(conversationId);
     assertThat(result.getTitle()).isEqualTo("breakfast");
     assertThat(result.getMessages()).hasSize(2);
-    assertThat(result.getMessages().get(0).getRole()).isEqualTo(AiMessage.Role.user);
-    assertThat(result.getMessages().get(1).getRole()).isEqualTo(AiMessage.Role.assistant);
+    assertThat(result.getMessages().get(0).getRole()).isEqualTo(AiMessageRole.user);
+    assertThat(result.getMessages().get(1).getRole()).isEqualTo(AiMessageRole.assistant);
   }
 
   @Test

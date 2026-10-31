@@ -1,6 +1,6 @@
 package com.vegalife.dto.response.ai;
 
-import com.vegalife.model.ai.AiMessage;
+import com.vegalife.enums.ai.AiMessageRole;
 import java.time.Instant;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ConversationMessageResponse {
 
-  private AiMessage.Role role;
+  private AiMessageRole role;
   private String content;
   private Instant createdAt;
 }

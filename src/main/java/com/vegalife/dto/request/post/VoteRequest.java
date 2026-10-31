@@ -1,6 +1,6 @@
 package com.vegalife.dto.request.post;
 
-import com.vegalife.model.post.Vote;
+import com.vegalife.enums.post.VoteType;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,5 +14,5 @@ import lombok.NoArgsConstructor;
 public class VoteRequest {
 
   @NotNull(message = "voteType is required")
-  private Vote.VoteType voteType;
+  private VoteType voteType;
 }

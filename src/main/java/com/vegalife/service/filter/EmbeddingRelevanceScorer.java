@@ -1,0 +1,243 @@
+package com.vegalife.service.filter;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.io.InputStream;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+/**
+ * Cosine-similarity relevance scorer against two committed centroids (on-topic vs off-topic).
+ * Before comparing, the text embedding and both centroids are mean-centered over the seed corpus:
+ * raw e5 embeddings are anisotropic, so without centering the margin score is confined to a narrow
+ * band around 0.5 and the accept/reject thresholds are unreachable (every post landed
+ * NEEDS_REVIEW). Score = (cos(text - mean, onTopic - mean) - cos(text - mean, offTopic - mean) + 1)
+ * / 2, clamped to [0, 1]; the band comes from the {@code app.filter.accept-threshold} / {@code
+ * app.filter.reject-threshold} values (FR-006, FR-007). The centroids and the mean are precomputed
+ * from the bilingual seed corpora in {@code src/main/resources/filter/seed-*.txt} and regenerated
+ * by {@code CentroidRegenerationTest} when {@code EMBED_API_KEY} is available.
+ *
+ * <p>Provider-agnostic by design: {@link #score(float[])} receives a finished vector and never
+ * learns whether Gemini or HuggingFace produced it (ADR-014).
+ */
+@Component
+public class EmbeddingRelevanceScorer implements RelevanceScorer {
+
+  public static final String CENTROIDS_RESOURCE = "/filter/centroids.json";
+
+  /** On-topic centroid with the corpus mean subtracted; pre-centered once at construction. */
+  private final float[] onTopic;
+
+  /** Off-topic centroid with the corpus mean subtracted; pre-centered once at construction. */
+  private final float[] offTopic;
+
+  private final float[] mean;
+  private final double acceptThreshold;
+  private final double rejectThreshold;
+
+  /**
+   * Spring wiring: loads the committed centroids and binds thresholds from {@code app.filter}.
+   * Explicitly annotated because the public vector constructor below exists for tests.
+   */
+  @Autowired
+  public EmbeddingRelevanceScorer(FilterProperties properties) {
+    Centroids centroids = loadCentroids();
+    validate(
+        centroids.onTopic(),
+        centroids.offTopic(),
+        centroids.mean(),
+        properties.getAcceptThreshold(),
+        properties.getRejectThreshold());
+    this.onTopic = subtract(centroids.onTopic(), centroids.mean());
+    this.offTopic = subtract(centroids.offTopic(), centroids.mean());
+    this.mean = centroids.mean();
+    this.acceptThreshold = properties.getAcceptThreshold();
+    this.rejectThreshold = properties.getRejectThreshold();
+  }
+
+  /**
+   * Direct construction with explicit centroids, corpus mean, and thresholds (used by unit tests).
+   * Both centroids are centered with the mean at construction; every scored embedding is centered
+   * the same way before the cosine comparison.
+   *
+   * @param onTopic on-topic centroid vector
+   * @param offTopic off-topic centroid vector, same length as {@code onTopic}
+   * @param mean arithmetic mean of the seed corpus, same length as {@code onTopic}
+   * @param acceptThreshold score >= acceptThreshold is PASS
+   * @param rejectThreshold score < rejectThreshold is REJECT; must be below the accept threshold
+   */
+  public EmbeddingRelevanceScorer(
+      float[] onTopic,
+      float[] offTopic,
+      float[] mean,
+      double acceptThreshold,
+      double rejectThreshold) {
+    validate(onTopic, offTopic, mean, acceptThreshold, rejectThreshold);
+    this.onTopic = subtract(onTopic, mean);
+    this.offTopic = subtract(offTopic, mean);
+    this.mean = mean;
+    this.acceptThreshold = acceptThreshold;
+    this.rejectThreshold = rejectThreshold;
+  }
+
+  @Override
+  public RelevanceScore score(float[] embedding) {
+    if (embedding == null || embedding.length != onTopic.length) {
+      throw new IllegalArgumentException(
+          "embedding length "
+              + (embedding == null ? "null" : embedding.length)
+              + " does not match centroid dimensions "
+              + onTopic.length);
+    }
+    double score = relevanceScore(embedding, onTopic, offTopic, mean);
+    RelevanceScore.Band band =
+        score >= acceptThreshold
+            ? RelevanceScore.Band.PASS
+            : score < rejectThreshold ? RelevanceScore.Band.REJECT : RelevanceScore.Band.REVIEW;
+    return new RelevanceScore(score, band);
+  }
+
+  /**
+   * The scoring formula itself, without the banding: mean-center the text and both centroids, then
+   * map their cosine difference into [0, 1].
+   *
+   * <p>Exposed as a static so the calibration harness measures exactly what production computes,
+   * rather than a re-implementation that could drift from it. The centroids must already be
+   * mean-centered (as {@link #EmbeddingRelevanceScorer} stores them); the text is centered here.
+   *
+   * @param embedding the text's unit-normalized embedding
+   * @param centeredOnTopic on-topic centroid with {@code mean} already subtracted
+   * @param centeredOffTopic off-topic centroid with {@code mean} already subtracted
+   * @param mean the corpus mean to center the text with
+   * @return relevance score clamped to [0, 1]
+   */
+  public static double relevanceScore(
+      float[] embedding, float[] centeredOnTopic, float[] centeredOffTopic, float[] mean) {
+    float[] centered = subtract(embedding, mean);
+    double cosineOn = cosine(centered, centeredOnTopic);
+    double cosineOff = cosine(centered, centeredOffTopic);
+    return Math.max(0, Math.min(1, (cosineOn - cosineOff + 1) / 2));
+  }
+
+  /**
+   * Standard cosine similarity between two equal-length vectors; 0 when either vector is
+   * zero-length in magnitude.
+   */
+  public static double cosine(float[] a, float[] b) {
+    if (a.length != b.length) {
+      throw new IllegalArgumentException("vectors must have equal length");
+    }
+    double dot = 0;
+    double normA = 0;
+    double normB = 0;
+    for (int i = 0; i < a.length; i++) {
+      dot += (double) a[i] * b[i];
+      normA += (double) a[i] * a[i];
+      normB += (double) b[i] * b[i];
+    }
+    if (normA == 0 || normB == 0) {
+      return 0;
+    }
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  /** Element-wise subtraction; both vectors must have equal length (callers validate). */
+  private static float[] subtract(float[] vector, float[] reference) {
+    float[] result = new float[vector.length];
+    for (int i = 0; i < vector.length; i++) {
+      result[i] = vector[i] - reference[i];
+    }
+    return result;
+  }
+
+  /**
+   * The committed centroid set loaded from {@link #CENTROIDS_RESOURCE}.
+   *
+   * <p>Holds two pairs: the post-content pair ({@code onTopic}/{@code offTopic}/{@code mean}) and
+   * the recipe-body pair ({@code recipeOnTopic}/{@code recipeOffTopic}/{@code recipeMean}). Each
+   * pair is centered over its own corpus mean, never the other's.
+   *
+   * @param dimensions embedding dimensionality all vectors must have
+   * @param onTopic normalized on-topic centroid for post content
+   * @param offTopic normalized off-topic centroid for post content
+   * @param mean arithmetic mean of the post-content seed corpus, used to center text and centroids
+   * @param recipeOnTopic normalized on-topic centroid for recipe bodies
+   * @param recipeOffTopic normalized off-topic centroid for recipe bodies
+   * @param recipeMean arithmetic mean of the recipe seed corpus
+   */
+  public record Centroids(
+      int dimensions,
+      float[] onTopic,
+      float[] offTopic,
+      float[] mean,
+      float[] recipeOnTopic,
+      float[] recipeOffTopic,
+      float[] recipeMean) {}
+
+  /** Loads and validates the committed centroids JSON from the classpath. */
+  public static Centroids loadCentroids() {
+    try (InputStream in = EmbeddingRelevanceScorer.class.getResourceAsStream(CENTROIDS_RESOURCE)) {
+      if (in == null) {
+        throw new IllegalStateException("Missing filter centroids: " + CENTROIDS_RESOURCE);
+      }
+      Centroids centroids = new ObjectMapper().readValue(in, Centroids.class);
+      if (centroids.dimensions() <= 0
+          || centroids.onTopic() == null
+          || centroids.offTopic() == null
+          || centroids.onTopic().length != centroids.dimensions()
+          || centroids.offTopic().length != centroids.dimensions()) {
+        throw new IllegalStateException("Invalid filter centroids: " + CENTROIDS_RESOURCE);
+      }
+      if (centroids.mean() == null || centroids.mean().length != centroids.dimensions()) {
+        throw new IllegalStateException(
+            "Filter centroids lack a mean vector; regenerate with CentroidRegenerationTest: "
+                + CENTROIDS_RESOURCE);
+      }
+      requireVector(centroids.recipeOnTopic(), "recipeOnTopic", centroids.dimensions());
+      requireVector(centroids.recipeOffTopic(), "recipeOffTopic", centroids.dimensions());
+      requireVector(centroids.recipeMean(), "recipeMean", centroids.dimensions());
+      return centroids;
+    } catch (IOException e) {
+      throw new IllegalStateException("Unreadable filter centroids: " + CENTROIDS_RESOURCE, e);
+    }
+  }
+
+  /**
+   * Fails fast on an incomplete centroid pair. A missing recipe pair would otherwise be scored as
+   * an all-zero vector, which silences every off-topic recipe instead of queuing it — the exact
+   * failure mode ADR-014 decision 3 exists to prevent.
+   */
+  private static void requireVector(float[] vector, String name, int dimensions) {
+    if (vector == null || vector.length != dimensions) {
+      throw new IllegalStateException(
+          "Filter centroids are missing "
+              + name
+              + "; regenerate with CentroidRegenerationTest: "
+              + CENTROIDS_RESOURCE);
+    }
+  }
+
+  private static void validate(
+      float[] onTopic,
+      float[] offTopic,
+      float[] mean,
+      double acceptThreshold,
+      double rejectThreshold) {
+    if (onTopic == null
+        || offTopic == null
+        || onTopic.length == 0
+        || onTopic.length != offTopic.length) {
+      throw new IllegalStateException("centroids must be non-empty and of equal length");
+    }
+    if (mean == null || mean.length != onTopic.length) {
+      throw new IllegalStateException("mean must be non-null and match the centroid length");
+    }
+    if (!(rejectThreshold >= 0 && acceptThreshold <= 1 && rejectThreshold < acceptThreshold)) {
+      throw new IllegalStateException(
+          "thresholds must satisfy 0 <= reject < accept <= 1, got reject="
+              + rejectThreshold
+              + " accept="
+              + acceptThreshold);
+    }
+  }
+}

@@ -1,10 +1,9 @@
 package com.vegalife.service.auth;
 
 import com.vegalife.dto.response.auth.LoginResponse;
-import com.vegalife.infrastructure.google.GoogleIdTokenVerifier;
-import com.vegalife.infrastructure.google.GoogleTokenExchanger;
-import com.vegalife.infrastructure.google.GoogleUserInfo;
-import com.vegalife.model.user.AuthProvider;
+import com.vegalife.enums.user.AuthProvider;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserIdentity;
 import com.vegalife.repository.user.UserIdentityRepository;
@@ -47,8 +46,7 @@ public class GoogleAuthService {
   private static final int USERNAME_ATTEMPTS = 5;
   private static final String USERNAME_PADDING = "user";
 
-  private final GoogleTokenExchanger tokenExchanger;
-  private final GoogleIdTokenVerifier idTokenVerifier;
+  private final GoogleIdentityProvider identityProvider;
   private final UserIdentityRepository userIdentityRepository;
   private final UserRepository userRepository;
   private final AuthService authService;
@@ -61,8 +59,7 @@ public class GoogleAuthService {
    */
   @Transactional
   public LoginResponse loginWithGoogle(String authorizationCode) {
-    String idToken = tokenExchanger.exchangeForIdToken(authorizationCode);
-    GoogleUserInfo info = idTokenVerifier.verify(idToken);
+    GoogleIdentityProvider.GoogleIdentity info = identityProvider.resolve(authorizationCode);
 
     User user = resolveAccount(info);
 
@@ -71,7 +68,7 @@ public class GoogleAuthService {
   }
 
   /** BR-AUTH-022's four-step order. Never returns; either yields an account or throws. */
-  private User resolveAccount(GoogleUserInfo info) {
+  private User resolveAccount(GoogleIdentityProvider.GoogleIdentity info) {
     Optional<UserIdentity> existing =
         userIdentityRepository.findByProviderAndProviderSubject(
             AuthProvider.GOOGLE, info.subject());
@@ -102,14 +99,13 @@ public class GoogleAuthService {
     if (user.getDeletedAt() != null) {
       throw new InvalidTokenException(INVALID_CREDENTIALS);
     }
-    if (user.getStatus() == User.Status.suspended) {
+    if (user.getStatus() == UserStatus.suspended) {
       throw new InvalidTokenException(SUSPENDED);
     }
-    if (user.getStatus() == User.Status.deactivated) {
+    if (user.getStatus() == UserStatus.deactivated) {
       throw new InvalidTokenException(DEACTIVATED);
     }
-    if (!Boolean.TRUE.equals(user.getEmailVerified())
-        || user.getStatus() != User.Status.activated) {
+    if (!Boolean.TRUE.equals(user.getEmailVerified()) || user.getStatus() != UserStatus.activated) {
       throw new InvalidTokenException(EMAIL_NOT_VERIFIED);
     }
   }
@@ -123,7 +119,7 @@ public class GoogleAuthService {
    * violation; that is the correct outcome — one subject, one account — so it is re-thrown as the
    * generic refusal rather than retried.
    */
-  private void linkIdentity(User user, GoogleUserInfo info) {
+  private void linkIdentity(User user, GoogleIdentityProvider.GoogleIdentity info) {
     if (userIdentityRepository.existsByUserIdAndProvider(user.getId(), AuthProvider.GOOGLE)) {
       // Different Google subject for an account that already has one: refuse rather than replace.
       log.warn("Refused second Google identity for user {}", user.getId());
@@ -145,15 +141,15 @@ public class GoogleAuthService {
   }
 
   /** BR-AUTH-023: Google already verified the address, so the account starts usable. */
-  private User createAccount(GoogleUserInfo info) {
+  private User createAccount(GoogleIdentityProvider.GoogleIdentity info) {
     for (int attempt = 0; attempt < USERNAME_ATTEMPTS; attempt++) {
       User user =
           User.builder()
               .username(candidateUsername(info.email(), attempt))
               .email(info.email())
               .passwordHash(null)
-              .role(User.Role.USER)
-              .status(User.Status.activated)
+              .role(UserRole.USER)
+              .status(UserStatus.activated)
               .emailVerified(true)
               .build();
       try {

@@ -10,10 +10,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.user.AuthProvider;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.infrastructure.google.GoogleIdTokenVerifier;
 import com.vegalife.infrastructure.google.GoogleTokenExchanger;
 import com.vegalife.infrastructure.google.GoogleUserInfo;
-import com.vegalife.model.user.AuthProvider;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.token.RefreshTokenRepository;
@@ -97,8 +99,8 @@ class GoogleAuthControllerIntegrationTest {
             .username(username)
             .email(email)
             .passwordHash(passwordEncoder.encode("password123"))
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }
@@ -134,7 +136,7 @@ class GoogleAuthControllerIntegrationTest {
     User created = users.get(0);
     assertThat(created.getEmail()).isEqualTo("newcomer@gmail.com");
     assertThat(created.getEmailVerified()).isTrue();
-    assertThat(created.getStatus()).isEqualTo(User.Status.activated);
+    assertThat(created.getStatus()).isEqualTo(UserStatus.activated);
     assertThat(created.getPasswordHash()).isNull();
     // No email-verification OTP is issued: Google already proved the address.
     verify(emailService, never()).sendVerificationOtp(anyString(), anyString(), anyString());
@@ -202,8 +204,8 @@ class GoogleAuthControllerIntegrationTest {
             .username("pending")
             .email("pending@gmail.com")
             .passwordHash(passwordEncoder.encode("password123"))
-            .role(User.Role.USER)
-            .status(User.Status.created)
+            .role(UserRole.USER)
+            .status(UserStatus.created)
             .emailVerified(false)
             .build());
     stubGoogleIdentity("sub-pending", "pending@gmail.com");

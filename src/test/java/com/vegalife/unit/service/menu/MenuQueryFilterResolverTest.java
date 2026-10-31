@@ -3,7 +3,7 @@ package com.vegalife.unit.service.menu;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.vegalife.model.menu.MenuStatus;
+import com.vegalife.enums.menu.MenuStatus;
 import com.vegalife.service.menu.MenuQueryFilter;
 import com.vegalife.service.menu.MenuQueryFilterResolver;
 import com.vegalife.shared.exception.InvalidMenuFilterException;

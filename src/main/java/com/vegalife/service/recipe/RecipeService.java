@@ -5,9 +5,10 @@ import com.vegalife.dto.request.recipe.RecipeCreateRequest;
 import com.vegalife.dto.request.recipe.RecipeIngredientItem;
 import com.vegalife.dto.response.recipe.RecipeIngredientResponse;
 import com.vegalife.dto.response.recipe.RecipeResponse;
+import com.vegalife.enums.recipe.Difficulty;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
-import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
@@ -253,12 +254,12 @@ public class RecipeService {
     return value.trim().toLowerCase(Locale.ROOT);
   }
 
-  private Recipe.Difficulty parseDifficulty(String difficulty) {
+  private Difficulty parseDifficulty(String difficulty) {
     if (difficulty == null) {
       return null;
     }
     try {
-      return Recipe.Difficulty.valueOf(difficulty);
+      return Difficulty.valueOf(difficulty);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException("Difficulty must be EASY, MEDIUM, or HARD");
     }

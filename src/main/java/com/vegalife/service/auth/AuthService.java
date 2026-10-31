@@ -11,8 +11,9 @@ import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.request.auth.VerifyPasswordResetRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
+import com.vegalife.enums.token.OtpPurpose;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.token.OtpCode;
-import com.vegalife.model.token.OtpPurpose;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -111,7 +112,7 @@ public class AuthService {
     }
 
     user.setEmailVerified(true);
-    user.setStatus(User.Status.activated);
+    user.setStatus(UserStatus.activated);
     userRepository.save(user);
 
     otpRow.setUsedAt(Instant.now());
@@ -175,16 +176,15 @@ public class AuthService {
       throw new InvalidTokenException("Invalid email/username or password");
     }
 
-    if (user.getStatus() == User.Status.suspended) {
+    if (user.getStatus() == UserStatus.suspended) {
       throw new InvalidTokenException("Account is suspended");
     }
 
-    if (user.getStatus() == User.Status.deactivated) {
+    if (user.getStatus() == UserStatus.deactivated) {
       throw new InvalidTokenException("Account is not active");
     }
 
-    if (!Boolean.TRUE.equals(user.getEmailVerified())
-        || user.getStatus() != User.Status.activated) {
+    if (!Boolean.TRUE.equals(user.getEmailVerified()) || user.getStatus() != UserStatus.activated) {
       throw new InvalidTokenException(
           "Email not verified. Please verify your email before logging in.");
     }
@@ -222,7 +222,7 @@ public class AuthService {
         jwtTokenService.validateRefreshToken(refreshToken);
     User user = storedToken.getUser();
 
-    if (user.getDeletedAt() != null || user.getStatus() != User.Status.activated) {
+    if (user.getDeletedAt() != null || user.getStatus() != UserStatus.activated) {
       throw new InvalidTokenException("Account is not active");
     }
 

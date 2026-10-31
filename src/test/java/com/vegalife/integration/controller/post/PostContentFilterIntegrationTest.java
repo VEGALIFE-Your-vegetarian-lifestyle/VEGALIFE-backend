@@ -13,12 +13,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.vegalife.filter.RelevanceScore;
-import com.vegalife.filter.RelevanceScore.Band;
-import com.vegalife.filter.RelevanceScorer;
-import com.vegalife.model.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.outbound.OutboundMessage;
-import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
@@ -27,6 +28,9 @@ import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.scheduled.OutboundMessageDrainer;
+import com.vegalife.service.filter.RelevanceScore;
+import com.vegalife.service.filter.RelevanceScore.Band;
+import com.vegalife.service.filter.RelevanceScorer;
 import com.vegalife.service.token.JwtTokenService;
 import jakarta.persistence.EntityManager;
 import java.util.List;
@@ -131,16 +135,16 @@ class PostContentFilterIntegrationTest {
             "Tofu bowl for lunch", "A simple plant-based lunch with tofu and rice.");
 
     Post queued = postById(postId);
-    assertThat(queued.getFlag()).isEqualTo(Post.Flag.PENDING);
-    assertThat(queued.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(queued.getFlag()).isEqualTo(PostFlag.PENDING);
+    assertThat(queued.getStatus()).isEqualTo(PostStatus.created);
     assertThat(queued.getPublishedAt()).isNull();
     assertThat(contentFilterQueue()).hasSize(1);
 
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(Post.Status.published);
-    assertThat(filtered.getFlag()).isEqualTo(Post.Flag.PASSED);
+    assertThat(filtered.getStatus()).isEqualTo(PostStatus.published);
+    assertThat(filtered.getFlag()).isEqualTo(PostFlag.PASSED);
     assertThat(filtered.getPublishedAt()).isNotNull();
 
     OutboundMessage message = contentFilterQueue().getFirst();
@@ -161,8 +165,8 @@ class PostContentFilterIntegrationTest {
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(Post.Status.unpublished);
-    assertThat(filtered.getFlag()).isEqualTo(Post.Flag.REJECTED);
+    assertThat(filtered.getStatus()).isEqualTo(PostStatus.unpublished);
+    assertThat(filtered.getFlag()).isEqualTo(PostFlag.REJECTED);
     assertThat(filtered.getPublishedAt()).isNull();
 
     verify(embeddingModel).embed(anyString());
@@ -180,8 +184,8 @@ class PostContentFilterIntegrationTest {
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(Post.Status.unpublished);
-    assertThat(filtered.getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
+    assertThat(filtered.getStatus()).isEqualTo(PostStatus.unpublished);
+    assertThat(filtered.getFlag()).isEqualTo(PostFlag.NEEDS_REVIEW);
     assertThat(filtered.getPublishedAt()).isNull();
   }
 
@@ -209,7 +213,7 @@ class PostContentFilterIntegrationTest {
     UUID postId = findPostId("Draft notes post");
     Post draft = postById(postId);
     assertThat(draft.getFlag()).isNull();
-    assertThat(draft.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(draft.getStatus()).isEqualTo(PostStatus.created);
     assertThat(contentFilterQueue()).isEmpty();
 
     verifyNoInteractions(embeddingModel, relevanceScorer);
@@ -223,8 +227,8 @@ class PostContentFilterIntegrationTest {
             "Editing published post", "The original article body before any edit happens.");
 
     drainFilterQueue();
-    assertThat(postById(postId).getStatus()).isEqualTo(Post.Status.published);
-    assertThat(postById(postId).getFlag()).isEqualTo(Post.Flag.PASSED);
+    assertThat(postById(postId).getStatus()).isEqualTo(PostStatus.published);
+    assertThat(postById(postId).getFlag()).isEqualTo(PostFlag.PASSED);
 
     stubScore(0.3, Band.REJECT);
     mockMvc
@@ -243,15 +247,15 @@ class PostContentFilterIntegrationTest {
         .andExpect(jsonPath("$.data.status").value("published"))
         .andExpect(jsonPath("$.data.flag").value("PENDING"));
 
-    assertThat(postById(postId).getStatus()).isEqualTo(Post.Status.published);
-    assertThat(postById(postId).getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(postById(postId).getStatus()).isEqualTo(PostStatus.published);
+    assertThat(postById(postId).getFlag()).isEqualTo(PostFlag.PENDING);
     assertThat(contentFilterQueue()).hasSize(2);
 
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(Post.Status.unpublished);
-    assertThat(filtered.getFlag()).isEqualTo(Post.Flag.REJECTED);
+    assertThat(filtered.getStatus()).isEqualTo(PostStatus.unpublished);
+    assertThat(filtered.getFlag()).isEqualTo(PostFlag.REJECTED);
   }
 
   @Test
@@ -262,8 +266,8 @@ class PostContentFilterIntegrationTest {
             "Unpublished post edit", "A body that initially lands in the reject band.");
 
     drainFilterQueue();
-    assertThat(postById(postId).getStatus()).isEqualTo(Post.Status.unpublished);
-    assertThat(postById(postId).getFlag()).isEqualTo(Post.Flag.REJECTED);
+    assertThat(postById(postId).getStatus()).isEqualTo(PostStatus.unpublished);
+    assertThat(postById(postId).getFlag()).isEqualTo(PostFlag.REJECTED);
 
     stubScore(0.9, Band.PASS);
     mockMvc
@@ -287,8 +291,8 @@ class PostContentFilterIntegrationTest {
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(Post.Status.published);
-    assertThat(filtered.getFlag()).isEqualTo(Post.Flag.PASSED);
+    assertThat(filtered.getStatus()).isEqualTo(PostStatus.published);
+    assertThat(filtered.getFlag()).isEqualTo(PostFlag.PASSED);
     assertThat(filtered.getPublishedAt()).isNotNull();
   }
 
@@ -315,8 +319,8 @@ class PostContentFilterIntegrationTest {
     assertThat(contentFilterQueue()).hasSize(1);
     Post unchanged = postById(postId);
     assertThat(unchanged.getContent()).isEqualTo("Original content owned by the author only.");
-    assertThat(unchanged.getFlag()).isEqualTo(Post.Flag.PENDING);
-    assertThat(unchanged.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(unchanged.getFlag()).isEqualTo(PostFlag.PENDING);
+    assertThat(unchanged.getStatus()).isEqualTo(PostStatus.created);
   }
 
   @Test
@@ -420,8 +424,8 @@ class PostContentFilterIntegrationTest {
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }

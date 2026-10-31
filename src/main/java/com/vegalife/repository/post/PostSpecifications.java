@@ -1,5 +1,7 @@
 package com.vegalife.repository.post;
 
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import jakarta.persistence.criteria.Join;
@@ -21,8 +23,8 @@ public final class PostSpecifications {
    * createdAt range. The category join is de-duplicated so a matching post is never returned twice.
    */
   public static Specification<Post> allWithFilters(
-      Post.Status status,
-      Post.Flag flag,
+      PostStatus status,
+      PostFlag flag,
       UUID userId,
       UUID categoryId,
       Instant createdFrom,
@@ -67,7 +69,7 @@ public final class PostSpecifications {
       String query, UUID categoryId, Instant createdFrom, Instant createdTo) {
     return (root, cq, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
-      predicates.add(cb.equal(root.get("status"), Post.Status.published));
+      predicates.add(cb.equal(root.get("status"), PostStatus.published));
       predicates.add(cb.isNull(root.get("deletedAt")));
 
       String pattern = "%" + query.toLowerCase(Locale.ROOT) + "%";

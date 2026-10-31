@@ -14,6 +14,8 @@ import com.vegalife.dto.request.admin.CommentListRequest;
 import com.vegalife.dto.request.admin.UserListRequest;
 import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.user.User;
@@ -72,8 +74,8 @@ class AdminServiceTest {
             .username("jane")
             .email("jane@example.com")
             .passwordHash("$2a$10$secret")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     userResponse =
@@ -332,7 +334,7 @@ class AdminServiceTest {
     UserListResponse result = adminService.suspendUser(user.getId());
 
     assertThat(result).isEqualTo(userResponse);
-    assertThat(user.getStatus()).isEqualTo(User.Status.suspended);
+    assertThat(user.getStatus()).isEqualTo(UserStatus.suspended);
     verify(userRepository).save(user);
     verify(jwtTokenService).revokeAllUserRefreshTokens(user.getId());
   }
@@ -363,7 +365,7 @@ class AdminServiceTest {
 
   @Test
   void suspendUser_alreadySuspended_throwsDuplicateResource() {
-    user.setStatus(User.Status.suspended);
+    user.setStatus(UserStatus.suspended);
     when(userRepository.findById(user.getId())).thenReturn(java.util.Optional.of(user));
 
     assertThatThrownBy(() -> adminService.suspendUser(user.getId()))
@@ -376,7 +378,7 @@ class AdminServiceTest {
 
   @Test
   void restoreUser_success_setsStatusToActivated() {
-    user.setStatus(User.Status.suspended);
+    user.setStatus(UserStatus.suspended);
     UserListResponse activatedResponse =
         UserListResponse.builder()
             .id(user.getId())
@@ -393,7 +395,7 @@ class AdminServiceTest {
     UserListResponse result = adminService.restoreUser(user.getId());
 
     assertThat(result).isEqualTo(activatedResponse);
-    assertThat(user.getStatus()).isEqualTo(User.Status.activated);
+    assertThat(user.getStatus()).isEqualTo(UserStatus.activated);
     verify(userRepository).save(user);
   }
 
@@ -411,7 +413,7 @@ class AdminServiceTest {
 
   @Test
   void restoreUser_softDeletedUser_throwsResourceNotFound() {
-    user.setStatus(User.Status.suspended);
+    user.setStatus(UserStatus.suspended);
     user.setDeletedAt(Instant.now());
     when(userRepository.findById(user.getId())).thenReturn(java.util.Optional.of(user));
 
@@ -424,7 +426,7 @@ class AdminServiceTest {
 
   @Test
   void restoreUser_notSuspended_throwsDuplicateResource() {
-    user.setStatus(User.Status.activated);
+    user.setStatus(UserStatus.activated);
     when(userRepository.findById(user.getId())).thenReturn(java.util.Optional.of(user));
 
     assertThatThrownBy(() -> adminService.restoreUser(user.getId()))

@@ -16,6 +16,7 @@ import com.vegalife.dto.request.location.LocationNearbyRequest;
 import com.vegalife.dto.request.location.LocationUpdateRequest;
 import com.vegalife.dto.response.admin.AdminLocationResponse;
 import com.vegalife.dto.response.location.LocationResponse;
+import com.vegalife.enums.post.PlaceType;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Location;
 import com.vegalife.repository.admin.ModerationLogRepository;
@@ -258,7 +259,7 @@ class LocationServiceTest {
     assertThat(response).isSameAs(expected);
     ArgumentCaptor<Location> savedCaptor = ArgumentCaptor.forClass(Location.class);
     verify(locationRepository).saveAndFlush(savedCaptor.capture());
-    assertThat(savedCaptor.getValue().getPlaceType()).isEqualTo(Location.PlaceType.restaurant);
+    assertThat(savedCaptor.getValue().getPlaceType()).isEqualTo(PlaceType.restaurant);
 
     ArgumentCaptor<ModerationLog> logCaptor = ArgumentCaptor.forClass(ModerationLog.class);
     verify(moderationLogRepository).save(logCaptor.capture());
@@ -332,7 +333,7 @@ class LocationServiceTest {
         .address("123 Vegan St")
         .latitude(new BigDecimal("10.000000"))
         .longitude(new BigDecimal("106.000000"))
-        .placeType(Location.PlaceType.restaurant)
+        .placeType(PlaceType.restaurant)
         .rating(rating)
         .build();
   }
@@ -344,7 +345,7 @@ class LocationServiceTest {
         .address("123 Vegan St")
         .latitude(lat)
         .longitude(lng)
-        .placeType(Location.PlaceType.restaurant)
+        .placeType(PlaceType.restaurant)
         .build();
   }
 

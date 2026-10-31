@@ -37,7 +37,22 @@ Vegalife is a social platform for the vegan community. Users can share experienc
 
 ## Architecture
 
-Layered architecture with package-by-layer: `controller/` → `service/` → `repository/`. Domain modules (user, recipe, content, etc.) will be added as features are built, organized within each layer. Cross-cutting concerns (config, security, exceptions) live in `shared/`.
+Layered architecture with package-by-layer: `controller/` → `service/` → `repository/`. Domain modules (user, recipe, content, etc.) will be added as features are built, organized within each layer. Cross-cutting concerns live in `shared/`.
+
+Packages are **ranked** and a package may import only from its own rank or lower:
+
+| Rank | Packages |
+|------|----------|
+| 1 | `shared/` (`dto`, `exception`, `openapi`, `validation`), `enums/` |
+| 2 | `model/` — JPA entities only, no enums or DTOs |
+| 3 | `repository/` |
+| 4 | `dto/` (`request`, `response`, `mapper`) |
+| 5 | `service/` — business logic, `*Properties`, and outbound *ports* (interfaces the service calls) |
+| 6 | `infrastructure/` — adapters implementing those ports (email, embedding, google, payment, security) |
+| 7 | `controller/`, `scheduled/` |
+| 8 | `config/` — Spring `@Configuration` only |
+
+`docs/adrs/018-clean-architecture-package-dependencies.md` records the ranking and its rationale; `tools/rank-check.ps1` verifies it (`pwsh tools/rank-check.ps1`, zero upward edges required).
 
 - `docs/arch/project-structure.md` — repo layout, source tree, package responsibilities, conventions
 - `docs/arch/dependencies.md` — full dependency matrix (approved, planned, not-approved)
@@ -91,7 +106,7 @@ branch I'm on right now" → `.agents/plans/`.
 
 - **Commit messages**: Conventional Commits format — `<type>(<scope>): <summary>` where type is one of `feat` / `fix` / `refactor` / `test` / `chore` / `docs` / `style` / `perf` / `ci`. Scope is optional (e.g., `auth`, `recipe`). Summary is lowercase, no trailing period, under 72 characters. **Always include a body description** using `git commit -m "summary" -m "description"` — the body should explain what changed and why, not just repeat the summary.
 - **Branch naming**: `type/short-description` — e.g., `feat/user-registration`, `fix/login-bug`, `refactor/cleanup-auth`. One branch per plan, never reused across unrelated work.
-- **Package structure**: Package-by-layer (`controller/`, `service/`, `repository/`) with domain sub-packages as features grow (e.g., `controller/user/UserController.java`).
+- **Package structure**: Package-by-layer (`controller/`, `service/`, `repository/`) with domain sub-packages as features grow (e.g., `controller/user/UserController.java`). Packages are ranked (see Architecture above) — an import may only target the same rank or lower; `pwsh tools/rank-check.ps1` enforces this. Enums live in `enums/<domain>/`, never nested in an entity.
 - **Naming**: Standard Java/Spring conventions — `PascalCase` classes, `camelCase` methods/fields, `UPPER_SNAKE_CASE` constants. Entity names singular (`User`, not `Users`). REST endpoints plural (`/api/users`).
 - **Project tracking**: GitHub Issues + Projects. Issue types set via GitHub's selector (Task / Bug / Feature), not file-based.
 - **Docs placement**: Finished docs in `docs/`, agent config in `.agents/`, ephemeral plans in `.agents/plans/` (gitignored). Never mix these.

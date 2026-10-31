@@ -1,7 +1,7 @@
 package com.vegalife.repository.menu;
 
+import com.vegalife.enums.menu.MenuStatus;
 import com.vegalife.model.menu.Menu;
-import com.vegalife.model.menu.MenuStatus;
 import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDate;
 import java.util.ArrayList;

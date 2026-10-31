@@ -2,9 +2,9 @@ package com.vegalife.unit.repository.outbound;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.vegalife.model.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.model.outbound.OutboundMessage;
-import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;

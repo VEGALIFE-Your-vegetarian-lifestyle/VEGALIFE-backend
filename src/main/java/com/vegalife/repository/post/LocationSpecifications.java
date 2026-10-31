@@ -1,5 +1,6 @@
 package com.vegalife.repository.post;
 
+import com.vegalife.enums.post.PlaceType;
 import com.vegalife.model.post.Location;
 import jakarta.persistence.criteria.Predicate;
 import java.math.BigDecimal;
@@ -17,7 +18,7 @@ public final class LocationSpecifications {
    * satisfies a minRating/maxPriceLevel filter, since its value is unknown rather than qualifying.
    */
   public static Specification<Location> activeWithFilters(
-      BigDecimal minRating, Location.PlaceType placeType, Integer maxPriceLevel) {
+      BigDecimal minRating, PlaceType placeType, Integer maxPriceLevel) {
     return (root, query, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
       predicates.add(cb.isNull(root.get("deletedAt")));

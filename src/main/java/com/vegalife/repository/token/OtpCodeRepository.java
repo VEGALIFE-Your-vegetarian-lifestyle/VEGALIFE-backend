@@ -1,7 +1,7 @@
 package com.vegalife.repository.token;
 
+import com.vegalife.enums.token.OtpPurpose;
 import com.vegalife.model.token.OtpCode;
-import com.vegalife.model.token.OtpPurpose;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;

@@ -9,13 +9,13 @@ import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.request.post.RelatedPostsRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.dto.response.post.RelatedPostResponse;
-import com.vegalife.filter.ActiveEmbeddingModel;
-import com.vegalife.filter.ContentFilterPayload;
-import com.vegalife.filter.FilterProperties;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
+import com.vegalife.enums.post.MediaStatus;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.model.admin.ModerationLog;
-import com.vegalife.model.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
-import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
@@ -29,6 +29,9 @@ import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.filter.ActiveEmbeddingModel;
+import com.vegalife.service.filter.ContentFilterPayload;
+import com.vegalife.service.filter.FilterProperties;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -93,9 +96,9 @@ public class PostService {
     // (BR-FILTER-009). Only when app.filter.enabled=false (deliberate outage mode) does a published
     // post skip the filter and land directly in the admin review queue (flag=NEEDS_REVIEW,
     // status=unpublished) with no embedding call.
-    post.setStatus(Post.Status.created);
+    post.setStatus(PostStatus.created);
     if (request.isPublish()) {
-      post.setFlag(filterProperties.isEnabled() ? Post.Flag.PENDING : Post.Flag.NEEDS_REVIEW);
+      post.setFlag(filterProperties.isEnabled() ? PostFlag.PENDING : PostFlag.NEEDS_REVIEW);
     }
 
     Post saved = postRepository.saveAndFlush(post);
@@ -137,7 +140,7 @@ public class PostService {
     boolean willEnqueue = shouldEnqueueFilter(post, request.getPublish(), contentChanged);
     applyPublishState(post, request.getPublish(), isAdmin, willEnqueue);
     if (willEnqueue) {
-      post.setFlag(filterProperties.isEnabled() ? Post.Flag.PENDING : Post.Flag.NEEDS_REVIEW);
+      post.setFlag(filterProperties.isEnabled() ? PostFlag.PENDING : PostFlag.NEEDS_REVIEW);
     }
 
     Post saved = postRepository.saveAndFlush(post);
@@ -177,7 +180,7 @@ public class PostService {
             .findByIdAndDeletedAtIsNull(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
 
-    boolean currentlyHidden = post.getStatus() == Post.Status.hidden;
+    boolean currentlyHidden = post.getStatus() == PostStatus.hidden;
     if (hidden == currentlyHidden) {
       if (hidden) {
         return postMapper.toListResponse(post);
@@ -186,10 +189,10 @@ public class PostService {
     }
 
     if (hidden) {
-      post.setStatus(Post.Status.hidden);
+      post.setStatus(PostStatus.hidden);
       post.setPublishedAt(null);
     } else {
-      post.setStatus(Post.Status.created);
+      post.setStatus(PostStatus.created);
     }
     Post saved = postRepository.saveAndFlush(post);
     moderationLogRepository.save(
@@ -337,8 +340,8 @@ public class PostService {
    *     unpublished post being re-checked is validated as if it were published
    */
   private void applyPublishState(Post post, Boolean publish, boolean isAdmin, boolean willRequeue) {
-    boolean published = post.getStatus() == Post.Status.published;
-    boolean unpublished = post.getStatus() == Post.Status.unpublished;
+    boolean published = post.getStatus() == PostStatus.published;
+    boolean unpublished = post.getStatus() == PostStatus.unpublished;
     boolean willBePublished = publish != null ? publish : (published || willRequeue);
     if (willBePublished) {
       if (post.getCategories().isEmpty()) {
@@ -348,11 +351,11 @@ public class PostService {
     if (publish == null) {
       return;
     }
-    if (post.getStatus() == Post.Status.hidden && !isAdmin) {
+    if (post.getStatus() == PostStatus.hidden && !isAdmin) {
       throw new ValidationException("A hidden post can only be changed by an administrator");
     }
     if (!publish && (published || unpublished)) {
-      post.setStatus(Post.Status.created);
+      post.setStatus(PostStatus.created);
       post.setPublishedAt(null);
     }
   }
@@ -368,8 +371,7 @@ public class PostService {
       return publish;
     }
     return contentChanged
-        && (post.getStatus() == Post.Status.published
-            || post.getStatus() == Post.Status.unpublished);
+        && (post.getStatus() == PostStatus.published || post.getStatus() == PostStatus.unpublished);
   }
 
   /** FR-003: only a title or content change counts as a content change. */
@@ -387,8 +389,8 @@ public class PostService {
    * it through the moderation endpoint.
    */
   private void markForAdminReview(Post post) {
-    post.setFlag(Post.Flag.NEEDS_REVIEW);
-    post.setStatus(Post.Status.unpublished);
+    post.setFlag(PostFlag.NEEDS_REVIEW);
+    post.setStatus(PostStatus.unpublished);
     post.setPublishedAt(null);
     postRepository.saveAndFlush(post);
     log.info("Filter disabled: forwarded post {} to admin review queue", post.getId());
@@ -443,7 +445,7 @@ public class PostService {
             ? postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(ownerId, pageable)
             : postRepository
                 .findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-                    ownerId, Post.Status.published, pageable);
+                    ownerId, PostStatus.published, pageable);
 
     return PageResponse.from(posts.map(postMapper::toListResponse));
   }
@@ -454,7 +456,7 @@ public class PostService {
     Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
     Page<Post> posts =
         postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            Post.Status.published, pageable);
+            PostStatus.published, pageable);
 
     return PageResponse.from(posts.map(postMapper::toListResponse));
   }
@@ -480,7 +482,7 @@ public class PostService {
       return new HashSet<>();
     }
     List<Media> found = mediaRepository.findByIdInAndDeletedAtIsNull(ids);
-    boolean allSucceeded = found.stream().allMatch(m -> m.getStatus() == Media.Status.succeed);
+    boolean allSucceeded = found.stream().allMatch(m -> m.getStatus() == MediaStatus.succeed);
     if (found.size() != ids.size() || !allSucceeded) {
       throw new ValidationException(
           "One or more media do not exist, are deleted, or have not finished uploading");

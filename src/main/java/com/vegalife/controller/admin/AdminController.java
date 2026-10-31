@@ -6,9 +6,9 @@ import com.vegalife.dto.request.admin.UserListRequest;
 import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
 import com.vegalife.service.admin.AdminService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
 public class AdminController {
 
   private final AdminService adminService;

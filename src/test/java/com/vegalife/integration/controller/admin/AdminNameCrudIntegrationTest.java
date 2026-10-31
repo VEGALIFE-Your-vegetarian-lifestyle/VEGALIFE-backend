@@ -8,9 +8,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
-import com.vegalife.model.recipe.ModerationStatus;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CategoryRepository;
@@ -109,10 +111,10 @@ class AdminNameCrudIntegrationTest {
 
     adminToken =
         jwtTokenService.generateAccessToken(
-            createUser("adminnames", "admin.names@example.com", User.Role.ADMIN));
+            createUser("adminnames", "admin.names@example.com", UserRole.ADMIN));
     memberToken =
         jwtTokenService.generateAccessToken(
-            createUser("membernames", "member.names@example.com", User.Role.USER));
+            createUser("membernames", "member.names@example.com", UserRole.USER));
   }
 
   @Test
@@ -386,14 +388,14 @@ class AdminNameCrudIntegrationTest {
         .formatted(dishName);
   }
 
-  private User createUser(String username, String email, User.Role role) {
+  private User createUser(String username, String email, UserRole role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)
-            .status(User.Status.activated)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }

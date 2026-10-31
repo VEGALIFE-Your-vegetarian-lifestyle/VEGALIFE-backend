@@ -1,5 +1,6 @@
 package com.vegalife.repository.subscription;
 
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.model.subscription.PaymentLedger;
 import jakarta.persistence.criteria.Predicate;
 import java.time.Instant;
@@ -19,7 +20,7 @@ public final class PaymentLedgerSpecifications {
   private PaymentLedgerSpecifications() {}
 
   public static Specification<PaymentLedger> withFilters(
-      UUID userId, PaymentLedger.Status status, Instant createdFrom, Instant createdTo) {
+      UUID userId, PaymentLedgerStatus status, Instant createdFrom, Instant createdTo) {
     return (root, query, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
       if (userId != null) {

@@ -10,10 +10,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.response.auth.LoginResponse;
-import com.vegalife.infrastructure.google.GoogleIdTokenVerifier;
-import com.vegalife.infrastructure.google.GoogleTokenExchanger;
-import com.vegalife.infrastructure.google.GoogleUserInfo;
-import com.vegalife.model.user.AuthProvider;
+import com.vegalife.enums.user.AuthProvider;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserIdentity;
 import com.vegalife.repository.user.UserIdentityRepository;
@@ -34,12 +33,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class GoogleAuthServiceTest {
 
   private static final String CODE = "google-auth-code";
-  private static final String ID_TOKEN = "raw.id.token";
   private static final String SUBJECT = "google-sub-1";
   private static final String EMAIL = "johndoe@gmail.com";
 
-  @Mock private GoogleTokenExchanger tokenExchanger;
-  @Mock private GoogleIdTokenVerifier idTokenVerifier;
+  @Mock private GoogleIdentityProvider identityProvider;
   @Mock private UserIdentityRepository userIdentityRepository;
   @Mock private UserRepository userRepository;
   @Mock private AuthService authService;
@@ -57,8 +54,8 @@ class GoogleAuthServiceTest {
             .username("johndoe")
             .email(EMAIL)
             .emailVerified(true)
-            .status(User.Status.activated)
-            .role(User.Role.USER)
+            .status(UserStatus.activated)
+            .role(UserRole.USER)
             .passwordHash("$2a$12$hash")
             .build();
     expectedResponse =
@@ -68,10 +65,9 @@ class GoogleAuthServiceTest {
             .refreshToken("refresh")
             .build();
 
-    lenient().when(tokenExchanger.exchangeForIdToken(CODE)).thenReturn(ID_TOKEN);
     lenient()
-        .when(idTokenVerifier.verify(ID_TOKEN))
-        .thenReturn(new GoogleUserInfo(SUBJECT, EMAIL, true, "J"));
+        .when(identityProvider.resolve(CODE))
+        .thenReturn(new GoogleIdentityProvider.GoogleIdentity(SUBJECT, EMAIL, true, "J"));
     lenient().when(authService.issueTokens(any(User.class))).thenReturn(expectedResponse);
   }
 
@@ -110,7 +106,7 @@ class GoogleAuthServiceTest {
   @Test
   void loginWithGoogle_unverifiedLocalAccount_refusesAndLinksNothing() {
     verifiedUser.setEmailVerified(false);
-    verifiedUser.setStatus(User.Status.created);
+    verifiedUser.setStatus(UserStatus.created);
     when(userIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, SUBJECT))
         .thenReturn(Optional.empty());
     when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(verifiedUser));
@@ -125,7 +121,7 @@ class GoogleAuthServiceTest {
 
   @Test
   void loginWithGoogle_suspendedAccount_refusesAndLinksNothing() {
-    verifiedUser.setStatus(User.Status.suspended);
+    verifiedUser.setStatus(UserStatus.suspended);
     when(userIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, SUBJECT))
         .thenReturn(Optional.empty());
     when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(verifiedUser));
@@ -139,7 +135,7 @@ class GoogleAuthServiceTest {
 
   @Test
   void loginWithGoogle_deactivatedAccount_refuses() {
-    verifiedUser.setStatus(User.Status.deactivated);
+    verifiedUser.setStatus(UserStatus.deactivated);
     when(userIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, SUBJECT))
         .thenReturn(Optional.empty());
     when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(verifiedUser));
@@ -175,8 +171,8 @@ class GoogleAuthServiceTest {
     assertThat(created.getEmail()).isEqualTo(EMAIL);
     assertThat(created.getUsername()).isEqualTo("johndoe");
     assertThat(created.getEmailVerified()).isTrue();
-    assertThat(created.getStatus()).isEqualTo(User.Status.activated);
-    assertThat(created.getRole()).isEqualTo(User.Role.USER);
+    assertThat(created.getStatus()).isEqualTo(UserStatus.activated);
+    assertThat(created.getRole()).isEqualTo(UserRole.USER);
     assertThat(created.getPasswordHash()).isNull();
     verify(userIdentityRepository).saveAndFlush(any(UserIdentity.class));
     verify(authService).issueTokens(created);

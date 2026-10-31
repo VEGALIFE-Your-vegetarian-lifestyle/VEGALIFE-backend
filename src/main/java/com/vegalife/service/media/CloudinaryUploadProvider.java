@@ -3,7 +3,6 @@ package com.vegalife.service.media;
 import com.cloudinary.Cloudinary;
 import com.cloudinary.api.ApiResponse;
 import com.cloudinary.api.exceptions.NotFound;
-import com.vegalife.shared.config.MediaProperties;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;

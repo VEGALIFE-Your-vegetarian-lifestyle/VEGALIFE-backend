@@ -1,5 +1,6 @@
 package com.vegalife.model.recipe;
 
+import com.vegalife.enums.recipe.ModerationStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

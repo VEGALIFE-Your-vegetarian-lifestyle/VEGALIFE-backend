@@ -3,8 +3,8 @@ package com.vegalife.controller.admin;
 import com.vegalife.dto.request.admin.SettingsUpdateRequest;
 import com.vegalife.dto.response.admin.SettingGroupResponse;
 import com.vegalife.service.admin.AdminSettingsService;
-import com.vegalife.shared.config.OpenApiConfig;
 import com.vegalife.shared.dto.ApiResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/settings")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
-@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
+@SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
 public class AdminSettingsController {
 
   private final AdminSettingsService adminSettingsService;

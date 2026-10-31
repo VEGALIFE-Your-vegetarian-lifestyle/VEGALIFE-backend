@@ -1,5 +1,6 @@
 package com.vegalife.model.post;
 
+import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.model.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -45,7 +46,7 @@ public class Media {
 
   @Enumerated(EnumType.STRING)
   @Column(name = "status", length = 20, nullable = false)
-  private Status status;
+  private MediaStatus status;
 
   @Column(name = "duration_seconds")
   private Integer durationSeconds;
@@ -79,10 +80,4 @@ public class Media {
 
   @Column(name = "deleted_at")
   private Instant deletedAt;
-
-  public enum Status {
-    uploading,
-    succeed,
-    failed
-  }
 }

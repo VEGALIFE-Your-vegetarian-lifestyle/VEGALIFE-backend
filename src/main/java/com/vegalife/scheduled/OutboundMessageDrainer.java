@@ -1,11 +1,11 @@
 package com.vegalife.scheduled;
 
-import com.vegalife.model.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.model.outbound.OutboundMessage;
-import com.vegalife.model.outbound.OutboundStatus;
 import com.vegalife.repository.outbound.OutboundMessageQueueDao;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
-import com.vegalife.shared.config.OutboundMessageProperties;
+import com.vegalife.service.outbound.OutboundMessageProperties;
 import java.lang.management.ManagementFactory;
 import java.time.Duration;
 import java.time.Instant;

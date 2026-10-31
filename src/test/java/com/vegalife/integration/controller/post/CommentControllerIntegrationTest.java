@@ -9,6 +9,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
@@ -92,7 +95,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void createComment_authenticatedUserCreatesTopLevelComment() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
 
     mockMvc
         .perform(
@@ -116,7 +119,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void createComment_withParentIdCreatesNestedReply() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment parent =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -142,7 +145,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void createComment_withoutAuthenticationReturns401() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
 
     mockMvc
         .perform(
@@ -155,7 +158,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void createComment_blankContentReturns400() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
 
     mockMvc
         .perform(
@@ -169,7 +172,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void createComment_unpublishedPostReturns404() throws Exception {
-    Post post = savePost(otherUser, Post.Status.created);
+    Post post = savePost(otherUser, PostStatus.created);
 
     mockMvc
         .perform(
@@ -183,8 +186,8 @@ class CommentControllerIntegrationTest {
 
   @Test
   void createComment_parentFromAnotherPostReturns404() throws Exception {
-    Post target = savePost(otherUser, Post.Status.published);
-    Post differentPost = savePost(user, Post.Status.published);
+    Post target = savePost(otherUser, PostStatus.published);
+    Post differentPost = savePost(user, PostStatus.published);
     Comment parent =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -205,7 +208,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void updateComment_ownerEditsContentAndMarksEdited() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder().postId(post.getId()).userId(user.getId()).content("Typo").build());
@@ -228,7 +231,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void updateComment_secondEditStaysMarkedEdited() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -250,7 +253,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void updateComment_nonOwnerReturns403() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -273,7 +276,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void updateComment_withoutAuthenticationReturns401() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder().postId(post.getId()).userId(user.getId()).content("Mine").build());
@@ -288,7 +291,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void updateComment_blankContentReturns400() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder().postId(post.getId()).userId(user.getId()).content("Mine").build());
@@ -305,7 +308,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void updateComment_missingCommentReturns404() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
 
     mockMvc
         .perform(
@@ -319,8 +322,8 @@ class CommentControllerIntegrationTest {
 
   @Test
   void updateComment_commentFromAnotherPostReturns404() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
-    Post differentPost = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
+    Post differentPost = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -341,7 +344,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void deleteComment_ownerSoftDeletesOwnComment() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder().postId(post.getId()).userId(user.getId()).content("Mine").build());
@@ -361,7 +364,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void deleteComment_nonOwnerNonAdminReturns404() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -382,9 +385,9 @@ class CommentControllerIntegrationTest {
 
   @Test
   void deleteComment_adminDeletesAnotherUsersCommentAndLogsModeration() throws Exception {
-    User admin = saveUser("adminuser", "admin@example.com", User.Role.ADMIN);
+    User admin = saveUser("adminuser", "admin@example.com", UserRole.ADMIN);
     String adminToken = jwtTokenService.generateAccessToken(admin);
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -411,9 +414,9 @@ class CommentControllerIntegrationTest {
 
   @Test
   void deleteComment_adminDeletingOwnCommentIsNotLogged() throws Exception {
-    User admin = saveUser("adminuser", "admin@example.com", User.Role.ADMIN);
+    User admin = saveUser("adminuser", "admin@example.com", UserRole.ADMIN);
     String adminToken = jwtTokenService.generateAccessToken(admin);
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder().postId(post.getId()).userId(admin.getId()).content("Mine").build());
@@ -429,7 +432,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void deleteComment_withoutAuthenticationReturns401() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder().postId(post.getId()).userId(user.getId()).content("Mine").build());
@@ -441,7 +444,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void deleteComment_alreadyDeletedReturns404() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -460,7 +463,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void deleteComment_replyKeepsParentIdAfterParentIsDeleted() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment parent =
         commentRepository.saveAndFlush(
             Comment.builder().postId(post.getId()).userId(user.getId()).content("Parent").build());
@@ -486,7 +489,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void listComments_returnsNestedThreadWithoutAuthentication() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment root =
         commentRepository.saveAndFlush(
             Comment.builder().postId(post.getId()).userId(user.getId()).content("Root").build());
@@ -513,7 +516,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void listComments_deletedCommentShowsPlaceholderAndKeepsReplies() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment root =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -547,7 +550,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void listComments_paginatesRootComments() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     for (int i = 0; i < 3; i++) {
       commentRepository.saveAndFlush(
           Comment.builder().postId(post.getId()).userId(user.getId()).content("Root " + i).build());
@@ -566,7 +569,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void listComments_unpublishedPostReturns404() throws Exception {
-    Post post = savePost(otherUser, Post.Status.created);
+    Post post = savePost(otherUser, PostStatus.created);
 
     mockMvc
         .perform(get("/api/posts/{postId}/comments", post.getId()))
@@ -584,7 +587,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void reportComment_incrementsReportCount() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -607,7 +610,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void reportComment_repeatedCallsKeepIncrementing() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -633,7 +636,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void reportComment_unknownCommentReturns404() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
 
     mockMvc
         .perform(
@@ -644,7 +647,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void reportComment_withoutJwt_returns401() throws Exception {
-    Post post = savePost(otherUser, Post.Status.published);
+    Post post = savePost(otherUser, PostStatus.published);
     Comment comment =
         commentRepository.saveAndFlush(
             Comment.builder()
@@ -660,22 +663,22 @@ class CommentControllerIntegrationTest {
   }
 
   private User saveUser(String username, String email) {
-    return saveUser(username, email, User.Role.USER);
+    return saveUser(username, email, UserRole.USER);
   }
 
-  private User saveUser(String username, String email, User.Role role) {
+  private User saveUser(String username, String email, UserRole role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)
-            .status(User.Status.activated)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }
 
-  private Post savePost(User owner, Post.Status status) {
+  private Post savePost(User owner, PostStatus status) {
     return postRepository.saveAndFlush(
         Post.builder()
             .user(owner)

@@ -11,7 +11,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vegalife.model.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Media;
 import com.vegalife.repository.post.MediaRepository;

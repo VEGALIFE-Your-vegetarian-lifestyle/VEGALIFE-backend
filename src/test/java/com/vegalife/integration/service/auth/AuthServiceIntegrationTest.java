@@ -10,9 +10,9 @@ import static org.mockito.Mockito.verify;
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.response.auth.RegisterResponse;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.User;
-import com.vegalife.model.user.User.Role;
-import com.vegalife.model.user.User.Status;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.auth.AuthService;
 import com.vegalife.service.email.EmailService;
@@ -107,8 +107,8 @@ class AuthServiceIntegrationTest {
     assertThat(savedUser.getEmail()).isEqualTo("dbuser@test.com");
     assertThat(savedUser.getPasswordHash()).isNotNull();
     assertThat(savedUser.getEmailVerified()).isFalse();
-    assertThat(savedUser.getStatus()).isEqualTo(Status.created);
-    assertThat(savedUser.getRole()).isEqualTo(Role.USER);
+    assertThat(savedUser.getStatus()).isEqualTo(UserStatus.created);
+    assertThat(savedUser.getRole()).isEqualTo(UserRole.USER);
   }
 
   @Test
@@ -164,7 +164,7 @@ class AuthServiceIntegrationTest {
 
     User verifiedUser = userRepository.findById(user.getId()).orElseThrow();
     assertThat(verifiedUser.getEmailVerified()).isTrue();
-    assertThat(verifiedUser.getStatus()).isEqualTo(Status.activated);
+    assertThat(verifiedUser.getStatus()).isEqualTo(UserStatus.activated);
   }
 
   @Test
@@ -181,7 +181,7 @@ class AuthServiceIntegrationTest {
 
     User verifiedUser = userRepository.findById(user.getId()).orElseThrow();
     assertThat(verifiedUser.getEmailVerified()).isTrue();
-    assertThat(verifiedUser.getStatus()).isEqualTo(Status.activated);
+    assertThat(verifiedUser.getStatus()).isEqualTo(UserStatus.activated);
   }
 
   @Test

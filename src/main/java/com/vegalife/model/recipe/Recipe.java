@@ -1,5 +1,7 @@
 package com.vegalife.model.recipe;
 
+import com.vegalife.enums.recipe.Difficulty;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import jakarta.persistence.Column;
@@ -132,10 +134,4 @@ public class Recipe {
 
   @Column(name = "deleted_at")
   private Instant deletedAt;
-
-  public enum Difficulty {
-    EASY,
-    MEDIUM,
-    HARD
-  }
 }

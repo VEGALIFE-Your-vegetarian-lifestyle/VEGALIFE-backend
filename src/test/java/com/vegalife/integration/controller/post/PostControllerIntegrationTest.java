@@ -10,8 +10,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.vegalife.model.outbound.OutboundChannel;
-import com.vegalife.model.outbound.OutboundStatus;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
+import com.vegalife.enums.post.MediaStatus;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
@@ -105,7 +110,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void getPost_returnsAnotherUsersPublishedPost() throws Exception {
-    Post published = createPost(otherUser, "Someone else's post", Post.Status.published, null);
+    Post published = createPost(otherUser, "Someone else's post", PostStatus.published, null);
 
     mockMvc
         .perform(
@@ -120,7 +125,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void getPost_ownNonPublishedPostIsReturned() throws Exception {
-    Post draft = createPost(user, "My draft", Post.Status.created, null);
+    Post draft = createPost(user, "My draft", PostStatus.created, null);
 
     mockMvc
         .perform(
@@ -135,7 +140,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void getPost_softDeletedPostReturns404() throws Exception {
-    Post deleted = createPost(user, "Gone", Post.Status.published, Instant.now());
+    Post deleted = createPost(user, "Gone", PostStatus.published, Instant.now());
 
     mockMvc
         .perform(
@@ -155,7 +160,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void getPost_withoutJwt_returnsPublishedPost() throws Exception {
-    Post published = createPost(otherUser, "Public post", Post.Status.published, null);
+    Post published = createPost(otherUser, "Public post", PostStatus.published, null);
 
     mockMvc
         .perform(get("/api/posts/{postId}", published.getId()))
@@ -166,7 +171,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void getPost_withoutJwt_nonPublishedPostIsReturned() throws Exception {
-    Post draft = createPost(user, "My draft", Post.Status.created, null);
+    Post draft = createPost(user, "My draft", PostStatus.created, null);
 
     mockMvc
         .perform(get("/api/posts/{postId}", draft.getId()))
@@ -178,7 +183,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void getPost_withoutJwt_softDeletedPostReturns404() throws Exception {
-    Post deleted = createPost(user, "Gone", Post.Status.published, Instant.now());
+    Post deleted = createPost(user, "Gone", PostStatus.published, Instant.now());
 
     mockMvc.perform(get("/api/posts/{postId}", deleted.getId())).andExpect(status().isNotFound());
   }
@@ -214,14 +219,14 @@ class PostControllerIntegrationTest {
 
     Post createdPost = postRepository.findAll().getFirst();
     assertThat(createdPost.getUser().getId()).isEqualTo(user.getId());
-    assertThat(createdPost.getStatus()).isEqualTo(Post.Status.created);
+    assertThat(createdPost.getStatus()).isEqualTo(PostStatus.created);
     assertThat(createdPost.getPublishedAt()).isNull();
   }
 
   @Test
   void attachMedia_ownerAttachesAndGetPostReflectsIt() throws Exception {
-    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
-    Media media = createMedia(Media.Status.succeed);
+    Post ownedPost = createPost(user, "My post", PostStatus.created, null);
+    Media media = createMedia(MediaStatus.succeed);
 
     mockMvc
         .perform(
@@ -243,8 +248,8 @@ class PostControllerIntegrationTest {
 
   @Test
   void attachMedia_reCallIsIdempotentAndEmptyListDetachesAll() throws Exception {
-    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
-    Media media = createMedia(Media.Status.succeed);
+    Post ownedPost = createPost(user, "My post", PostStatus.created, null);
+    Media media = createMedia(MediaStatus.succeed);
     mockMvc
         .perform(
             post("/api/posts/{postId}/media", ownedPost.getId())
@@ -276,8 +281,8 @@ class PostControllerIntegrationTest {
 
   @Test
   void attachMedia_unsucceededMediaReturns400AndWritesNothing() throws Exception {
-    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
-    Media uploading = createMedia(Media.Status.uploading);
+    Post ownedPost = createPost(user, "My post", PostStatus.created, null);
+    Media uploading = createMedia(MediaStatus.uploading);
 
     mockMvc
         .perform(
@@ -292,7 +297,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void attachMedia_unknownMediaIdReturns400() throws Exception {
-    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+    Post ownedPost = createPost(user, "My post", PostStatus.created, null);
 
     mockMvc
         .perform(
@@ -305,8 +310,8 @@ class PostControllerIntegrationTest {
 
   @Test
   void attachMedia_nonOwnerNonAdminGetsNotFound() throws Exception {
-    Post othersPost = createPost(otherUser, "Someone else's post", Post.Status.created, null);
-    Media media = createMedia(Media.Status.succeed);
+    Post othersPost = createPost(otherUser, "Someone else's post", PostStatus.created, null);
+    Media media = createMedia(MediaStatus.succeed);
 
     mockMvc
         .perform(
@@ -319,7 +324,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void attachRecipes_ownerAttachesAndGetPostReflectsIt() throws Exception {
-    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+    Post ownedPost = createPost(user, "My post", PostStatus.created, null);
     Recipe recipe = createRecipe(user);
 
     mockMvc
@@ -342,7 +347,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void attachRecipes_replacingSetDetachesRecipesNotInNewSet() throws Exception {
-    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+    Post ownedPost = createPost(user, "My post", PostStatus.created, null);
     Recipe first = createRecipe(user);
     Recipe second = createRecipe(user);
     mockMvc
@@ -366,7 +371,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void attachRecipes_emptyListDetachesAll() throws Exception {
-    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+    Post ownedPost = createPost(user, "My post", PostStatus.created, null);
     Recipe recipe = createRecipe(user);
     mockMvc
         .perform(
@@ -388,7 +393,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void attachRecipes_unknownRecipeIdReturns400AndWritesNothing() throws Exception {
-    Post ownedPost = createPost(user, "My post", Post.Status.created, null);
+    Post ownedPost = createPost(user, "My post", PostStatus.created, null);
 
     mockMvc
         .perform(
@@ -407,7 +412,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void attachRecipes_nonOwnerNonAdminGetsNotFound() throws Exception {
-    Post othersPost = createPost(otherUser, "Someone else's post", Post.Status.created, null);
+    Post othersPost = createPost(otherUser, "Someone else's post", PostStatus.created, null);
     Recipe recipe = createRecipe(otherUser);
 
     mockMvc
@@ -421,10 +426,10 @@ class PostControllerIntegrationTest {
 
   @Test
   void attachMedia_adminCanAttachToAnotherUsersPost() throws Exception {
-    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
+    User admin = createUser("adminuser", "admin@example.com", UserRole.ADMIN);
     String adminToken = jwtTokenService.generateAccessToken(admin);
-    Post othersPost = createPost(otherUser, "Someone else's post", Post.Status.created, null);
-    Media media = createMedia(Media.Status.succeed);
+    Post othersPost = createPost(otherUser, "Someone else's post", PostStatus.created, null);
+    Media media = createMedia(MediaStatus.succeed);
 
     mockMvc
         .perform(
@@ -462,8 +467,8 @@ class PostControllerIntegrationTest {
         .andExpect(jsonPath("$.data.categoryIds[0]").value(category.getId().toString()));
 
     Post queuedPost = postRepository.findAll().getFirst();
-    assertThat(queuedPost.getStatus()).isEqualTo(Post.Status.created);
-    assertThat(queuedPost.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(queuedPost.getStatus()).isEqualTo(PostStatus.created);
+    assertThat(queuedPost.getFlag()).isEqualTo(PostFlag.PENDING);
     assertThat(queuedPost.getPublishedAt()).isNull();
     assertThat(outboundMessageRepository.findAll())
         .anySatisfy(
@@ -587,7 +592,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void updatePost_withOneField_updatesOnlyThatField() throws Exception {
-    Post existingPost = createPost(user, "Old title", Post.Status.published, null);
+    Post existingPost = createPost(user, "Old title", PostStatus.published, null);
     existingPost.setCategories(
         new java.util.HashSet<>(
             java.util.Set.of(
@@ -616,8 +621,8 @@ class PostControllerIntegrationTest {
 
     Post updatedPost = postRepository.findById(existingPost.getId()).orElseThrow();
     assertThat(updatedPost.getUser().getId()).isEqualTo(user.getId());
-    assertThat(updatedPost.getStatus()).isEqualTo(Post.Status.published);
-    assertThat(updatedPost.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(updatedPost.getStatus()).isEqualTo(PostStatus.published);
+    assertThat(updatedPost.getFlag()).isEqualTo(PostFlag.PENDING);
     assertThat(updatedPost.getViewCount()).isEqualTo(12);
     assertThat(outboundMessageRepository.findAll())
         .anySatisfy(
@@ -629,7 +634,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void updatePost_canChangeContentAndFeaturedImage() throws Exception {
-    Post existingPost = createPost(user, "Post title", Post.Status.created, null);
+    Post existingPost = createPost(user, "Post title", PostStatus.created, null);
 
     mockMvc
         .perform(
@@ -657,7 +662,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void updatePost_withInvalidFields_returns400() throws Exception {
-    Post existingPost = createPost(user, "Old title", Post.Status.created, null);
+    Post existingPost = createPost(user, "Old title", PostStatus.created, null);
     String path = "/api/posts/" + existingPost.getId();
 
     mockMvc
@@ -708,8 +713,8 @@ class PostControllerIntegrationTest {
 
   @Test
   void updatePost_whenPostIsMissingDeletedOrOwnedByAnotherUser_returns404() throws Exception {
-    Post deletedPost = createPost(user, "Deleted post", Post.Status.created, Instant.now());
-    Post otherUsersPost = createPost(otherUser, "Other user's post", Post.Status.created, null);
+    Post deletedPost = createPost(user, "Deleted post", PostStatus.created, Instant.now());
+    Post otherUsersPost = createPost(otherUser, "Other user's post", PostStatus.created, null);
     String body = "{\"title\":\"New title\",\"content\":\"New content\",\"rawContent\":{}}";
 
     mockMvc
@@ -743,7 +748,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void updatePost_publishQueuesDraftForFilteringWhenCategoryAssigned() throws Exception {
-    Post existingPost = createPost(user, "Post title", Post.Status.created, null);
+    Post existingPost = createPost(user, "Post title", PostStatus.created, null);
     Category category = categoryRepository.saveAndFlush(Category.builder().name("Recipes").build());
 
     mockMvc
@@ -761,14 +766,14 @@ class PostControllerIntegrationTest {
         .andExpect(jsonPath("$.data.categoryIds[0]").value(category.getId().toString()));
 
     Post queuedPost = postRepository.findById(existingPost.getId()).orElseThrow();
-    assertThat(queuedPost.getStatus()).isEqualTo(Post.Status.created);
-    assertThat(queuedPost.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(queuedPost.getStatus()).isEqualTo(PostStatus.created);
+    assertThat(queuedPost.getFlag()).isEqualTo(PostFlag.PENDING);
     assertThat(queuedPost.getPublishedAt()).isNull();
   }
 
   @Test
   void updatePost_publishWithoutCategoryReturns400() throws Exception {
-    Post existingPost = createPost(user, "Post title", Post.Status.created, null);
+    Post existingPost = createPost(user, "Post title", PostStatus.created, null);
 
     mockMvc
         .perform(
@@ -781,8 +786,8 @@ class PostControllerIntegrationTest {
 
   @Test
   void updatePost_adminCanEditAnotherUsersPostAndActionIsLogged() throws Exception {
-    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
-    Post otherUsersPost = createPost(otherUser, "Other title", Post.Status.created, null);
+    User admin = createUser("adminuser", "admin@example.com", UserRole.ADMIN);
+    Post otherUsersPost = createPost(otherUser, "Other title", PostStatus.created, null);
 
     mockMvc
         .perform(
@@ -807,7 +812,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void deletePost_ownerSoftDeletesPost() throws Exception {
-    Post existingPost = createPost(user, "Post title", Post.Status.created, null);
+    Post existingPost = createPost(user, "Post title", PostStatus.created, null);
 
     mockMvc
         .perform(
@@ -837,7 +842,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void deletePost_ofAnotherUserOrMissing_returns404AndKeepsPost() throws Exception {
-    Post otherUsersPost = createPost(otherUser, "Other title", Post.Status.created, null);
+    Post otherUsersPost = createPost(otherUser, "Other title", PostStatus.created, null);
 
     mockMvc
         .perform(
@@ -856,8 +861,8 @@ class PostControllerIntegrationTest {
 
   @Test
   void deletePost_adminCanDeleteAnotherUsersPostAndActionIsLogged() throws Exception {
-    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
-    Post otherUsersPost = createPost(otherUser, "Other title", Post.Status.published, null);
+    User admin = createUser("adminuser", "admin@example.com", UserRole.ADMIN);
+    Post otherUsersPost = createPost(otherUser, "Other title", PostStatus.published, null);
 
     mockMvc
         .perform(
@@ -879,9 +884,9 @@ class PostControllerIntegrationTest {
 
   @Test
   void updateVisibility_adminHidesAndUnhidesPostAndActionsAreLogged() throws Exception {
-    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
+    User admin = createUser("adminuser", "admin@example.com", UserRole.ADMIN);
     String adminToken = jwtTokenService.generateAccessToken(admin);
-    Post published = createPost(user, "Published", Post.Status.published, null);
+    Post published = createPost(user, "Published", PostStatus.published, null);
     published.setPublishedAt(Instant.now());
     postRepository.saveAndFlush(published);
 
@@ -921,7 +926,7 @@ class PostControllerIntegrationTest {
 
   @Test
   void updateVisibility_nonAdminReturns403AndWithoutJwtReturns401() throws Exception {
-    Post existingPost = createPost(user, "Mine", Post.Status.published, null);
+    Post existingPost = createPost(user, "Mine", PostStatus.published, null);
 
     mockMvc
         .perform(
@@ -938,14 +943,14 @@ class PostControllerIntegrationTest {
         .andExpect(status().isUnauthorized());
 
     assertThat(postRepository.findById(existingPost.getId()).orElseThrow().getStatus())
-        .isEqualTo(Post.Status.published);
+        .isEqualTo(PostStatus.published);
   }
 
   @Test
   void updateVisibility_invalidBodyMissingPostAndNotHiddenPost() throws Exception {
-    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
+    User admin = createUser("adminuser", "admin@example.com", UserRole.ADMIN);
     String adminToken = jwtTokenService.generateAccessToken(admin);
-    Post existingPost = createPost(user, "Mine", Post.Status.published, null);
+    Post existingPost = createPost(user, "Mine", PostStatus.published, null);
 
     mockMvc
         .perform(
@@ -973,11 +978,11 @@ class PostControllerIntegrationTest {
 
   @Test
   void listPostsOfUser_guestSeesOnlyPublishedPostsOfThatUser() throws Exception {
-    createPost(user, "Draft", Post.Status.created, null);
-    createPost(user, "Hidden", Post.Status.hidden, null);
-    createPost(user, "Deleted", Post.Status.published, Instant.now());
-    createPost(user, "Published", Post.Status.published, null);
-    createPost(otherUser, "Someone else", Post.Status.published, null);
+    createPost(user, "Draft", PostStatus.created, null);
+    createPost(user, "Hidden", PostStatus.hidden, null);
+    createPost(user, "Deleted", PostStatus.published, Instant.now());
+    createPost(user, "Published", PostStatus.published, null);
+    createPost(otherUser, "Someone else", PostStatus.published, null);
 
     mockMvc
         .perform(get("/api/users/{userId}/posts", user.getId()))
@@ -988,9 +993,9 @@ class PostControllerIntegrationTest {
 
   @Test
   void listPostsOfUser_otherMemberSeesOnlyPublished_ownerAndAdminSeeAll() throws Exception {
-    createPost(user, "Draft", Post.Status.created, null);
-    createPost(user, "Published", Post.Status.published, null);
-    User admin = createUser("adminuser", "admin@example.com", User.Role.ADMIN);
+    createPost(user, "Draft", PostStatus.created, null);
+    createPost(user, "Published", PostStatus.published, null);
+    User admin = createUser("adminuser", "admin@example.com", UserRole.ADMIN);
 
     mockMvc
         .perform(
@@ -1022,10 +1027,10 @@ class PostControllerIntegrationTest {
 
   @Test
   void listUserPosts_returnsOnlyOwnNonDeletedPostsWithAnyStatus() throws Exception {
-    createPost(user, "Published post", Post.Status.published, null);
-    createPost(user, "Hidden post", Post.Status.hidden, null);
-    createPost(user, "Deleted post", Post.Status.published, Instant.now());
-    createPost(otherUser, "Another user's post", Post.Status.published, null);
+    createPost(user, "Published post", PostStatus.published, null);
+    createPost(user, "Hidden post", PostStatus.hidden, null);
+    createPost(user, "Deleted post", PostStatus.published, Instant.now());
+    createPost(otherUser, "Another user's post", PostStatus.published, null);
 
     mockMvc
         .perform(get("/api/posts").header("Authorization", "Bearer " + accessToken))
@@ -1043,9 +1048,9 @@ class PostControllerIntegrationTest {
 
   @Test
   void listUserPosts_appliesPagination() throws Exception {
-    createPost(user, "First post", Post.Status.created, null);
-    createPost(user, "Second post", Post.Status.published, null);
-    createPost(user, "Third post", Post.Status.unpublished, null);
+    createPost(user, "First post", PostStatus.created, null);
+    createPost(user, "Second post", PostStatus.published, null);
+    createPost(user, "Third post", PostStatus.unpublished, null);
 
     mockMvc
         .perform(
@@ -1076,9 +1081,9 @@ class PostControllerIntegrationTest {
 
   @Test
   void listFeed_guestSeesOnlyPublishedPostsNewestFirst() throws Exception {
-    createPost(user, "Draft", Post.Status.created, null);
-    createPost(user, "Hidden", Post.Status.hidden, null);
-    createPost(user, "Deleted", Post.Status.published, Instant.now());
+    createPost(user, "Draft", PostStatus.created, null);
+    createPost(user, "Hidden", PostStatus.hidden, null);
+    createPost(user, "Deleted", PostStatus.published, Instant.now());
     createPublished(user, "Older", Instant.parse("2026-01-01T00:00:00Z"));
     createPublished(otherUser, "Newer", Instant.parse("2026-02-01T00:00:00Z"));
 
@@ -1095,8 +1100,8 @@ class PostControllerIntegrationTest {
 
   @Test
   void listFeed_memberSeesSamePublishedPostsAsGuest() throws Exception {
-    createPost(user, "Draft", Post.Status.created, null);
-    createPost(user, "Published", Post.Status.published, null);
+    createPost(user, "Draft", PostStatus.created, null);
+    createPost(user, "Published", PostStatus.published, null);
 
     mockMvc
         .perform(get("/api/posts/feed").header("Authorization", "Bearer " + accessToken))
@@ -1131,22 +1136,22 @@ class PostControllerIntegrationTest {
   }
 
   private User createUser(String username, String email) {
-    return createUser(username, email, User.Role.USER);
+    return createUser(username, email, UserRole.USER);
   }
 
-  private User createUser(String username, String email, User.Role role) {
+  private User createUser(String username, String email, UserRole role) {
     return userRepository.save(
         User.builder()
             .username(username)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)
-            .status(User.Status.activated)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build());
   }
 
-  private Post createPost(User owner, String title, Post.Status status, Instant deletedAt) {
+  private Post createPost(User owner, String title, PostStatus status, Instant deletedAt) {
     return postRepository.save(
         Post.builder()
             .user(owner)
@@ -1160,12 +1165,12 @@ class PostControllerIntegrationTest {
   }
 
   private Post createPublished(User owner, String title, Instant publishedAt) {
-    Post post = createPost(owner, title, Post.Status.published, null);
+    Post post = createPost(owner, title, PostStatus.published, null);
     post.setPublishedAt(publishedAt);
     return postRepository.save(post);
   }
 
-  private Media createMedia(Media.Status status) {
+  private Media createMedia(MediaStatus status) {
     return mediaRepository.save(
         Media.builder().mediaUrl("https://example.com/video.mp4").status(status).build());
   }

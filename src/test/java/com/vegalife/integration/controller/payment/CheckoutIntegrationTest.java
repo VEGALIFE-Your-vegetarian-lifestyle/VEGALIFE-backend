@@ -7,7 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vegalife.infrastructure.payment.vnpay.VnpayProperties;
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.infrastructure.payment.vnpay.VnpaySigner;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.PaymentLedger;
@@ -15,8 +17,9 @@ import com.vegalife.model.user.User;
 import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.payment.PaymentProperties;
+import com.vegalife.service.payment.VnpayProperties;
 import com.vegalife.service.token.JwtTokenService;
-import com.vegalife.shared.config.PaymentProperties;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.BeforeEach;
@@ -87,8 +90,8 @@ class CheckoutIntegrationTest {
             .username("checkoutuser")
             .email("checkout@example.com")
             .passwordHash("$2a$10$test")
-            .role(User.Role.USER)
-            .status(User.Status.activated)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
             .emailVerified(true)
             .build();
     testUser = userRepository.save(testUser);
@@ -155,7 +158,7 @@ class CheckoutIntegrationTest {
 
     PaymentLedger ledger = paymentLedgerRepository.findByTxnRef(txnRef).orElseThrow();
     assertThat(paymentId).isEqualTo(ledger.getId().toString());
-    assertThat(ledger.getStatus()).isEqualTo(PaymentLedger.Status.pending);
+    assertThat(ledger.getStatus()).isEqualTo(PaymentLedgerStatus.pending);
     assertThat(ledger.getUserId()).isEqualTo(testUser.getId());
     assertThat(ledger.getPlanId()).isEqualTo(proPlan.getId());
     assertThat(ledger.getProvider()).isEqualTo("vnpay");

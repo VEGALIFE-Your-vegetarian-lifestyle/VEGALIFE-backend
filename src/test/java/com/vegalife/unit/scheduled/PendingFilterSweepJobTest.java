@@ -9,12 +9,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.vegalife.filter.FilterProperties;
-import com.vegalife.model.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.model.post.Post;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.scheduled.PendingFilterSweepJob;
+import com.vegalife.service.filter.FilterProperties;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -44,8 +46,8 @@ class PendingFilterSweepJobTest {
     Post stalePost =
         Post.builder()
             .id(UUID.randomUUID())
-            .flag(Post.Flag.PENDING)
-            .status(Post.Status.created)
+            .flag(PostFlag.PENDING)
+            .status(PostStatus.created)
             .build();
     when(outboundMessageRepository.findRecipientsOfChannelWithLatestBefore(
             eq(OutboundChannel.CONTENT_FILTER), any(Instant.class)))
@@ -62,8 +64,8 @@ class PendingFilterSweepJobTest {
     Instant expectedCutoff = Instant.now().minus(properties.getSweepMaxAge());
     assertThat(cutoffCaptor.getValue())
         .isBetween(expectedCutoff.minusSeconds(5), expectedCutoff.plusSeconds(5));
-    assertThat(stalePost.getFlag()).isEqualTo(Post.Flag.NEEDS_REVIEW);
-    assertThat(stalePost.getStatus()).isEqualTo(Post.Status.unpublished);
+    assertThat(stalePost.getFlag()).isEqualTo(PostFlag.NEEDS_REVIEW);
+    assertThat(stalePost.getStatus()).isEqualTo(PostStatus.unpublished);
     verify(postRepository).save(stalePost);
   }
 
@@ -72,12 +74,12 @@ class PendingFilterSweepJobTest {
     UUID filteredId = UUID.randomUUID();
     UUID deletedId = UUID.randomUUID();
     Post alreadyFiltered =
-        Post.builder().id(filteredId).flag(Post.Flag.PASSED).status(Post.Status.published).build();
+        Post.builder().id(filteredId).flag(PostFlag.PASSED).status(PostStatus.published).build();
     Post deleted =
         Post.builder()
             .id(deletedId)
-            .flag(Post.Flag.PENDING)
-            .status(Post.Status.created)
+            .flag(PostFlag.PENDING)
+            .status(PostStatus.created)
             .deletedAt(Instant.now())
             .build();
     when(outboundMessageRepository.findRecipientsOfChannelWithLatestBefore(
@@ -88,8 +90,8 @@ class PendingFilterSweepJobTest {
 
     job.sweepStalePendingPosts();
 
-    assertThat(alreadyFiltered.getFlag()).isEqualTo(Post.Flag.PASSED);
-    assertThat(deleted.getFlag()).isEqualTo(Post.Flag.PENDING);
+    assertThat(alreadyFiltered.getFlag()).isEqualTo(PostFlag.PASSED);
+    assertThat(deleted.getFlag()).isEqualTo(PostFlag.PENDING);
     verify(postRepository, never()).save(any(Post.class));
   }
 
