@@ -1,4 +1,4 @@
-package com.vegalife.service.recipe;
+package com.vegalife.dto.mapper.recipe;
 
 import com.vegalife.dto.response.menu.RecipeSummaryResponse;
 import com.vegalife.model.recipe.Recipe;

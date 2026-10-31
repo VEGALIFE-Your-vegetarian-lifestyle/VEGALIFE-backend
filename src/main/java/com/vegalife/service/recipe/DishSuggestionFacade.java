@@ -1,5 +1,6 @@
 package com.vegalife.service.recipe;
 
+import com.vegalife.dto.mapper.recipe.RecipeSummaryMapper;
 import com.vegalife.dto.request.recipe.DishSuggestionRequest;
 import com.vegalife.dto.response.menu.RecipeSummaryResponse;
 import com.vegalife.dto.response.recipe.DishSuggestionResponse;
