@@ -26,8 +26,8 @@ public interface GoogleIdentityProvider {
   /**
    * @param authorizationCode the code the client obtained from Google Identity Services
    * @return the verified identity carried by that code
-   * @throws com.vegalife.shared.exception.InvalidTokenException never — see the adapter, which
-   *     throws {@code GoogleAuthException} for a code or token Google rejects
+   * @throws com.vegalife.shared.exception.GoogleAuthException if Google rejects the code, or the
+   *     token it yields fails signature, issuer, audience, expiry or verified-email checks
    */
   GoogleIdentity resolve(String authorizationCode);
 }
