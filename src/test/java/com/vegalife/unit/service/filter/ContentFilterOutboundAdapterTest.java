@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -18,12 +19,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
@@ -38,6 +41,9 @@ import com.vegalife.service.filter.ContentFilterService.FilterResult;
 import com.vegalife.service.filter.DuplicateDetector;
 import com.vegalife.service.filter.EmbeddingComponentScorer;
 import com.vegalife.service.filter.FilterVerdict;
+import com.vegalife.shared.exception.EmbeddingClientException;
+import com.vegalife.shared.exception.RetryableDeliveryException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +51,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.InvalidDataAccessResourceUsageException;
@@ -77,6 +84,7 @@ class ContentFilterOutboundAdapterTest {
   @Mock private ActiveEmbeddingModel activeEmbeddingModel;
   @Mock private EmbeddingComponentScorer.Factory componentScorerFactory;
   @Mock private ComponentScorer recipeScorer;
+  @Mock private ModerationLogRepository moderationLogRepository;
 
   private ContentFilterOutboundAdapter adapter;
   private final ObjectMapper objectMapper = new ObjectMapper();
@@ -93,7 +101,8 @@ class ContentFilterOutboundAdapterTest {
             duplicateDetector,
             activeEmbeddingModel,
             objectMapper,
-            componentScorerFactory);
+            componentScorerFactory,
+            moderationLogRepository);
     noRecipeAttached();
   }
 
@@ -489,6 +498,114 @@ class ContentFilterOutboundAdapterTest {
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
     assertEquals(PostFlag.REJECTED, post.getFlag());
+  }
+
+  /**
+   * ADR-020, the case that caused the outage: the provider rejected the credential permanently, so
+   * retrying the message 116 times could only waste ten hours. The post must leave {@code PENDING}
+   * now and the reason must be readable afterwards.
+   */
+  @Test
+  void permanentEmbeddingRejectionQueuesThePostForReviewInsteadOfRetrying() throws Exception {
+    Post post = post(PostStatus.created);
+    when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+    when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(contentFilterService.filter(TITLE + "\n" + CONTENT))
+        .thenThrow(
+            new EmbeddingClientException(
+                "Gemini embedding call failed for model gemini-embedding-001: the provider"
+                    + " rejected the credential (HTTP 400) [API_KEY_INVALID]",
+                EmbeddingClientException.Reason.AUTH,
+                400,
+                "API_KEY_INVALID",
+                null,
+                null));
+
+    // No exception: the message's purpose is discharged by the review queue, not by a retry.
+    adapter.deliver(message(new ContentFilterPayload(post.getId())));
+
+    assertEquals(PostFlag.NEEDS_REVIEW, post.getFlag());
+    assertEquals(PostStatus.unpublished, post.getStatus());
+    verify(postRepository).save(post);
+
+    ArgumentCaptor<ModerationLog> log = ArgumentCaptor.forClass(ModerationLog.class);
+    verify(moderationLogRepository).save(log.capture());
+    assertEquals("FILTER_UNAVAILABLE", log.getValue().getAction());
+    assertEquals("POST", log.getValue().getTargetType());
+    assertEquals(post.getId(), log.getValue().getTargetId());
+    // An operator must be able to tell a lapsed key from a bad request without the raw body.
+    assertTrue(log.getValue().getReason().contains("AUTH"));
+    assertTrue(log.getValue().getReason().contains("HTTP 400"));
+    assertTrue(log.getValue().getReason().contains("API_KEY_INVALID"));
+  }
+
+  /** A quota is transient: the post must stay untouched and the provider's hint must survive. */
+  @Test
+  void transientEmbeddingFailureIsRethrownRetryableWithTheProviderHint() throws Exception {
+    Post post = post(PostStatus.created);
+    when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+    when(contentFilterService.filter(TITLE + "\n" + CONTENT))
+        .thenThrow(
+            new EmbeddingClientException(
+                "rate limited",
+                EmbeddingClientException.Reason.RATE_LIMITED,
+                429,
+                "RESOURCE_EXHAUSTED",
+                Duration.ofSeconds(40),
+                null));
+
+    RetryableDeliveryException thrown =
+        assertThrows(
+            RetryableDeliveryException.class,
+            () -> adapter.deliver(message(new ContentFilterPayload(post.getId()))));
+
+    assertEquals(Duration.ofSeconds(40), thrown.getRetryAfter());
+    assertEquals(PostFlag.PENDING, post.getFlag());
+    verify(postRepository, never()).save(any(Post.class));
+    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
+  }
+
+  /** A message abandoned before delivery still owes the post a terminal state. */
+  @Test
+  void abandonedMessageSettlesAPendingPost() throws Exception {
+    Post post = post(PostStatus.created);
+    when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+    when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    adapter.onDeliveryAbandoned(
+        message(new ContentFilterPayload(post.getId())), new IllegalStateException("unavailable"));
+
+    assertEquals(PostFlag.NEEDS_REVIEW, post.getFlag());
+    assertEquals(PostStatus.unpublished, post.getStatus());
+    ArgumentCaptor<ModerationLog> log = ArgumentCaptor.forClass(ModerationLog.class);
+    verify(moderationLogRepository).save(log.capture());
+    assertEquals("FILTER_UNAVAILABLE", log.getValue().getAction());
+  }
+
+  /** Never let an abandonment overwrite a verdict that already ran. */
+  @Test
+  void abandonedMessageNeverOverwritesAnExistingVerdict() throws Exception {
+    Post post = post(PostStatus.unpublished);
+    post.setFlag(PostFlag.REJECTED);
+    when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+
+    adapter.onDeliveryAbandoned(
+        message(new ContentFilterPayload(post.getId())), new IllegalStateException("unavailable"));
+
+    assertEquals(PostFlag.REJECTED, post.getFlag());
+    verify(postRepository, never()).save(any(Post.class));
+    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
+  }
+
+  /** An unreadable payload has no post to settle; the hook must not throw into the drainer. */
+  @Test
+  void abandonedMessageWithUnreadablePayloadIsIgnored() {
+    OutboundMessage broken =
+        OutboundMessage.builder().id(UUID.randomUUID()).payload("not json").build();
+
+    adapter.onDeliveryAbandoned(broken, new IllegalStateException("unavailable"));
+
+    verify(postRepository, never()).findById(any());
   }
 
   private static ComponentScorer.ComponentResult needsReview(
