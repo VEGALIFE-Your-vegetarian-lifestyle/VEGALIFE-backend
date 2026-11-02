@@ -72,6 +72,8 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-RECP-002 | Ingredient and Dish Names Are Unique Case-Insensitively | Active | 2026-10-01 |
 | BR-RECP-003 | Recipe Name, Instructions, Servings, and Dish Are Required | Active | 2026-10-01 |
 | BR-DISH-001 | Dish and Ingredient Names Require Admin Approval and Rejection Is Permanent | Active | 2026-10-23 |
+| BR-DISH-002 | Dish Ingredient Suggestions and Advisory Required Flag | Active | 2026-11-02 |
+| BR-DISH-003 | Dish Ingredient Entries Come From Approved Recipes or an Administrator, and Deletion Is Permanent for Seeding | Active | 2026-11-02 |
 | BR-SUBS-001 | AI Quota Window Is the Current UTC Calendar Month | Active | 2026-10-04 |
 | BR-SUBS-002 | Plan Limits and Prices Are Data-Driven | Active | 2026-10-04 |
 | BR-SUBS-003 | Members Without a Subscription Row Are FREE by Default | Active | 2026-10-07 |

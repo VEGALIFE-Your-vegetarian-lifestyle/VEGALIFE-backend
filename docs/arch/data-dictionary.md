@@ -598,6 +598,30 @@ _Description: Persistent outbound message queue (transactional outbox) for email
 
 ---
 
+## Table 25: Dish_Ingredient
+
+_Description: Curated association between a dish and the ingredients that normally belong to it (V46 / BR-DISH-002, BR-DISH-003). Read by members as ingredient suggestions when writing a recipe for the dish, and used to derive the advisory `missingRequiredIngredients` warning. Entries are curated by an administrator, or seeded from a recipe at approval time with `is_required = false`._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| dish_id | UUID | PK, FK | No | References Dish(id) |
+| ingredient_id | UUID | PK, FK | No | References Ingredient(id) |
+| is_required | BOOLEAN | - | No | Advisory: ingredient is normally mandatory for this dish (default FALSE). Never blocks a recipe |
+| removed_at | TIMESTAMPTZ | - | Yes | Withdrawal tombstone set by an admin; the auto-seed path never clears it |
+| created_at | TIMESTAMPTZ | - | No | Timestamp when the entry is created |
+| updated_at | TIMESTAMPTZ | - | No | Timestamp of last update |
+
+**Constraints:**
+- PK: (dish_id, ingredient_id)
+- FK: dish_id REFERENCES dish(id) ON DELETE CASCADE
+- FK: ingredient_id REFERENCES ingredient(id) ON DELETE CASCADE
+
+**Indexes:**
+- `idx_dish_ingredient_dish_id` ON (dish_id)
+- `idx_dish_ingredient_ingredient_id` ON (ingredient_id)
+
+---
+
 ## Relationship Summary
 
 - **User** 1:N **UserProfile** (1:1 via unique FK)
@@ -619,6 +643,7 @@ _Description: Persistent outbound message queue (transactional outbox) for email
 - **Recipe** N:1 **Dish** (variations of a canonical dish)
 - **Recipe** N:1 **User** (author)
 - **Recipe** M:N **Ingredient** (via Recipe_Ingredient)
+- **Dish** M:N **Ingredient** (via Dish_Ingredient; curated suggestions, soft-withdrawable)
 - **Menu** N:1 **User**
 - **MenuDetail** N:1 **Menu**, N:1 **Dish** (unique per menu+date+meal_type)
 - **Location** 1:N **Post** (via location_id)

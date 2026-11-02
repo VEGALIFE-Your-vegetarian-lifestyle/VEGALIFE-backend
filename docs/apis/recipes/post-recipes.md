@@ -106,6 +106,7 @@ The client must not send `userId`, `dishId`, `id`, or timestamps. The server set
 | data.servings | integer | Number of servings. |
 | data.difficulty | string or null | `EASY`, `MEDIUM`, `HARD`, or `null`. |
 | data.ingredients | array | One entry per ingredient link, with the resolved `ingredientId` and the lowercased `name`. |
+| data.missingRequiredIngredients | array of string | Names of the dish's `required` ingredients this recipe omits (BR-DISH-002). Advisory: the recipe was created regardless. Empty array when nothing is missing. |
 | data.createdAt / data.updatedAt | string | Timestamps in ISO-8601 format. |
 
 ### Error Responses

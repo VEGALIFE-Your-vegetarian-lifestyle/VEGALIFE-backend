@@ -56,6 +56,16 @@ one wrong answer a queue must never give.
         "imageUrl": null,
         "cuisineType": null,
         "moderationStatus": "PENDING",
+        "suggestedIngredients": [
+          {
+            "ingredientId": "7d3e4f5a-6b7c-8d9e-0f1a-2b3c4d5e6f70",
+            "name": "rice noodles",
+            "moderationStatus": "APPROVED",
+            "required": true,
+            "createdAt": "2026-10-24T08:00:00Z",
+            "updatedAt": "2026-10-24T08:00:00Z"
+          }
+        ],
         "createdAt": "2026-10-24T08:00:00Z",
         "updatedAt": "2026-10-24T08:00:00Z"
       }
@@ -72,6 +82,11 @@ one wrong answer a queue must never give.
 
 Ingredient entries carry the same shape plus `calories`, `proteinG`,
 `carbohydrateG`, `fatG` and `fiberG`.
+
+`suggestedIngredients` is the dish's active curated list (BR-DISH-002), embedded so the
+admin detail screen does not need a second call. It includes entries whose ingredient name is
+still `PENDING` or `REJECTED` — an admin should see what is curated — unlike the member
+endpoint, which hides unapproved names. An empty array means nothing is curated yet.
 
 ## POST /api/admin/dishes
 
