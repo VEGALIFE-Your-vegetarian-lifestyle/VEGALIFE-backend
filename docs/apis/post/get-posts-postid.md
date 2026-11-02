@@ -1,0 +1,89 @@
+# API Reference: GET /api/posts/{postId}
+
+## Overview
+
+Return a single post by id, using the same response shape as the post list endpoints. Visibility depends only on the post not being soft-deleted, never on status or ownership — a draft, `unpublished`, or `hidden` post is returned to any caller just like a published one.
+
+## Endpoint
+
+```text
+GET /api/posts/{postId}
+```
+
+## Authentication
+
+Optional. No JWT is needed; the route is `permitAll`. Any caller — guest or authenticated — may read any `published` post. If a token is sent it is still validated: an invalid or expired token returns `401`.
+
+## Request
+
+### Path Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| postId | UUID | Yes | ID of the post to read. |
+
+### Query Parameters
+
+No query parameters.
+
+### Request Body
+
+No request body.
+
+## Responses
+
+### Success Response (200 OK)
+
+```json
+{
+  "success": true,
+  "message": "Post retrieved successfully",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "userId": "9f1c2f4a-8a3b-4c5d-9e6f-7a8b9c0d1e2f",
+    "displayName": "John Doe",
+    "avatarUrl": "https://res.cloudinary.com/vegalife/avatar/john.jpg",
+    "title": "Easy tofu bowl",
+    "rawContent": {"type": "doc", "content": []},
+    "featuredImageUrl": "https://example.com/tofu-bowl.jpg",
+    "categoryIds": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
+    "mediaIds": [],
+    "recipeIds": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
+    "status": "published",
+    "flag": "PASSED",
+    "viewCount": 12,
+    "publishedAt": "2026-09-26T10:00:00Z",
+    "createdAt": "2026-09-26T09:50:00Z"
+  }
+}
+```
+
+Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-posts.md` for the full field table, including the author summary (`userId`, `displayName`, `avatarUrl`). Unlike the list and feed endpoints, this endpoint resolves `recipeIds` to the post's actual attached recipes (issue #137), since it returns a single post rather than a page.
+
+### Error Responses
+
+| Status Code | Condition | Message |
+|-------------|-----------|---------|
+| 401 | A token is supplied but is invalid, expired, or the account is inactive | `Unauthorized` |
+| 404 | The post does not exist or is soft-deleted | `Post not found` |
+| 500 | Unexpected server error | `Internal server error` |
+
+## Business Rules
+
+- Visibility is gated by `deleted_at IS NULL` only (BR-POST-011); neither status nor ownership is checked, so another user's post is returned and the caller's own non-published post is returned too.
+- A soft-deleted post and an unknown id are both reported as `404 Post not found` — the same not-found-over-leak pattern used elsewhere in the post API, so no post data or existence is leaked.
+- Public access: this route is `permitAll`, so guests may read any non-deleted post — like `GET /api/posts/feed` and `GET /api/users/{userId}/posts`. Only a supplied-but-invalid token is rejected (`401`); a missing token is not.
+- No view-count increment, caching, or ETags are performed by this endpoint.
+
+## Example
+
+```bash
+curl http://localhost:8080/api/posts/550e8400-e29b-41d4-a716-446655440000
+```
+
+## Related
+
+- Feature spec: `docs/feats/get-post-by-id.md`
+- Business rules: `docs/brs/posts.md`
+- List responses use the same shape: `docs/apis/post/get-posts.md`
+- Shared error/response contract: `docs/apis/error-responses.md`

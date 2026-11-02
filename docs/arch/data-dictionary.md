@@ -7,7 +7,7 @@ _Description: Stores user account credentials, status, and role-based access con
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
 | id | UUID | PK | No | Unique identifier for each user |
-| username | VARCHAR(50) | Unique | No | Unique login username |
+| display_name | VARCHAR(100) | - | No | Display name shown next to the member's content; **not unique** (ADR-019) |
 | email | VARCHAR(100) | Unique | No | Registered email address |
 | password_hash | VARCHAR(255) | - | No | BCrypt hashed password |
 | role | VARCHAR(20) | - | No | User role: ADMIN, USER |
@@ -31,17 +31,18 @@ _Description: Stores user account credentials, status, and role-based access con
 
 ## Table 2: UserProfile
 
-_Description: Stores physical body metrics used for meal planning._
+_Description: Stores physical body metrics and the member's dietary profile used for meal planning and AI context._
 
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
 | id | UUID | PK | No | Unique identifier for user profile |
 | user_id | UUID | FK, Unique | No | References User(id) (1-to-1 relationship) |
-| height_cm | DECIMAL(5,2) | - | No | User height in centimeters |
-| weight_kg | DECIMAL(5,2) | - | No | User weight in kilograms |
-| age | INT | - | No | User age |
-| gender | VARCHAR(20) | - | No | User sex: male, female, other |
+| height_cm | DECIMAL(5,2) | - | Yes | User height in centimeters |
+| weight_kg | DECIMAL(5,2) | - | Yes | User weight in kilograms |
+| age | INT | - | Yes | User age |
+| gender | VARCHAR(20) | - | Yes | User sex: male, female, other |
 | description | TEXT | - | Yes | User description about themself |
+| dietary_preferences | JSONB | - | Yes | Single JSONB value: preferences, dislikes, allergies, restrictions (arrays of free-text tags) and health_goal (free text). All members optional. |
 | updated_at | TIMESTAMPTZ | - | No | Timestamp of the last metric update |
 
 **Constraints:**
@@ -81,7 +82,8 @@ _Description: Manages community blog posts and vegetarian articles._
 | user_id | UUID | FK | No | References User(id) - Author of the post |
 | location_id | UUID | FK | Yes | References Location(id) - Location tagged in post |
 | title | VARCHAR(255) | - | No | Title of the blog post |
-| content | TEXT | - | No | Full content body of the post |
+| content | TEXT | - | No | Plain-text content body, used as the semantic-filtering input |
+| raw_content | JSONB | - | No | Rich-text document produced by the frontend editor (V27) |
 | featured_image_url | TEXT | - | Yes | Thumbnail image for feed display |
 | status | VARCHAR(20) | - | No | Post status: created, processed, published, unpublished, hidden |
 | view_count | INT | - | No | Number of views |
@@ -235,13 +237,12 @@ _Description: Master list of vegan food materials/ingredients available in the s
 |------------|-----------|-----|------------|-------------|
 | id | UUID | PK | No | Unique identifier for ingredient |
 | name | VARCHAR(100) | - | No | Ingredient name (e.g., Tofu, Mushroom, Spinach) |
-| calories | DECIMAL(10,2) | - | Yes | Calories per 100g |
-| protein_g | DECIMAL(10,2) | - | Yes | Protein per 100g |
-| carbohydrate_g | DECIMAL(10,2) | - | Yes | Carbohydrates per 100g |
-| fat_g | DECIMAL(10,2) | - | Yes | Fat per 100g |
-| fiber_g | DECIMAL(10,2) | - | Yes | Fiber per 100g |
 | created_at | TIMESTAMPTZ | - | No | Timestamp of creation |
 | updated_at | TIMESTAMPTZ | - | No | Timestamp of last update |
+
+_Nutrition is not stored here. Before V43 the table carried per-100 g columns
+that had no recorded basis and could not be turned into a dish figure; they
+were dropped and the concept moved to `recipe` as author-entered totals._
 
 ---
 
@@ -261,8 +262,17 @@ _Description: Manages vegan recipes, preparation steps, and calorie values._
 | cook_time_minutes | INT | - | Yes | Estimated cooking duration in minutes |
 | servings | INT | - | No | Number of servings |
 | difficulty | VARCHAR(20) | - | Yes | Difficulty: EASY, MEDIUM, HARD |
+| calories | DECIMAL(10,2) | - | Yes | Author-entered calories for the **whole** recipe |
+| protein_g | DECIMAL(10,2) | - | Yes | Author-entered protein (g) for the whole recipe |
+| carbohydrate_g | DECIMAL(10,2) | - | Yes | Author-entered carbohydrate (g) for the whole recipe |
+| fat_g | DECIMAL(10,2) | - | Yes | Author-entered fat (g) for the whole recipe |
+| fiber_g | DECIMAL(10,2) | - | Yes | Author-entered fibre (g) for the whole recipe |
 | created_at | TIMESTAMPTZ | - | No | Timestamp when the recipe is created |
 | updated_at | TIMESTAMPTZ | - | No | Timestamp when the recipe is updated |
+
+_Nutrition columns (V42) are totals for the whole recipe, not per serving, and
+are nullable on purpose: `NULL` means the author did not provide the value and
+is never coerced to `0`. Per-serving values are derived from `servings`._
 | deleted_at | TIMESTAMPTZ | - | Yes | Soft delete timestamp |
 
 **Constraints:**
@@ -316,7 +326,7 @@ _Description: Canonical vegan dishes — each dish can have multiple recipe vari
 
 ## Table 15: Menu
 
-_Description: User-specific weekly meal plan generated based on BMI and available ingredients._
+_Description: User-specific weekly meal plan authored by the member or the AI assistant._
 
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
@@ -407,8 +417,6 @@ _Description: Tracks AI Chatbot conversations._
 | id | UUID | PK | No | Unique identifier for chat session |
 | user_id | UUID | FK | Yes | References User(id) (Null for guest users) |
 | title | TEXT | - | No | Title of conversation |
-| summary | TEXT | - | Yes | Summary of conversation |
-| recent_messages | JSONB | - | Yes | Recent messages for context |
 | created_at | TIMESTAMPTZ | - | No | Conversation start timestamp |
 | updated_at | TIMESTAMPTZ | - | No | Conversation last update timestamp |
 
@@ -493,6 +501,127 @@ _Description: Tracks AI usage per user per period._
 
 ---
 
+## Table 21: Refresh Token
+
+_Description: Stores SHA-256 hashes of opaque refresh tokens for JWT token refresh flow. Enables revocation and expiration tracking without storing raw tokens._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| id | UUID | PK | No | Unique identifier for each refresh token record |
+| user_id | UUID | FK | No | References "user"(id) ON DELETE CASCADE |
+| token_hash | CHAR(64) | Unique | No | SHA-256 hash of the raw refresh token (hex encoded) |
+| expires_at | TIMESTAMPTZ | - | No | Token expiration timestamp |
+| revoked_at | TIMESTAMPTZ | - | Yes | Revocation timestamp (NULL = active) |
+| created_at | TIMESTAMPTZ | - | No | Timestamp when token was issued |
+
+**Constraints:**
+- FK: user_id REFERENCES "user"(id) ON DELETE CASCADE
+- `uq_refresh_token_hash`: UNIQUE (token_hash)
+
+**Indexes:**
+- `idx_refresh_token_user_id` ON (user_id)
+- `idx_refresh_token_hash` ON (token_hash)
+- `idx_refresh_token_expires` ON (expires_at)
+
+---
+
+## Table 22: Blacklist Token
+
+_Description: Access token denylist for immediate revocation. Stores JWT ID (jti) and issuer from revoked access tokens. Entry persists until token's natural expiration._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| jti | VARCHAR(36) | PK (part 1) | No | JWT ID from revoked access token |
+| issuer | VARCHAR(100) | PK (part 2) | No | JWT issuer claim from revoked access token |
+| expires_at | TIMESTAMPTZ | - | No | Original JWT expiration timestamp |
+| revoked_at | TIMESTAMPTZ | - | No | Timestamp when token was blacklisted (DEFAULT NOW()) |
+
+**Constraints:**
+- Primary Key: (jti, issuer)
+
+**Indexes:**
+- `idx_blacklist_token_expires` ON (expires_at)
+
+---
+
+## Table 23: OTP Code
+
+_Description: Stores SHA-256 hashes of 6-digit auth codes for password reset and email verification (purpose column, V14 / ADR-004). One row per issued code; at most one unused, unexpired row is active per (user, purpose). Optional verified stage (verified_at, V16 / ADR-006) records a code that has been proven correct but not yet consumed._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| id | UUID | PK | No | Unique identifier for each OTP record |
+| user_id | UUID | FK | No | References "user"(id) - Account the code was issued for |
+| otp_hash | CHAR(64) | - | No | SHA-256 hex hash of the raw 6-digit code (raw code never stored) |
+| purpose | VARCHAR(32) | - | No | PASSWORD_RESET or EMAIL_VERIFICATION (default PASSWORD_RESET for rows migrated from V13) |
+| expires_at | TIMESTAMPTZ | - | No | Code expiration timestamp (issued_at + 10 minutes) |
+| used_at | TIMESTAMPTZ | - | Yes | When the code was consumed or superseded (NULL = active) |
+| verified_at | TIMESTAMPTZ | - | Yes | Optional verified stage (V16 / ADR-006): when the code was proven correct but not yet consumed. Set only by PASSWORD_RESET codes between the verify and reset steps; EMAIL_VERIFICATION rows keep NULL. NULL = not yet verified |
+| created_at | TIMESTAMPTZ | - | No | Timestamp when the code was issued |
+
+**Constraints:**
+- FK: user_id REFERENCES "user"(id) ON DELETE CASCADE
+
+**Indexes:**
+- `idx_otp_code_user_id` ON (user_id)
+- `idx_otp_code_expires` ON (expires_at)
+
+---
+
+## Table 24: Outbound Message
+
+_Description: Persistent outbound message queue (transactional outbox) for email delivery (V15 / ADR-005, issue #49). Business transactions enqueue a row in the same commit; a background drainer delivers it with retries. The payload holds the message JSON (including a plaintext OTP) until the row reaches a terminal status, then it is cleared._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| id | UUID | PK | No | Unique identifier for each outbound message |
+| channel | VARCHAR(16) | - | No | Delivery channel: EMAIL |
+| recipient | VARCHAR(255) | - | No | Destination address (email) |
+| payload | JSONB | - | Yes | Message body JSON (type, displayName, otp, expiryMinutes); cleared when the row reaches a terminal status |
+| status | VARCHAR(32) | - | No | PENDING, PROCESSING, COMPLETED, DEFERRED, FAILED or EXPIRED (default PENDING) |
+| attempts | INT | - | No | Monotonic attempt counter, incremented when a worker claims the row (default 0) |
+| next_attempt_at | TIMESTAMPTZ | - | No | Earliest time the row may be claimed (default NOW()) |
+| expires_at | TIMESTAMPTZ | - | Yes | Business deadline (OTP expiry); past it the row is EXPIRED without sending |
+| locked_at | TIMESTAMPTZ | - | Yes | When the current worker claimed the row (visibility timeout) |
+| locked_by | VARCHAR(64) | - | Yes | Worker id owning the PROCESSING row |
+| completed_at | TIMESTAMPTZ | - | Yes | When the message was handed to SMTP successfully |
+| created_at | TIMESTAMPTZ | - | No | Insertion time; cutoff for the 7-day retention purge |
+
+**Constraints:**
+- CHECK: status IN ('PENDING','PROCESSING','COMPLETED','DEFERRED','FAILED','EXPIRED')
+- CHECK: channel IN ('EMAIL')
+- CHECK: attempts >= 0
+
+**Indexes:**
+- `idx_outbound_message_due` ON (status, next_attempt_at)
+- `idx_outbound_message_created_at` ON (created_at)
+
+---
+
+## Table 25: Dish_Ingredient
+
+_Description: Curated association between a dish and the ingredients that normally belong to it (V46 / BR-DISH-002, BR-DISH-003). Read by members as ingredient suggestions when writing a recipe for the dish, and used to derive the advisory `missingRequiredIngredients` warning. Entries are curated by an administrator, or seeded from a recipe at approval time with `is_required = false`._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| dish_id | UUID | PK, FK | No | References Dish(id) |
+| ingredient_id | UUID | PK, FK | No | References Ingredient(id) |
+| is_required | BOOLEAN | - | No | Advisory: ingredient is normally mandatory for this dish (default FALSE). Never blocks a recipe |
+| removed_at | TIMESTAMPTZ | - | Yes | Withdrawal tombstone set by an admin; the auto-seed path never clears it |
+| created_at | TIMESTAMPTZ | - | No | Timestamp when the entry is created |
+| updated_at | TIMESTAMPTZ | - | No | Timestamp of last update |
+
+**Constraints:**
+- PK: (dish_id, ingredient_id)
+- FK: dish_id REFERENCES dish(id) ON DELETE CASCADE
+- FK: ingredient_id REFERENCES ingredient(id) ON DELETE CASCADE
+
+**Indexes:**
+- `idx_dish_ingredient_dish_id` ON (dish_id)
+- `idx_dish_ingredient_ingredient_id` ON (ingredient_id)
+
+---
+
 ## Relationship Summary
 
 - **User** 1:N **UserProfile** (1:1 via unique FK)
@@ -503,6 +632,8 @@ _Description: Tracks AI usage per user per period._
 - **User** 1:N **Menu**
 - **User** 1:N **AIConversation** (nullable for guests)
 - **User** 1:N **AIUsage** (nullable for guests)
+- **User** 1:N **RefreshToken** (auth tokens for session management)
+- **User** 1:N **OtpCode** (password-reset and email-verification codes; at most one active per user per purpose)
 - **Post** M:N **Category** (via Post_Category)
 - **Post** M:N **Media** (via Post_Media)
 - **Post** M:N **Recipe** (via Post_Recipe)
@@ -512,9 +643,11 @@ _Description: Tracks AI usage per user per period._
 - **Recipe** N:1 **Dish** (variations of a canonical dish)
 - **Recipe** N:1 **User** (author)
 - **Recipe** M:N **Ingredient** (via Recipe_Ingredient)
+- **Dish** M:N **Ingredient** (via Dish_Ingredient; curated suggestions, soft-withdrawable)
 - **Menu** N:1 **User**
 - **MenuDetail** N:1 **Menu**, N:1 **Dish** (unique per menu+date+meal_type)
 - **Location** 1:N **Post** (via location_id)
 - **AIConversation** N:1 **User** (nullable)
 - **AIMessage** N:1 **AIConversation**
 - **AIUsage** N:1 **User** (nullable)
+- **BlacklistToken** — No direct FK (identified by JWT jti+issuer only)

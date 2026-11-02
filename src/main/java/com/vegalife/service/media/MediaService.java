@@ -1,0 +1,246 @@
+package com.vegalife.service.media;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.dto.mapper.media.MediaMapper;
+import com.vegalife.dto.request.media.MediaUploadRequest;
+import com.vegalife.dto.response.media.MediaResponse;
+import com.vegalife.dto.response.media.MediaUploadGrantResponse;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
+import com.vegalife.enums.post.MediaStatus;
+import com.vegalife.model.outbound.OutboundMessage;
+import com.vegalife.model.post.Media;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
+import com.vegalife.repository.post.MediaRepository;
+import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.admin.PlatformSettingsProvider;
+import com.vegalife.shared.exception.DuplicateResourceException;
+import com.vegalife.shared.exception.ForbiddenException;
+import com.vegalife.shared.exception.ResourceNotFoundException;
+import com.vegalife.shared.exception.ValidationException;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Media upload lifecycle (spec {@code docs/feats/upload-media-api.md}): mint a direct-to-storage
+ * grant, then confirm the object against what the provider actually holds. All policy lives here —
+ * the provider only signs and reads back.
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class MediaService {
+
+  private final MediaRepository mediaRepository;
+  private final UserRepository userRepository;
+  private final PresignedUploadProvider uploadProvider;
+  private final MediaProperties mediaProperties;
+  private final PlatformSettingsProvider platformSettingsProvider;
+  private final MediaMapper mediaMapper;
+  private final ObjectMapper objectMapper;
+  private final OutboundMessageRepository outboundMessageRepository;
+
+  /**
+   * FR-001..FR-006: validates the declared content type and size, records the row owned by the
+   * caller, and returns a grant bound to a server-chosen object key. Rolls back if the provider
+   * cannot be reached, so no row outlives a failed grant.
+   */
+  @Transactional
+  public MediaUploadGrantResponse createGrant(UUID userId, MediaUploadRequest request) {
+    String contentType = request.getContentType();
+    if (!platformSettingsProvider.getAllowedUploadTypes().contains(contentType)) {
+      throw new ValidationException("Unsupported content type: " + contentType);
+    }
+    long ceiling = platformSettingsProvider.maxUploadBytesFor(contentType);
+    if (request.getSizeBytes() != null && request.getSizeBytes() > ceiling) {
+      throw new ValidationException(sizeLimitMessage(contentType));
+    }
+
+    var user =
+        userRepository
+            .findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+    Media media =
+        Media.builder()
+            .status(MediaStatus.uploading)
+            .mimeType(contentType)
+            .uploadedBy(user)
+            .build();
+    Media granted = mediaRepository.saveAndFlush(media);
+
+    UploadGrant grant = uploadProvider.prepare(publicIdFor(userId, granted.getId()), contentType);
+    granted.setExternalId(grant.publicId());
+    Media saved = mediaRepository.saveAndFlush(granted);
+
+    Instant expiresAt = saved.getCreatedAt().plus(mediaProperties.getUpload().getGrantTtl());
+    return toGrantResponse(saved, grant, expiresAt);
+  }
+
+  /**
+   * FR-007..FR-012: re-reads the object from the provider and persists what it reports. A missing
+   * object, an expired grant, or a size above the class ceiling all leave the row unconfirmed.
+   *
+   * <p>{@code noRollbackFor} is required: the over-size branch (FR-010) writes {@code status =
+   * failed} and then reports 400, and that write must survive the {@link ValidationException} that
+   * carries the error out. Every other branch of this method writes nothing before it throws.
+   */
+  @Transactional(noRollbackFor = ValidationException.class)
+  public MediaResponse confirm(UUID mediaId) {
+    Media media = find(mediaId);
+
+    if (media.getStatus() == MediaStatus.succeed) {
+      throw new DuplicateResourceException("Media upload has already been confirmed");
+    }
+    if (media.getStatus() == MediaStatus.failed) {
+      throw new ValidationException("Upload verification failed");
+    }
+    if (media.getExternalId() == null || media.getExternalId().isBlank()) {
+      throw new ValidationException("Upload verification failed");
+    }
+
+    String contentType = media.getMimeType();
+    if (media.getCreatedAt() == null
+        || media
+            .getCreatedAt()
+            .plus(mediaProperties.getUpload().getGrantTtl())
+            .isBefore(Instant.now())) {
+      throw new ValidationException("Upload grant has expired");
+    }
+
+    VerifiedUpload upload =
+        uploadProvider
+            .verify(media.getExternalId(), contentType)
+            .orElseThrow(() -> new ValidationException("Upload verification failed"));
+
+    if (upload.fileSizeBytes() > platformSettingsProvider.maxUploadBytesFor(contentType)) {
+      media.setStatus(MediaStatus.failed);
+      mediaRepository.saveAndFlush(media);
+      throw new ValidationException(sizeLimitMessage(contentType));
+    }
+
+    media.setStatus(MediaStatus.succeed);
+    media.setMediaUrl(upload.mediaUrl());
+    media.setMimeType(upload.mimeType());
+    media.setFileSizeBytes(upload.fileSizeBytes());
+    media.setWidth(upload.width());
+    media.setHeight(upload.height());
+    media.setDurationSeconds(upload.durationSeconds());
+
+    return mediaMapper.toResponse(mediaRepository.saveAndFlush(media));
+  }
+
+  /** Read endpoint: a row still in {@code uploading} simply reports null measurements. */
+  @Transactional(readOnly = true)
+  public MediaResponse get(UUID mediaId) {
+    return mediaMapper.toResponse(find(mediaId));
+  }
+
+  /**
+   * BR-MEDIA-009: owner-or-admin soft delete, idempotent on repeat, physical purge delivered
+   * asynchronously through the ADR-005 outbox so the response never waits on the provider. The row
+   * is read with {@code findById} (soft-deleted included) so a repeat delete finds it and answers
+   * the same 200 without enqueueing a second purge message.
+   */
+  @Transactional
+  public void deleteMedia(UUID actorId, boolean isAdmin, UUID mediaId) {
+    Media media =
+        mediaRepository
+            .findById(mediaId)
+            .orElseThrow(() -> new ResourceNotFoundException("Media not found"));
+
+    boolean isOwner =
+        media.getUploadedBy() != null && actorId.equals(media.getUploadedBy().getId());
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException("Forbidden");
+    }
+
+    if (media.getDeletedAt() != null) {
+      return;
+    }
+
+    media.setDeletedAt(Instant.now());
+    mediaRepository.saveAndFlush(media);
+    enqueuePurge(media);
+    log.info("Media {} soft-deleted by user {}", mediaId, actorId);
+  }
+
+  /**
+   * ADR-005 outbox: enqueue a MEDIA_PURGE row in the caller's transaction so the purge survives a
+   * crash between soft-deleting the row and starting the provider call. The adapter re-reads the
+   * row for {@code external_id} and the content type.
+   */
+  private void enqueuePurge(Media media) {
+    try {
+      OutboundMessage message =
+          OutboundMessage.builder()
+              .channel(OutboundChannel.MEDIA_PURGE)
+              .recipient(media.getId().toString())
+              .payload(objectMapper.writeValueAsString(new MediaPurgePayload(media.getId())))
+              .status(OutboundStatus.PENDING)
+              .attempts(0)
+              .nextAttemptAt(Instant.now())
+              .build();
+      outboundMessageRepository.save(message);
+      log.info("Queued media purge for {} on outbound queue", media.getId());
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Failed to serialize media purge payload", e);
+    }
+  }
+
+  private Media find(UUID mediaId) {
+    return mediaRepository
+        .findByIdAndDeletedAtIsNull(mediaId)
+        .orElseThrow(() -> new ResourceNotFoundException("Media not found"));
+  }
+
+  /** FR-005: the object key is derived from the cloud, the owner, and the media row. */
+  private String publicIdFor(UUID userId, UUID mediaId) {
+    return mediaProperties.getCloudinary().getCloudName() + "/" + userId + "/" + mediaId;
+  }
+
+  /** FR-014: the ceiling comes from configuration; this file only renders it as whole megabytes. */
+  private String sizeLimitMessage(String contentType) {
+    long megabytes =
+        Math.max(
+            1,
+            (long)
+                Math.ceil(
+                    platformSettingsProvider.maxUploadBytesFor(contentType) / 1024.0 / 1024.0));
+    return platformSettingsProvider.isImageContentType(contentType)
+        ? String.format("File exceeds the %d MB image limit", megabytes)
+        : String.format("File exceeds the %d MB limit", megabytes);
+  }
+
+  private MediaUploadGrantResponse toGrantResponse(
+      Media media, UploadGrant grant, Instant expiresAt) {
+    MediaUploadGrantResponse.UploadFields fields =
+        MediaUploadGrantResponse.UploadFields.builder()
+            .apiKey(grant.apiKey())
+            .timestamp(grant.timestamp())
+            .signature(grant.signature())
+            .publicId(grant.publicId())
+            .maxFileSize(grant.maxFileSize())
+            .allowedFormats(grant.allowedFormats())
+            .build();
+    MediaUploadGrantResponse.UploadInstruction instruction =
+        MediaUploadGrantResponse.UploadInstruction.builder()
+            .method("POST")
+            .url(grant.uploadUrl())
+            .headers(Map.of())
+            .fields(fields)
+            .build();
+    return MediaUploadGrantResponse.builder()
+        .mediaId(media.getId())
+        .status(media.getStatus().name())
+        .expiresAt(expiresAt)
+        .upload(instruction)
+        .build();
+  }
+}

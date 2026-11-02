@@ -28,16 +28,31 @@ Vegalife is a social platform for the vegan community. Users can share experienc
 - **Build**: Maven with Wrapper (`./mvnw`)
 - **Database**: PostgreSQL (Spring Data JPA / Hibernate)
 - **Code quality**: Checkstyle (style rules), Spotless (auto-formatting)
-- **Testing**: JUnit 5, Mockito, MockMvc, H2 (in-memory test DB)
+- **Testing**: JUnit 5, Mockito, MockMvc, H2 (unit tests), Testcontainers PostgreSQL (integration tests)
 - **API docs**: SpringDoc OpenAPI (Swagger UI)
 - **Utilities**: Lombok, MapStruct
-- **Observability**: Spring Boot Actuator
+- **Observability**: SLF4J logs + Spring Boot Actuator health endpoint (`/actuator/health`, status only; see `docs/arch/deployment.md`)
 - **Schema management**: Flyway
 - **Runtime**: Docker Compose (dev/test), Cloud (prod) — see `docs/arch/dependencies.md` for full dependency matrix
 
 ## Architecture
 
-Layered architecture with package-by-layer: `controller/` → `service/` → `repository/`. Domain modules (user, recipe, content, etc.) will be added as features are built, organized within each layer. Cross-cutting concerns (config, security, exceptions) live in `shared/`.
+Layered architecture with package-by-layer: `controller/` → `service/` → `repository/`. Domain modules (user, recipe, content, etc.) will be added as features are built, organized within each layer. Cross-cutting concerns live in `shared/`.
+
+Packages are **ranked** and a package may import only from its own rank or lower:
+
+| Rank | Packages |
+|------|----------|
+| 1 | `shared/` (`dto`, `exception` — exception *types* only, `openapi`, `validation`), `enums/` |
+| 2 | `model/` — JPA entities only, no enums or DTOs |
+| 3 | `repository/` |
+| 4 | `dto/` (`request`, `response`, `mapper`) |
+| 5 | `service/` — business logic, `*Properties`, and outbound *ports* (interfaces the service calls) |
+| 6 | `infrastructure/` — adapters that import vendor SDKs (email, embedding, google, media, payment, security) |
+| 7 | `controller/` (incl. `advice/` — the `@RestControllerAdvice` exception handler), `scheduled/` |
+| 8 | `config/` — Spring `@Configuration` only |
+
+`docs/adrs/018-clean-architecture-package-dependencies.md` records the ranking and its rationale; `tools/rank-check.ps1` verifies it (`pwsh tools/rank-check.ps1`, zero upward edges required).
 
 - `docs/arch/project-structure.md` — repo layout, source tree, package responsibilities, conventions
 - `docs/arch/dependencies.md` — full dependency matrix (approved, planned, not-approved)
@@ -91,7 +106,7 @@ branch I'm on right now" → `.agents/plans/`.
 
 - **Commit messages**: Conventional Commits format — `<type>(<scope>): <summary>` where type is one of `feat` / `fix` / `refactor` / `test` / `chore` / `docs` / `style` / `perf` / `ci`. Scope is optional (e.g., `auth`, `recipe`). Summary is lowercase, no trailing period, under 72 characters. **Always include a body description** using `git commit -m "summary" -m "description"` — the body should explain what changed and why, not just repeat the summary.
 - **Branch naming**: `type/short-description` — e.g., `feat/user-registration`, `fix/login-bug`, `refactor/cleanup-auth`. One branch per plan, never reused across unrelated work.
-- **Package structure**: Package-by-layer (`controller/`, `service/`, `repository/`) with domain sub-packages as features grow (e.g., `controller/user/UserController.java`).
+- **Package structure**: Package-by-layer (`controller/`, `service/`, `repository/`) with domain sub-packages as features grow (e.g., `controller/user/UserController.java`). Packages are ranked (see Architecture above) — an import may only target the same rank or lower; `pwsh tools/rank-check.ps1` enforces this. Enums live in `enums/<domain>/`, never nested in an entity.
 - **Naming**: Standard Java/Spring conventions — `PascalCase` classes, `camelCase` methods/fields, `UPPER_SNAKE_CASE` constants. Entity names singular (`User`, not `Users`). REST endpoints plural (`/api/users`).
 - **Project tracking**: GitHub Issues + Projects. Issue types set via GitHub's selector (Task / Bug / Feature), not file-based.
 - **Docs placement**: Finished docs in `docs/`, agent config in `.agents/`, ephemeral plans in `.agents/plans/` (gitignored). Never mix these.
@@ -101,38 +116,77 @@ branch I'm on right now" → `.agents/plans/`.
 - **Formatting**: Spotless enforces consistent style — run `./mvnw spotless:apply` before committing.
 - **Style rules**: Checkstyle enforced — run `./mvnw checkstyle:check` to verify.
 - **Patterns**: Prefer composition over inheritance. Use constructor injection (not `@Autowired` on fields). Keep controllers thin — business logic belongs in services. Use DTOs for API boundaries, never expose entities directly.
-- **Exceptions**: Use custom exception classes in `shared/exception/`, global `@ControllerException` handler.
+- **Exceptions**: Use custom exception classes in `shared/exception/` (plain types, no framework imports); the global `@RestControllerAdvice` handler lives in `controller/advice/GlobalExceptionHandler`.
 - **Nullability**: Prefer `Optional` over null returns. Use `@NonNull` / `@Nullable` annotations where helpful.
 - **Logging**: Use SLF4J via Lombok's `@Slf4j`. Log errors at ERROR level, business warnings at WARN, debug info at DEBUG. Never log secrets, passwords, or tokens.
 - **Avoid**: `@SuppressWarnings` without justification, raw types, catching generic `Exception`, System.out/System.err.
 
 ## How to work in this repo
 
-1. **Read `.agents/workflows/index.md`, pick the matching workflow, and
-   read and follow it.** A workflow's steps are written in plain
-   language and don't name specific skills — that match happens next.
-   If nothing matches (a one-off script, a pure doc change, genuinely
-   novel work), say so rather than forcing the task into the nearest
-   workflow.
-2. **For each step of the workflow, read `.agents/skills/index.md` and
-   match the step to a skill by its description.** Use that skill for
-   the step. If no skill matches, do the step directly using judgment
-   consistent with the conventions in this file.
-3. Don't reference a specific skill or workflow file from within
-   another skill or workflow file — every file here stands on its own;
-   cross-cutting coordination happens through this process, not through
-   files pointing at each other.
+### 1. Workflow declaration gate (mandatory — before any work)
+
+**Before writing any code, editing any file, or creating any plan, your
+first output must be a workflow declaration.** Read
+`.agents/workflows/index.md` and declare exactly one of:
+
+- **A workflow match**: `Workflow: feature.md` (or `bugfix.md`,
+  `refactor.md`), then read that workflow and follow it.
+- **No match**: `No workflow matches this task because [specific
+  reason].` — then **stop and report back to the user**. Do not
+  proceed on your own interpretation. Wait for the user to either
+  confirm working without a workflow or reframe the task.
+
+**No declaration = no work.** If you find yourself editing files
+without having produced a declaration first, stop and emit one before
+continuing. Picking the nearest workflow "to keep moving" is not an
+option — a forced match is worse than an honest no-match.
+
+### 2. Skill matching (per workflow step)
+
+For each step of the chosen workflow, read `.agents/skills/index.md`
+and match the step to a skill by its description. Use that skill for
+the step. If no skill matches, do the step directly using judgment
+consistent with the conventions in this file.
+
+### 3. Standing rules
+
+- At each workflow's "Conditions for stopping or requesting human
+  input" — surface it to the user; don't push through silently.
+- Don't reference a specific skill or workflow file from within
+  another skill or workflow file — every file here stands on its own;
+  cross-cutting coordination happens through this process, not through
+  files pointing at each other.
 
 ## Build / test / lint commands
 
 - Install dependencies: `./mvnw clean install`
 - Build: `./mvnw clean compile`
 - Run locally: `./mvnw spring-boot:run`
-- Test: `./mvnw test`
+- Unit tests: `./mvnw test`
+- Integration tests: `./mvnw verify -Pintegration-test`
 - Lint (Checkstyle): `./mvnw checkstyle:check`
 - Format check (Spotless): `./mvnw spotless:check`
 - Auto-format (Spotless): `./mvnw spotless:apply`
-- Full verification: `./mvnw clean verify` (build + test + checkstyle + spotless)
+- Full verification: `./mvnw clean verify` (build + unit tests + integration tests + checkstyle + spotless)
+
+## Local git hooks (one-time setup per clone)
+
+Hooks live in `.githooks/` and are plain POSIX shell scripts — git runs
+them with its own bundled shell, so they work whether your terminal is
+bash, cmd, or PowerShell. Enable them once per clone:
+
+```
+git config core.hooksPath .githooks
+```
+
+| Hook | Runs on | Blocks when |
+|------|---------|-------------|
+| `commit-msg` | `git commit` | subject doesn't match Conventional Commits or exceeds 72 chars |
+| `pre-commit` | `git commit` | `spotless:check` or `checkstyle:check` fails |
+| `pre-push` | `git push` | `./mvnw test` fails |
+
+CI remains the full safety net (including integration tests); hooks are
+fast local feedback only.
 
 ## Verification
 

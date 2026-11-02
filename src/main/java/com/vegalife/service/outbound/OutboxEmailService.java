@@ -1,0 +1,93 @@
+package com.vegalife.service.outbound;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
+import com.vegalife.model.outbound.OutboundMessage;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
+import com.vegalife.service.email.EmailService;
+import java.time.Instant;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Primary;
+import org.springframework.stereotype.Service;
+
+/**
+ * Outbox-backed {@link EmailService} (ADR-005): enqueues an {@code outbound_message} row in the
+ * caller's transaction instead of talking to SMTP, so registration and password reset succeed even
+ * when email delivery is unavailable. The background drainer delivers the row afterwards.
+ */
+@Service
+@Primary
+@RequiredArgsConstructor
+@Slf4j
+public class OutboxEmailService implements EmailService {
+
+  private final OutboundMessageRepository outboundMessageRepository;
+  private final ObjectMapper objectMapper;
+
+  @Value("${app.password-reset.otp-expiry-minutes:10}")
+  private int otpExpiryMinutes;
+
+  @Value("${app.email-verification.otp-expiry-minutes:10}")
+  private int emailVerificationOtpExpiryMinutes;
+
+  @Override
+  public void sendVerificationOtp(String to, String displayName, String otp) {
+    enqueue(
+        OutboundEmailPayload.Type.EMAIL_VERIFICATION,
+        to,
+        displayName,
+        otp,
+        emailVerificationOtpExpiryMinutes);
+  }
+
+  @Override
+  public void sendPasswordResetOtp(String to, String displayName, String otp) {
+    enqueue(OutboundEmailPayload.Type.PASSWORD_RESET, to, displayName, otp, otpExpiryMinutes);
+  }
+
+  @Override
+  public void sendPaymentReceipt(
+      String to, String displayName, OutboundEmailPayload.Receipt receipt) {
+    // A receipt has no OTP-style business deadline: it stays deliverable
+    // until the queue's max-age guard (BR-PAY-007).
+    enqueue(
+        new OutboundEmailPayload(
+            OutboundEmailPayload.Type.RECEIPT, displayName, null, null, receipt),
+        to,
+        null);
+  }
+
+  private void enqueue(
+      OutboundEmailPayload.Type type,
+      String to,
+      String displayName,
+      String otp,
+      int expiryMinutes) {
+    enqueue(
+        new OutboundEmailPayload(type, displayName, otp, expiryMinutes), to, expiryMinutes * 60L);
+  }
+
+  private void enqueue(OutboundEmailPayload payload, String to, Long ttlSeconds) {
+    try {
+      Instant now = Instant.now();
+      OutboundMessage message =
+          OutboundMessage.builder()
+              .channel(OutboundChannel.EMAIL)
+              .recipient(to)
+              .payload(objectMapper.writeValueAsString(payload))
+              .status(OutboundStatus.PENDING)
+              .attempts(0)
+              .nextAttemptAt(now)
+              .expiresAt(ttlSeconds == null ? null : now.plusSeconds(ttlSeconds))
+              .build();
+      outboundMessageRepository.save(message);
+      log.info("Queued {} email for {} on outbound queue", payload.type(), to);
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Failed to serialize outbound email payload", e);
+    }
+  }
+}

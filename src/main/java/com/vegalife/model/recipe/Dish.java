@@ -1,0 +1,66 @@
+package com.vegalife.model.recipe;
+
+import com.vegalife.enums.recipe.ModerationStatus;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.time.Instant;
+import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+@Entity
+@Table(name = "dish")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class Dish {
+
+  @Id
+  @GeneratedValue(strategy = GenerationType.UUID)
+  @Column(name = "id", updatable = false, nullable = false)
+  private UUID id;
+
+  @Column(name = "name", columnDefinition = "TEXT", nullable = false)
+  private String name;
+
+  @Column(name = "description", columnDefinition = "TEXT")
+  private String description;
+
+  @Column(name = "image_url", columnDefinition = "TEXT")
+  private String imageUrl;
+
+  @Column(name = "cuisine_type", length = 50)
+  private String cuisineType;
+
+  @CreationTimestamp
+  @Column(name = "created_at", nullable = false, updatable = false)
+  private Instant createdAt;
+
+  @UpdateTimestamp
+  @Column(name = "updated_at", nullable = false)
+  private Instant updatedAt;
+
+  @Column(name = "deleted_at")
+  private Instant deletedAt;
+
+  /**
+   * Review state of this dish name (ADR-016). Existing rows were backfilled to {@link
+   * ModerationStatus#APPROVED} by the migration; names introduced by a member's recipe start as
+   * {@link ModerationStatus#PENDING}.
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "moderation_status", length = 20, nullable = false)
+  @Builder.Default
+  private ModerationStatus moderationStatus = ModerationStatus.PENDING;
+}

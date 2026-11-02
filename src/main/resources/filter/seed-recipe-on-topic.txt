@@ -1,0 +1,28 @@
+# On-topic seed corpus for the RECIPE-BODY centroid (issue #160, ADR-016).
+# These are whole recipe bodies in the shape the filter actually receives:
+# name + description + instructions, one recipe per line, fields separated by
+# " | ". Vietnamese + English mixed, matching the platform's users.
+# Blank lines and lines starting with # are ignored.
+# Regenerate centroids.json after editing: see docs/feats/filter-calibration-gemini.md.
+Phở chay | Nước dùng thanh ngọt từ củ cải, hành tây nướng và nấm hương | Nướng hành tây và gừng cho thơm, ninh cùng củ cải trắng trong 90 phút, nêm nước mắm chay và đường phèn, trụng bánh phở, xếp rau thơm và đậu hũ chiên rồi chan nước dùng nóng
+Đậu hũ sốt cà chua | Món mặn cơm nhà đơn giản mà đưa cơm | Cắt đậu hũ thành miếng vuông rồi chiên vàng hai mặt, xào cà chua băm nhuyễn với dầu ăn cho lên màu, thêm nước và nước mắm chay, cho đậu vào rim khoảng 10 phút, rắc hành lá
+Bún chả giò chay | Bữa trưa gọn nhẹ với rau sống tươi | Cuốn nhân bún, chả giò chay chiên giòn, rau sống và giá đỗ, chan nước mắm chay pha chua ngọt với tỏi và ớt, thêm đậu phộng rang
+Chả giò chay giòn rụm | Nhân nấm và khoai môn béo ngậy | Trộn khoai môn hấp nghiền với nấm mèo băm, miến ngâm mềm và cà rốt nạo, nêm muối và tiêu, cuộn trong bánh tráng rồi chiên ngập dầu đến khi vàng đều
+Canh chua chay | Chua thanh, thơm mùi dứa và cà chua | Nấu nước luộc rau với me, thêm dứa cắt lát và cà chua, cho đậu bắp và giá đỗ vào sau cùng để không bị nhũn, thêm ngò gai và rau om
+Gỏi cuốn chay | Món khai vị mát lạnh cho ngày hè | Nhúng bánh tráng qua nước, xếp xà lách, rau thơm, bún, đậu hũ chiên và cà rốt sợi vào rồi cuộn chặt, ăn kèm tương hột pha đậu phộng
+Cơm gạo lứt chay | Cơm gạo lứt chay với rau củ nướng, giàu chất xơ và đạm thực vật | Vo gạo lứt rồi ngâm 2 giờ, nấu với tỉ lệ nước 1:2.5, nướng bí đỏ và ớt chuông với dầu olive, rắc hạt bí và mè rang lên trên
+Bún bò Huế chay | Vị cay nồng đặc trưng nhưng hoàn toàn từ thực vật | Xào sả và ớt sa tế chay, ninh xương hầm từ nấm rơm và củ sen, nêm mắm ruốc chay, trụng bún, thêm bắp chuối, rau răm và đậu hũ
+Bánh xèo chay | Vỏ giòn rụm nhân giá đỗ và nấm | Pha bột gạo với nước cốt dừa và nghệ, tráng mỏng trên chảo nóng, rải giá đỗ, nấm kim châm và đậu hũ, gập đôi và chiên đến khi vỏ giòn, ăn kèm rau sống
+Xôi gấc | Xôi gấc đỏ thắm cho mâm cỗ chay | Ngâm nếp 4 giờ, trộn với thịt gấc và một ít rượu trắng để giữ màu đỏ, hấp chín trong 40 phút, đảo đều với đường và dầu ăn
+Chè đậu xanh đánh | Món ngọt truyền thống mát lành | Đãi vỏ đậu xanh, hấp chín rồi nghiền nhuyễn, nấu với nước cốt dừa và đường đến khi sánh mịn, múc ra bát và rắc dừa nạo
+Nộm rau muống chua cay | Nộm rau muống chua cay, thanh mát và ít calo | Trần rau muống với nước sôi có chanh để giữ màu xanh, ngâm nước đá, trộn với lạc rang, rau thơm và nước mắm chay pha tỏi ớt
+Cà tím nướng mỡ hành | Cà tím nướng mỡ hành mềm ngọt, ăn cùng cơm trắng | Nướng nguyên quả cà tím trên bếp than đến khi vỏ cháy xém, bóc vỏ rồi xé dọc, rưới nước mắm chay và mỡ hành phi, rắc đậu phộng
+Đậu phụ rim tiêu | Đậu phụ rim tiêu đậm đà cho bữa cơm chiều | Cắt đậu phụ thành khối, chiên vàng đều các mặt, rim với nước tương, đường thốt nốt và tiêu đen cho đến khi sốt keo lại
+Miến gà chay | Miến nấm hương thanh nhẹ, thích hợp ngày se lạnh | Ngâm miến dong cho mềm, xào nấm hương và mộc nhĩ với hành tím, đổ nước dùng rau củ vào đun sôi, thêm miến và hành lá
+Vegan lentil curry | A creamy plant-based curry ready in forty minutes | Sauté onion, garlic and ginger, add curry powder and tomato paste, pour in coconut milk with red lentils, simmer until the lentils break down, finish with spinach and lime juice
+Crispy tofu banh mi | Vietnamese banh mi filled with marinated tofu and pickled carrot | Press and slice firm tofu, marinate in soy sauce, lime and maple syrup, bake until crisp, assemble with pickled carrot, cucumber, coriander and chilli mayo in a baguette
+Roasted vegetable salad | A warm salad of seasonal vegetables with a lemon tahini dressing | Toss sweet potato, red onion and courgette in olive oil, roast for thirty minutes, whisk tahini with lemon, garlic and water, drizzle over the vegetables and scatter with pumpkin seeds
+Mushroom and lentil pie | A hearty meat-free pie for a Sunday dinner | Cook lentils with bay and stock, fry mushrooms until golden, combine with a tomato sauce, top with mashed potato and bake until the crust browns
+Overnight oats with berries | An easy make-ahead vegan breakfast | Mix rolled oats with oat milk, chia seeds and maple syrup, refrigerate overnight, top with blueberry compote and toasted almonds before serving
+Coconut chickpea soup | Comforting chickpea soup with warming spices | Fry onion with cumin, coriander and turmeric, add chickpeas, tomatoes and coconut milk, simmer twenty minutes, blend half of it and stir through kale
+Vegan chocolate tahini cake | Dense chocolate cake with a tahini swirl | Whisk flax eggs with sugar, add coconut oil and oat milk, fold in flour, cocoa and baking powder, marble in tahini, bake at 175C for thirty five minutes

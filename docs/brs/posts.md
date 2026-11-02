@@ -1,0 +1,715 @@
+# Business Rules: Posts
+
+## Rule Index
+
+| Rule ID | Title | Status | Last Reviewed |
+|---------|-------|--------|---------------|
+| BR-POST-001 | Post Ownership Comes from Authentication | Active | 2026-09-26 |
+| BR-POST-002 | Users List Only Their Non-Deleted Posts | Active | 2026-09-26 |
+| BR-POST-003 | User Post Lists Use Bounded Newest-First Pagination | Active | 2026-09-26 |
+| BR-POST-004 | New Posts Start in the Created State | Active | 2026-09-30 |
+| BR-POST-005 | Post Title and Content Are Required | Active | 2026-09-26 |
+| BR-POST-006 | Users Edit Only Their Own Non-Deleted Posts | Active | 2026-09-27 |
+| BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-09-30 |
+| BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
+| BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
+| BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
+| BR-POST-011 | Single Post Detail Excludes Only Deleted Posts, Not Ownership | Active | 2026-10-10 |
+| BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-09-30 |
+| BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-09-30 |
+| BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-09-30 |
+| BR-FILTER-007 | A Passed Filter Publishes the Post | Active | 2026-09-30 |
+| BR-FILTER-008 | A Rejected or Uncertain Filter Unpublishes the Post | Active | 2026-10-10 |
+| BR-FILTER-009 | Posts Stuck Pending Are Unpublished After 24 Hours | Active | 2026-10-10 |
+
+---
+
+---
+
+# Business Rule: Post Ownership Comes from Authentication
+
+## Rule ID
+
+`BR-POST-001`
+
+## Status
+
+Active
+
+## Statement
+
+When a user creates or lists posts, the user's identity is taken from the authenticated JWT. A client-supplied user ID must not determine post ownership or which user's posts are listed.
+
+## Rationale
+
+Deriving ownership from the authenticated identity prevents users from creating posts under another account or retrieving another user's private post-management list.
+
+## Scope & Exceptions
+
+Applies to `POST /api/posts`, `GET /api/posts`, and `PATCH /api/posts/{postId}`. Administrative moderation APIs are outside this rule and require their own authorization contract.
+
+## Enforcement
+
+- Controller: `PostController` receives `@AuthenticationPrincipal UUID userId` for these endpoints.
+- Service: `PostService.createPost()` assigns the loaded user; list/edit operations use that user ID when querying posts.
+- API references: `docs/apis/post/post-posts.md`, `docs/apis/post/get-posts.md`, and `docs/apis/post/patch-posts-postid.md`.
+
+## Last Reviewed
+
+2026-09-26, by Vegalife backend team
+
+---
+
+# Business Rule: Users List Only Their Non-Deleted Posts
+
+## Rule ID
+
+`BR-POST-002`
+
+## Status
+
+Active
+
+## Statement
+
+The user post-list endpoint returns only posts owned by the authenticated user whose `deleted_at` is null. It includes all post statuses so the owner can see posts that are not publicly published.
+
+## Rationale
+
+Owners need to manage their own content, while soft-deleted records and other users' content must remain outside their list.
+
+## Scope & Exceptions
+
+Applies to `GET /api/posts`. It does not define visibility for a public feed or admin moderation view.
+
+## Enforcement
+
+- Repository: `PostRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc()`.
+- API reference: `docs/apis/post/get-posts.md`.
+
+## Last Reviewed
+
+2026-09-26, by Vegalife backend team
+
+---
+
+---
+
+# Business Rule: User Post Lists Use Bounded Newest-First Pagination
+
+## Rule ID
+
+`BR-POST-003`
+
+## Status
+
+Active
+
+## Statement
+
+`GET /api/posts` uses zero-based pagination. If omitted, `page` is `0` and `size` is `20`; `size` must be between `1` and `100`. Results are sorted by creation time descending.
+
+## Rationale
+
+Bounded pages control response size, and newest-first ordering lets users see their recent posts first.
+
+## Scope & Exceptions
+
+Applies to the authenticated user's post-list endpoint. Clients cannot request a different sort order.
+
+## Enforcement
+
+- Request DTO: `PostListRequest` validates page and size and supplies defaults.
+- Repository: `PostRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc()` applies newest-first ordering.
+- API reference: `docs/apis/post/get-posts.md`.
+
+## Last Reviewed
+
+2026-09-26, by Vegalife backend team
+
+---
+
+---
+
+# Business Rule: New Posts Start in the Created State
+
+## Rule ID
+
+`BR-POST-004`
+
+## Status
+
+Active
+
+## Statement
+
+When a user creates a post, the system sets its view count to `0`. The post starts as a private draft (`created`) unless the client asks to publish (`publish: true`), which is accepted only when the post has at least one active category (BR-CONTENT-004). Publishing is then gated by content filtering: the post is saved as `created` with `flag = PENDING` and a `CONTENT_FILTER` message enqueued (BR-FILTER-005, BR-FILTER-006), and it becomes `published` with `publishedAt` set only once filtering returns `PASSED` (BR-FILTER-007). Status and view count cannot otherwise be set by the client.
+
+## Rationale
+
+System-controlled initial values keep post lifecycle state consistent and leave publication decisions to later processing.
+
+## Scope & Exceptions
+
+Applies to `POST /api/posts`. The `flag` value is the filter state and is distinct from `status` (BR-FILTER-004); a draft (`publish: false`) keeps `flag` NULL and is never filtered (BR-FILTER-005).
+
+## Enforcement
+
+- Service: `PostService.createPost()` sets status and view count, records publish intent, and enqueues the filter message in the caller's transaction; `publishedAt` is assigned only when the filter verdict `PASSED` is applied.
+- Request DTO: `PostCreateRequest` does not expose lifecycle fields.
+- API reference: `docs/apis/post/post-posts.md`.
+
+## Last Reviewed
+
+2026-09-30, by Vegalife backend team
+
+---
+
+---
+
+# Business Rule: Post Title and Content Are Required
+
+## Rule ID
+
+`BR-POST-005`
+
+## Status
+
+Active
+
+## Statement
+
+Post creation requires a non-blank title no longer than 255 characters, non-blank plain `content` (used only as the semantic-filtering input, BR-FILTER-004), and a `rawContent` JSON object (the frontend editor's rich-text document). A featured image URL is optional.
+
+## Rationale
+
+Each post needs a title and body to be useful to readers; an image is supplementary content. Plain content and the rich-text document are both required because the frontend editor only produces rich text, while filtering only understands plain text.
+
+## Scope & Exceptions
+
+Applies to requests to create a post through `POST /api/posts`. The existing database also requires `title`, `content`, and `raw_content` columns to be non-null.
+
+## Enforcement
+
+- DTO: `PostCreateRequest` uses `@NotBlank` for title and content, `@NotNull` plus a custom `@AssertTrue` check for `rawContent` (must be a JSON object), and `@Size(max = 255)` for title.
+- Database: the `post` table defines `title`, `content`, and `raw_content` as `NOT NULL` (migration `V27__add_post_raw_content_drop_type_video_url.sql`).
+- API reference: `docs/apis/post/post-posts.md`.
+
+## Last Reviewed
+
+2026-10-05, by Vegalife backend team
+
+---
+
+# Business Rule: Users Edit Only Their Own Non-Deleted Posts
+
+## Rule ID
+
+`BR-POST-006`
+
+## Status
+
+Active
+
+## Statement
+
+An authenticated user may edit a post only when the post is owned by that user and `deleted_at` is null; an Administrator may edit any non-deleted post (BR-CONTENT-001). For a non-admin, a missing post, soft-deleted post, or post owned by another user is reported as not found. Every edit an Administrator makes to another user's post is recorded in `moderation_log` (actor, action, target, time) per BR-ADMIN-002.
+
+## Rationale
+
+Post ownership is private user content. Applying the same owner boundary to edits prevents cross-account changes and avoids disclosing whether another user's post exists.
+
+## Scope & Exceptions
+
+Applies to `PATCH /api/posts/{postId}`.
+
+## Enforcement
+
+- Controller: `PostController` supplies the authenticated user ID from the JWT principal.
+- Repository/service: the post is looked up by post ID, owner ID, and non-deleted state.
+- API reference: `docs/apis/post/patch-posts-postid.md`.
+
+## Last Reviewed
+
+2026-09-27, by Vegalife backend team
+
+---
+
+---
+
+# Business Rule: Post Edits Change Only Supplied Fields
+
+## Rule ID
+
+`BR-POST-007`
+
+## Status
+
+Active
+
+## Statement
+
+Post edits require `content` and `rawContent` on every request, and accept a non-empty subset of `title`, `featuredImageUrl`, `categoryIds`, and `publish` on top of them. Only supplied, non-null values among the optional fields are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters; `content` must not be blank and `rawContent` must be a JSON object. `categoryIds` replaces the category set and may only reference active categories (BR-CONTENT-004). `publish: true` requests publication and re-queues the post for content filtering (BR-FILTER-005): the post only becomes `published` once the filter returns `PASSED` (BR-FILTER-007). `publish: false` withdraws the post to a private draft immediately — a withdrawn `unpublished` post returns to `created` but keeps its `flag` value — and never triggers filtering. A title or plain-content change to a post whose status is `published` or `unpublished` re-queues it for filtering (BR-FILTER-005); a `rawContent`-only change does not re-queue, since filtering only reads plain `content`. A post that is or becomes published must keep at least one category (BR-CONTENT-003). Only an Administrator may change the state of a `hidden` post. Ownership and view count are not editable.
+
+## Rationale
+
+Partial updates let clients change title, image, categories, or publish state without resending the full post; `content`/`rawContent` are required on every edit because the frontend editor always resubmits both together.
+
+## Scope & Exceptions
+
+Applies to `PATCH /api/posts/{postId}`. Removing a featured image by sending null is not supported by this endpoint.
+
+## Enforcement
+
+- Request DTO: `PostUpdateRequest` requires `content` (`@NotBlank`) and `rawContent` (`@NotNull` plus a JSON-object `@AssertTrue` check) on every request; other fields stay optional (null allowed, blank/invalid rejected when supplied).
+- Service: `PostService.updatePost()` applies only non-null optional request values and enforces the category and publish rules.
+- API reference: `docs/apis/post/patch-posts-postid.md`.
+
+## Last Reviewed
+
+2026-09-30, by Vegalife backend team
+
+---
+
+# Business Rule: Posts Are Soft-Deleted by Owner or Administrator
+
+## Rule ID
+
+`BR-POST-008`
+
+## Status
+
+Active
+
+## Statement
+
+A post may be deleted only by its owner or an Administrator (BR-CONTENT-001). Deletion is soft: `deleted_at` is set and the row is kept, so the post disappears from user lists and can no longer be edited or deleted. For a non-admin, a missing, already-deleted, or other user's post is reported as not found. Every deletion an Administrator makes to another user's post is recorded in `moderation_log` (BR-ADMIN-002).
+
+## Rationale
+
+Ownership boundaries protect user content, soft deletion preserves data for moderation and recovery, and the moderation log keeps administrator actions reviewable.
+
+## Scope & Exceptions
+
+Applies to `DELETE /api/posts/{postId}`. Restoring deleted posts is not supported.
+
+## Enforcement
+
+- Controller: `PostController.deletePost()` supplies the JWT principal and admin flag.
+- Service: `PostService.deletePost()` uses `findManageablePost()` and records the moderation entry.
+- API reference: `docs/apis/post/delete-posts-postid.md`.
+
+## Last Reviewed
+
+2026-09-29, by Vegalife backend team
+
+---
+
+# Business Rule: Only Administrators Hide Posts, and It Is Logged
+
+## Rule ID
+
+`BR-POST-009`
+
+## Status
+
+Active
+
+## Statement
+
+Only an Administrator may hide a post or lift a hide (BR-ADMIN-002, BR-ADMIN-004). Hiding sets status `hidden` and clears the publication timestamp; lifting returns the post to a private draft. While a post is hidden, only an Administrator may change its publish state. Every hide and unhide is recorded in `moderation_log`.
+
+## Rationale
+
+Moderation is an administrator power; recording each action keeps decisions reviewable, and returning to draft forces the normal publish checks before content becomes public again.
+
+## Scope & Exceptions
+
+Applies to `PATCH /api/posts/{postId}/visibility`. Owners withdraw their own posts with `publish: false`.
+
+## Enforcement
+
+- Security: `PostController.updateVisibility()` is annotated `@PreAuthorize("hasRole('ADMIN')")` (ADR-009); the route is no longer granted `ROLE_ADMIN` by a `SecurityConfig` path rule.
+- Service: `PostService.updateVisibility()` changes status and writes the log; `applyPublishState()` blocks non-admins on hidden posts.
+- API reference: `docs/apis/post/patch-posts-postid-visibility.md`.
+
+## Last Reviewed
+
+2026-09-29, by Vegalife backend team
+
+---
+
+# Business Rule: Only Published Posts Are Public
+
+## Rule ID
+
+`BR-POST-010`
+
+## Status
+
+Active
+
+## Statement
+
+When a member's posts are listed, guests and other members see only `published`, non-deleted posts. Drafts and other non-public states (`created`, `processed`, `unpublished`, `hidden`) are visible only to the post's creator and Administrators (BR-CONTENT-003). A post the content filter did not pass is `unpublished` with a `REJECTED`/`NEEDS_REVIEW` flag, so it is not public.
+
+## Rationale
+
+Published content is open to everyone (BR-PUBLIC-001, BR-SEARCH-002), while unpublished or moderated content must stay private to its owner and administrators.
+
+## Scope & Exceptions
+
+Applies to `GET /api/users/{userId}/posts`. `GET /api/posts` is the caller's own list and already includes all non-deleted statuses.
+
+## Enforcement
+
+- Security: `SecurityConfig` permits unauthenticated `GET /api/users/*/posts`.
+- Service: `PostService.listPostsOfUser()` selects the published-only query unless the viewer is the owner or an Administrator.
+- API reference: `docs/apis/post/get-users-userid-posts.md`.
+
+## Last Reviewed
+
+2026-10-10, by Vegalife backend team
+
+---
+
+# Business Rule: Single Post Detail Excludes Only Deleted Posts, Not Ownership
+
+## Rule ID
+
+`BR-POST-011`
+
+## Status
+
+Active
+
+## Statement
+
+When a caller — guest or authenticated — requests a single post by id, the post is returned whenever `deleted_at` is null, regardless of its status. Neither status nor ownership is checked: another user's post is returned, and the caller's own draft, `unpublished`, or `hidden` post is returned too. Only a missing or soft-deleted post returns `404 Post not found`. The endpoint is public (no authentication required).
+
+## Rationale
+
+A shared or linked post must be readable by anyone who opens the link, signed in or not, at whatever stage it is in — the detail endpoint is a direct-by-id read, not a public-feed browse, so it does not gate on the `published` status that controls the feed. Only removal is hidden, and a soft-deleted or unknown id is reported as the same generic 404 so no post existence is leaked.
+
+## Scope & Exceptions
+
+Applies to `GET /api/posts/{postId}`. It does not define owner/admin draft preview, caching, or view-count behavior — none of these exist for this endpoint. `GET /api/posts` (the caller's own list, all statuses, authenticated) and `GET /api/users/{userId}/posts` (public, owner/admin see all statuses) have their own rules (BR-POST-002, BR-POST-010).
+
+## Enforcement
+
+- Repository: `PostRepository.findDetailById(id)` (`where p.id = :id and p.deletedAt is null` — no status predicate).
+- Service: `PostService.getPost()` maps a missing result to `ResourceNotFoundException("Post not found")`.
+- Security: `SecurityConfig` permits unauthenticated `GET /api/posts/*` (single path segment — matches `feed` and `{postId}`, never the auth-required list route); `PostController` declares `@SecurityRequirement` per protected operation instead of at class level, so `getPost` is documented as public in OpenAPI.
+- API reference: `docs/apis/post/get-posts-postid.md`.
+
+## Last Reviewed
+
+2026-10-10, by Vegalife backend team
+
+---
+
+---
+
+# Business Rule: Semantic Relevance Uses Three Bands and Configured Thresholds
+
+## Rule ID
+
+`BR-FILTER-004`
+
+## Status
+
+Active
+
+## Statement
+
+The content is embedded and mean-centered — the text embedding and both centroids have the seed-corpus mean subtracted first (raw e5 embeddings are anisotropic, so an uncentered margin score collapses into a ~0.46–0.54 band no threshold can reach) — and compared by cosine similarity with two precomputed centroids, one built from on-topic seed texts and one from off-topic seed texts, both Vietnamese and English. The relevance score is the normalized margin between the two centered similarities, `score = (cos(text - mean, onTopic - mean) - cos(text - mean, offTopic - mean) + 1) / 2`, clamped to `[0, 1]`. The score maps to exactly one verdict: `score >= accept-threshold` is `PASSED`; `score < reject-threshold` is `REJECTED`; anything between the two is `NEEDS_REVIEW`. The two thresholds are read live, per scoring call, from the `content_filter_accept_threshold` / `content_filter_reject_threshold` platform settings (issue #13 follow-up), falling back to the compiled `app.filter.accept-threshold` / `app.filter.reject-threshold` defaults on a missing, invalid, or contradictory (`reject >= accept`) stored pair — never a startup or request failure. The compiled defaults are recalibrated whenever the embedding model changes; the current values (`0.70` / `0.45`) are calibrated for `gemini-embedding-001` at 768 dimensions from the measured centered seed distribution (highest off-topic `0.3491`, lowest on-topic `0.7553`). The derivation and the selected values are recorded in [Filter Calibration: gemini-embedding-001](../feats/filter-calibration-gemini.md); thresholds derived for a previous model (e5: `0.65` / `0.43`) must not be carried across. The filter state is stored in `post.flag`, which is separate from `post.status`; `flag` is NULL only when the post has never been filtered.
+
+## Rationale
+
+A three-band outcome separates confident failures from content that is merely ambiguous, so uncertain posts are held for a human instead of being published or silently rejected. Thresholds are configuration so tuning does not require a redeploy of logic.
+
+## Scope & Exceptions
+
+Applies to every filter run. There is no `NOT_FILTERED` value: NULL means never filtered (drafts and pre-existing rows), and every run ends in one of the three verdicts. The centroid model and regeneration procedure are recorded in `docs/adrs/007-post-content-filtering.md`.
+
+## Enforcement
+
+- `EmbeddingRelevanceScorer` reads both thresholds from `PlatformSettingsProvider` (falling back to `app.filter.*`) on every `score()` call and returns the band; `ContentFilterService` turns it into the verdict and reasons.
+- `post.flag VARCHAR(16)` is constrained to `PENDING`/`PASSED`/`REJECTED`/`NEEDS_REVIEW` or NULL (migration V19).
+- Unit tests cover both bands and the review band at the exact threshold boundaries; a fixture-based regression test replays captured embeddings through the configured thresholds, and `CentroidRegenerationTest` refreshes those fixtures whenever the centroids are regenerated.
+
+## Last Reviewed
+
+2026-09-30, by Vegalife backend team
+
+---
+
+---
+
+# Business Rule: Only Publish Intent Triggers Filtering
+
+## Rule ID
+
+`BR-FILTER-005`
+
+## Status
+
+Active
+
+## Statement
+
+A post is filtered only when it is submitted for publication or when already-visible content changes. An explicit `publish: true` on create or edit always queues a filter run. Without an explicit `publish` field, a title or plain-`content` change on a post whose status is `published` or `unpublished` (a post the filter did not pass) re-queues it for filtering; a `rawContent`-only change does not, since filtering never reads `rawContent`. A draft — created or edited without `publish: true`, `flag` NULL — is never filtered, and unpublishing with `publish: false` never triggers a filter run.
+
+When the `content_filter_enabled` platform setting is false (a deliberate outage/bypass mode), BR-FILTER-004/006/007 are bypassed for new filter triggers: a post that would have been queued is instead routed straight to the admin review queue (`flag = NEEDS_REVIEW`, `status = unpublished`, no outbound row, no embedding call). This only stops *new* filtering; a post already `flag = PENDING` from before the setting was disabled is still swept to `NEEDS_REVIEW` by the stale-pending sweep (BR-FILTER-009) once its queue row goes stale, so disabling the filter never leaves a post pending forever.
+
+## Rationale
+
+Only content that is (or is about to be) public needs screening; screening drafts would burn embedding calls on work in progress and expose unfinished content to automated judgement.
+
+## Scope & Exceptions
+
+Applies to `POST /api/posts` and `PATCH /api/posts/{postId}`. Ownership and category validation (BR-POST-006, BR-POST-007, BR-CONTENT-003/004) are unchanged and happen before any queueing decision. Withdrawing stays immediate (BR-CONTENT-003).
+
+## Enforcement
+
+- Service: `PostService.createPost()` / `updatePost()` decide whether to enqueue from an explicit `publish: true` or from the content dirty check on a `published`/`unpublished` post, and enqueue in the caller's transaction. The enqueue-vs-bypass choice reads `PlatformSettingsProvider.isContentFilterEnabled()` (issue #13 follow-up), falling back to `app.filter.enabled` on a missing/invalid stored value.
+- `PendingFilterSweepJob` sweeps any post still `flag = PENDING` whose queue row is stale, regardless of the current `content_filter_enabled` value — it does not check the setting, so it covers both "message lost" and "filter was disabled mid-flight".
+- API references: `docs/apis/post/post-posts.md`, `docs/apis/post/patch-posts-postid.md`.
+
+## Last Reviewed
+
+2026-10-10, by Vegalife backend team
+
+---
+
+# Business Rule: Filtering Is Asynchronous Through the Outbound Queue
+
+## Rule ID
+
+`BR-FILTER-006`
+
+## Status
+
+Active
+
+## Statement
+
+Filtering never runs inside the HTTP request. Enqueueing writes an `outbound_message` row with channel `CONTENT_FILTER` in the same transaction that saves the post, sets `post.flag = PENDING`, and returns; a scheduled drainer later claims the message and runs the filter. The message row's `created_at` is the enqueue clock the sweep reasons about (BR-FILTER-009). There is no synchronous or real-time filtering path, and a failed filter run is retried by the queue's existing retry/deferred handling rather than failing the user's request.
+
+## Rationale
+
+The embedding call is an external network dependency with unbounded latency; keeping it off the request thread keeps create/edit fast and makes the post durable even if the model or provider is down.
+
+## Scope & Exceptions
+
+Applies to every filter trigger (BR-FILTER-005). The queue is the ADR-005 PostgreSQL outbox with a new `CONTENT_FILTER` channel — no new broker. A message that exhausts retries or is lost is covered by the 24-hour sweep (BR-FILTER-009), so `PENDING` is never permanent.
+
+## Enforcement
+
+- `ContentFilterOutboundAdapter` implements the existing `OutboundChannelAdapter` for `CONTENT_FILTER`; `OutboundMessageDrainer` dispatches to it.
+- Service: `PostService` uses the outbox enqueue-in-caller-tx pattern so the message and the post commit together.
+- Design: `docs/adrs/007-post-content-filtering.md`.
+
+## Last Reviewed
+
+2026-09-30, by Vegalife backend team
+
+---
+
+---
+
+# Business Rule: A Passed Filter Publishes the Post
+
+## Rule ID
+
+`BR-FILTER-007`
+
+## Status
+
+Active
+
+## Statement
+
+When a filter run ends with `PASSED`, the post's `flag` becomes `PASSED`, its status becomes `published`, and `publishedAt` is set if it was null. Every queued run was enqueued by an explicit publish request or by a content change on a `published`/`unpublished` post (BR-FILTER-005), so a `PASSED` verdict publishes the post unconditionally — the verdict, not the client's request, drives publication.
+
+## Rationale
+
+Passing the filter is the gate that makes publication legitimate; the transition is driven by the verdict, not by the client's request, so the API response and the public visibility can never disagree about a filtered post.
+
+## Scope & Exceptions
+
+Applies to every `PASSED` verdict, whether it comes from a create, an edit, or a re-run of an `unpublished` post (a passing edit returns an `unpublished` post to `published`). Administrative hide/unhide (BR-POST-009) is unaffected.
+
+## Enforcement
+
+- `ContentFilterOutboundAdapter` applies the verdict: sets `flag`, moves `status` to `published`, and stamps `publishedAt` when it is null.
+- API references: `docs/apis/post/post-posts.md`, `docs/apis/post/patch-posts-postid.md`.
+
+## Last Reviewed
+
+2026-10-10, by Vegalife backend team
+
+---
+
+# Business Rule: A Rejected or Uncertain Filter Unpublishes the Post
+
+## Rule ID
+
+`BR-FILTER-008`
+
+## Status
+
+Active
+
+## Statement
+
+When a filter run ends with `REJECTED` or `NEEDS_REVIEW`, the post's `flag` is set to that value and its status becomes `unpublished`, which is not publicly visible (BR-POST-010). The verdict is carried only by `flag`; `status` carries visibility. A `REJECTED` run logs a WARN carrying the out-of-band score; a `NEEDS_REVIEW` run logs a WARN recording that the score fell between the two thresholds. `NEEDS_REVIEW` is a data state only this sprint — no admin endpoint changes it. There is no `prev_status` column: the previous status is not tracked.
+
+## Rationale
+
+Failing content must not stay public, but it must not be destroyed either — `unpublished` keeps the post intact for its owner and for later review, and distinguishing rejection from uncertainty in `flag` tells a future reviewer how much scrutiny to apply.
+
+## Scope & Exceptions
+
+Applies to every `REJECTED` / `NEEDS_REVIEW` verdict and to the stale-pending sweep (BR-FILTER-009), which produces `NEEDS_REVIEW`. The owner can edit the post again; a passing edit returns it to `published` (BR-FILTER-007).
+
+## Enforcement
+
+- `ContentFilterOutboundAdapter` sets flag and status and writes the WARN log.
+- `post.status` no longer accepts `flagged` from migration V31 on; a non-`PASSED` verdict maps to `unpublished` (ADR-011).
+
+## Last Reviewed
+
+2026-10-10, by Vegalife backend team
+
+---
+
+---
+
+# Business Rule: Posts Stuck Pending Are Unpublished After 24 Hours
+
+## Rule ID
+
+`BR-FILTER-009`
+
+## Status
+
+Active
+
+## Statement
+
+A scheduled job finds every `CONTENT_FILTER` recipient whose newest outbound message is older than `app.filter.sweep-max-age` (default 24 hours) and, for each such post still at `flag = PENDING`, sets `flag = NEEDS_REVIEW`, `status = unpublished`, logging at ERROR. Posts with a fresh outbound message or a NULL `flag` are never touched.
+
+## Rationale
+
+The outbox retries and then defers, but a message can still be lost (deleted row, exhausted retries, prolonged provider outage). Without a bound, such a post would stay `PENDING` forever — invisible to its owner and to any reviewer.
+
+## Scope & Exceptions
+
+Applies only to posts still at `PENDING`; it never re-runs a completed verdict and never touches drafts (NULL flag). 24 hours is the default and is configuration, not a constant. The outbox row is the enqueue clock: it is written in the same transaction as `flag = PENDING`, and terminal rows are deleted only by the 7-day retention job, so every lost message is always sweepable.
+
+## Enforcement
+
+- `PendingFilterSweepJob` (scheduled, `OutboundRetentionJob` pattern) queries recipients of `CONTENT_FILTER` whose latest message is older than the max age, then performs the transition.
+- Unit tests cover: stale recipient with `PENDING` post swept, fresh recipient untouched, non-`PENDING` post untouched.
+
+## Last Reviewed
+
+2026-10-10, by Vegalife backend team
+
+---
+
+# Business Rule: Only Administrators Publish or Unpublish a Post as a Moderation Action
+
+## Rule ID
+
+`BR-POST-012`
+
+## Status
+
+Active
+
+## Statement
+
+Only an Administrator may moderate a post's publish state directly, through
+`POST /api/admin/posts/{postId}/moderate` with action `PUBLISH` or `UNPUBLISH`. `PUBLISH` sets
+`status = published` and stamps `publishedAt`; it requires the post to have at least one category
+(BR-CONTENT-003). `UNPUBLISH` sets `status = unpublished` and clears `publishedAt`. Neither action
+changes `flag`: the content-filter verdict is a record of what the filter decided and stays as
+written (ADR-011). A `hidden` post is moderated through the visibility endpoint (BR-POST-009), not
+these verbs, and a request whose target status already holds is a no-op that writes no log entry.
+Every real change is recorded in `moderation_log` (BR-ADMIN-002).
+
+## Rationale
+
+The filter can withhold a post the admin judges acceptable, and an admin may need to take a live
+post down as a moderation decision distinct from hiding it. Both are administrator powers, so
+recording them keeps decisions reviewable; leaving `flag` untouched keeps the two axes of ADR-011
+independent, so "why is this not public" is still answerable from the verdict.
+
+## Scope & Exceptions
+
+Applies to `POST /api/admin/posts/{postId}/moderate`. It does not cover editing content (BR-POST-006),
+hiding (BR-POST-009), or deletion (BR-POST-008), each of which has its own rule and log action. The
+admin post list's default `flag = NEEDS_REVIEW` filter (issue #5) is a query default, not a rule about
+which posts exist.
+
+## Enforcement
+
+- Security: `AdminPostController` carries `@PreAuthorize("hasRole('ADMIN')")` (ADR-009); no
+  `SecurityConfig` path rule grants `/api/admin/**`.
+- Service: `AdminPostService.moderatePost()` loads a non-deleted post, rejects `hidden` and a
+  categoryless publish, no-ops on an already-target status, sets `status`/`publishedAt`, and writes
+  the log row with the reason.
+- API reference: `docs/apis/admin/post-posts-postid-moderate.md`.
+
+## Last Reviewed
+
+2026-10-10, by Vegalife backend team
+
+---
+
+# Business Rule: Every Administrator Content-Moderation Action Is Logged
+
+## Rule ID
+
+`BR-ADMIN-002`
+
+## Status
+
+Active
+
+## Statement
+
+Every administrator action that changes another user's content — editing (`EDIT_POST`), deleting
+(`DELETE_POST`), hiding or lifting a hide (`HIDE_POST` / `UNHIDE_POST`), and moderating a post's
+publish state (`PUBLISH_POST` / `UNPUBLISH_POST`) — is written to `moderation_log` with the acting
+administrator (`actor_id`), the action, the target (`target_type`, `target_id`), the time
+(`created_at`), and — for the moderation verbs — an optional reason. A no-op that changes nothing is
+never logged. The log is append-only; entries are never edited or deleted by application code.
+
+## Rationale
+
+Moderation is an administrator power over content they do not own; a durable, attributable record is
+what makes those actions auditable and reviewable after the fact, including the stated justification.
+
+## Scope & Exceptions
+
+Applies to post and comment moderation. Category creation, edit, and retirement are deliberately
+**not** logged — BR-ADMIN-002 scopes the log to content/comment moderation, not category management
+(the decision recorded in `create-category-api.md`, `edit-category-api.md`, `delete-category-api.md`).
+`reason` is optional today; a required-reason contract would be a separate validation change.
+
+## Enforcement
+
+- Table: `moderation_log` (migration `V18`); `V32` adds the nullable `reason` column.
+- Service: every writer builds a `ModerationLog` through `ModerationLogRepository` in the same
+  transaction as the change (`PostService`, `AdminPostService`).
+- API references: `docs/apis/post/patch-posts-postid.md`, `docs/apis/post/delete-posts-postid.md`,
+  `docs/apis/post/patch-posts-postid-visibility.md`, `docs/apis/admin/post-posts-postid-moderate.md`.
+
+## Last Reviewed
+
+2026-10-10, by Vegalife backend team
+
+---

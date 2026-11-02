@@ -1,0 +1,2 @@
+# Git hooks must stay LF so bash can execute them on any OS
+.githooks/* text eol=lf

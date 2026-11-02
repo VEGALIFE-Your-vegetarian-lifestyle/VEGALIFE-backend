@@ -1,7 +1,61 @@
-# Feature Specifications
+﻿# Feature Specifications
 
 Product-level feature specs with design overview, success metrics, and acceptance criteria for the Vegalife backend.
 
-| File | Title | Status | Date |
-|------|-------|--------|------|
-| | | | |
+| File                                | Title                                     | Status      | Date       |
+| ----------------------------------- | ----------------------------------------- | ----------- | ---------- |
+| `user-registration.md`              | User Registration with Email Verification | Implemented | 2026-09-22 |
+| `edit-user-profile-api.md`          | Edit User Profile API                     | In Progress | 2026-09-23 |
+| `get-user-profile-api.md`           | Get User Profile API                      | Approved    | 2026-10-01 |
+| `list-user-accounts-admin-api.md`   | List User Accounts API (Admin)            | Implemented | 2026-09-23 |
+| `suspend-user-account-admin-api.md` | Suspend User Account API (Admin)          | Implemented | 2026-09-23 |
+| `restore-user-account-admin-api.md` | Restore User Account API (Admin)          | Implemented | 2026-09-24 |
+| `forgot-password-reset.md`          | Forgot Password with Email OTP            | In progress | 2026-09-24 |
+| `email-verification-otp.md`         | Email Verification via Generalized OTP    | In progress | 2026-09-24 |
+| `outbound-message-queue.md`         | Persistent Outbound Message Queue (Email) | In progress | 2026-09-26 |
+| `list-user-posts.md`                | List the Authenticated User's Posts       | Implemented | 2026-09-26 |
+| `create-user-post.md`               | Create a User Post                        | In progress | 2026-09-26 |
+| `edit-user-post.md`                 | Edit a User Post                          | In progress | 2026-09-27 |
+| `delete-user-post.md`               | Delete a User Post                        | Implemented | 2026-09-29 |
+| `hide-user-post.md`                 | Hide a Post (Moderation)                  | Implemented | 2026-09-29 |
+| `list-posts-of-user.md`             | List a Member's Posts                     | Implemented | 2026-09-29 |
+| `upload-media-api.md`               | Upload Media API (Presigned URL)          | In progress | 2026-09-30 |
+| `create-category-api.md`            | Create Category API (Admin)               | Implemented | 2026-09-30 |
+| `post-content-filtering.md`         | Post Content Filtering (Semantic)         | In progress | 2026-09-30 |
+| `edit-category-api.md`              | Edit Category API (Admin)                 | Implemented | 2026-09-30 |
+| `delete-category-api.md`            | Delete Category API (Admin)               | Implemented | 2026-09-30 |
+| `list-categories-api.md`            | List Categories API                       | Implemented | 2026-09-30 |
+| `list-all-posts-admin-api.md`       | List All Posts API (Admin)                | In progress | 2026-09-30 |
+| `list-comments-admin-api.md`        | List All Comments API (Admin)             | In progress | 2026-09-30 |
+| `create-comments-api.md`             | Create Comments API                       | In progress | 2026-10-10 |
+| `edit-comments-api.md`               | Edit Comments API                         | In progress | 2026-10-11 |
+| `delete-comments-api.md`             | Delete Comments API                       | In progress | 2026-10-11 |
+| `list-comments-api.md`               | List Comments API                         | In progress | 2026-10-11 |
+| `vote-api.md`                        | Vote (Like/Dislike) API                   | In progress | 2026-10-11 |
+| `list-all-recipes-admin-api.md`     | List All Recipes API (Admin)              | Draft       | 2026-10-01 |
+| `list-all-videos-admin-api.md`      | List All User Videos API (Admin)          | In progress | 2026-10-01 |
+| `create-recipe-api.md`              | Create Recipe API                         | Draft       | 2026-10-01 |
+| `list-ingredients-api.md`           | List Ingredients API                      | Implemented | 2026-10-01 |
+| `list-dishes-api.md`                | List Dishes API                           | Implemented | 2026-10-01 |
+| `component-level-verification.md`   | Component-Level Verification and Approval | In progress | 2026-10-23 |
+| `posts-feed.md`                     | Global Post Feed                          | In progress | 2026-10-02 |
+| `delete-media-api.md`               | Delete Media API (soft delete + async purge) | Implemented | 2026-10-03 |
+| `subscription-api.md`               | AI Subscription APIs (Own + Available Plans) | In progress | 2026-10-04 |
+| `subscription-purchase.md`          | Purchase AI Subscription (VNPay Checkout) | In progress | 2026-10-04 |
+| `payment-status-api.md`             | Payment Status API (Poll after VNPay Redirect) | Implemented | 2026-10-04 |
+| `post-raw-content-migration.md`     | Post Schema — Rich-Text raw_content, Drop type/video_url | Implemented | 2026-10-05 |
+| `get-post-by-id.md`                 | View Post Detail API (Get Post by ID) | Implemented | 2026-10-05 |
+| `subscription-lifecycle.md`         | AI Subscription Lifecycle (Cancel, Extension, Expiry) | In review | 2026-10-07 |
+| `payment-history.md`                | Payment History API (Member + Admin)     | Approved    | 2026-10-07 |
+| `ai-chat-send.md`                   | AI Chat Send (JSON + SSE Streaming)      | Approved    | 2026-10-07 |
+| `query-menus-by-range.md`           | Query Menus by Week, Month, or Date Range | Superseded  | 2026-10-10 |
+| `mcp-menu-tools.md`                 | Menu Tools for AI Chat (In-Process)    | Approved    | 2026-10-13 |
+| `dish-suggestions.md`               | Dish Suggestions and Recipe Recommendations | Implemented | 2026-10-25 |
+| `meal-plan-detail-query.md`         | Meal Plan Detail Query                   | Implemented | 2026-10-12 |
+| `moderate-posts-admin-api.md`       | Moderate Posts API (Admin)                | Implemented | 2026-10-10 |
+| `embedding-provider-migration.md`   | Embedding Provider Migration to Gemini    | Draft       | 2026-10-18 |
+| `filter-calibration-gemini.md`      | Filter Calibration for `gemini-embedding-001` | Accepted | 2026-10-18 |
+| `duplicate-post-detection.md`       | Duplicate Post Detection                  | In Progress | 2026-10-18 |
+| `google-login.md`                   | Sign In with Google                       | In progress | 2026-10-26 |
+| `post-author-in-response.md`        | Post Responses Carry Their Author's Identity | Implemented | 2026-11-02 |
+| `dish-ingredient-suggestions.md`    | Dish Ingredient Suggestions and Advisory Required Flag | Implemented | 2026-11-02 |

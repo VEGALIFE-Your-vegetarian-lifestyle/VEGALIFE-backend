@@ -1,0 +1,167 @@
+package com.vegalife.unit.controller.admin;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.vegalife.controller.admin.AdminController;
+import com.vegalife.dto.request.admin.CommentListRequest;
+import com.vegalife.dto.request.admin.UserListRequest;
+import com.vegalife.dto.response.admin.CommentListResponse;
+import com.vegalife.dto.response.admin.UserListResponse;
+import com.vegalife.service.admin.AdminService;
+import com.vegalife.shared.dto.ApiResponse;
+import com.vegalife.shared.dto.PageResponse;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.ResponseEntity;
+
+@ExtendWith(MockitoExtension.class)
+class AdminControllerTest {
+
+  @Mock private AdminService adminService;
+
+  @InjectMocks private AdminController adminController;
+
+  private UserListRequest request;
+  private PageResponse<UserListResponse> pageResponse;
+
+  @BeforeEach
+  void setUp() {
+    request = UserListRequest.builder().status("activated").role("USER").build();
+    UserListResponse item =
+        UserListResponse.builder()
+            .id(UUID.randomUUID())
+            .email("jane@example.com")
+            .displayName("jane")
+            .role("USER")
+            .status("activated")
+            .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
+            .build();
+    pageResponse =
+        PageResponse.<UserListResponse>builder()
+            .content(List.of(item))
+            .page(0)
+            .size(20)
+            .totalElements(1)
+            .totalPages(1)
+            .first(true)
+            .last(true)
+            .build();
+  }
+
+  @Test
+  void listUsers_shouldReturnSuccessEnvelope() {
+    when(adminService.listUsers(request)).thenReturn(pageResponse);
+
+    ResponseEntity<ApiResponse<PageResponse<UserListResponse>>> response =
+        adminController.listUsers(request);
+
+    assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().isSuccess()).isTrue();
+    assertThat(response.getBody().getMessage()).isEqualTo("Users retrieved successfully");
+    assertThat(response.getBody().getData()).isEqualTo(pageResponse);
+
+    ArgumentCaptor<UserListRequest> captor = ArgumentCaptor.forClass(UserListRequest.class);
+    verify(adminService).listUsers(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo("activated");
+    assertThat(captor.getValue().getRole()).isEqualTo("USER");
+  }
+
+  @Test
+  void listComments_shouldReturnSuccessEnvelope() {
+    CommentListRequest commentRequest = CommentListRequest.builder().status("active").build();
+    CommentListResponse item =
+        CommentListResponse.builder()
+            .id(UUID.randomUUID())
+            .postId(UUID.randomUUID())
+            .userId(UUID.randomUUID())
+            .displayName("jane")
+            .content("Great recipe!")
+            .status("active")
+            .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
+            .updatedAt(Instant.parse("2026-09-21T10:00:00Z"))
+            .build();
+    PageResponse<CommentListResponse> commentPage =
+        PageResponse.<CommentListResponse>builder()
+            .content(List.of(item))
+            .page(0)
+            .size(20)
+            .totalElements(1)
+            .totalPages(1)
+            .first(true)
+            .last(true)
+            .build();
+    when(adminService.listComments(commentRequest)).thenReturn(commentPage);
+
+    ResponseEntity<ApiResponse<PageResponse<CommentListResponse>>> response =
+        adminController.listComments(commentRequest);
+
+    assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().isSuccess()).isTrue();
+    assertThat(response.getBody().getMessage()).isEqualTo("Comments retrieved successfully");
+    assertThat(response.getBody().getData()).isEqualTo(commentPage);
+
+    ArgumentCaptor<CommentListRequest> captor = ArgumentCaptor.forClass(CommentListRequest.class);
+    verify(adminService).listComments(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo("active");
+  }
+
+  @Test
+  void suspendUser_shouldReturnSuccessEnvelope() {
+    UUID userId = UUID.randomUUID();
+    UserListResponse suspended =
+        UserListResponse.builder()
+            .id(userId)
+            .email("jane@example.com")
+            .displayName("jane")
+            .role("USER")
+            .status("suspended")
+            .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
+            .build();
+    when(adminService.suspendUser(userId)).thenReturn(suspended);
+
+    ResponseEntity<ApiResponse<UserListResponse>> response = adminController.suspendUser(userId);
+
+    assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().isSuccess()).isTrue();
+    assertThat(response.getBody().getMessage()).isEqualTo("User suspended successfully");
+    assertThat(response.getBody().getData().getStatus()).isEqualTo("suspended");
+    verify(adminService).suspendUser(userId);
+  }
+
+  @Test
+  void restoreUser_shouldReturnSuccessEnvelope() {
+    UUID userId = UUID.randomUUID();
+    UserListResponse restored =
+        UserListResponse.builder()
+            .id(userId)
+            .email("jane@example.com")
+            .displayName("jane")
+            .role("USER")
+            .status("activated")
+            .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
+            .build();
+    when(adminService.restoreUser(userId)).thenReturn(restored);
+
+    ResponseEntity<ApiResponse<UserListResponse>> response = adminController.restoreUser(userId);
+
+    assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().isSuccess()).isTrue();
+    assertThat(response.getBody().getMessage()).isEqualTo("User restored successfully");
+    assertThat(response.getBody().getData().getStatus()).isEqualTo("activated");
+    verify(adminService).restoreUser(userId);
+  }
+}

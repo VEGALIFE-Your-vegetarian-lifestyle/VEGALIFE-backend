@@ -1,0 +1,63 @@
+package com.vegalife.dto.response.recipe;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class RecipeResponse {
+
+  private UUID id;
+  private UUID userId;
+  private UUID dishId;
+  private String dishName;
+
+  /**
+   * The dish's review state. Exposed because a recipe whose dish name is still awaiting approval
+   * would otherwise look inexplicably withheld to its own author (BR-DISH-001).
+   */
+  private String dishModerationStatus;
+
+  /** This recipe's own review state, for the same reason. */
+  private String moderationStatus;
+
+  private String name;
+  private String description;
+  private String instructions;
+  private Integer prepTimeMinutes;
+  private Integer cookTimeMinutes;
+  private Integer servings;
+  private String difficulty;
+  private List<RecipeIngredientResponse> ingredients;
+
+  /**
+   * Names of the dish's active required ingredients this recipe does not use (BR-DISH-002).
+   *
+   * <p>Advisory only: the recipe is valid and saved regardless. Derived at read time, never stored,
+   * so an ingredient an admin marks required later shows up on the next read without a backfill.
+   * Empty when nothing is missing.
+   */
+  private List<String> missingRequiredIngredients;
+
+  /**
+   * Author-entered totals for the whole recipe (issue #163), never per serving. {@code null} means
+   * the author did not provide the value — distinct from 0.
+   */
+  private BigDecimal calories;
+
+  private BigDecimal proteinG;
+  private BigDecimal carbohydrateG;
+  private BigDecimal fatG;
+  private BigDecimal fiberG;
+
+  private Instant createdAt;
+  private Instant updatedAt;
+}

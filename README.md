@@ -17,7 +17,7 @@ A Spring Boot backend API for **Vegalife** — a social platform for the vegan c
 | Code Quality | Checkstyle, Spotless |
 | Testing | JUnit 5, Mockito, MockMvc, H2 |
 | Utilities | Lombok, MapStruct |
-| Observability | Spring Boot Actuator |
+| Observability | SLF4J logs (Spring Boot Actuator planned) |
 | Runtime | Docker Compose (dev/test), Cloud (prod) |
 
 ---

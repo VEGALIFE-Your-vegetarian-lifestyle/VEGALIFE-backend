@@ -1,0 +1,70 @@
+package com.vegalife.controller.admin;
+
+import com.vegalife.dto.request.admin.CommentListRequest;
+import com.vegalife.dto.request.admin.CommentModerationRequest;
+import com.vegalife.dto.request.admin.UserListRequest;
+import com.vegalife.dto.response.admin.CommentListResponse;
+import com.vegalife.dto.response.admin.UserListResponse;
+import com.vegalife.service.admin.AdminService;
+import com.vegalife.shared.dto.ApiResponse;
+import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.openapi.OpenApiSchemeNames;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import jakarta.validation.Valid;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/admin")
+@RequiredArgsConstructor
+@PreAuthorize("hasRole('ADMIN')")
+@SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
+public class AdminController {
+
+  private final AdminService adminService;
+
+  @GetMapping("/users")
+  public ResponseEntity<ApiResponse<PageResponse<UserListResponse>>> listUsers(
+      @Valid @ModelAttribute UserListRequest request) {
+    PageResponse<UserListResponse> page = adminService.listUsers(request);
+    return ResponseEntity.ok(ApiResponse.success(page, "Users retrieved successfully"));
+  }
+
+  @GetMapping("/comments")
+  public ResponseEntity<ApiResponse<PageResponse<CommentListResponse>>> listComments(
+      @Valid @ModelAttribute CommentListRequest request) {
+    PageResponse<CommentListResponse> page = adminService.listComments(request);
+    return ResponseEntity.ok(ApiResponse.success(page, "Comments retrieved successfully"));
+  }
+
+  @PostMapping("/users/{userId}/suspend")
+  public ResponseEntity<ApiResponse<UserListResponse>> suspendUser(@PathVariable UUID userId) {
+    UserListResponse user = adminService.suspendUser(userId);
+    return ResponseEntity.ok(ApiResponse.success(user, "User suspended successfully"));
+  }
+
+  @PostMapping("/users/{userId}/restore")
+  public ResponseEntity<ApiResponse<UserListResponse>> restoreUser(@PathVariable UUID userId) {
+    UserListResponse user = adminService.restoreUser(userId);
+    return ResponseEntity.ok(ApiResponse.success(user, "User restored successfully"));
+  }
+
+  @PostMapping("/comments/{commentId}/moderate")
+  public ResponseEntity<ApiResponse<Void>> moderateComment(
+      @AuthenticationPrincipal UUID adminId,
+      @PathVariable UUID commentId,
+      @Valid @RequestBody CommentModerationRequest request) {
+    adminService.moderateComment(adminId, commentId, request.getReason());
+    return ResponseEntity.ok(ApiResponse.success(null, "Comment moderated successfully"));
+  }
+}

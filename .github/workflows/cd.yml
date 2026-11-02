@@ -1,5 +1,13 @@
 name: CD
 
+# Triggers:
+#   - push to main  -> staging (build image, deploy staging)
+#   - tag v*        -> production (build image, deploy production, gated by
+#                      the GitHub "production" environment)
+#   - workflow_dispatch (run from the Actions tab, any branch e.g. dev) ->
+#     staging or production; never fires on plain pushes to dev. The
+#     deploy hook is called with ?ref=$GITHUB_SHA so Render builds the
+#     exact dispatched commit, not the service's configured branch HEAD.
 on:
   push:
     branches: [main]
@@ -83,22 +91,28 @@ jobs:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: docker-build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging')
     environment:
       name: staging
-      url: https://staging.vegalife.example.com
+      url: https://staging-vegalife.onrender.com
     steps:
-      - name: Deploy to Staging
-        run: echo "Deploying to staging (placeholder - image built and pushed to GHCR)"
+      - name: Trigger Render staging deploy
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_STAGING_DEPLOY_HOOK }}
+        run: |
+          curl -fsS -X POST "${RENDER_DEPLOY_HOOK}?ref=${GITHUB_SHA}"
 
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: docker-build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production')
     environment:
       name: production
-      url: https://api.vegalife.example.com
+      url: https://api-vegalife.onrender.com
     steps:
-      - name: Deploy to Production
-        run: echo "Deploying to production (placeholder - image built and pushed to GHCR)"
+      - name: Trigger Render production deploy
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_PRODUCTION_DEPLOY_HOOK }}
+        run: |
+          curl -fsS -X POST "${RENDER_DEPLOY_HOOK}?ref=${GITHUB_SHA}"

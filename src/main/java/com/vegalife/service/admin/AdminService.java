@@ -1,0 +1,260 @@
+package com.vegalife.service.admin;
+
+import com.vegalife.dto.mapper.admin.AdminCommentMapper;
+import com.vegalife.dto.mapper.admin.AdminUserMapper;
+import com.vegalife.dto.request.admin.CommentListRequest;
+import com.vegalife.dto.request.admin.UserListRequest;
+import com.vegalife.dto.response.admin.CommentListResponse;
+import com.vegalife.dto.response.admin.UserListResponse;
+import com.vegalife.enums.user.UserRole;
+import com.vegalife.enums.user.UserStatus;
+import com.vegalife.model.admin.ModerationLog;
+import com.vegalife.model.post.Comment;
+import com.vegalife.model.user.User;
+import com.vegalife.repository.admin.ModerationLogRepository;
+import com.vegalife.repository.post.CommentRepository;
+import com.vegalife.repository.post.CommentSpecifications;
+import com.vegalife.repository.user.UserRepository;
+import com.vegalife.repository.user.UserSpecifications;
+import com.vegalife.service.token.JwtTokenService;
+import com.vegalife.shared.dto.PageResponse;
+import com.vegalife.shared.exception.DuplicateResourceException;
+import com.vegalife.shared.exception.ResourceNotFoundException;
+import com.vegalife.shared.exception.ValidationException;
+import java.time.Instant;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class AdminService {
+
+  private final UserRepository userRepository;
+  private final AdminUserMapper adminUserMapper;
+  private final JwtTokenService jwtTokenService;
+  private final CommentRepository commentRepository;
+  private final AdminCommentMapper adminCommentMapper;
+  private final ModerationLogRepository moderationLogRepository;
+
+  @Transactional(readOnly = true)
+  public PageResponse<UserListResponse> listUsers(UserListRequest request) {
+    UserStatus status = parseStatus(request.getStatus());
+    UserRole role = parseRole(request.getRole());
+    Instant createdFrom = request.getCreatedFrom();
+    Instant createdTo = request.getCreatedTo();
+
+    if (createdFrom != null && createdTo != null && createdFrom.isAfter(createdTo)) {
+      throw new ValidationException("createdFrom must be before createdTo");
+    }
+
+    Pageable pageable =
+        PageRequest.of(request.getPage(), request.getSize(), parseSort(request.getSort()));
+    Specification<User> spec =
+        UserSpecifications.activeWithFilters(status, role, createdFrom, createdTo);
+    Page<User> page = userRepository.findAll(spec, pageable);
+
+    log.debug(
+        "Listed users page={} size={} total={}",
+        page.getNumber(),
+        page.getSize(),
+        page.getTotalElements());
+
+    Page<UserListResponse> mapped = page.map(adminUserMapper::toResponse);
+    return PageResponse.from(mapped);
+  }
+
+  @Transactional(readOnly = true)
+  public PageResponse<CommentListResponse> listComments(CommentListRequest request) {
+    String status = parseCommentStatus(request.getStatus());
+    UUID userId = request.getUserId();
+    UUID postId = request.getPostId();
+    Instant createdFrom = request.getCreatedFrom();
+    Instant createdTo = request.getCreatedTo();
+
+    if (createdFrom != null && createdTo != null && createdFrom.isAfter(createdTo)) {
+      throw new ValidationException("createdFrom must be before createdTo");
+    }
+
+    Pageable pageable =
+        PageRequest.of(request.getPage(), request.getSize(), parseCommentSort(request.getSort()));
+    Page<Comment> page =
+        commentRepository.findAll(
+            CommentSpecifications.withFilters(status, userId, postId, createdFrom, createdTo),
+            pageable);
+
+    Set<UUID> authorIds =
+        page.getContent().stream().map(Comment::getUserId).collect(Collectors.toSet());
+    Map<UUID, String> displayNames =
+        userRepository.findAllById(authorIds).stream()
+            .collect(Collectors.toMap(User::getId, User::getDisplayName));
+
+    Page<CommentListResponse> mapped =
+        page.map(
+            comment -> {
+              CommentListResponse response = adminCommentMapper.toResponse(comment);
+              response.setDisplayName(displayNames.get(comment.getUserId()));
+              return response;
+            });
+
+    log.debug(
+        "Listed comments page={} size={} total={}",
+        mapped.getNumber(),
+        mapped.getSize(),
+        mapped.getTotalElements());
+
+    return PageResponse.from(mapped);
+  }
+
+  /**
+   * BR-ADMIN-003/BR-ADMIN-002: only an Administrator may moderate a comment, and every moderation
+   * action is soft-delete plus a required reason recorded on the moderation log (issue #6). Admin
+   * editing and bulk moderation are non-goals — this is the only moderation action.
+   */
+  @Transactional
+  public void moderateComment(UUID adminId, UUID commentId, String reason) {
+    Comment comment =
+        commentRepository
+            .findByIdAndDeletedAtIsNull(commentId)
+            .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
+
+    comment.setDeletedAt(Instant.now());
+    Comment saved = commentRepository.saveAndFlush(comment);
+
+    moderationLogRepository.save(
+        ModerationLog.builder()
+            .actorId(adminId)
+            .action("MODERATE_COMMENT")
+            .targetType("COMMENT")
+            .targetId(saved.getId())
+            .reason(reason)
+            .build());
+
+    log.info("Comment {} moderated by admin {}", saved.getId(), adminId);
+  }
+
+  @Transactional
+  public UserListResponse suspendUser(UUID userId) {
+    User user =
+        userRepository
+            .findById(userId)
+            .filter(u -> u.getDeletedAt() == null)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+    if (user.getStatus() == UserStatus.suspended) {
+      throw new DuplicateResourceException("User is already suspended");
+    }
+
+    user.setStatus(UserStatus.suspended);
+    userRepository.save(user);
+
+    int revoked = jwtTokenService.revokeAllUserRefreshTokens(userId);
+    log.info("User {} suspended; revoked {} refresh tokens", userId, revoked);
+
+    return adminUserMapper.toResponse(user);
+  }
+
+  @Transactional
+  public UserListResponse restoreUser(UUID userId) {
+    User user =
+        userRepository
+            .findById(userId)
+            .filter(u -> u.getDeletedAt() == null)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+    if (user.getStatus() != UserStatus.suspended) {
+      throw new DuplicateResourceException("User is not suspended");
+    }
+
+    user.setStatus(UserStatus.activated);
+    userRepository.save(user);
+
+    log.info("User {} restored; status set to activated", userId);
+
+    return adminUserMapper.toResponse(user);
+  }
+
+  private UserStatus parseStatus(String status) {
+    if (status == null || status.isBlank()) {
+      return null;
+    }
+    try {
+      return UserStatus.valueOf(status);
+    } catch (IllegalArgumentException ex) {
+      throw new ValidationException(
+          "Status must be one of: created, activated, deactivated, suspended");
+    }
+  }
+
+  private UserRole parseRole(String role) {
+    if (role == null || role.isBlank()) {
+      return null;
+    }
+    try {
+      return UserRole.valueOf(role);
+    } catch (IllegalArgumentException ex) {
+      throw new ValidationException("Role must be ADMIN or USER");
+    }
+  }
+
+  private String parseCommentStatus(String status) {
+    if (status == null || status.isBlank()) {
+      return null;
+    }
+    if ("active".equals(status) || "removed".equals(status)) {
+      return status;
+    }
+    throw new ValidationException("Status must be one of: active, removed");
+  }
+
+  private Sort parseCommentSort(String sort) {
+    String[] parts = sort.split(",");
+    if (parts.length == 0 || parts.length > 2) {
+      throw new ValidationException("Sort must be in the form property,asc|desc");
+    }
+    String property = parts[0].trim();
+    if (!"createdAt".equals(property)
+        && !"updatedAt".equals(property)
+        && !"reportCount".equals(property)) {
+      throw new ValidationException(
+          "Sort property must be one of: createdAt, updatedAt, reportCount");
+    }
+    Sort.Direction direction =
+        parts.length == 2 && parts[1].trim().equalsIgnoreCase("asc")
+            ? Sort.Direction.ASC
+            : Sort.Direction.DESC;
+    return Sort.by(direction, property);
+  }
+
+  private Sort parseSort(String sort) {
+    String[] parts = sort.split(",");
+    if (parts.length == 0 || parts.length > 2) {
+      throw new ValidationException("Sort must be in the form property,asc|desc");
+    }
+    String property = parts[0].trim();
+    if (property.isBlank()) {
+      throw new ValidationException("Sort property must not be blank");
+    }
+    // `username` was a valid sort property until ADR-019 renamed the column. Translate it rather
+    // than let Spring Data throw a PropertyReferenceException, which would surface as a 500.
+    if ("username".equals(property)) {
+      property = "displayName";
+    }
+    Sort.Direction direction =
+        parts.length == 2 && parts[1].trim().equalsIgnoreCase("asc")
+            ? Sort.Direction.ASC
+            : Sort.Direction.DESC;
+    return Sort.by(direction, property);
+  }
+}

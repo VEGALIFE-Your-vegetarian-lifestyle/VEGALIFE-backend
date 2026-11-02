@@ -1,0 +1,61 @@
+spring:
+  ai:
+    openai:
+      # Spring AI refuses to start with an empty key; never a real credential.
+      api-key: ${AI_CHAT_API_KEY:integration-dummy-key-not-a-secret}
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  mail:
+    host: localhost
+    port: 2525
+    username: ""
+    password: ""
+    properties:
+      mail:
+        smtp:
+          auth: "false"
+          starttls:
+            enable: "false"
+        debug: "false"
+
+app:
+  auth:
+    access-token-expiry-minutes: 15
+    refresh-token-expiry-days: 7
+    jwt:
+      secret: integration-test-auth-jwt-secret-key-at-least-32-chars
+      issuer: vegalife-backend-integration
+      audience: vegalife-api
+
+  media:
+    cloudinary:
+      cloud-name: integration-test-cloud
+
+  payments:
+    vnpay:
+      # Checkout is fail-closed without a full configuration (FR-019), so tests
+      # need an obviously fake but complete block; no gateway is ever contacted
+      # during integration runs.
+      enabled: true
+      tmn-code: integration-test-tmn
+      secure-hash-secret: integration-only-vnpay-secret-not-a-real-credential
+      payment-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+      locale: vn
+
+  scheduling:
+    enabled: false
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.testcontainers: INFO
+    org.springframework.mail: DEBUG
