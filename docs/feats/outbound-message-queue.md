@@ -92,11 +92,14 @@ registration.
 - [x] FR-013: A channel adapter distinguishes transient from permanent
       failure (ADR-020). `RetryableDeliveryException` means "try again"
       and may carry the receiver's retry hint; the next attempt is never
-      scheduled earlier than that hint. Any other exception is
-      permanent: the message is marked `FAILED` immediately instead of
-      consuming the ladder to `max-age`, and the adapter's
-      `onDeliveryAbandoned` hook is called so the channel can record the
-      domain consequence. A retry that would land past `max-age` is
+      scheduled earlier than that hint. Permanence is *declared* with
+      `PermanentDeliveryException`: the message is marked `FAILED`
+      immediately instead of consuming the ladder to `max-age`, and the
+      adapter's `onDeliveryAbandoned` hook is called so the channel can
+      record the domain consequence. Any other exception is retried with
+      normal backoff — an unclassified failure is more likely transient
+      than permanent, so an SMTP or provider outage can never be mistaken
+      for a bad message. A retry that would land past `max-age` is
       abandoned rather than scheduled.
 
 ### Non-Functional Requirements
@@ -161,10 +164,11 @@ never blocks me from creating an account.
 - [x] Given a concurrent claim scenario, when two drainers claim
       simultaneously, then each message is claimed by exactly one
       (unit/integration test with disjoint assertion on `attempts`).
-- [x] Given an adapter throws a permanent failure, when the drainer
+- [x] Given an adapter declares a permanent failure, when the drainer
       processes the row, then the message is `FAILED` at once, no retry
       is scheduled, and the adapter observes the abandonment (issue
-      #175).
+      #175). Given an adapter throws an undeclared failure, then the
+      message is retried with normal backoff.
 
 ## Risks / open questions
 

@@ -118,7 +118,10 @@ business purpose — "get this post judged" — was discharged by the review que
 does not know what a `CONTENT_FILTER` row means. A channel adapter may implement
 an optional hook invoked when its message is abandoned; the default is a no-op.
 This keeps the channel → consequence mapping in the adapter that owns the domain,
-and leaves `EMAIL` and `MEDIA_PURGE` unaffected.
+and leaves `EMAIL` and `MEDIA_PURGE` unaffected. Permanence is **declared** by the
+adapter, never inferred by the drainer: an undeclared failure keeps its retries,
+because an SMTP or provider outage is indistinguishable from a bad message at that
+boundary and silently dropping work is the worse mistake.
 
 **7. The filter paths become consistent.** The post-body path adopts the
 behaviour the component scorer already had (ADR-016 D16), rather than the reverse.
@@ -183,8 +186,9 @@ revisiting if queue volume grows.
 
 - Unit tests pin one distinct message per provider shape (429, 400-invalid-key,
   403, 404, timeout), and assert `Retry-After` survives into the reschedule.
-- A drainer test asserts a permanent failure produces no retry and invokes the
-  abandonment hook, and that a retry never precedes the provider's hint.
+- A drainer test asserts a declared permanent failure produces no retry and invokes
+  the abandonment hook, that a retry never precedes the provider's hint, and that
+  an undeclared failure still retries (the EMAIL and MEDIA_PURGE contract).
 - An adapter test asserts the post lands `NEEDS_REVIEW` / `unpublished` with a
   `moderation_log` row naming the cause, and that the message completes.
 - Live shapes recorded 2026-11-02: invalid key `400 API_KEY_INVALID`, no key
