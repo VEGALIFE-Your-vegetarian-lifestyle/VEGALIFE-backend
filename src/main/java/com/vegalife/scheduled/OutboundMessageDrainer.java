@@ -6,11 +6,13 @@ import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.repository.outbound.OutboundMessageQueueDao;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
 import com.vegalife.service.outbound.OutboundMessageProperties;
+import com.vegalife.shared.exception.RetryableDeliveryException;
 import java.lang.management.ManagementFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -144,8 +146,11 @@ public class OutboundMessageDrainer {
     }
     try {
       adapter.deliver(message);
+    } catch (RetryableDeliveryException e) {
+      scheduleRetry(message, now, e, e.getRetryAfter());
+      return;
     } catch (RuntimeException e) {
-      scheduleRetry(message, now, e);
+      abandon(message, now, e);
       return;
     }
     if (queueDao.markCompleted(message.getId(), workerId, Instant.now())) {
@@ -160,39 +165,104 @@ public class OutboundMessageDrainer {
     }
   }
 
-  private void scheduleRetry(OutboundMessage message, Instant from, RuntimeException cause) {
+  /**
+   * Ends a message whose delivery can never succeed (ADR-020).
+   *
+   * <p>Retrying a permanent rejection costs a full day of the fast ladder plus the deferred
+   * cadence, and ends in {@code FAILED} anyway — so it is marked terminal now, and the adapter is
+   * told so it can record the domain consequence (the content filter queues the post for review).
+   */
+  private void abandon(OutboundMessage message, Instant now, RuntimeException cause) {
+    if (!markTerminal(message, OutboundStatus.FAILED)) {
+      return;
+    }
+    failed.incrementAndGet();
+    log.error(
+        "Outbound message {} abandoned after {} attempt(s) on channel {}: {}",
+        message.getId(),
+        message.getAttempts(),
+        message.getChannel(),
+        cause.getMessage());
+    adapterFor(message).ifPresent(adapter -> notifyAbandoned(adapter, message, cause));
+  }
+
+  private Optional<OutboundChannelAdapter> adapterFor(OutboundMessage message) {
+    return Optional.ofNullable(adapters.get(message.getChannel()));
+  }
+
+  /**
+   * The adapter's hook still runs when it throws: losing the notification would leave the domain (a
+   * post stuck at {@code PENDING}) in a worse state than the failed delivery itself.
+   */
+  private void notifyAbandoned(
+      OutboundChannelAdapter adapter, OutboundMessage message, RuntimeException cause) {
+    try {
+      adapter.onDeliveryAbandoned(message, cause);
+    } catch (RuntimeException e) {
+      log.error(
+          "Channel adapter {} failed to record abandonment of outbound message {}",
+          message.getChannel(),
+          message.getId(),
+          e);
+    }
+  }
+
+  /**
+   * Reschedules a failed delivery, never earlier than the receiver's own retry hint.
+   *
+   * @param retryAfter the provider's requested delay, or {@code null} when it gave none
+   */
+  private void scheduleRetry(
+      OutboundMessage message, Instant from, RuntimeException cause, Duration retryAfter) {
     int attempts = Math.max(message.getAttempts(), 1);
     List<Duration> delays = properties.getRetry().getDelays();
-    if (attempts <= delays.size()) {
-      Duration delay = delays.get(attempts - 1);
-      if (queueDao.scheduleRetry(
-          message.getId(), OutboundStatus.PENDING, from.plus(delay), workerId)) {
-        retried.incrementAndGet();
-        log.warn(
-            "Outbound message {} delivery failed on attempt {}/{}, retrying in {}: {}",
-            message.getId(),
-            attempts,
-            attempts + 1,
-            delay,
-            cause.getMessage());
-      } else {
-        logLostOwnership(message, OutboundStatus.PENDING);
-      }
-    } else {
-      Instant deferredAt = from.plus(properties.getRetry().getDeferredDelay());
-      if (queueDao.scheduleRetry(message.getId(), OutboundStatus.DEFERRED, deferredAt, workerId)) {
-        retried.incrementAndGet();
+    boolean withinFastRetries = attempts <= delays.size();
+    Duration configured =
+        withinFastRetries ? delays.get(attempts - 1) : properties.getRetry().getDeferredDelay();
+    // A provider's hint is a floor, never a ceiling: reacting sooner than asked re-arms the very
+    // limit being waited on, which is how a queue throttles itself (ADR-020).
+    Duration delay =
+        retryAfter != null && retryAfter.compareTo(configured) > 0 ? retryAfter : configured;
+
+    if (deferralWouldExceedMaxAge(message, from, delay)) {
+      log.warn(
+          "Outbound message {} cannot be retried inside max age {} (next attempt {}); abandoning: {}",
+          message.getId(),
+          properties.getMaxAge(),
+          from.plus(delay),
+          cause.getMessage());
+      abandon(message, from, cause);
+      return;
+    }
+
+    OutboundStatus status = withinFastRetries ? OutboundStatus.PENDING : OutboundStatus.DEFERRED;
+    if (queueDao.scheduleRetry(message.getId(), status, from.plus(delay), workerId)) {
+      retried.incrementAndGet();
+      if (!withinFastRetries) {
         deferred.incrementAndGet();
+      }
+      String line = "Outbound message {} delivery failed on attempt {}/{}, retrying in {}: {}";
+      if (withinFastRetries) {
+        log.warn(line, message.getId(), attempts, attempts + 1, delay, cause.getMessage());
+      } else {
         log.error(
             "Outbound message {} failed after {} attempts, deferred until {}: {}",
             message.getId(),
             attempts,
-            deferredAt,
+            from.plus(delay),
             cause.getMessage());
-      } else {
-        logLostOwnership(message, OutboundStatus.DEFERRED);
       }
+    } else {
+      logLostOwnership(message, status);
     }
+  }
+
+  /** True when the next attempt would land past the queue's max age, making it pointless. */
+  private boolean deferralWouldExceedMaxAge(OutboundMessage message, Instant from, Duration delay) {
+    if (message.getCreatedAt() == null) {
+      return false;
+    }
+    return from.plus(delay).isAfter(message.getCreatedAt().plus(properties.getMaxAge()));
   }
 
   private boolean markTerminal(OutboundMessage message, OutboundStatus status) {
