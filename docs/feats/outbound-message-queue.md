@@ -60,7 +60,9 @@ registration.
       ever added to request latency.
 - [x] FR-003: A failed send is retried after 10s, then 30s, then 2m
       (initial attempt + 3 retries, per issue #49), each attempt
-      incrementing `attempts` and scheduling `next_attempt_at`.
+      incrementing `attempts` and scheduling `next_attempt_at`. Since
+      ADR-020 the ladder applies to *retryable* failures only — see
+      FR-013.
 - [x] FR-004: After the 3rd retry fails (attempt 4), the message
       becomes `DEFERRED` and is re-attempted every 5 minutes until
       delivered, expired, or too old.
@@ -87,6 +89,15 @@ registration.
       `app.scheduling.enabled` is true.
 - [x] FR-012: Terminal rows older than 7 days are purged by a daily
       cleanup job.
+- [x] FR-013: A channel adapter distinguishes transient from permanent
+      failure (ADR-020). `RetryableDeliveryException` means "try again"
+      and may carry the receiver's retry hint; the next attempt is never
+      scheduled earlier than that hint. Any other exception is
+      permanent: the message is marked `FAILED` immediately instead of
+      consuming the ladder to `max-age`, and the adapter's
+      `onDeliveryAbandoned` hook is called so the channel can record the
+      domain consequence. A retry that would land past `max-age` is
+      abandoned rather than scheduled.
 
 ### Non-Functional Requirements
 
@@ -150,6 +161,10 @@ never blocks me from creating an account.
 - [x] Given a concurrent claim scenario, when two drainers claim
       simultaneously, then each message is claimed by exactly one
       (unit/integration test with disjoint assertion on `attempts`).
+- [x] Given an adapter throws a permanent failure, when the drainer
+      processes the row, then the message is `FAILED` at once, no retry
+      is scheduled, and the adapter observes the abandonment (issue
+      #175).
 
 ## Risks / open questions
 

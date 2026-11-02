@@ -90,8 +90,9 @@ credential and bad content are both `400`.
 
 **2. A permanent rejection ends the message immediately.** `AUTH`,
 `INVALID_REQUEST` and `NOT_FOUND` are terminal: no retry, no fast ladder, no
-24-hour wait. `TIMEOUT`, `UPSTREAM_ERROR` (5xx) and `RATE_LIMITED` are
-retryable.
+24-hour wait. `TIMEOUT`, `UPSTREAM_ERROR` (5xx), `RATE_LIMITED` and an
+unclassifiable `UNKNOWN` are retryable — treating an unreadable failure as
+permanent would silently drop work.
 
 **3. A retryable failure is rescheduled at or after the provider's `Retry-After`,
 never before it.** The drainer takes the maximum of the configured delay and the

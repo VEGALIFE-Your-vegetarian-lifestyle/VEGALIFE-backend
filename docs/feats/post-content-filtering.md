@@ -111,7 +111,8 @@ vegan food at all, or what it contains.
       persisted (ADR-014).
 - [ ] NFR-SEC-002: Only `post.flag` is exposed to owners via the normal
       post responses; scores, reasons, and model details stay internal
-      (logs only).
+      (logs, and the admin-only `moderation_log` record used to tell
+      "the filter could not run" from "the filter judged this").
 - [ ] NFR-MAINT-001: The embedding provider is behind Spring AI's
       `EmbeddingModel` interface, so the provider can be swapped without
       touching the scorer or the service. Exercised in practice by ADR-014,
@@ -196,10 +197,14 @@ Issue #34 (edit):
 
 ## Risks / open questions
 
-- **Provider availability**: the HuggingFace inference endpoint is an
-  external dependency. Failures do not lose posts (the outbox retries),
-  but a prolonged outage delays publishing; the 24h sweep converts the
-  worst case into `NEEDS_REVIEW` rather than a permanent `PENDING`.
+- **Provider availability**: the embedding endpoint is an external
+  dependency. A transient failure is retried with backoff and the
+  provider's `Retry-After` honoured; a permanent rejection (bad
+  credential, unknown model, rejected request) can never succeed on
+  retry, so the post goes to `NEEDS_REVIEW` immediately with a
+  `moderation_log` `FILTER_UNAVAILABLE` row recording the cause
+  (ADR-020). Posts are never lost, and no post stays `PENDING`
+  indefinitely.
 - **Threshold tuning**: 0.70 / 0.45 are derived from the measured
   centered seed distribution under `gemini-embedding-001` (lowest
   on-topic 0.7553, highest off-topic 0.3491), not measured against
