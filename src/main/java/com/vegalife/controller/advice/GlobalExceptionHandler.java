@@ -3,6 +3,7 @@ package com.vegalife.controller.advice;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.exception.AiProviderException;
 import com.vegalife.shared.exception.AiQuotaExceededException;
+import com.vegalife.shared.exception.AiUnavailableException;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.EmbeddingClientException;
 import com.vegalife.shared.exception.ExpiredTokenException;
@@ -119,6 +120,16 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(PaymentGatewayException.class)
   public ResponseEntity<ApiResponse<Void>> handlePaymentGateway(
       PaymentGatewayException ex, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        .body(ApiResponse.failure(ex.getMessage()));
+  }
+
+  /**
+   * AI chat is turned off via the {@code ai_chat_enabled} platform setting (issue #13 follow-up).
+   */
+  @ExceptionHandler(AiUnavailableException.class)
+  public ResponseEntity<ApiResponse<Void>> handleAiUnavailable(
+      AiUnavailableException ex, HttpServletRequest request) {
     return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
         .body(ApiResponse.failure(ex.getMessage()));
   }

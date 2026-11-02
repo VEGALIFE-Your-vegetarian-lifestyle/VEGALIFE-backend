@@ -93,6 +93,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-AI-004 | Context Is the Stored Profile (Incl. Dietary JSON and BMI) Plus Own Conversation History | Active | 2026-10-13 |
 | BR-AI-005 | Chat Provider Is OpenAI-Compatible and Set by Dedicated Env Vars | Active | 2026-10-07 |
 | BR-AI-006 | Persona Is Scoped to Vegan and Platform Topics, With a Polite Refusal Otherwise | Active | 2026-10-13 |
+| BR-AI-007 | AI Chat Can Be Disabled Platform-Wide, With No Turn, Provider Call, or Quota | Active | 2026-11-02 |
 | BR-MENU-001 | Menu Ownership Comes from Authentication | Active | 2026-10-10 |
 | BR-MENU-002 | Menu Read Windows Are Intersections | Active | 2026-10-10 |
 | BR-MENU-003 | One Scheduled Week per User, No Overlap | Active | 2026-10-10 |

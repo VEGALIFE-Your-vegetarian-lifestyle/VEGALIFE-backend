@@ -1,32 +1,47 @@
 package com.vegalife.unit.infrastructure.media;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 
 import com.vegalife.infrastructure.media.CloudinaryUploadProvider;
+import com.vegalife.repository.admin.PlatformSettingRepository;
+import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.media.MediaProperties;
 import com.vegalife.service.media.UploadGrant;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+@ExtendWith(MockitoExtension.class)
 class CloudinaryUploadProviderTest {
 
   private static final int IMAGE_CEILING = 5 * 1024 * 1024;
   private static final int VIDEO_CEILING = 50 * 1024 * 1024;
   private static final String API_SECRET = "test-secret";
 
+  @Mock private PlatformSettingRepository platformSettingRepository;
+
   private CloudinaryUploadProvider provider;
 
   @BeforeEach
   void setUp() {
+    lenient().when(platformSettingRepository.findByKey(anyString())).thenReturn(Optional.empty());
+
     MediaProperties properties = new MediaProperties();
     properties.getCloudinary().setCloudName("testcloud");
     properties.getCloudinary().setApiKey("test-api-key");
     properties.getCloudinary().setApiSecret(API_SECRET);
-    provider = new CloudinaryUploadProvider(properties);
+    provider =
+        new CloudinaryUploadProvider(
+            properties, new PlatformSettingsProvider(platformSettingRepository));
   }
 
   @Test

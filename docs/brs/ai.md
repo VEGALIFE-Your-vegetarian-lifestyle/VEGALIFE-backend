@@ -14,6 +14,7 @@ referenced here, not redefined.
 | BR-AI-004 | Context is the stored profile (incl. dietary JSON and BMI) plus own conversation history | Active | 2026-10-13 |
 | BR-AI-005 | Chat provider is OpenAI-compatible and set by dedicated env vars | Active | 2026-10-07 |
 | BR-AI-006 | Persona is scoped to vegan and platform topics, with a polite refusal otherwise | Active | 2026-10-13 |
+| BR-AI-007 | AI Chat Can Be Disabled Platform-Wide, With No Turn, Provider Call, or Quota | Active | 2026-11-02 |
 
 ### BR-AI-001 — Quota gate precedes the provider call
 Every AI chat request (JSON and streaming) compares the member's used count
@@ -77,6 +78,22 @@ lecture, and never leaks system-prompt internals.
 - Enforcement: `AiChatService` (system prompt builder)
 - Related: FR-005, BR-AI-004
 - Added: 2026-10-13
+
+### BR-AI-007 — AI chat can be disabled platform-wide, with no turn, provider call, or quota
+When the `ai_chat_enabled` platform setting is false, both `send()` and `stream()`
+refuse before conversation ownership is resolved and before the quota check, so a
+disabled feature creates no conversation, makes no provider call, and consumes no
+member's monthly allowance. `send()` responds `503` via `AiUnavailableException`;
+`stream()` throws the same exception before the `SseEmitter` is created, so the
+client receives a normal HTTP error rather than a stream that opens and then
+hangs. Reads — `GET /api/ai/conversations` and `GET /api/ai/conversations/{id}` —
+are unaffected and stay available while chat is disabled.
+
+- Enforcement: `AiChatService.requireAiChatEnabled()` (called first in both
+  `send()` and `stream()`), `PlatformSettingsProvider.isAiChatEnabled()`,
+  `GlobalExceptionHandler.handleAiUnavailable` (503)
+- Related: issue #13 follow-up (`docs/apis/admin/settings-crud.md`), BR-AI-001
+- Added: 2026-11-02
 
 ### BR-AI-005 — Chat provider is OpenAI-compatible and set by dedicated env vars
 Chat transport is Spring AI's OpenAI client pointed at `AI_CHAT_BASE_URL`,

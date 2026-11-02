@@ -42,36 +42,36 @@ class AdminSettingsServiceTest {
             List.of(
                 PlatformSetting.builder()
                     .id(UUID.randomUUID())
-                    .category("auth")
-                    .key("registration_open")
+                    .category("ai")
+                    .key("ai_chat_enabled")
                     .value("true")
                     .build(),
                 PlatformSetting.builder()
                     .id(UUID.randomUUID())
-                    .category("limits")
-                    .key("max_upload_size_mb")
-                    .value("50")
+                    .category("media")
+                    .key("max_image_upload_mb")
+                    .value("5")
                     .build()));
 
     List<SettingGroupResponse> groups = adminSettingsService.getSettings();
 
     assertThat(groups).hasSize(2);
-    assertThat(groups.get(0).getCategory()).isEqualTo("auth");
-    assertThat(groups.get(0).getItems()).extracting("key").containsExactly("registration_open");
+    assertThat(groups.get(0).getCategory()).isEqualTo("ai");
+    assertThat(groups.get(0).getItems()).extracting("key").containsExactly("ai_chat_enabled");
   }
 
   @Test
-  void updateSettingsAppliesChangeAndRecordsModerationLog() {
+  void updateSettingsAppliesChangeRecordsModerationLogAndSetsUpdatedBy() {
     UUID adminId = UUID.randomUUID();
     UUID settingId = UUID.randomUUID();
     PlatformSetting setting =
         PlatformSetting.builder()
             .id(settingId)
-            .category("limits")
-            .key("max_upload_size_mb")
-            .value("50")
+            .category("media")
+            .key("max_image_upload_mb")
+            .value("5")
             .build();
-    when(platformSettingRepository.findByKey("max_upload_size_mb"))
+    when(platformSettingRepository.findByKey("max_image_upload_mb"))
         .thenReturn(Optional.of(setting));
     when(platformSettingRepository.saveAndFlush(any(PlatformSetting.class)))
         .thenAnswer(inv -> inv.getArgument(0));
@@ -80,11 +80,12 @@ class AdminSettingsServiceTest {
 
     adminSettingsService.updateSettings(
         adminId,
-        SettingsUpdateRequest.builder().settings(Map.of("max_upload_size_mb", "100")).build());
+        SettingsUpdateRequest.builder().settings(Map.of("max_image_upload_mb", "10")).build());
 
     ArgumentCaptor<PlatformSetting> settingCaptor = ArgumentCaptor.forClass(PlatformSetting.class);
     verify(platformSettingRepository).saveAndFlush(settingCaptor.capture());
-    assertThat(settingCaptor.getValue().getValue()).isEqualTo("100");
+    assertThat(settingCaptor.getValue().getValue()).isEqualTo("10");
+    assertThat(settingCaptor.getValue().getUpdatedBy()).isEqualTo(adminId);
 
     ArgumentCaptor<ModerationLog> logCaptor = ArgumentCaptor.forClass(ModerationLog.class);
     verify(moderationLogRepository).save(logCaptor.capture());
@@ -95,8 +96,6 @@ class AdminSettingsServiceTest {
 
   @Test
   void updateSettingsRejectsUnknownKey() {
-    when(platformSettingRepository.findByKey("bogus_key")).thenReturn(Optional.empty());
-
     assertThatThrownBy(
             () ->
                 adminSettingsService.updateSettings(
@@ -104,6 +103,47 @@ class AdminSettingsServiceTest {
                     SettingsUpdateRequest.builder().settings(Map.of("bogus_key", "x")).build()))
         .isInstanceOf(ValidationException.class);
 
+    verify(platformSettingRepository, never()).saveAndFlush(any());
+    verify(moderationLogRepository, never()).save(any());
+  }
+
+  @Test
+  void updateSettingsRejectsValueOutOfBounds() {
+    assertThatThrownBy(
+            () ->
+                adminSettingsService.updateSettings(
+                    UUID.randomUUID(),
+                    SettingsUpdateRequest.builder()
+                        .settings(Map.of("max_image_upload_mb", "0"))
+                        .build()))
+        .isInstanceOf(ValidationException.class);
+
+    verify(platformSettingRepository, never()).saveAndFlush(any());
+    verify(moderationLogRepository, never()).save(any());
+  }
+
+  @Test
+  void updateSettingsRejectsRejectThresholdNotBelowAcceptThreshold() {
+    PlatformSetting rejectSetting =
+        PlatformSetting.builder()
+            .id(UUID.randomUUID())
+            .category("content")
+            .key("content_filter_reject_threshold")
+            .value("0.45")
+            .build();
+    when(platformSettingRepository.findByKey("content_filter_reject_threshold"))
+        .thenReturn(Optional.of(rejectSetting));
+
+    assertThatThrownBy(
+            () ->
+                adminSettingsService.updateSettings(
+                    UUID.randomUUID(),
+                    SettingsUpdateRequest.builder()
+                        .settings(Map.of("content_filter_reject_threshold", "0.80"))
+                        .build()))
+        .isInstanceOf(ValidationException.class);
+
+    verify(platformSettingRepository, never()).saveAndFlush(any());
     verify(moderationLogRepository, never()).save(any());
   }
 }

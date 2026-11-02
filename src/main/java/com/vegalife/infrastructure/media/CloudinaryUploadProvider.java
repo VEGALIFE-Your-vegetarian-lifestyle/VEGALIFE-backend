@@ -3,6 +3,7 @@ package com.vegalife.infrastructure.media;
 import com.cloudinary.Cloudinary;
 import com.cloudinary.api.ApiResponse;
 import com.cloudinary.api.exceptions.NotFound;
+import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.media.MediaProperties;
 import com.vegalife.service.media.PresignedUploadProvider;
 import com.vegalife.service.media.UploadGrant;
@@ -36,11 +37,13 @@ public class CloudinaryUploadProvider implements PresignedUploadProvider {
   private static final String JPG = "jpg";
 
   private final MediaProperties properties;
+  private final PlatformSettingsProvider platformSettingsProvider;
   private final Cloudinary cloudinary;
-  private final Map<String, String> mimeByFormat;
 
-  public CloudinaryUploadProvider(MediaProperties properties) {
+  public CloudinaryUploadProvider(
+      MediaProperties properties, PlatformSettingsProvider platformSettingsProvider) {
     this.properties = properties;
+    this.platformSettingsProvider = platformSettingsProvider;
 
     MediaProperties.Cloudinary credentials = properties.getCloudinary();
     Map<String, Object> config = new HashMap<>();
@@ -48,17 +51,11 @@ public class CloudinaryUploadProvider implements PresignedUploadProvider {
     config.put("api_key", credentials.getApiKey());
     config.put("api_secret", credentials.getApiSecret());
     this.cloudinary = new Cloudinary(config);
-
-    Map<String, String> formats = new HashMap<>();
-    for (String contentType : properties.getUpload().allowedTypes()) {
-      formats.put(shortFormat(contentType), contentType);
-    }
-    this.mimeByFormat = formats;
   }
 
   @Override
   public UploadGrant prepare(String publicId, String contentType) {
-    long maxFileSize = properties.getUpload().maxBytesFor(contentType);
+    long maxFileSize = platformSettingsProvider.maxUploadBytesFor(contentType);
     long timestamp = System.currentTimeMillis() / 1000L;
     List<String> allowedFormats = shortFormats(contentType);
 
@@ -92,6 +89,7 @@ public class CloudinaryUploadProvider implements PresignedUploadProvider {
     }
 
     Object reportedFormat = resource.get("format");
+    Map<String, String> mimeByFormat = mimeByFormat();
     String reportedMime =
         reportedFormat instanceof String format && mimeByFormat.containsKey(format)
             ? mimeByFormat.get(format)
@@ -124,15 +122,30 @@ public class CloudinaryUploadProvider implements PresignedUploadProvider {
   }
 
   private String resourceType(String contentType) {
-    return properties.getUpload().isImage(contentType) ? IMAGE : VIDEO;
+    return platformSettingsProvider.isImageContentType(contentType) ? IMAGE : VIDEO;
   }
 
+  /**
+   * Built fresh from the live settings on every call rather than once at construction, so a PATCH
+   * to the allow-lists takes effect on the next upload without a restart. {@link
+   * PlatformSettingsProvider} already guarantees a non-empty list (falling back to the compiled
+   * default itself on a bad or empty stored value), so this never signs an upload with no allowed
+   * formats.
+   */
   private List<String> shortFormats(String contentType) {
     List<String> allowed =
-        properties.getUpload().isImage(contentType)
-            ? properties.getUpload().getAllowedImageTypes()
-            : properties.getUpload().getAllowedVideoTypes();
+        platformSettingsProvider.isImageContentType(contentType)
+            ? platformSettingsProvider.getAllowedImageTypes()
+            : platformSettingsProvider.getAllowedVideoTypes();
     return allowed.stream().map(CloudinaryUploadProvider::shortFormat).toList();
+  }
+
+  private Map<String, String> mimeByFormat() {
+    Map<String, String> formats = new HashMap<>();
+    for (String contentType : platformSettingsProvider.getAllowedUploadTypes()) {
+      formats.put(shortFormat(contentType), contentType);
+    }
+    return formats;
   }
 
   private static String shortFormat(String contentType) {

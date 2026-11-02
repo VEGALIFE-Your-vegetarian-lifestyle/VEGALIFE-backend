@@ -1,6 +1,7 @@
 package com.vegalife.service.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.service.admin.PlatformSettingsProvider;
 import java.io.IOException;
 import java.io.InputStream;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,15 +33,27 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
   private final float[] offTopic;
 
   private final float[] mean;
-  private final double acceptThreshold;
-  private final double rejectThreshold;
+
+  /** Compiled-default thresholds: used for the construction-time sanity check, and by tests. */
+  private final double defaultAcceptThreshold;
+
+  private final double defaultRejectThreshold;
+
+  /** Null for the test-only vector constructor, which has no access to the live settings. */
+  private final PlatformSettingsProvider platformSettingsProvider;
 
   /**
-   * Spring wiring: loads the committed centroids and binds thresholds from {@code app.filter}.
-   * Explicitly annotated because the public vector constructor below exists for tests.
+   * Spring wiring: loads the committed centroids, validates them against the compiled {@code
+   * app.filter} defaults, and reads the live accept/reject thresholds per scoring call from {@code
+   * platformSettingsProvider} instead — so a PATCH to {@code content_filter_accept_threshold} /
+   * {@code content_filter_reject_threshold} takes effect on the next run, and an invalid stored
+   * pair falls back to the registry defaults (handled by the provider) rather than failing a
+   * scoring call. Explicitly annotated because the public vector constructor below exists for
+   * tests.
    */
   @Autowired
-  public EmbeddingRelevanceScorer(FilterProperties properties) {
+  public EmbeddingRelevanceScorer(
+      FilterProperties properties, PlatformSettingsProvider platformSettingsProvider) {
     Centroids centroids = loadCentroids();
     validate(
         centroids.onTopic(),
@@ -51,14 +64,16 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
     this.onTopic = subtract(centroids.onTopic(), centroids.mean());
     this.offTopic = subtract(centroids.offTopic(), centroids.mean());
     this.mean = centroids.mean();
-    this.acceptThreshold = properties.getAcceptThreshold();
-    this.rejectThreshold = properties.getRejectThreshold();
+    this.defaultAcceptThreshold = properties.getAcceptThreshold();
+    this.defaultRejectThreshold = properties.getRejectThreshold();
+    this.platformSettingsProvider = platformSettingsProvider;
   }
 
   /**
-   * Direct construction with explicit centroids, corpus mean, and thresholds (used by unit tests).
-   * Both centroids are centered with the mean at construction; every scored embedding is centered
-   * the same way before the cosine comparison.
+   * Direct construction with explicit centroids, corpus mean, and fixed thresholds (used by unit
+   * tests): scores with exactly the thresholds passed in, with no live settings lookup. Both
+   * centroids are centered with the mean at construction; every scored embedding is centered the
+   * same way before the cosine comparison.
    *
    * @param onTopic on-topic centroid vector
    * @param offTopic off-topic centroid vector, same length as {@code onTopic}
@@ -76,8 +91,9 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
     this.onTopic = subtract(onTopic, mean);
     this.offTopic = subtract(offTopic, mean);
     this.mean = mean;
-    this.acceptThreshold = acceptThreshold;
-    this.rejectThreshold = rejectThreshold;
+    this.defaultAcceptThreshold = acceptThreshold;
+    this.defaultRejectThreshold = rejectThreshold;
+    this.platformSettingsProvider = null;
   }
 
   @Override
@@ -88,6 +104,14 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
               + (embedding == null ? "null" : embedding.length)
               + " does not match centroid dimensions "
               + onTopic.length);
+    }
+    double acceptThreshold = defaultAcceptThreshold;
+    double rejectThreshold = defaultRejectThreshold;
+    if (platformSettingsProvider != null) {
+      PlatformSettingsProvider.ContentFilterThresholds thresholds =
+          platformSettingsProvider.getContentFilterThresholds();
+      acceptThreshold = thresholds.acceptThreshold();
+      rejectThreshold = thresholds.rejectThreshold();
     }
     double score = relevanceScore(embedding, onTopic, offTopic, mean);
     RelevanceScore.Band band =

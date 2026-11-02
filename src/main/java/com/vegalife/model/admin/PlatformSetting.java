@@ -38,6 +38,10 @@ public class PlatformSetting {
   @Column(name = "value", columnDefinition = "TEXT")
   private String value;
 
+  /** Admin who made the most recent change (issue #13 follow-up); null if never updated. */
+  @Column(name = "updated_by")
+  private UUID updatedBy;
+
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;

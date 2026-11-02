@@ -31,9 +31,9 @@ import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
 import com.vegalife.service.filter.ContentFilterPayload;
-import com.vegalife.service.filter.FilterProperties;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -73,7 +73,7 @@ public class PostService {
   private final OutboundMessageRepository outboundMessageRepository;
   private final PostMapper postMapper;
   private final ObjectMapper objectMapper;
-  private final FilterProperties filterProperties;
+  private final PlatformSettingsProvider platformSettingsProvider;
   private final PostEmbeddingRepository postEmbeddingRepository;
   private final ActiveEmbeddingModel activeEmbeddingModel;
 
@@ -98,17 +98,19 @@ public class PostService {
     // filter enabled (the default) it is queued for content filtering (BR-FILTER-005) and the
     // filter callback publishes it once it passes; without it the post stays a private draft that
     // is never filtered. The queued outbound row's creation time is the enqueue clock
-    // (BR-FILTER-009). Only when app.filter.enabled=false (deliberate outage mode) does a published
-    // post skip the filter and land directly in the admin review queue (flag=NEEDS_REVIEW,
-    // status=unpublished) with no embedding call.
+    // (BR-FILTER-009). Only when the content_filter_enabled platform setting is false (deliberate
+    // outage mode) does a published post skip the filter and land directly in the admin review
+    // queue
+    // (flag=NEEDS_REVIEW, status=unpublished) with no embedding call.
     post.setStatus(PostStatus.created);
+    boolean filterEnabled = platformSettingsProvider.isContentFilterEnabled();
     if (request.isPublish()) {
-      post.setFlag(filterProperties.isEnabled() ? PostFlag.PENDING : PostFlag.NEEDS_REVIEW);
+      post.setFlag(filterEnabled ? PostFlag.PENDING : PostFlag.NEEDS_REVIEW);
     }
 
     Post saved = postRepository.saveAndFlush(post);
     if (request.isPublish()) {
-      if (filterProperties.isEnabled()) {
+      if (filterEnabled) {
         enqueueContentFilter(saved);
       } else {
         markForAdminReview(saved);
@@ -144,13 +146,14 @@ public class PostService {
 
     boolean willEnqueue = shouldEnqueueFilter(post, request.getPublish(), contentChanged);
     applyPublishState(post, request.getPublish(), isAdmin, willEnqueue);
+    boolean filterEnabled = platformSettingsProvider.isContentFilterEnabled();
     if (willEnqueue) {
-      post.setFlag(filterProperties.isEnabled() ? PostFlag.PENDING : PostFlag.NEEDS_REVIEW);
+      post.setFlag(filterEnabled ? PostFlag.PENDING : PostFlag.NEEDS_REVIEW);
     }
 
     Post saved = postRepository.saveAndFlush(post);
     if (willEnqueue) {
-      if (filterProperties.isEnabled()) {
+      if (filterEnabled) {
         enqueueContentFilter(saved);
       } else {
         markForAdminReview(saved);

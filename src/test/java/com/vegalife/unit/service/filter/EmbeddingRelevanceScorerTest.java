@@ -3,7 +3,10 @@ package com.vegalife.unit.service.filter;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.filter.EmbeddingRelevanceScorer;
 import com.vegalife.service.filter.EmbeddingRelevanceScorer.Centroids;
 import com.vegalife.service.filter.FilterProperties;
@@ -108,5 +111,30 @@ class EmbeddingRelevanceScorerTest {
     assertTrue(
         offScore < properties.getRejectThreshold(),
         "off-topic centroid must fall below the reject threshold, was " + offScore);
+  }
+
+  /**
+   * Issue #13 follow-up: the Spring-wired constructor must read {@code
+   * content_filter_accept/reject} thresholds from {@link PlatformSettingsProvider} on every {@code
+   * score()} call, not once at construction — otherwise a PATCH to either setting would need a
+   * restart to take effect.
+   */
+  @Test
+  void springWiredConstructorReadsThresholdsFromProviderPerCall() {
+    FilterProperties properties = new FilterProperties();
+    PlatformSettingsProvider platformSettingsProvider = mock(PlatformSettingsProvider.class);
+    EmbeddingRelevanceScorer scorer =
+        new EmbeddingRelevanceScorer(properties, platformSettingsProvider);
+    Centroids centroids = EmbeddingRelevanceScorer.loadCentroids();
+
+    // Thresholds set well outside the real calibrated range so the band follows the mocked
+    // provider regardless of the committed centroids' exact self-similarity score.
+    when(platformSettingsProvider.getContentFilterThresholds())
+        .thenReturn(new PlatformSettingsProvider.ContentFilterThresholds(2.0, 0.5));
+    assertEquals(Band.REVIEW, scorer.score(centroids.onTopic()).band());
+
+    when(platformSettingsProvider.getContentFilterThresholds())
+        .thenReturn(new PlatformSettingsProvider.ContentFilterThresholds(0.01, 0.0));
+    assertEquals(Band.PASS, scorer.score(centroids.onTopic()).band());
   }
 }
