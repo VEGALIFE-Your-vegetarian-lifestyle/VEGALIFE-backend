@@ -1,4 +1,4 @@
--- V46__replace_platform_settings.sql
+-- V47__replace_platform_settings.sql
 -- Issue #13 follow-up: the 4 settings seeded by V41 were read-model only (no service ever read
 -- them). Replace them with 8 keys backed by a real business rule, in 3 categories (media, content,
 -- ai), and add updated_by so the audit trail names the admin on the row itself as well as in
