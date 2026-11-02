@@ -6,6 +6,7 @@ import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.repository.outbound.OutboundMessageQueueDao;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
 import com.vegalife.service.outbound.OutboundMessageProperties;
+import com.vegalife.shared.exception.PermanentDeliveryException;
 import com.vegalife.shared.exception.RetryableDeliveryException;
 import java.lang.management.ManagementFactory;
 import java.time.Duration;
@@ -149,8 +150,14 @@ public class OutboundMessageDrainer {
     } catch (RetryableDeliveryException e) {
       scheduleRetry(message, now, e, e.getRetryAfter());
       return;
-    } catch (RuntimeException e) {
+    } catch (PermanentDeliveryException e) {
       abandon(message, now, e);
+      return;
+    } catch (RuntimeException e) {
+      // Anything undeclared is retried, exactly as before ADR-020: an SMTP outage and a bad
+      // message look the same from here, and dropping work on a guess is the worse mistake. Only
+      // an adapter that can tell the difference declares permanence.
+      scheduleRetry(message, now, e, null);
       return;
     }
     if (queueDao.markCompleted(message.getId(), workerId, Instant.now())) {

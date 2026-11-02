@@ -23,6 +23,7 @@ import com.vegalife.repository.outbound.OutboundMessageQueueDao;
 import com.vegalife.scheduled.OutboundMessageDrainer;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
 import com.vegalife.service.outbound.OutboundMessageProperties;
+import com.vegalife.shared.exception.PermanentDeliveryException;
 import com.vegalife.shared.exception.RetryableDeliveryException;
 import java.time.Duration;
 import java.time.Instant;
@@ -259,7 +260,7 @@ class OutboundMessageDrainerTest {
     OutboundMessage message = message(1, Instant.now(), null);
     when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
         .thenReturn(List.of(message));
-    doThrow(new IllegalStateException("provider rejected the request"))
+    doThrow(new PermanentDeliveryException("provider rejected the request"))
         .when(adapter)
         .deliver(message);
     when(queueDao.markTerminal(eq(message.getId()), eq(OutboundStatus.FAILED), anyString()))
@@ -279,7 +280,7 @@ class OutboundMessageDrainerTest {
     OutboundMessage message = message(116, Instant.now().minus(Duration.ofHours(10)), null);
     when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
         .thenReturn(List.of(message));
-    doThrow(new IllegalStateException("invalid argument")).when(adapter).deliver(message);
+    doThrow(new PermanentDeliveryException("invalid argument")).when(adapter).deliver(message);
     when(queueDao.markTerminal(eq(message.getId()), eq(OutboundStatus.FAILED), anyString()))
         .thenReturn(true);
 
@@ -358,13 +359,37 @@ class OutboundMessageDrainerTest {
     verify(queueDao, never()).markTerminal(any(UUID.class), any(OutboundStatus.class), anyString());
   }
 
+  /**
+   * The safety valve for every adapter that cannot classify its failures: an SMTP outage, a
+   * provider 5xx and a malformed payload are indistinguishable from here, and ADR-020 does not
+   * license guessing. Undeclared means retry.
+   */
+  @Test
+  void shouldKeepRetryingAnUndeclaredFailure() {
+    OutboundMessage message = message(1, Instant.now(), null);
+    when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
+        .thenReturn(List.of(message));
+    doThrow(new IllegalStateException("smtp down")).when(adapter).deliver(message);
+    when(queueDao.scheduleRetry(
+            eq(message.getId()), eq(OutboundStatus.PENDING), any(Instant.class), anyString()))
+        .thenReturn(true);
+
+    drainer.drainOnce();
+
+    verify(queueDao)
+        .scheduleRetry(
+            eq(message.getId()), eq(OutboundStatus.PENDING), any(Instant.class), anyString());
+    verify(queueDao, never()).markTerminal(any(UUID.class), any(OutboundStatus.class), anyString());
+    verify(adapter, never()).onDeliveryAbandoned(any(), any());
+  }
+
   /** A hook that throws must not lose the terminal transition that already succeeded. */
   @Test
   void shouldSurviveAnAdapterHookThatThrows() {
     OutboundMessage message = message(1, Instant.now(), null);
     when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
         .thenReturn(List.of(message));
-    doThrow(new IllegalStateException("provider rejected the request"))
+    doThrow(new PermanentDeliveryException("provider rejected the request"))
         .when(adapter)
         .deliver(message);
     doThrow(new IllegalStateException("hook exploded"))

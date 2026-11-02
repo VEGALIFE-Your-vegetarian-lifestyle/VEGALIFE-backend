@@ -10,8 +10,9 @@ import java.time.Duration;
  * attempt no earlier than {@link #getRetryAfter()}, so a hint of 40 seconds is not undercut by a
  * 10-second configured delay (ADR-020).
  *
- * <p>An adapter that throws anything else is treated as a permanent failure: the message is
- * abandoned immediately instead of burning the retry ladder to {@code app.outbound.max-age}.
+ * <p>An adapter that throws anything else — including a plain {@link RuntimeException} — is
+ * retried: an unclassified failure is more likely transient than permanent, and dropping work on a
+ * guess is the worse mistake. Permanence is declared with {@link PermanentDeliveryException}.
  */
 public class RetryableDeliveryException extends RuntimeException {
 

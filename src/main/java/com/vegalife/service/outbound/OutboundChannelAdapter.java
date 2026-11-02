@@ -17,8 +17,10 @@ public interface OutboundChannelAdapter {
    *
    * @throws com.vegalife.shared.exception.RetryableDeliveryException when the failure is transient
    *     and the attempt should be retried, honouring its {@code retryAfter} hint when present
-   * @throws RuntimeException for a permanent failure: the drainer abandons the message and calls
-   *     {@link #onDeliveryAbandoned} rather than retrying (ADR-020)
+   * @throws com.vegalife.shared.exception.PermanentDeliveryException when no retry can succeed: the
+   *     drainer abandons the message and calls {@link #onDeliveryAbandoned} (ADR-020)
+   * @throws RuntimeException for any other failure; the drainer retries it with normal backoff,
+   *     because an unclassified failure is more likely transient than permanent
    */
   void deliver(OutboundMessage message);
 
