@@ -396,10 +396,10 @@ public class PostService {
   }
 
   /**
-   * Filter bypass ({@code app.filter.enabled=false}): route a post that would have been queued for
-   * content filtering straight to the admin review queue instead — {@code flag=NEEDS_REVIEW},
-   * {@code status=unpublished}, no publication timestamp and no outbound row. An admin then acts on
-   * it through the moderation endpoint.
+   * Filter bypass ({@code content_filter_enabled} platform setting off): route a post that would
+   * have been queued for content filtering straight to the admin review queue instead — {@code
+   * flag=NEEDS_REVIEW}, {@code status=unpublished}, no publication timestamp and no outbound row.
+   * An admin then acts on it through the moderation endpoint.
    */
   private void markForAdminReview(Post post) {
     post.setFlag(PostFlag.NEEDS_REVIEW);
