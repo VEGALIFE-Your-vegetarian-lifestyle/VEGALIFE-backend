@@ -52,16 +52,20 @@ final class EmbeddingFailureClassifier {
    * Classifies a failed embedding call.
    *
    * @param failure the exception thrown by the client
+   * @param provider the client's display name, used only in the message
    * @param model the configured model, used only in the message
    */
-  static EmbeddingClientException classify(Throwable failure, String model) {
+  static EmbeddingClientException classify(Throwable failure, String provider, String model) {
     RestClientResponseException response = findResponse(failure);
     if (response != null) {
-      return fromResponse(response, model);
+      return fromResponse(response, provider, model);
     }
     if (hasCause(failure, ResourceAccessException.class)) {
       return new EmbeddingClientException(
-          "Gemini embedding call timed out or could not reach the provider (model " + model + ")",
+          provider
+              + " embedding call timed out or could not reach the provider (model "
+              + model
+              + ")",
           Reason.TIMEOUT,
           null,
           null,
@@ -69,7 +73,7 @@ final class EmbeddingFailureClassifier {
           failure);
     }
     return new EmbeddingClientException(
-        "Gemini embedding call failed for model " + model + ": unclassified failure",
+        provider + " embedding call failed for model " + model + ": unclassified failure",
         Reason.UNKNOWN,
         null,
         null,
@@ -78,7 +82,7 @@ final class EmbeddingFailureClassifier {
   }
 
   private static EmbeddingClientException fromResponse(
-      RestClientResponseException response, String model) {
+      RestClientResponseException response, String provider, String model) {
     HttpStatusCode code = response.getStatusCode();
     int status = code == null ? -1 : code.value();
     String body = response.getResponseBodyAsString();
@@ -88,7 +92,8 @@ final class EmbeddingFailureClassifier {
     Duration retryAfter = retryAfter(response, body);
 
     StringBuilder message =
-        new StringBuilder("Gemini embedding call failed for model ")
+        new StringBuilder(provider)
+            .append(" embedding call failed for model ")
             .append(model)
             .append(": ")
             .append(describe(reason))

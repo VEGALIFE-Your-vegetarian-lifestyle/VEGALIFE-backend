@@ -101,7 +101,7 @@ public class HfEmbeddingModel implements EmbeddingModel {
     } catch (RestClientException | HttpMessageConversionException e) {
       // Shares the Gemini client's classification so both providers fail the same way: a rejected
       // credential is not a bad request, and neither is a transient outage (issue #175).
-      throw EmbeddingFailureClassifier.classify(e, properties.getModel());
+      throw EmbeddingFailureClassifier.classify(e, "HuggingFace", properties.getModel());
     }
   }
 
