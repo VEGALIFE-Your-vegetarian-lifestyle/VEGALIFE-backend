@@ -23,6 +23,12 @@ public class GoogleIdentityProviderAdapter implements GoogleIdentityProvider {
   public GoogleIdentity resolve(String authorizationCode) {
     String idToken = tokenExchanger.exchangeForIdToken(authorizationCode);
     GoogleUserInfo info = idTokenVerifier.verify(idToken);
-    return new GoogleIdentity(info.subject(), info.email(), info.emailVerified(), info.name());
+    return new GoogleIdentity(
+        info.subject(),
+        info.email(),
+        info.emailVerified(),
+        info.name(),
+        info.givenName(),
+        info.familyName());
   }
 }

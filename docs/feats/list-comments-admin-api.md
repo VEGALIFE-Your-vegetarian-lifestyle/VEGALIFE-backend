@@ -28,7 +28,7 @@ Admins moderate discussions at scale but have no API to see comments: no `Commen
 ### Functional Requirements
 - [ ] FR-001: `GET /api/admin/comments` returns a paginated list of comments to callers with role ADMIN.
 - [ ] FR-002: The unfiltered list includes comments from all users and both statuses (active and removed).
-- [ ] FR-003: Each item includes `id`, `postId`, `parentId`, `userId`, `username`, `content`, `status`, `createdAt`, `updatedAt`.
+- [ ] FR-003: Each item includes `id`, `postId`, `parentId`, `userId`, `displayName`, `content`, `status`, `createdAt`, `updatedAt`.
 - [ ] FR-004: Optional query filters: `status` (`active` | `removed`), `userId` (UUID), `postId` (UUID), `createdFrom`, `createdTo` (ISO-8601 date or datetime).
 - [ ] FR-005: `status` is derived from `deleted_at`: `active` = `deleted_at IS NULL`, `removed` = `deleted_at IS NOT NULL`. Omitting `status` returns both. There is no `all` value and no new column.
 - [ ] FR-006: Pagination via `page` (0-based, default 0), `size` (default 20, max 100), optional `sort` (default `createdAt,desc`, allowlisted to `createdAt` and `updatedAt`).
@@ -43,7 +43,7 @@ Admins moderate discussions at scale but have no API to see comments: no `Commen
 - [ ] NFR-MAINT-003: Filtering is built with a JPA `Specification` (like `UserSpecifications`), not a fixed JPQL query, so nullable filter parameters don't hit untyped PostgreSQL parameters.
 
 ## Design overview
-New `Comment` entity mapped to the existing `comment` table (`model/post/Comment.java`, plain UUID FK columns `userId`/`postId`/`parentId`, no associations), `CommentRepository extends JpaRepository<Comment, UUID>, JpaSpecificationExecutor<Comment>`, and `CommentSpecifications.withFilters(...)` for the optional predicates. A new `GET /comments` handler on the existing `AdminController` delegates to a `listComments` method on `AdminService`, which validates inputs, builds the `Pageable`, runs the specification, batch-resolves author usernames in one extra `findAllById` call (avoids N+1), and maps to `CommentListResponse`. Request DTO `CommentListRequest` (`@ModelAttribute @Valid`) mirrors `UserListRequest`. No migration: status derives from `deleted_at`. `SecurityConfig` already maps `/api/admin/**` to `hasRole("ADMIN")`.
+New `Comment` entity mapped to the existing `comment` table (`model/post/Comment.java`, plain UUID FK columns `userId`/`postId`/`parentId`, no associations), `CommentRepository extends JpaRepository<Comment, UUID>, JpaSpecificationExecutor<Comment>`, and `CommentSpecifications.withFilters(...)` for the optional predicates. A new `GET /comments` handler on the existing `AdminController` delegates to a `listComments` method on `AdminService`, which validates inputs, builds the `Pageable`, runs the specification, batch-resolves author display names in one extra `findAllById` call (avoids N+1), and maps to `CommentListResponse`. Request DTO `CommentListRequest` (`@ModelAttribute @Valid`) mirrors `UserListRequest`. No migration: status derives from `deleted_at`. `SecurityConfig` already maps `/api/admin/**` to `hasRole("ADMIN")`.
 
 ## Success metrics
 - Issue #2 acceptance criteria all checked and covered by unit + integration tests before PR merge.
@@ -61,6 +61,6 @@ New `Comment` entity mapped to the existing `comment` table (`model/post/Comment
 - [ ] Given no JWT, when requesting the endpoint, then 401 is returned.
 
 ## Risks / open questions
-- `username` resolution costs one extra `findAllById` query per page — acceptable at page sizes ≤ 100; revisit only if this endpoint ever becomes high-traffic.
+- `displayName` resolution costs one extra `findAllById` query per page — acceptable at page sizes ≤ 100; revisit only if this endpoint ever becomes high-traffic.
 - Sort is allowlisted to `createdAt`/`updatedAt` (unlike the free-form sort in `AdminService.listUsers`) so invalid properties surface as 400 instead of 500; the two endpoints intentionally diverge here.
 - Moderation states beyond removed (e.g. `hidden`) would require a real status column and a migration — deliberately deferred until a product decision exists.

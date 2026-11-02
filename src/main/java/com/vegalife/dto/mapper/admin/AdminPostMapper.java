@@ -17,7 +17,7 @@ public interface AdminPostMapper {
   @Mapping(target = "categoryIds", source = "categories")
   @Mapping(target = "mediaIds", source = "media")
   @Mapping(target = "userId", source = "user.id")
-  @Mapping(target = "username", source = "user.username")
+  @Mapping(target = "displayName", source = "user.displayName")
   @Mapping(target = "email", source = "user.email")
   AdminPostListResponse toResponse(Post post);
 

@@ -314,10 +314,10 @@ class PaymentHistoryIntegrationTest {
         .andExpect(jsonPath("$.message").value("createdFrom must be before createdTo"));
   }
 
-  private User saveUser(String username, String email, UserRole role) {
+  private User saveUser(String displayName, String email, UserRole role) {
     return userRepository.save(
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)

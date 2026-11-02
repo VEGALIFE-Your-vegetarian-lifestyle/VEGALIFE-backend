@@ -16,6 +16,18 @@ import lombok.NoArgsConstructor;
 public class PostListResponse {
 
   private UUID id;
+
+  /**
+   * Author summary (issue: post responses carry user info). {@code userId} is always present for a
+   * live post; {@code avatarUrl} is null when the author has no profile row yet (BR-PROFILE-003).
+   * Populated for a soft-deleted author's posts exactly as for anyone else — the post itself is
+   * what was deleted, not the account.
+   */
+  private UUID userId;
+
+  private String displayName;
+  private String avatarUrl;
+
   private String title;
   private String content;
   private JsonNode rawContent;

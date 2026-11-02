@@ -309,7 +309,7 @@ class CommentServiceTest {
   void getComments_returnsNestedTreeWithUserInfo() {
     UUID rootId = UUID.randomUUID();
     UUID replyId = UUID.randomUUID();
-    User author = User.builder().id(userId).username("veganchef").build();
+    User author = User.builder().id(userId).displayName("veganchef").build();
     UserProfile profile =
         UserProfile.builder().user(author).avatarUrl("https://example.com/a.png").build();
     Comment root =
@@ -335,7 +335,7 @@ class CommentServiceTest {
     assertThat(response.getContent()).hasSize(1);
     CommentThreadResponse rootResponse = response.getContent().get(0);
     assertThat(rootResponse.getId()).isEqualTo(rootId);
-    assertThat(rootResponse.getUsername()).isEqualTo("veganchef");
+    assertThat(rootResponse.getDisplayName()).isEqualTo("veganchef");
     assertThat(rootResponse.getAvatarUrl()).isEqualTo("https://example.com/a.png");
     assertThat(rootResponse.isDeleted()).isFalse();
     assertThat(rootResponse.getReplies()).hasSize(1);
@@ -376,7 +376,7 @@ class CommentServiceTest {
     assertThat(rootResponse.isDeleted()).isTrue();
     assertThat(rootResponse.getContent()).isEqualTo("[deleted]");
     assertThat(rootResponse.getUserId()).isNull();
-    assertThat(rootResponse.getUsername()).isNull();
+    assertThat(rootResponse.getDisplayName()).isNull();
     assertThat(rootResponse.getReplies()).hasSize(1);
     assertThat(rootResponse.getReplies().get(0).getContent()).isEqualTo("Still here");
   }

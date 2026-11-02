@@ -21,13 +21,13 @@ Admins currently have no way to view registered users through the API. Moderatio
 - Bulk actions (suspend/restore are separate endpoints, #25/#26).
 - Export functionality.
 - Soft-deleted account visibility (`deletedAt IS NULL` always).
-- Full-text search by username/email.
+- Full-text search by display name/email.
 
 ## Requirements
 
 ### Functional Requirements
 - [x] FR-001: `GET /api/admin/users` returns a paginated list of users to callers with role ADMIN.
-- [x] FR-002: Each item includes `id`, `email`, `username`, `role`, `status`, `createdAt` — never `passwordHash` or other secrets.
+- [x] FR-002: Each item includes `id`, `email`, `displayName`, `role`, `status`, `createdAt` — never `passwordHash` or other secrets.
 - [x] FR-003: Optional query filters: `status` (User.Status), `role` (User.Role), `createdFrom`, `createdTo` (ISO-8601 date or datetime).
 - [x] FR-004: Pagination via `page` (0-based, default 0), `size` (default 20, max 100), optional `sort` (default `createdAt,desc`).
 - [x] FR-005: Soft-deleted users (`deletedAt != null`) are never returned.
@@ -54,7 +54,7 @@ New `AdminController` + `AdminService` under `controller/admin` and `service/adm
 - [x] Given an admin JWT, when filtering by `role` and `createdFrom`/`createdTo`, then only matching users are returned.
 - [x] Given a non-admin JWT, when requesting the endpoint, then 403 is returned.
 - [x] Given no JWT, when requesting the endpoint, then 401 is returned.
-- [x] Given any list response, when inspecting items, then only id/email/username/role/status/createdAt fields are present (no passwordHash).
+- [x] Given any list response, when inspecting items, then only id/email/displayName/role/status/createdAt fields are present (no passwordHash).
 
 ## Risks / open questions
 - None blocking. Sort allowlist is not enforced beyond Spring Data's default behavior — invalid sort properties surface as a 500 unless handled; acceptable for admin-only v1, revisit if exposed more broadly.

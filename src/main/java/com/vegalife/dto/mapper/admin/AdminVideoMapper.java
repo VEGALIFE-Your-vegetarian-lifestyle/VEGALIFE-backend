@@ -12,7 +12,7 @@ import org.mapstruct.Mapping;
 public interface AdminVideoMapper {
 
   @Mapping(target = "userId", source = "uploadedBy.id")
-  @Mapping(target = "username", source = "uploadedBy.username")
+  @Mapping(target = "displayName", source = "uploadedBy.displayName")
   @Mapping(target = "email", source = "uploadedBy.email")
   @Mapping(target = "posts", ignore = true)
   AdminVideoListResponse toResponse(Media media);

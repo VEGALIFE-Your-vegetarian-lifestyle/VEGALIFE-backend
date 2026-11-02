@@ -143,10 +143,10 @@ class FilterBypassForwardsToAdminIntegrationTest {
         .andExpect(jsonPath("$.data.flag").value("NEEDS_REVIEW"));
   }
 
-  private User createUser(String username, String email, UserRole role) {
+  private User createUser(String displayName, String email, UserRole role) {
     return userRepository.save(
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)

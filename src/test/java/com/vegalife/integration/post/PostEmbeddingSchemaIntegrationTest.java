@@ -146,7 +146,7 @@ class PostEmbeddingSchemaIntegrationTest {
     User user =
         userRepository.saveAndFlush(
             User.builder()
-                .username("embeddingowner")
+                .displayName("embeddingowner")
                 .email("embeddingowner@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)

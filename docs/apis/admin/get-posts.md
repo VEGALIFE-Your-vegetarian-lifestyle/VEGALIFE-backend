@@ -54,7 +54,7 @@ No request body
         "publishedAt": "2026-09-28T08:15:00Z",
         "createdAt": "2026-09-28T08:00:00Z",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "username": "jane",
+        "displayName": "jane",
         "email": "jane@example.com"
       }
     ],
@@ -85,7 +85,7 @@ No request body
 | data.content[].publishedAt | string | ISO-8601 publish timestamp, nullable |
 | data.content[].createdAt | string | ISO-8601 creation timestamp |
 | data.content[].userId | uuid | Author user id |
-| data.content[].username | string | Author username |
+| data.content[].displayName | string | Author's display name |
 | data.content[].email | string | Author email |
 | data.page | integer | 0-based page index returned |
 | data.size | integer | Page size used |
@@ -137,7 +137,7 @@ curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&flag=REJECTED&
         "publishedAt": "2026-09-28T08:15:00Z",
         "createdAt": "2026-09-28T08:00:00Z",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "username": "jane",
+        "displayName": "jane",
         "email": "jane@example.com"
       }
     ],

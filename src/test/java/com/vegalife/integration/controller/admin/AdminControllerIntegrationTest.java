@@ -74,7 +74,7 @@ class AdminControllerIntegrationTest {
     User admin =
         userRepository.save(
             User.builder()
-                .username("adminuser")
+                .displayName("adminuser")
                 .email("admin@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.ADMIN)
@@ -86,7 +86,7 @@ class AdminControllerIntegrationTest {
     User regular =
         userRepository.save(
             User.builder()
-                .username("regularuser")
+                .displayName("regularuser")
                 .email("user@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)
@@ -98,7 +98,7 @@ class AdminControllerIntegrationTest {
     User suspendedUser =
         userRepository.save(
             User.builder()
-                .username("suspendeduser")
+                .displayName("suspendeduser")
                 .email("suspended@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)
@@ -110,7 +110,7 @@ class AdminControllerIntegrationTest {
     User softDeleted =
         userRepository.save(
             User.builder()
-                .username("deleteduser")
+                .displayName("deleteduser")
                 .email("deleted@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)
@@ -143,7 +143,7 @@ class AdminControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].passwordHash").doesNotExist())
         .andExpect(jsonPath("$.data.content[0].id").exists())
         .andExpect(jsonPath("$.data.content[0].email").exists())
-        .andExpect(jsonPath("$.data.content[0].username").exists())
+        .andExpect(jsonPath("$.data.content[0].displayName").exists())
         .andExpect(jsonPath("$.data.content[0].role").exists())
         .andExpect(jsonPath("$.data.content[0].status").exists())
         .andExpect(jsonPath("$.data.content[0].createdAt").exists());
@@ -161,7 +161,7 @@ class AdminControllerIntegrationTest {
         .andExpect(jsonPath("$.data.totalElements").value(1))
         .andExpect(jsonPath("$.data.content.length()").value(1))
         .andExpect(jsonPath("$.data.content[0].status").value("suspended"))
-        .andExpect(jsonPath("$.data.content[0].username").value("suspendeduser"));
+        .andExpect(jsonPath("$.data.content[0].displayName").value("suspendeduser"));
   }
 
   @Test
@@ -177,7 +177,7 @@ class AdminControllerIntegrationTest {
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.data.totalElements").value(1))
         .andExpect(jsonPath("$.data.content[0].role").value("ADMIN"))
-        .andExpect(jsonPath("$.data.content[0].username").value("adminuser"));
+        .andExpect(jsonPath("$.data.content[0].displayName").value("adminuser"));
   }
 
   @Test
@@ -206,7 +206,7 @@ class AdminControllerIntegrationTest {
         .andExpect(jsonPath("$.data.totalElements").value(3))
         .andExpect(jsonPath("$.data.totalPages").value(3))
         .andExpect(jsonPath("$.data.content.length()").value(1))
-        .andExpect(jsonPath("$.data.content[0].username").value("adminuser"));
+        .andExpect(jsonPath("$.data.content[0].displayName").value("adminuser"));
   }
 
   @Test

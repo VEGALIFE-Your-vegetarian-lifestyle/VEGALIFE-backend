@@ -21,7 +21,7 @@ has never filled in a profile still gets a 200 response.
 The platform can write a profile (`PUT /api/profile`, issue #23) but cannot
 read one back. The member-facing profile page, other members' post author
 cards, and the frontend's own settings page all need profile data (metrics,
-description, avatar) plus basic identity (`username`, `email`) in one call.
+description, avatar) plus basic identity (`displayName`, `email`) in one call.
 
 Today the only read path, `UserProfileService.getProfile`, is dead code that
 throws `ResourceNotFoundException` when no `user_profile` row exists — and
@@ -38,7 +38,7 @@ fails with a 500 (`DataIntegrityViolationException`).
 - The authenticated user reads their own profile at `GET /api/profile`.
 - Reading a profile never 404s merely because the user has not filled in
   metrics yet — an empty profile row is created on first read.
-- Profile responses carry identity (`userId`, `username`, `email`) so the
+- Profile responses carry identity (`userId`, `displayName`, `email`) so the
   frontend renders author cards from a single response.
 - `PUT /api/profile` stops failing when it is the first write for a user.
 
@@ -67,11 +67,11 @@ fails with a 500 (`DataIntegrityViolationException`).
 - [ ] FR-003: Both endpoints return `404` with
       `"User not found"` when the `userId` does not exist (or is soft-deleted
       state where the user row itself is absent).
-- [ ] FR-004: `ProfileResponse` contains exactly: `userId`, `username`,
+- [ ] FR-004: `ProfileResponse` contains exactly: `userId`, `displayName`,
       `email`, `heightCm`, `weightKg`, `age`, `gender`, `description`,
       `avatarUrl`, `updatedAt`. The profile row `id` is no longer exposed.
 - [ ] FR-005: `PUT /api/profile` returns the same `ProfileResponse` shape
-      (adds `username`/`email`, drops `id`) so callers need one response
+      (adds `displayName`/`email`, drops `id`) so callers need one response
       model.
 - [ ] FR-006: When no `user_profile` row exists for an existing user, a GET
       creates the row with nullable metrics (all `null`) and returns `200`
@@ -114,7 +114,7 @@ fails with a 500 (`DataIntegrityViolationException`).
 | `GET /api/profile/{userId}` | None (`permitAll`) | Public profile by path variable |
 
 **Response DTO**: `ProfileResponse` loses its `id` field and gains
-`username`/`email`, mapped from the parent `User` in `ProfileMapper`
+`displayName`/`email`, mapped from the parent `User` in `ProfileMapper`
 (`toResponse` already maps `userId` ← `user.id`, so the same source supplies
 the two new fields). PUT keeps returning this DTO — its existing docs and
 tests are updated to the new shape.
@@ -164,7 +164,7 @@ client-side assembly from multiple endpoints.
 
 - [ ] Given an authenticated user with a filled profile, when
       `GET /api/profile` is called, then `200` is returned with
-      `userId`, `username`, `email`, and all profile fields.
+      `userId`, `displayName`, `email`, and all profile fields.
 - [ ] Given an authenticated user with no `user_profile` row, when
       `GET /api/profile` is called, then `200` is returned with null
       metric/description/avatar fields and an empty row now exists in
@@ -181,7 +181,7 @@ client-side assembly from multiple endpoints.
       only `avatarUrl`, then `200` is returned (regression guard for the
       NOT NULL fix).
 - [ ] When `PUT /api/profile` returns, then its `data` has no `id` and does
-      have `username`/`email`, matching both GET responses.
+      have `displayName`/`email`, matching both GET responses.
 
 ## Risks / open questions
 

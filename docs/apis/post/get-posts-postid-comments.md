@@ -44,7 +44,7 @@ Replies are not paginated: each root comment in the page carries its entire repl
       {
         "id": "98b73399-d47a-4ad3-a092-d5f5edc2c7a6",
         "userId": "249cf378-643a-4e56-b6ba-96ff2141eff0",
-        "username": "veganchef",
+        "displayName": "veganchef",
         "avatarUrl": "https://cdn.example.com/avatars/veganchef.png",
         "content": "This looks delicious!",
         "edited": false,
@@ -55,7 +55,7 @@ Replies are not paginated: each root comment in the page carries its entire repl
           {
             "id": "a1b2c3d4-0000-0000-0000-000000000001",
             "userId": null,
-            "username": null,
+            "displayName": null,
             "avatarUrl": null,
             "content": "[deleted]",
             "edited": false,
@@ -66,7 +66,7 @@ Replies are not paginated: each root comment in the page carries its entire repl
               {
                 "id": "a1b2c3d4-0000-0000-0000-000000000002",
                 "userId": "c7d8e9f0-0000-0000-0000-000000000003",
-                "username": "another_user",
+                "displayName": "another_user",
                 "avatarUrl": null,
                 "content": "Still visible even though the parent was removed",
                 "edited": true,

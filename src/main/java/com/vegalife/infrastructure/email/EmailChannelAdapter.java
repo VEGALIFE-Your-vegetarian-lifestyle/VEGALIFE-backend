@@ -34,17 +34,17 @@ public class EmailChannelAdapter implements OutboundChannelAdapter {
     switch (payload.type()) {
       case EMAIL_VERIFICATION ->
           smtpEmailService.sendVerificationOtp(
-              message.getRecipient(), payload.username(), payload.otp());
+              message.getRecipient(), payload.displayName(), payload.otp());
       case PASSWORD_RESET ->
           smtpEmailService.sendPasswordResetOtp(
-              message.getRecipient(), payload.username(), payload.otp());
+              message.getRecipient(), payload.displayName(), payload.otp());
       case RECEIPT -> {
         if (payload.receipt() == null) {
           throw new IllegalStateException(
               "Outbound message " + message.getId() + " has no receipt details to deliver");
         }
         smtpEmailService.sendPaymentReceipt(
-            message.getRecipient(), payload.username(), payload.receipt());
+            message.getRecipient(), payload.displayName(), payload.receipt());
       }
       default ->
           throw new IllegalStateException("Unsupported outbound email type: " + payload.type());

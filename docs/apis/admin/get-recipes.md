@@ -63,7 +63,7 @@ No request body
         "createdAt": "2026-09-28T08:00:00Z",
         "updatedAt": "2026-09-28T09:00:00Z",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "username": "jane",
+        "displayName": "jane",
         "email": "jane@example.com"
       }
     ],
@@ -102,7 +102,7 @@ No request body
 | data.content[].createdAt | string | ISO-8601 creation timestamp |
 | data.content[].updatedAt | string | ISO-8601 last-update timestamp |
 | data.content[].userId | uuid | Author user id |
-| data.content[].username | string | Author username |
+| data.content[].displayName | string | Author's display name |
 | data.content[].email | string | Author email |
 | data.page | integer | 0-based page index returned |
 | data.size | integer | Page size used |
@@ -165,7 +165,7 @@ curl -X GET "http://localhost:8080/api/admin/recipes?page=0&size=20&userId=550e8
         "createdAt": "2026-09-28T08:00:00Z",
         "updatedAt": "2026-09-28T09:00:00Z",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "username": "jane",
+        "displayName": "jane",
         "email": "jane@example.com"
       }
     ],

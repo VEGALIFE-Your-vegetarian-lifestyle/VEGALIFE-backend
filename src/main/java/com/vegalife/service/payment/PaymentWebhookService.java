@@ -155,7 +155,7 @@ public class PaymentWebhookService {
             .orElseThrow(() -> missingRow("user", ledger.getUserId(), ledger.getTxnRef()));
     emailService.sendPaymentReceipt(
         user.getEmail(),
-        user.getUsername(),
+        user.getDisplayName(),
         new OutboundEmailPayload.Receipt(
             plan.getName(), ledger.getAmount(), ledger.getCurrency(), paidAt, ledger.getTxnRef()));
 

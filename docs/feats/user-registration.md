@@ -2,7 +2,7 @@
 
 ## Overview
 
-Implement user registration for the Vegalife platform with email verification flow. Users can create an account with username, email, and password, then verify their email via a token sent to their inbox.
+Implement user registration for the Vegalife platform with email verification flow. Users can create an account with a display name, email, and password, then verify their email via a token sent to their inbox.
 
 ## Actors
 
@@ -13,20 +13,20 @@ Implement user registration for the Vegalife platform with email verification fl
 
 ### FR-01: User Registration
 
-**Description**: Anonymous users can register with username, email, password, and password confirmation.
+**Description**: Anonymous users can register with a display name, email, password, and password confirmation.
 
 **Acceptance Criteria**:
-- Username: 3-50 characters, unique
+- Display name: 2-100 characters, **not** unique (ADR-019)
 - Email: Valid format, unique, max 100 characters
 - Password: Minimum 8 characters, max 100 characters
 - Password confirmation must match password
 - Returns 201 Created with user data on success
 - Returns 400 Bad Request for validation failures
-- Returns 409 Conflict for duplicate email/username
+- Returns 409 Conflict for a duplicate email
 
 **API Contract**:
 - Method: `POST /api/auth/register`
-- Request: `RegisterRequest` (username, email, password, confirmPassword)
+- Request: `RegisterRequest` (displayName, email, password, confirmPassword)
 - Response: `ApiResponse<AuthResponse>` with 201 Created
 
 ### FR-02: Email Verification
@@ -72,7 +72,7 @@ Implement user registration for the Vegalife platform with email verification fl
 
 ### NFR-03: Observability
 - Structured logging at key points (registration, verification)
-- No PII in logs beyond username/email
+- No PII in logs beyond display name/email
 
 ## Data Model
 
@@ -80,7 +80,7 @@ Implement user registration for the Vegalife platform with email verification fl
 | Field | Type | Constraints |
 |-------|------|-------------|
 | id | UUID | PK, generated |
-| username | String | Unique, 3-50 chars |
+| display_name | String | 2-100 chars, not unique |
 | email | String | Unique, valid email, max 100 chars |
 | passwordHash | String | BCrypt, not null |
 | emailVerified | Boolean | Default false |
@@ -93,12 +93,11 @@ Implement user registration for the Vegalife platform with email verification fl
 
 | Scenario | HTTP Status | Error Code | Message |
 |----------|-------------|------------|---------|
-| Missing username | 400 | VALIDATION_ERROR | "Username is required" |
+| Missing display name | 400 | VALIDATION_ERROR | "Display name is required" |
 | Invalid email format | 400 | VALIDATION_ERROR | "Email must be valid" |
 | Short password | 400 | VALIDATION_ERROR | "Password must be at least 8 characters" |
 | Password mismatch | 400 | VALIDATION_ERROR | "Fields must be equal" |
 | Duplicate email | 409 | DUPLICATE_RESOURCE | "Email already registered" |
-| Duplicate username | 409 | DUPLICATE_RESOURCE | "Username already taken" |
 | Invalid OTP | 400 | INVALID_TOKEN | "Invalid or already used verification code" |
 | Expired OTP | 400 | EXPIRED_TOKEN | "Verification code has expired. Please request a new one." |
 

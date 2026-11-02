@@ -39,7 +39,7 @@ No request body
       {
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "email": "jane@example.com",
-        "username": "jane",
+        "displayName": "jane",
         "role": "USER",
         "status": "activated",
         "createdAt": "2026-09-21T10:00:00Z"
@@ -62,7 +62,7 @@ No request body
 | data.content | array | User items for this page |
 | data.content[].id | uuid | User id |
 | data.content[].email | string | Email address |
-| data.content[].username | string | Username |
+| data.content[].displayName | string | Display name (not unique) |
 | data.content[].role | string | ADMIN or USER |
 | data.content[].status | string | created, activated, deactivated, or suspended |
 | data.content[].createdAt | string | ISO-8601 account creation timestamp |
@@ -102,7 +102,7 @@ curl -X GET "http://localhost:8080/api/admin/users?page=0&size=20&status=activat
       {
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "email": "jane@example.com",
-        "username": "jane",
+        "displayName": "jane",
         "role": "USER",
         "status": "activated",
         "createdAt": "2026-09-21T10:00:00Z"

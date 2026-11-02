@@ -41,7 +41,7 @@ None
   "message": "Email verified successfully",
   "data": {
     "userId": "uuid",
-    "username": "string",
+    "displayName": "string",
     "email": "string"
   }
 }

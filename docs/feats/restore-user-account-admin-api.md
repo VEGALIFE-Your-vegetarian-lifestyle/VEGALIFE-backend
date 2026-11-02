@@ -30,7 +30,7 @@ Issue #25 added admin suspend, but there is no way to reverse it after review/ap
 ### Functional Requirements
 - [x] FR-001: `POST /api/admin/users/{userId}/restore` requires role ADMIN.
 - [x] FR-002: On success, the user's `status` is set to `activated`.
-- [x] FR-003: Response is 200 with the same user summary shape as list/suspend (`id`, `email`, `username`, `role`, `status`, `createdAt`).
+- [x] FR-003: Response is 200 with the same user summary shape as list/suspend (`id`, `email`, `displayName`, `role`, `status`, `createdAt`).
 - [x] FR-004: Missing or soft-deleted user → 404.
 - [x] FR-005: User whose status is not `suspended` → 409 ("User is not suspended").
 - [x] FR-006: A successful restoration writes an audit log line including the target user id.

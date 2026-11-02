@@ -66,7 +66,7 @@ class AdminRecipeServiceTest {
     author =
         User.builder()
             .id(UUID.randomUUID())
-            .username("janedoe")
+            .displayName("janedoe")
             .email("jane@example.com")
             .passwordHash("$2a$10$secret")
             .role(UserRole.USER)
@@ -95,7 +95,7 @@ class AdminRecipeServiceTest {
             .dishName("Bowl")
             .createdAt(recipe.getCreatedAt())
             .userId(author.getId())
-            .username("janedoe")
+            .displayName("janedoe")
             .email("jane@example.com")
             .build();
     expectedPageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));

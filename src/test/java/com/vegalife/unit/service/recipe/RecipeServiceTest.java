@@ -78,7 +78,7 @@ class RecipeServiceTest {
 
   @BeforeEach
   void setUp() {
-    user = User.builder().id(userId).username("alice").build();
+    user = User.builder().id(userId).displayName("alice").build();
     lenient()
         .when(transactionTemplate.execute(any()))
         .thenAnswer(
@@ -415,7 +415,7 @@ class RecipeServiceTest {
     Recipe recipe =
         Recipe.builder()
             .id(recipeId)
-            .user(User.builder().id(otherUserId).username("bob").build())
+            .user(User.builder().id(otherUserId).displayName("bob").build())
             .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
             .name("Rainbow Bowl")
             .instructions("Chop and cook")

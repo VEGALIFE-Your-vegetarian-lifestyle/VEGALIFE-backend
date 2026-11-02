@@ -132,7 +132,7 @@ class AdminVideoControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].createdAt").exists())
         .andExpect(jsonPath("$.data.content[0].updatedAt").exists())
         .andExpect(jsonPath("$.data.content[0].userId").value(uploader.getId().toString()))
-        .andExpect(jsonPath("$.data.content[0].username").value("chefvideo"))
+        .andExpect(jsonPath("$.data.content[0].displayName").value("chefvideo"))
         .andExpect(jsonPath("$.data.content[0].email").value("chef.video@example.com"))
         .andExpect(jsonPath("$.data.content[0].passwordHash").doesNotExist())
         .andExpect(jsonPath("$.data.content[0].posts.length()").value(1))
@@ -158,7 +158,7 @@ class AdminVideoControllerIntegrationTest {
             jsonPath("$.data.content[*].status")
                 .value(containsInAnyOrder("uploading", "succeed", "failed")))
         .andExpect(
-            jsonPath("$.data.content[*].username")
+            jsonPath("$.data.content[*].displayName")
                 .value(containsInAnyOrder("chefvideo", "membervideo", "membervideo")));
   }
 
@@ -193,7 +193,7 @@ class AdminVideoControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(1))
         .andExpect(jsonPath("$.data.content.length()").value(1))
-        .andExpect(jsonPath("$.data.content[0].username").value("chefvideo"))
+        .andExpect(jsonPath("$.data.content[0].displayName").value("chefvideo"))
         .andExpect(jsonPath("$.data.content[0].userId").value(uploader.getId().toString()));
   }
 
@@ -333,10 +333,10 @@ class AdminVideoControllerIntegrationTest {
         .andExpect(status().isBadRequest());
   }
 
-  private User createUser(String username, String email, UserRole role) {
+  private User createUser(String displayName, String email, UserRole role) {
     return userRepository.save(
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)

@@ -35,33 +35,40 @@ public class OutboxEmailService implements EmailService {
   private int emailVerificationOtpExpiryMinutes;
 
   @Override
-  public void sendVerificationOtp(String to, String username, String otp) {
+  public void sendVerificationOtp(String to, String displayName, String otp) {
     enqueue(
         OutboundEmailPayload.Type.EMAIL_VERIFICATION,
         to,
-        username,
+        displayName,
         otp,
         emailVerificationOtpExpiryMinutes);
   }
 
   @Override
-  public void sendPasswordResetOtp(String to, String username, String otp) {
-    enqueue(OutboundEmailPayload.Type.PASSWORD_RESET, to, username, otp, otpExpiryMinutes);
+  public void sendPasswordResetOtp(String to, String displayName, String otp) {
+    enqueue(OutboundEmailPayload.Type.PASSWORD_RESET, to, displayName, otp, otpExpiryMinutes);
   }
 
   @Override
-  public void sendPaymentReceipt(String to, String username, OutboundEmailPayload.Receipt receipt) {
+  public void sendPaymentReceipt(
+      String to, String displayName, OutboundEmailPayload.Receipt receipt) {
     // A receipt has no OTP-style business deadline: it stays deliverable
     // until the queue's max-age guard (BR-PAY-007).
     enqueue(
-        new OutboundEmailPayload(OutboundEmailPayload.Type.RECEIPT, username, null, null, receipt),
+        new OutboundEmailPayload(
+            OutboundEmailPayload.Type.RECEIPT, displayName, null, null, receipt),
         to,
         null);
   }
 
   private void enqueue(
-      OutboundEmailPayload.Type type, String to, String username, String otp, int expiryMinutes) {
-    enqueue(new OutboundEmailPayload(type, username, otp, expiryMinutes), to, expiryMinutes * 60L);
+      OutboundEmailPayload.Type type,
+      String to,
+      String displayName,
+      String otp,
+      int expiryMinutes) {
+    enqueue(
+        new OutboundEmailPayload(type, displayName, otp, expiryMinutes), to, expiryMinutes * 60L);
   }
 
   private void enqueue(OutboundEmailPayload payload, String to, Long ttlSeconds) {

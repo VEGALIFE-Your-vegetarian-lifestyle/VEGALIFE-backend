@@ -11,9 +11,9 @@ import lombok.Data;
 @FieldsEqual({"password", "confirmPassword"})
 public class RegisterRequest {
 
-  @NotBlank(message = "Username is required")
-  @Size(min = 3, max = 50, message = "Username must be between 3 and 50 characters")
-  private String username;
+  @NotBlank(message = "Display name is required")
+  @Size(min = 2, max = 100, message = "Display name must be between 2 and 100 characters")
+  private String displayName;
 
   @NotBlank(message = "Email is required")
   @Email(message = "Email must be valid")

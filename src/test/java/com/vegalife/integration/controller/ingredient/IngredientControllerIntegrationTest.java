@@ -70,7 +70,7 @@ class IngredientControllerIntegrationTest {
 
     User testUser =
         User.builder()
-            .username("ingredientuser")
+            .displayName("ingredientuser")
             .email("ingredient@example.com")
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)

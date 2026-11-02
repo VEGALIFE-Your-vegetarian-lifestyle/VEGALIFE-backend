@@ -1135,14 +1135,14 @@ class PostControllerIntegrationTest {
     mockMvc.perform(get("/api/posts/feed").param("size", "0")).andExpect(status().isBadRequest());
   }
 
-  private User createUser(String username, String email) {
-    return createUser(username, email, UserRole.USER);
+  private User createUser(String displayName, String email) {
+    return createUser(displayName, email, UserRole.USER);
   }
 
-  private User createUser(String username, String email, UserRole role) {
+  private User createUser(String displayName, String email, UserRole role) {
     return userRepository.save(
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)

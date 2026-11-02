@@ -16,7 +16,7 @@ import lombok.NoArgsConstructor;
 public class ProfileResponse {
 
   private UUID userId;
-  private String username;
+  private String displayName;
   private String email;
   private BigDecimal heightCm;
   private BigDecimal weightKg;

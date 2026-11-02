@@ -70,10 +70,6 @@ public class AuthService {
       throw new DuplicateResourceException("Email already registered");
     }
 
-    if (userRepository.existsByUsername(request.getUsername())) {
-      throw new DuplicateResourceException("Username already taken");
-    }
-
     String encodedPassword = passwordEncoder.encode(request.getPassword());
 
     User user = authMapper.toEntity(request, encodedPassword);
@@ -81,7 +77,7 @@ public class AuthService {
 
     issueVerificationOtp(user);
 
-    log.info("User registered: {} ({})", user.getUsername(), user.getEmail());
+    log.info("User registered: {} ({})", user.getDisplayName(), user.getEmail());
 
     return authMapper.toRegisterResponse(user);
   }
@@ -94,7 +90,7 @@ public class AuthService {
             .orElseThrow(() -> new InvalidTokenException(INVALID_VERIFICATION_CODE_MESSAGE));
 
     if (user.getEmailVerified()) {
-      log.info("Email already verified for user: {}", user.getUsername());
+      log.info("Email already verified for user: {}", user.getDisplayName());
       return authMapper.toRegisterResponse(user);
     }
 
@@ -118,7 +114,7 @@ public class AuthService {
     otpRow.setUsedAt(Instant.now());
     otpCodeRepository.save(otpRow);
 
-    log.info("Email verified for user: {} ({})", user.getUsername(), user.getEmail());
+    log.info("Email verified for user: {} ({})", user.getDisplayName(), user.getEmail());
 
     return authMapper.toRegisterResponse(user);
   }
@@ -135,13 +131,14 @@ public class AuthService {
     User user = userOpt.get();
 
     if (Boolean.TRUE.equals(user.getEmailVerified())) {
-      log.debug("Verification resend requested for already verified user: {}", user.getUsername());
+      log.debug(
+          "Verification resend requested for already verified user: {}", user.getDisplayName());
       return;
     }
 
     issueVerificationOtp(user);
 
-    log.info("Verification OTP reissued for user: {}", user.getUsername());
+    log.info("Verification OTP reissued for user: {}", user.getDisplayName());
   }
 
   private void issueVerificationOtp(User user) {
@@ -157,23 +154,24 @@ public class AuthService {
             .expiresAt(Instant.now().plusSeconds(emailVerificationOtpExpiryMinutes * 60L))
             .build());
 
-    emailService.sendVerificationOtp(user.getEmail(), user.getUsername(), otp);
+    emailService.sendVerificationOtp(user.getEmail(), user.getDisplayName(), otp);
   }
 
   @Transactional
   public LoginResponse login(LoginRequest request) {
+    // Email is the only login identifier (ADR-019): the display name is not unique and is never
+    // accepted here, so there is nothing else to fall back to.
     User user =
         userRepository
             .findByEmail(request.getIdentifier())
-            .or(() -> userRepository.findByUsername(request.getIdentifier()))
-            .orElseThrow(() -> new InvalidTokenException("Invalid email/username or password"));
+            .orElseThrow(() -> new InvalidTokenException("Invalid email or password"));
 
     // An account with no local password (created through Google, BR-AUTH-023) must fail exactly
     // like a wrong password: passing a null hash into the encoder throws, and answering differently
     // would reveal that the account exists and is Google-only.
     if (user.getPasswordHash() == null
         || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-      throw new InvalidTokenException("Invalid email/username or password");
+      throw new InvalidTokenException("Invalid email or password");
     }
 
     if (user.getStatus() == UserStatus.suspended) {
@@ -189,7 +187,7 @@ public class AuthService {
           "Email not verified. Please verify your email before logging in.");
     }
 
-    log.info("User logged in: {} ({})", user.getUsername(), user.getEmail());
+    log.info("User logged in: {} ({})", user.getDisplayName(), user.getEmail());
 
     return issueTokens(user);
   }
@@ -228,7 +226,7 @@ public class AuthService {
 
     String newAccessToken = jwtTokenService.generateAccessToken(user);
 
-    log.info("Access token refreshed for user: {}", user.getUsername());
+    log.info("Access token refreshed for user: {}", user.getDisplayName());
 
     return loginMapper.toLoginResponse(user).toBuilder()
         .accessToken(newAccessToken)
@@ -274,9 +272,9 @@ public class AuthService {
             .expiresAt(Instant.now().plusSeconds(otpExpiryMinutes * 60L))
             .build());
 
-    emailService.sendPasswordResetOtp(user.getEmail(), user.getUsername(), otp);
+    emailService.sendPasswordResetOtp(user.getEmail(), user.getDisplayName(), otp);
 
-    log.info("Password reset OTP issued for user: {}", user.getUsername());
+    log.info("Password reset OTP issued for user: {}", user.getDisplayName());
   }
 
   @Transactional
@@ -300,14 +298,14 @@ public class AuthService {
     }
 
     if (otpRow.isVerified()) {
-      log.debug("Password reset OTP already verified for user: {}", user.getUsername());
+      log.debug("Password reset OTP already verified for user: {}", user.getDisplayName());
       return;
     }
 
     otpRow.setVerifiedAt(Instant.now());
     otpCodeRepository.save(otpRow);
 
-    log.info("Password reset OTP verified for user: {}", user.getUsername());
+    log.info("Password reset OTP verified for user: {}", user.getDisplayName());
   }
 
   @Transactional
@@ -340,7 +338,7 @@ public class AuthService {
 
     jwtTokenService.revokeAllUserRefreshTokens(user.getId());
 
-    log.info("Password reset completed for user: {}", user.getUsername());
+    log.info("Password reset completed for user: {}", user.getDisplayName());
   }
 
   private String generateOtp() {

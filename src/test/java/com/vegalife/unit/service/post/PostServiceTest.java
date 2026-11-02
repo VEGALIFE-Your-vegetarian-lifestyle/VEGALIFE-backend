@@ -24,6 +24,7 @@ import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
+import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
@@ -31,6 +32,7 @@ import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
 import com.vegalife.service.post.PostService;
@@ -59,6 +61,8 @@ class PostServiceTest {
   @Mock private PostRepository postRepository;
 
   @Mock private UserRepository userRepository;
+
+  @Mock private UserProfileRepository userProfileRepository;
 
   @Mock private CategoryRepository categoryRepository;
 
@@ -93,9 +97,20 @@ class PostServiceTest {
   void setUp() {
     // Default the suite to the filter-enabled path; bypass tests override this to false.
     org.mockito.Mockito.lenient().when(filterProperties.isEnabled()).thenReturn(true);
+    // The mapper is a mock here, so give it an empty response by default. Tests that care about
+    // the mapped shape stub a concrete one, which wins over this.
+    org.mockito.Mockito.lenient()
+        .when(postMapper.toListResponse(org.mockito.ArgumentMatchers.any(Post.class)))
+        .thenReturn(new PostListResponse());
+    org.mockito.Mockito.lenient()
+        .when(
+            postMapper.toListResponse(
+                org.mockito.ArgumentMatchers.any(Post.class),
+                org.mockito.ArgumentMatchers.anySet()))
+        .thenReturn(new PostListResponse());
     userId = UUID.randomUUID();
     categoryId = UUID.randomUUID();
-    user = User.builder().id(userId).username("postowner").build();
+    user = User.builder().id(userId).displayName("postowner").build();
     category = Category.builder().id(categoryId).name("Recipes").build();
     request =
         PostCreateRequest.builder()
@@ -315,7 +330,7 @@ class PostServiceTest {
             Optional.of(new PostEmbeddingRepository.StoredEmbedding("[0.1,0.2]", "model-x")));
     when(postEmbeddingRepository.findTopNearestPublished("[0.1,0.2]", "model-x", postId, 10))
         .thenReturn(List.of(new PostEmbeddingRepository.NearestMatch(matchId, 0.92)));
-    when(postRepository.findAllById(List.of(matchId))).thenReturn(List.of(match));
+    when(postRepository.findWithAuthorByIdIn(List.of(matchId))).thenReturn(List.of(match));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(matchId)).thenReturn(List.of());
     PostListResponse matchResponse = PostListResponse.builder().id(matchId).build();
     when(postMapper.toListResponse(match, Set.of())).thenReturn(matchResponse);
@@ -350,6 +365,30 @@ class PostServiceTest {
             () -> postService.getRelatedPosts(postId, RelatedPostsRequest.builder().build()))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
+  }
+
+  @Test
+  void getPost_carriesAuthorIdNameAndAvatar() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, PostStatus.published);
+    UserProfile profile =
+        UserProfile.builder()
+            .id(UUID.randomUUID())
+            .user(user)
+            .avatarUrl("https://a/ava.png")
+            .build();
+    when(postRepository.findDetailById(postId)).thenReturn(Optional.of(existing));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(userProfileRepository.findByUserIdIn(Set.of(userId))).thenReturn(List.of(profile));
+    when(postMapper.toListResponse(existing, Set.of()))
+        .thenReturn(
+            PostListResponse.builder().id(postId).userId(userId).displayName("postowner").build());
+
+    PostListResponse response = postService.getPost(postId);
+
+    assertThat(response.getUserId()).isEqualTo(userId);
+    assertThat(response.getDisplayName()).isEqualTo("postowner");
+    assertThat(response.getAvatarUrl()).isEqualTo("https://a/ava.png");
   }
 
   private Post ownedPost(UUID postId, PostStatus status) {

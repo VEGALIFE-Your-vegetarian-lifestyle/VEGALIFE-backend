@@ -86,7 +86,7 @@ class AdminCategoryControllerIntegrationTest {
     User admin =
         userRepository.save(
             User.builder()
-                .username("adminuser")
+                .displayName("adminuser")
                 .email("admin@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.ADMIN)
@@ -97,7 +97,7 @@ class AdminCategoryControllerIntegrationTest {
     User regular =
         userRepository.save(
             User.builder()
-                .username("regularuser")
+                .displayName("regularuser")
                 .email("user@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)
@@ -332,7 +332,7 @@ class AdminCategoryControllerIntegrationTest {
     User author =
         userRepository.save(
             User.builder()
-                .username("author")
+                .displayName("author")
                 .email("author@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)

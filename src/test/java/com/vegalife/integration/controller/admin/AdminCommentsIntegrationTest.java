@@ -150,7 +150,7 @@ class AdminCommentsIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].content").exists())
         .andExpect(jsonPath("$.data.content[0].createdAt").exists())
         .andExpect(jsonPath("$.data.content[0].updatedAt").exists())
-        .andExpect(jsonPath("$.data.content[*].username", hasItems("regularuser", "seconduser")))
+        .andExpect(jsonPath("$.data.content[*].displayName", hasItems("regularuser", "seconduser")))
         .andExpect(jsonPath("$.data.content[*].status", hasItems("active", "removed")));
   }
 
@@ -195,7 +195,7 @@ class AdminCommentsIntegrationTest {
         .andExpect(jsonPath("$.data.content.length()").value(1))
         .andExpect(jsonPath("$.data.content[0].id").value(removedCommentId.toString()))
         .andExpect(jsonPath("$.data.content[0].status").value("removed"))
-        .andExpect(jsonPath("$.data.content[0].username").value("seconduser"));
+        .andExpect(jsonPath("$.data.content[0].displayName").value("seconduser"));
   }
 
   @Test
@@ -208,7 +208,7 @@ class AdminCommentsIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(2))
         .andExpect(jsonPath("$.data.content[*].userId").value(everyItem(is(secondId.toString()))))
-        .andExpect(jsonPath("$.data.content[*].username").value(everyItem(is("seconduser"))));
+        .andExpect(jsonPath("$.data.content[*].displayName").value(everyItem(is("seconduser"))));
   }
 
   @Test
@@ -399,10 +399,10 @@ class AdminCommentsIntegrationTest {
         .andExpect(status().isUnauthorized());
   }
 
-  private User saveUser(String username, String email, UserRole role) {
+  private User saveUser(String displayName, String email, UserRole role) {
     return userRepository.save(
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)

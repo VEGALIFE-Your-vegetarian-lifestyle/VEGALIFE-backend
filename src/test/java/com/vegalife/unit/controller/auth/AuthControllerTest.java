@@ -39,7 +39,7 @@ class AuthControllerTest {
   @Test
   void register_validRequest_returns201() throws Exception {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername("testuser");
+    request.setDisplayName("testuser");
     request.setEmail("test@example.com");
     request.setPassword("password123");
     request.setConfirmPassword("password123");
@@ -48,7 +48,7 @@ class AuthControllerTest {
     RegisterResponse response =
         RegisterResponse.builder()
             .userId(userId)
-            .username("testuser")
+            .displayName("testuser")
             .email("test@example.com")
             .build();
 
@@ -63,12 +63,12 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("User registered successfully"))
         .andExpect(jsonPath("$.data.userId").value(userId.toString()))
-        .andExpect(jsonPath("$.data.username").value("testuser"))
+        .andExpect(jsonPath("$.data.displayName").value("testuser"))
         .andExpect(jsonPath("$.data.email").value("test@example.com"));
   }
 
   @Test
-  void register_missingUsername_returns400() throws Exception {
+  void register_missingDisplayName_returns400() throws Exception {
     RegisterRequest request = new RegisterRequest();
     request.setEmail("test@example.com");
     request.setPassword("password123");
@@ -86,7 +86,7 @@ class AuthControllerTest {
   @Test
   void register_invalidEmail_returns400() throws Exception {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername("testuser");
+    request.setDisplayName("testuser");
     request.setEmail("invalid-email");
     request.setPassword("password123");
     request.setConfirmPassword("password123");
@@ -103,7 +103,7 @@ class AuthControllerTest {
   @Test
   void register_shortPassword_returns400() throws Exception {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername("testuser");
+    request.setDisplayName("testuser");
     request.setEmail("test@example.com");
     request.setPassword("short");
     request.setConfirmPassword("short");
@@ -120,7 +120,7 @@ class AuthControllerTest {
   @Test
   void register_passwordMismatch_returns400() throws Exception {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername("testuser");
+    request.setDisplayName("testuser");
     request.setEmail("test@example.com");
     request.setPassword("password123");
     request.setConfirmPassword("different");
@@ -137,7 +137,7 @@ class AuthControllerTest {
   @Test
   void register_duplicateEmail_returns409() throws Exception {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername("testuser");
+    request.setDisplayName("testuser");
     request.setEmail("test@example.com");
     request.setPassword("password123");
     request.setConfirmPassword("password123");
@@ -167,7 +167,7 @@ class AuthControllerTest {
     RegisterResponse response =
         RegisterResponse.builder()
             .userId(userId)
-            .username("testuser")
+            .displayName("testuser")
             .email("test@example.com")
             .build();
 
@@ -182,7 +182,7 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Email verified successfully"))
         .andExpect(jsonPath("$.data.userId").value(userId.toString()))
-        .andExpect(jsonPath("$.data.username").value("testuser"))
+        .andExpect(jsonPath("$.data.displayName").value("testuser"))
         .andExpect(jsonPath("$.data.email").value("test@example.com"));
   }
 
@@ -254,7 +254,7 @@ class AuthControllerTest {
     LoginResponse response =
         LoginResponse.builder()
             .userId(userId)
-            .username("testuser")
+            .displayName("testuser")
             .email("test@example.com")
             .accessToken("access.token")
             .refreshToken("refresh.token")
@@ -273,7 +273,7 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Login successful"))
         .andExpect(jsonPath("$.data.userId").value(userId.toString()))
-        .andExpect(jsonPath("$.data.username").value("testuser"))
+        .andExpect(jsonPath("$.data.displayName").value("testuser"))
         .andExpect(jsonPath("$.data.email").value("test@example.com"))
         .andExpect(jsonPath("$.data.accessToken").value("access.token"))
         .andExpect(jsonPath("$.data.refreshToken").value("refresh.token"))
@@ -289,8 +289,7 @@ class AuthControllerTest {
 
     when(authService.login(any(LoginRequest.class)))
         .thenThrow(
-            new com.vegalife.shared.exception.InvalidTokenException(
-                "Invalid email/username or password"));
+            new com.vegalife.shared.exception.InvalidTokenException("Invalid email or password"));
 
     mockMvc
         .perform(
@@ -299,7 +298,7 @@ class AuthControllerTest {
                 .content(objectMapper.writeValueAsString(request)))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Invalid email/username or password"));
+        .andExpect(jsonPath("$.message").value("Invalid email or password"));
   }
 
   @Test

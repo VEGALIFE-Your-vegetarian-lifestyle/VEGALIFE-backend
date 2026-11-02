@@ -6,12 +6,12 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 
 | Rule ID | Title | Status | Last Reviewed |
 |---------|-------|--------|---------------|
-| BR-AUTH-001 | Unique User Identity | Active | 2026-09-22 |
+| BR-AUTH-001 | Unique User Identity (email) | Active | 2026-11-02 |
 | BR-AUTH-002 | Password Confirmation Match | Active | 2026-09-22 |
 | BR-AUTH-003 | Email Verification Required for Activation | Active | 2026-09-24 |
 | BR-AUTH-004 | Email Verification OTP Expiration (10 min) | Active | 2026-09-24 |
 | BR-AUTH-005 | Password Minimum Length (8 chars) | Active | 2026-09-22 |
-| BR-AUTH-006 | Username Format and Length (3-50 chars) | Active | 2026-09-22 |
+| BR-AUTH-006 | Username Format and Length (3-50 chars) | Retired by ADR-019 | 2026-11-02 |
 | BR-AUTH-007 | Email Format and Length (valid, max 100 chars) | Active | 2026-09-22 |
 | BR-PROFILE-001 | Profile Fields Validation | Active | 2026-10-13 |
 | BR-PROFILE-002 | Profile Ownership | Active | 2026-09-23 |
@@ -33,6 +33,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-AUTH-021 | Email Verification OTP Lifecycle and Resend | Active | 2026-09-24 |
 | BR-AUTH-022 | Google Sign-In Resolves to an Existing Identity or Auto-Links on Verified Email | Active | 2026-10-26 |
 | BR-AUTH-023 | Accounts Created Through Google Start Verified and Activated | Active | 2026-10-26 |
+| BR-AUTH-024 | Display Name Format and Length (2-100 chars, not unique) | Active | 2026-11-02 |
 | BR-POST-001 | Post Ownership Comes from Authentication | Active | 2026-09-26 |
 | BR-POST-002 | Users List Only Their Non-Deleted Posts | Active | 2026-09-26 |
 | BR-POST-003 | User Post Lists Use Bounded Newest-First Pagination | Active | 2026-09-26 |

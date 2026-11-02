@@ -1,7 +1,7 @@
 # API Reference: POST /api/auth/login
 
 ## Overview
-Authenticate a user with email/username and password. Returns short-lived access token and long-lived refresh token.
+Authenticate a user with email and password. Returns short-lived access token and long-lived refresh token. Email is the only login identifier (ADR-019) — the display name is not unique and cannot be used to sign in.
 
 ## Endpoint
 ```
@@ -22,14 +22,14 @@ None
 ### Request Body
 ```json
 {
-  "identifier": "string — email or username",
+  "identifier": "string — registered email address",
   "password": "string — user's password"
 }
 ```
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| identifier | string | Yes | Not blank, can be email or username |
+| identifier | string | Yes | Not blank, must be a registered email address |
 | password | string | Yes | Not blank |
 
 ## Responses
@@ -41,7 +41,7 @@ None
   "message": "Login successful",
   "data": {
     "userId": "uuid",
-    "username": "string",
+    "displayName": "string",
     "email": "string",
     "accessToken": "string — JWT access token",
     "refreshToken": "string — opaque refresh token",
@@ -56,7 +56,7 @@ None
 | success | boolean | Always true for success |
 | message | string | "Login successful" |
 | data.userId | uuid | Unique user identifier |
-| data.username | string | Registered username |
+| data.displayName | string | Member display name (not unique) |
 | data.email | string | Registered email |
 | data.accessToken | string | Short-lived JWT (15 min) |
 | data.refreshToken | string | Long-lived opaque token (7 days) |
@@ -67,7 +67,7 @@ None
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
 | 400 | Validation failed | "Validation failed" |
-| 400 | Invalid credentials | "Invalid email/username or password" |
+| 400 | Invalid credentials | "Invalid email or password" |
 | 400 | Account not activated | "Email not verified. Please verify your email before logging in." |
 | 400 | Account suspended | "Account is suspended" |
 | 400 | Account deactivated | "Account is not active" |
@@ -83,7 +83,7 @@ None
 
 ## Flow
 1. Validate request body (identifier + password present)
-2. Find user by email OR username
+2. Find user by email — the only login identifier (ADR-019)
 3. If user not found → 400 (generic message to prevent enumeration)
 4. Verify password with BCrypt
 5. If password invalid → 400 (generic message)
@@ -103,7 +103,7 @@ None
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "identifier": "johndoe",
+    "identifier": "john@example.com",
     "password": "securePass123"
   }'
 ```
@@ -115,7 +115,7 @@ curl -X POST http://localhost:8080/api/auth/login \
   "message": "Login successful",
   "data": {
     "userId": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "johndoe",
+    "displayName": "John Doe",
     "email": "john@example.com",
     "accessToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDAiLCJpc3MiOiJ2ZWdhbGlmZS1iYWNrZW5kIiwiYXVkIjoidmVnYWxpZmUtYXBpIiwianRpIjoiYWIxMmMzZDQtNTZlZi00YzY3LTk4YmQtMTIzNDU2Nzg5MDEyMyIsImlhdCI6MTY5OTk5OTk5OSwiZXhwIjoxNzAwMDAwODk5fQ.signature",
     "refreshToken": "aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890AbCdEfGhIjKlMnOpQrStUvWxYz",
@@ -129,7 +129,7 @@ curl -X POST http://localhost:8080/api/auth/login \
 ```json
 {
   "success": false,
-  "message": "Invalid email/username or password",
+  "message": "Invalid email or password",
   "data": null
 }
 ```

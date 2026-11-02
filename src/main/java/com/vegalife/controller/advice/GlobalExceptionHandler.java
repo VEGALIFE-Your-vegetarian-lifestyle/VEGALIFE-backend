@@ -268,7 +268,7 @@ public class GlobalExceptionHandler {
     if (ex.getCause() != null && ex.getCause().getMessage() != null) {
       String causeMsg = ex.getCause().getMessage().toLowerCase();
       if (causeMsg.contains("unique") || causeMsg.contains("duplicate")) {
-        message = "Email or username already exists";
+        message = "Email already exists";
       }
     }
     return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.failure(message));

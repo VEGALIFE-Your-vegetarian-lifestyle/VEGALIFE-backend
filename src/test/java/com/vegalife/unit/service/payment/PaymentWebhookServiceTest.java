@@ -123,7 +123,7 @@ class PaymentWebhookServiceTest {
             .priceAmount(49000L)
             .priceCurrency("VND")
             .build();
-    User user = User.builder().id(userId).username("member").email("member@example.com").build();
+    User user = User.builder().id(userId).displayName("member").email("member@example.com").build();
     when(paymentGateway.verifyCallback(params)).thenReturn(true);
     when(paymentLedgerRepository.findByTxnRef(txnRef)).thenReturn(Optional.of(ledger));
     when(paymentLedgerRepository.findByIdForUpdate(ledger.getId())).thenReturn(Optional.of(ledger));

@@ -101,7 +101,7 @@ class DuplicateDetectionIntegrationTest {
     author =
         userRepository.saveAndFlush(
             User.builder()
-                .username("dupowner")
+                .displayName("dupowner")
                 .email("dupowner@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)

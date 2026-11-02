@@ -174,9 +174,9 @@ public class CommentService {
 
     Set<UUID> authorIds = new HashSet<>();
     collectAuthorIds(pageRoots, childrenByParentId, authorIds);
-    Map<UUID, String> usernames =
+    Map<UUID, String> displayNames =
         userRepository.findAllById(authorIds).stream()
-            .collect(Collectors.toMap(User::getId, User::getUsername));
+            .collect(Collectors.toMap(User::getId, User::getDisplayName));
     Map<UUID, String> avatarUrls =
         userProfileRepository.findByUserIdIn(authorIds).stream()
             .collect(
@@ -184,7 +184,7 @@ public class CommentService {
 
     List<CommentThreadResponse> content =
         pageRoots.stream()
-            .map(comment -> toThreadResponse(comment, childrenByParentId, usernames, avatarUrls))
+            .map(comment -> toThreadResponse(comment, childrenByParentId, displayNames, avatarUrls))
             .toList();
 
     return PageResponse.<CommentThreadResponse>builder()
@@ -212,18 +212,18 @@ public class CommentService {
   private CommentThreadResponse toThreadResponse(
       Comment comment,
       Map<UUID, List<Comment>> childrenByParentId,
-      Map<UUID, String> usernames,
+      Map<UUID, String> displayNames,
       Map<UUID, String> avatarUrls) {
     boolean deleted = comment.getDeletedAt() != null;
     List<CommentThreadResponse> replies =
         childrenByParentId.getOrDefault(comment.getId(), List.of()).stream()
-            .map(child -> toThreadResponse(child, childrenByParentId, usernames, avatarUrls))
+            .map(child -> toThreadResponse(child, childrenByParentId, displayNames, avatarUrls))
             .toList();
 
     return CommentThreadResponse.builder()
         .id(comment.getId())
         .userId(deleted ? null : comment.getUserId())
-        .username(deleted ? null : usernames.get(comment.getUserId()))
+        .displayName(deleted ? null : displayNames.get(comment.getUserId()))
         .avatarUrl(deleted ? null : avatarUrls.get(comment.getUserId()))
         .content(deleted ? "[deleted]" : comment.getContent())
         .edited(comment.isEdited())

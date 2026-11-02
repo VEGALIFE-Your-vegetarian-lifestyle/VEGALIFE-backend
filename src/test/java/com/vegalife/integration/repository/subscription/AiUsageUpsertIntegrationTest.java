@@ -66,7 +66,7 @@ class AiUsageUpsertIntegrationTest {
     User user =
         userRepository.save(
             User.builder()
-                .username("aiusage" + UUID.randomUUID())
+                .displayName("aiusage" + UUID.randomUUID())
                 .email(UUID.randomUUID() + "@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)

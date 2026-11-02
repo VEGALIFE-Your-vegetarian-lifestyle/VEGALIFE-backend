@@ -92,7 +92,7 @@ class DishControllerIntegrationTest {
     dishRepository.deleteAll();
     User testUser =
         User.builder()
-            .username("dishuser")
+            .displayName("dishuser")
             .email("dish@example.com")
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)

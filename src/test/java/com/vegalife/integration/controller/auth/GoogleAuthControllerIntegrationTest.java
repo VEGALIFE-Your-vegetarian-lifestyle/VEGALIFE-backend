@@ -93,10 +93,10 @@ class GoogleAuthControllerIntegrationTest {
     doNothing().when(emailService).sendPasswordResetOtp(anyString(), anyString(), anyString());
   }
 
-  private User createActivatedPasswordUser(String username, String email) {
+  private User createActivatedPasswordUser(String displayName, String email) {
     return userRepository.save(
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash(passwordEncoder.encode("password123"))
             .role(UserRole.USER)
@@ -106,9 +106,14 @@ class GoogleAuthControllerIntegrationTest {
   }
 
   private void stubGoogleIdentity(String subject, String email) {
+    stubGoogleIdentity(subject, email, null, null, null);
+  }
+
+  private void stubGoogleIdentity(
+      String subject, String email, String name, String givenName, String familyName) {
     when(googleTokenExchanger.exchangeForIdToken("google-code")).thenReturn("id-token");
     when(googleIdTokenVerifier.verify("id-token"))
-        .thenReturn(new GoogleUserInfo(subject, email, true, "Test"));
+        .thenReturn(new GoogleUserInfo(subject, email, true, name, givenName, familyName));
   }
 
   private String googleLoginBody() {
@@ -129,7 +134,7 @@ class GoogleAuthControllerIntegrationTest {
         .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
         .andExpect(jsonPath("$.data.refreshToken").isNotEmpty())
         .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
-        .andExpect(jsonPath("$.data.username").value("newcomer"));
+        .andExpect(jsonPath("$.data.displayName").value("newcomer"));
 
     List<User> users = userRepository.findAll();
     assertThat(users).hasSize(1);
@@ -201,7 +206,7 @@ class GoogleAuthControllerIntegrationTest {
   void googleLogin_unverifiedExistingAccount_refusesAndCreatesNoLink() throws Exception {
     userRepository.save(
         User.builder()
-            .username("pending")
+            .displayName("pending")
             .email("pending@gmail.com")
             .passwordHash(passwordEncoder.encode("password123"))
             .role(UserRole.USER)
@@ -240,7 +245,37 @@ class GoogleAuthControllerIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"identifier\":\"googleonly@gmail.com\",\"password\":\"anything123\"}"))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").value("Invalid email/username or password"));
+        .andExpect(jsonPath("$.message").value("Invalid email or password"));
+  }
+
+  @Test
+  void googleLogin_seedsDisplayNameFromGoogleNameOnceAndNeverOverwritesIt() throws Exception {
+    stubGoogleIdentity("sub-name", "ada@gmail.com", "Ada Lovelace", "Ada", "Lovelace");
+
+    mockMvc
+        .perform(
+            post("/api/auth/google")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(googleLoginBody()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.displayName").value("Ada Lovelace"));
+
+    // Signing in again with a renamed Google profile must not rewrite the stored display name:
+    // the display name is the member's own once the account exists (ADR-019).
+    stubGoogleIdentity("sub-name", "ada@gmail.com", "Ada King", "Ada", "King");
+
+    mockMvc
+        .perform(
+            post("/api/auth/google")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(googleLoginBody()))
+        .andExpect(status().isOk());
+
+    assertThat(userRepository.findAll())
+        .filteredOn(user -> "ada@gmail.com".equals(user.getEmail()))
+        .singleElement()
+        .extracting(User::getDisplayName)
+        .isEqualTo("Ada Lovelace");
   }
 
   @Test

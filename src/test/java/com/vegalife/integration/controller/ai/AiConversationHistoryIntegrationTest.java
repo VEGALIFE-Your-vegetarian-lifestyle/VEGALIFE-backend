@@ -81,7 +81,7 @@ class AiConversationHistoryIntegrationTest {
   private User saveUser(String prefix) {
     return userRepository.save(
         User.builder()
-            .username(prefix + UUID.randomUUID())
+            .displayName(prefix + UUID.randomUUID())
             .email(UUID.randomUUID() + "@example.com")
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)

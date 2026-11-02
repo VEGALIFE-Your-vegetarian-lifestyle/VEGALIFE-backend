@@ -7,6 +7,15 @@ package com.vegalife.infrastructure.google;
  *     email
  * @param email the address Google asserts, used only to find a candidate account on the first link
  * @param emailVerified whether Google has proven the user controls {@code email}
- * @param name display name, for future profile seeding; unused today
+ * @param name the user's full name in displayable form; present only when the client requested the
+ *     {@code profile} scope, and never guaranteed
+ * @param givenName first name, offered by Google as a fallback for {@code name}
+ * @param familyName last name, offered by Google as a fallback for {@code name}
  */
-public record GoogleUserInfo(String subject, String email, boolean emailVerified, String name) {}
+public record GoogleUserInfo(
+    String subject,
+    String email,
+    boolean emailVerified,
+    String name,
+    String givenName,
+    String familyName) {}

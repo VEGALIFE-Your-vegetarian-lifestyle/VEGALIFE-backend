@@ -58,6 +58,9 @@ The client must not send `userId`, `status`, `flag`, `viewCount`, `type`, `video
   "message": "Post created successfully",
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
+    "userId": "9f1c2f4a-8a3b-4c5d-9e6f-7a8b9c0d1e2f",
+    "displayName": "John Doe",
+    "avatarUrl": "https://res.cloudinary.com/vegalife/avatar/john.jpg",
     "title": "Vegan tofu bowl",
     "rawContent": {"type": "doc", "content": []},
     "featuredImageUrl": "https://example.com/tofu-bowl.jpg",
@@ -75,6 +78,9 @@ The client must not send `userId`, `status`, `flag`, `viewCount`, `type`, `video
 | success | boolean | `true` when the request succeeds. |
 | message | string | `Post created successfully`. |
 | data.id | uuid | Identifier generated for the new post. |
+| data.userId | uuid | Author's user id — taken from the JWT, never from the request body. |
+| data.displayName | string | Author's display name. |
+| data.avatarUrl | string or null | Author's avatar URL; `null` when the author has no profile row yet (BR-PROFILE-003). |
 | data.title | string | Post title. |
 | data.rawContent | object | Rich-text document produced by the frontend editor. |
 | data.featuredImageUrl | string or null | Featured image URL, if supplied. |

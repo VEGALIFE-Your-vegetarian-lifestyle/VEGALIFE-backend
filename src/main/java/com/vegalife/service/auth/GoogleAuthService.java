@@ -35,16 +35,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class GoogleAuthService {
 
-  private static final String INVALID_CREDENTIALS = "Invalid email/username or password";
+  private static final String INVALID_CREDENTIALS = "Invalid email or password";
   private static final String SUSPENDED = "Account is suspended";
   private static final String DEACTIVATED = "Account is not active";
   private static final String EMAIL_NOT_VERIFIED =
       "Email not verified. Please verify your email before logging in.";
 
-  private static final int USERNAME_MIN_LENGTH = 3;
-  private static final int USERNAME_MAX_LENGTH = 50;
-  private static final int USERNAME_ATTEMPTS = 5;
-  private static final String USERNAME_PADDING = "user";
+  /** Matches {@code user.display_name VARCHAR(100)}; longer provider names are truncated. */
+  private static final int DISPLAY_NAME_MAX_LENGTH = 100;
+
+  /** Used only when Google supplies neither a name nor a usable email local part. */
+  private static final String FALLBACK_DISPLAY_NAME = "Vegalife user";
 
   private final GoogleIdentityProvider identityProvider;
   private final UserIdentityRepository userIdentityRepository;
@@ -63,7 +64,7 @@ public class GoogleAuthService {
 
     User user = resolveAccount(info);
 
-    log.info("User logged in with Google: {} ({})", user.getUsername(), user.getEmail());
+    log.info("User logged in with Google: {} ({})", user.getDisplayName(), user.getEmail());
     return authService.issueTokens(user);
   }
 
@@ -140,63 +141,97 @@ public class GoogleAuthService {
     }
   }
 
-  /** BR-AUTH-023: Google already verified the address, so the account starts usable. */
+  /**
+   * BR-AUTH-023: Google already verified the address, so the account starts usable. The display
+   * name is seeded from Google's profile claims here and <em>only</em> here — no later sign-in
+   * rewrites it (ADR-019), so a rename the user makes in Vegalife is never clobbered by Google.
+   */
   private User createAccount(GoogleIdentityProvider.GoogleIdentity info) {
-    for (int attempt = 0; attempt < USERNAME_ATTEMPTS; attempt++) {
-      User user =
-          User.builder()
-              .username(candidateUsername(info.email(), attempt))
-              .email(info.email())
-              .passwordHash(null)
-              .role(UserRole.USER)
-              .status(UserStatus.activated)
-              .emailVerified(true)
-              .build();
-      try {
-        User saved = userRepository.saveAndFlush(user);
-        userIdentityRepository.saveAndFlush(
-            UserIdentity.builder()
-                .user(saved)
-                .provider(AuthProvider.GOOGLE)
-                .providerSubject(info.subject())
-                .emailAtProvider(info.email())
-                .build());
-        log.info("Account created through Google: {}", saved.getId());
-        return saved;
-      } catch (DataIntegrityViolationException e) {
-        // Either the username is taken (retry with a new suffix) or a concurrent sign-in with the
-        // same email won the race (then the next attempt fails on the email and we stop).
-        if (attempt == USERNAME_ATTEMPTS - 1 || emailTaken(info.email())) {
-          throw new InvalidTokenException(INVALID_CREDENTIALS);
-        }
-        log.debug("Username collision creating Google account, retrying (attempt {})", attempt + 1);
-      }
+    User user =
+        User.builder()
+            .displayName(resolveDisplayName(info))
+            .email(info.email())
+            .passwordHash(null)
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
+            .emailVerified(true)
+            .build();
+    try {
+      User saved = userRepository.saveAndFlush(user);
+      userIdentityRepository.saveAndFlush(
+          UserIdentity.builder()
+              .user(saved)
+              .provider(AuthProvider.GOOGLE)
+              .providerSubject(info.subject())
+              .emailAtProvider(info.email())
+              .build());
+      log.info("Account created through Google: {}", saved.getId());
+      return saved;
+    } catch (DataIntegrityViolationException e) {
+      // A display name is not unique, so the only constraint left to lose is the email: a
+      // concurrent sign-in with the same address got there first.
+      log.warn("Google account creation lost the email race: {}", e.getClass().getSimpleName());
+      throw new InvalidTokenException(INVALID_CREDENTIALS);
     }
-    throw new InvalidTokenException(INVALID_CREDENTIALS);
-  }
-
-  private boolean emailTaken(String email) {
-    return userRepository.existsByEmail(email);
   }
 
   /**
-   * Derives a BR-AUTH-006-valid username from the email local part: lowercased, stripped to {@code
-   * [a-z0-9._-]}, padded when too short, truncated to leave room for a suffix, and suffixed on
-   * later attempts. Uniqueness is enforced by the retry loop above, not by a pre-check.
+   * Derives the display name for a brand-new Google account (ADR-019).
+   *
+   * <p>Preference order, whichever comes first and is non-blank: Google's {@code name} claim, the
+   * {@code given_name} + {@code family_name} pair, the email local part, then a constant. Google
+   * only guarantees these claims when the client requested the {@code profile} scope, so the
+   * fallbacks are reachable in practice, not defensive padding. The result is length-capped to the
+   * column, never truncated mid-surrogate-pair.
    */
-  static String candidateUsername(String email, int attempt) {
-    int at = email.indexOf('@');
-    String localPart = at > 0 ? email.substring(0, at) : email;
-    String base = localPart.toLowerCase().replaceAll("[^a-z0-9._-]", "");
-    if (base.length() < USERNAME_MIN_LENGTH) {
-      base = (base + USERNAME_PADDING);
-      base = base.length() > USERNAME_MAX_LENGTH ? base.substring(0, USERNAME_MAX_LENGTH) : base;
+  static String resolveDisplayName(GoogleIdentityProvider.GoogleIdentity info) {
+    String full = trimToNull(info.name());
+    if (full != null) {
+      return truncate(full);
     }
-    if (attempt == 0) {
-      return base;
+
+    String given = trimToNull(info.givenName());
+    String family = trimToNull(info.familyName());
+    if (given != null && family != null) {
+      return truncate(given + " " + family);
     }
-    String suffix = "_" + attempt;
-    int keep = Math.min(base.length(), USERNAME_MAX_LENGTH - suffix.length());
-    return base.substring(0, keep) + suffix;
+    if (given != null) {
+      return truncate(given);
+    }
+    if (family != null) {
+      return truncate(family);
+    }
+
+    String email = trimToNull(info.email());
+    if (email != null) {
+      int at = email.indexOf('@');
+      String localPart = at > 0 ? email.substring(0, at) : email;
+      String candidate = trimToNull(localPart);
+      if (candidate != null) {
+        return truncate(candidate);
+      }
+    }
+
+    return FALLBACK_DISPLAY_NAME;
+  }
+
+  private static String trimToNull(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  /** Caps at the column width without splitting a surrogate pair. */
+  private static String truncate(String value) {
+    if (value.length() <= DISPLAY_NAME_MAX_LENGTH) {
+      return value;
+    }
+    int end = DISPLAY_NAME_MAX_LENGTH;
+    if (Character.isHighSurrogate(value.charAt(end - 1))) {
+      end--;
+    }
+    return value.substring(0, end).trim();
   }
 }

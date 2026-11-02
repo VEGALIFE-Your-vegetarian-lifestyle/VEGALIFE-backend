@@ -34,7 +34,7 @@ No request body
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "jane@example.com",
-    "username": "jane",
+    "displayName": "jane",
     "role": "USER",
     "status": "activated",
     "createdAt": "2026-09-21T10:00:00Z"
@@ -48,7 +48,7 @@ No request body
 | message | string | Human-readable message |
 | data.id | uuid | Restored user id |
 | data.email | string | User email |
-| data.username | string | Username |
+| data.displayName | string | Display name |
 | data.role | string | ADMIN or USER |
 | data.status | string | Always `activated` on success |
 | data.createdAt | string | ISO-8601 instant |
@@ -87,7 +87,7 @@ curl -X POST "http://localhost:8080/api/admin/users/550e8400-e29b-41d4-a716-4466
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "jane@example.com",
-    "username": "jane",
+    "displayName": "jane",
     "role": "USER",
     "status": "activated",
     "createdAt": "2026-09-21T10:00:00Z"

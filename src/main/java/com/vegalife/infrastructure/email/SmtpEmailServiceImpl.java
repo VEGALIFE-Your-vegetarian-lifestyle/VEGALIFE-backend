@@ -31,7 +31,7 @@ public class SmtpEmailServiceImpl implements EmailService {
   private String fromAddress;
 
   @Override
-  public void sendVerificationOtp(String to, String username, String otp) {
+  public void sendVerificationOtp(String to, String displayName, String otp) {
     try {
       MimeMessage message = mailSender.createMimeMessage();
       MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -41,7 +41,7 @@ public class SmtpEmailServiceImpl implements EmailService {
       helper.setSubject("Verify your email - Vegalife");
 
       Context context = new Context();
-      context.setVariable("username", username);
+      context.setVariable("displayName", displayName);
       context.setVariable("otp", otp);
       context.setVariable("otpExpiryMinutes", emailVerificationOtpExpiryMinutes);
 
@@ -57,7 +57,7 @@ public class SmtpEmailServiceImpl implements EmailService {
   }
 
   @Override
-  public void sendPasswordResetOtp(String to, String username, String otp) {
+  public void sendPasswordResetOtp(String to, String displayName, String otp) {
     try {
       MimeMessage message = mailSender.createMimeMessage();
       MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -67,7 +67,7 @@ public class SmtpEmailServiceImpl implements EmailService {
       helper.setSubject("Reset your password - Vegalife");
 
       Context context = new Context();
-      context.setVariable("username", username);
+      context.setVariable("displayName", displayName);
       context.setVariable("otp", otp);
       context.setVariable("otpExpiryMinutes", otpExpiryMinutes);
 
@@ -83,7 +83,8 @@ public class SmtpEmailServiceImpl implements EmailService {
   }
 
   @Override
-  public void sendPaymentReceipt(String to, String username, OutboundEmailPayload.Receipt receipt) {
+  public void sendPaymentReceipt(
+      String to, String displayName, OutboundEmailPayload.Receipt receipt) {
     if (receipt == null) {
       throw new IllegalArgumentException("Payment receipt details are required");
     }
@@ -96,7 +97,7 @@ public class SmtpEmailServiceImpl implements EmailService {
       helper.setSubject("Your payment receipt - Vegalife");
 
       Context context = new Context();
-      context.setVariable("username", username);
+      context.setVariable("displayName", displayName);
       context.setVariable("planName", receipt.planName());
       context.setVariable("amount", receipt.amount());
       context.setVariable("currency", receipt.currency());

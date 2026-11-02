@@ -100,7 +100,7 @@ class AiChatControllerIntegrationTest {
     user =
         userRepository.save(
             User.builder()
-                .username("aichat" + UUID.randomUUID())
+                .displayName("aichat" + UUID.randomUUID())
                 .email(UUID.randomUUID() + "@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)
@@ -191,7 +191,7 @@ class AiChatControllerIntegrationTest {
     User other =
         userRepository.save(
             User.builder()
-                .username("aichatother" + UUID.randomUUID())
+                .displayName("aichatother" + UUID.randomUUID())
                 .email(UUID.randomUUID() + "@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)

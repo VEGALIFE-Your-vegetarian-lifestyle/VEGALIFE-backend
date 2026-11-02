@@ -40,6 +40,9 @@ No request body.
   "message": "Post retrieved successfully",
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
+    "userId": "9f1c2f4a-8a3b-4c5d-9e6f-7a8b9c0d1e2f",
+    "displayName": "John Doe",
+    "avatarUrl": "https://res.cloudinary.com/vegalife/avatar/john.jpg",
     "title": "Easy tofu bowl",
     "rawContent": {"type": "doc", "content": []},
     "featuredImageUrl": "https://example.com/tofu-bowl.jpg",
@@ -55,7 +58,7 @@ No request body.
 }
 ```
 
-Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-posts.md` for the full field table. Unlike the list and feed endpoints, this endpoint resolves `recipeIds` to the post's actual attached recipes (issue #137), since it returns a single post rather than a page.
+Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-posts.md` for the full field table, including the author summary (`userId`, `displayName`, `avatarUrl`). Unlike the list and feed endpoints, this endpoint resolves `recipeIds` to the post's actual attached recipes (issue #137), since it returns a single post rather than a page.
 
 ### Error Responses
 

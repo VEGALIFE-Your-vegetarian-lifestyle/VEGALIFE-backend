@@ -19,9 +19,18 @@ public interface GoogleIdentityProvider {
    * @param email the address Google asserts, used only to find a candidate account on the first
    *     link
    * @param emailVerified whether Google has proven the user controls {@code email}
-   * @param name display name, for future profile seeding; unused today
+   * @param name display name in displayable form, used once to seed a new account (ADR-019); null
+   *     when the client did not request the {@code profile} scope
+   * @param givenName first name, a fallback when {@code name} is absent
+   * @param familyName last name, a fallback when {@code name} is absent
    */
-  record GoogleIdentity(String subject, String email, boolean emailVerified, String name) {}
+  record GoogleIdentity(
+      String subject,
+      String email,
+      boolean emailVerified,
+      String name,
+      String givenName,
+      String familyName) {}
 
   /**
    * @param authorizationCode the code the client obtained from Google Identity Services

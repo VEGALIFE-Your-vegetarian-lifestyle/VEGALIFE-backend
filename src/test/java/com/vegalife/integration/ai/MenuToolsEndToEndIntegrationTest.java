@@ -315,7 +315,7 @@ class MenuToolsEndToEndIntegrationTest {
     String unique = UUID.randomUUID().toString().substring(0, 8);
     return userRepository.save(
         User.builder()
-            .username("tools" + unique)
+            .displayName("tools" + unique)
             .email(unique + "@example.com")
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)

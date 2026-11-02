@@ -137,7 +137,7 @@ class RelatedPostsIntegrationTest {
     User user =
         userRepository.saveAndFlush(
             User.builder()
-                .username("author" + java.util.UUID.randomUUID().toString().substring(0, 8))
+                .displayName("author" + java.util.UUID.randomUUID().toString().substring(0, 8))
                 .email("author" + java.util.UUID.randomUUID() + "@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)

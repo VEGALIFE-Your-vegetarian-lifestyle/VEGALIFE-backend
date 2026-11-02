@@ -37,7 +37,7 @@ No request body.
   "message": "Profile retrieved successfully",
   "data": {
     "userId": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "johndoe",
+    "displayName": "johndoe",
     "email": "john@example.com",
     "heightCm": 175.50,
     "weightKg": 70.20,
@@ -59,7 +59,7 @@ No request body.
 | message | string | Human-readable message |
 | data | object | `ProfileResponse` payload — identical shape to `GET /api/profile` |
 | data.userId | UUID | ID of the requested user |
-| data.username | string | The user's username |
+| data.displayName | string | The member's display name |
 | data.email | string | The user's email address |
 | data.heightCm | number \| null | Height in cm; `null` if never set |
 | data.weightKg | number \| null | Weight in kg; `null` if never set |
@@ -104,7 +104,7 @@ curl -X GET /api/profile/550e8400-e29b-41d4-a716-446655440000
   "message": "Profile retrieved successfully",
   "data": {
     "userId": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "johndoe",
+    "displayName": "johndoe",
     "email": "john@example.com",
     "heightCm": 175.50,
     "weightKg": 70.20,

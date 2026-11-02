@@ -9,7 +9,7 @@ Use this template for documenting business rules. **Group all rules for one feat
 - NNN: 3-digit zero-padded sequence (001, 002, 003...)
 
 Examples:
-- `BR-AUTH-001` — Auth: Unique email/username
+- `BR-AUTH-001` — Auth: Unique email
 - `BR-AUTH-002` — Auth: Password confirmation match
 - `BR-USER-001` — User: Profile visibility
 - `BR-RECP-001` — Recipe: Public/private visibility
@@ -61,7 +61,7 @@ YYYY-MM-DD, by <name/role>
 Active
 
 ## Statement
-A user's email and username must each be unique across the system.
+A user's email must be unique across the system.
 
 ## Rationale
 Prevents account confusion, ensures reliable login/identification, and supports password recovery via email.
@@ -70,9 +70,9 @@ Prevents account confusion, ensures reliable login/identification, and supports 
 Applies to all user registrations. No exceptions.
 
 ## Enforcement
-- `AuthService.register()` checks `userRepository.existsByEmail()` and `existsByUsername()` before creation
-- Database: Unique constraints on `user.email` and `user.username`
-- API: Returns 409 Conflict with message "Email already registered" or "Username already taken"
+- `AuthService.register()` checks `userRepository.existsByEmail()` before creation
+- Database: Unique constraint on `user.email`
+- API: Returns 409 Conflict with message "Email already registered"
 
 ## Last Reviewed
 2026-09-22, by <name/role>

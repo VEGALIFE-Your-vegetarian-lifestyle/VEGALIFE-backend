@@ -507,11 +507,11 @@ class CommentControllerIntegrationTest {
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.data.content.length()").value(1))
         .andExpect(jsonPath("$.data.content[0].id").value(root.getId().toString()))
-        .andExpect(jsonPath("$.data.content[0].username").value("commenter"))
+        .andExpect(jsonPath("$.data.content[0].displayName").value("commenter"))
         .andExpect(jsonPath("$.data.content[0].deleted").value(false))
         .andExpect(jsonPath("$.data.content[0].replies.length()").value(1))
         .andExpect(jsonPath("$.data.content[0].replies[0].content").value("Reply"))
-        .andExpect(jsonPath("$.data.content[0].replies[0].username").value("postauthor"));
+        .andExpect(jsonPath("$.data.content[0].replies[0].displayName").value("postauthor"));
   }
 
   @Test
@@ -544,7 +544,7 @@ class CommentControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].deleted").value(true))
         .andExpect(jsonPath("$.data.content[0].content").value("[deleted]"))
         .andExpect(jsonPath("$.data.content[0].userId").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].username").doesNotExist())
+        .andExpect(jsonPath("$.data.content[0].displayName").doesNotExist())
         .andExpect(jsonPath("$.data.content[0].replies[0].content").value("Still visible"));
   }
 
@@ -662,14 +662,14 @@ class CommentControllerIntegrationTest {
         .andExpect(status().isUnauthorized());
   }
 
-  private User saveUser(String username, String email) {
-    return saveUser(username, email, UserRole.USER);
+  private User saveUser(String displayName, String email) {
+    return saveUser(displayName, email, UserRole.USER);
   }
 
-  private User saveUser(String username, String email, UserRole role) {
+  private User saveUser(String displayName, String email, UserRole role) {
     return userRepository.save(
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)

@@ -98,7 +98,7 @@ class PaymentStatusIntegrationTest {
   void setUp() {
     testUser =
         User.builder()
-            .username("statususer")
+            .displayName("statususer")
             .email("status@example.com")
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)
@@ -146,7 +146,7 @@ class PaymentStatusIntegrationTest {
     User otherUser =
         userRepository.save(
             User.builder()
-                .username("otherstatususer")
+                .displayName("otherstatususer")
                 .email("other-status@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)

@@ -40,6 +40,9 @@ None required — public, like `GET /api/posts/{postId}` and `GET /api/posts/fee
     {
       "post": {
         "id": "550e8400-e29b-41d4-a716-446655440000",
+        "userId": "9f1c2f4a-8a3b-4c5d-9e6f-7a8b9c0d1e2f",
+        "displayName": "John Doe",
+        "avatarUrl": "https://res.cloudinary.com/vegalife/avatar/john.jpg",
         "title": "Rau củ hấp",
         "content": "Món chay đơn giản cho bữa tối.",
         "status": "published",

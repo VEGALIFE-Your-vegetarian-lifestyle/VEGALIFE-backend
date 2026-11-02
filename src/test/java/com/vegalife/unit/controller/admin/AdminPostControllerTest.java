@@ -43,7 +43,7 @@ class AdminPostControllerTest {
             .flag("PASSED")
             .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
             .userId(UUID.randomUUID())
-            .username("janedoe")
+            .displayName("janedoe")
             .email("jane@example.com")
             .build();
     pageResponse =

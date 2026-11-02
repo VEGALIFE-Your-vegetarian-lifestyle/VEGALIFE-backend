@@ -78,7 +78,7 @@ class MediaServiceTest {
             outboundMessageRepository);
     userId = UUID.randomUUID();
     mediaId = UUID.randomUUID();
-    user = User.builder().id(userId).username("mediaowner").build();
+    user = User.builder().id(userId).displayName("mediaowner").build();
     createdAt = Instant.now();
   }
 

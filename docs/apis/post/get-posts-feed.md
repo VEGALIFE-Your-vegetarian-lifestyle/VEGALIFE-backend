@@ -48,7 +48,10 @@ Standard pagination envelope (`ApiResponse<PageResponse<PostListResponse>>`), me
   "data": {
     "content": [
       {
-        "postId": "550e8400-e29b-41d4-a716-446655440000",
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "userId": "9f1c2f4a-8a3b-4c5d-9e6f-7a8b9c0d1e2f",
+        "displayName": "John Doe",
+        "avatarUrl": "https://res.cloudinary.com/vegalife/avatar/john.jpg",
         "title": "Vegan pho for beginners",
         "status": "published",
         "publishedAt": "2026-10-01T09:15:00",
@@ -63,7 +66,7 @@ Standard pagination envelope (`ApiResponse<PageResponse<PostListResponse>>`), me
 }
 ```
 
-Item fields follow the existing `PostListResponse` shape used by `GET /api/posts` (the exact field set is defined by that DTO).
+Item fields follow the existing `PostListResponse` shape used by `GET /api/posts` — including the author summary (`userId`, `displayName`, `avatarUrl`). See that endpoint's field table for the full set.
 
 ### Error Responses
 

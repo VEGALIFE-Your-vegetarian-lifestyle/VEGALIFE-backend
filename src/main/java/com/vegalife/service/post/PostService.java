@@ -20,6 +20,7 @@ import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Recipe;
+import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
@@ -28,6 +29,7 @@ import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
 import com.vegalife.service.filter.ContentFilterPayload;
@@ -36,9 +38,11 @@ import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -61,6 +65,7 @@ public class PostService {
 
   private final PostRepository postRepository;
   private final UserRepository userRepository;
+  private final UserProfileRepository userProfileRepository;
   private final CategoryRepository categoryRepository;
   private final MediaRepository mediaRepository;
   private final RecipeRepository recipeRepository;
@@ -109,7 +114,7 @@ public class PostService {
         markForAdminReview(saved);
       }
     }
-    return postMapper.toListResponse(saved);
+    return toResponse(saved);
   }
 
   /**
@@ -152,7 +157,7 @@ public class PostService {
       }
     }
     recordModerationIfAdminOverride(actorId, isAdmin, saved, "EDIT_POST");
-    return postMapper.toListResponse(saved);
+    return toResponse(saved);
   }
 
   /**
@@ -183,7 +188,7 @@ public class PostService {
     boolean currentlyHidden = post.getStatus() == PostStatus.hidden;
     if (hidden == currentlyHidden) {
       if (hidden) {
-        return postMapper.toListResponse(post);
+        return toResponse(post);
       }
       throw new ValidationException("Post is not hidden");
     }
@@ -202,7 +207,7 @@ public class PostService {
             .targetType("POST")
             .targetId(saved.getId())
             .build());
-    return postMapper.toListResponse(saved);
+    return toResponse(saved);
   }
 
   /**
@@ -216,7 +221,7 @@ public class PostService {
         postRepository
             .findDetailById(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-    return postMapper.toListResponse(post, attachedRecipeIds(postId));
+    return toResponse(post, attachedRecipeIds(postId));
   }
 
   /**
@@ -246,22 +251,27 @@ public class PostService {
 
     List<UUID> matchedIds = matches.stream().map(NearestMatch::postId).toList();
     Map<UUID, Post> postsById =
-        postRepository.findAllById(matchedIds).stream()
+        postRepository.findWithAuthorByIdIn(matchedIds).stream()
             .collect(Collectors.toMap(Post::getId, p -> p));
 
-    return matches.stream()
-        .filter(match -> postsById.containsKey(match.postId()))
-        .map(
-            match -> {
-              Post post = postsById.get(match.postId());
-              PostListResponse response =
-                  postMapper.toListResponse(post, attachedRecipeIds(post.getId()));
-              return RelatedPostResponse.builder()
-                  .post(response)
-                  .similarityScore(match.similarity())
-                  .build();
-            })
-        .toList();
+    List<RelatedPostResponse> related =
+        matches.stream()
+            .filter(match -> postsById.containsKey(match.postId()))
+            .map(
+                match -> {
+                  Post post = postsById.get(match.postId());
+                  PostListResponse response =
+                      postMapper.toListResponse(post, attachedRecipeIds(post.getId()));
+                  return RelatedPostResponse.builder()
+                      .post(response)
+                      .similarityScore(match.similarity())
+                      .build();
+                })
+            .toList();
+
+    // One avatar query for the whole batch rather than one per related post.
+    applyAuthorAvatars(related.stream().map(RelatedPostResponse::getPost).toList());
+    return related;
   }
 
   /**
@@ -275,7 +285,7 @@ public class PostService {
     Post post = findManageablePost(actorId, isAdmin, postId);
     post.setMedia(resolveMedia(mediaIds));
     Post saved = postRepository.saveAndFlush(post);
-    return postMapper.toListResponse(saved, attachedRecipeIds(postId));
+    return toResponse(saved, attachedRecipeIds(postId));
   }
 
   /**
@@ -304,7 +314,7 @@ public class PostService {
     recipeRepository.saveAll(currentlyAttached);
     recipeRepository.saveAll(requested);
 
-    return postMapper.toListResponse(post, recipeIds);
+    return toResponse(post, recipeIds);
   }
 
   /** Owner sees own posts; an Administrator sees every non-deleted post. */
@@ -424,7 +434,7 @@ public class PostService {
     Page<Post> posts =
         postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(userId, pageable);
 
-    return PageResponse.from(posts.map(postMapper::toListResponse));
+    return toPage(posts);
   }
 
   /**
@@ -447,7 +457,7 @@ public class PostService {
                 .findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
                     ownerId, PostStatus.published, pageable);
 
-    return PageResponse.from(posts.map(postMapper::toListResponse));
+    return toPage(posts);
   }
 
   /** BR-POST-010: the public feed serves every published, non-deleted post, newest first. */
@@ -458,7 +468,60 @@ public class PostService {
         postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
             PostStatus.published, pageable);
 
-    return PageResponse.from(posts.map(postMapper::toListResponse));
+    return toPage(posts);
+  }
+
+  /**
+   * Maps one post and fills in the author avatar, which {@code PostMapper} cannot reach: the avatar
+   * lives on {@code UserProfile}, not on {@code User}.
+   */
+  private PostListResponse toResponse(Post post) {
+    PostListResponse response = postMapper.toListResponse(post);
+    applyAuthorAvatars(List.of(response));
+    return response;
+  }
+
+  private PostListResponse toResponse(Post post, Set<UUID> recipeIds) {
+    PostListResponse response = postMapper.toListResponse(post, recipeIds);
+    applyAuthorAvatars(List.of(response));
+    return response;
+  }
+
+  /** Page variant: one avatar query for the whole page, never one per post. */
+  private PageResponse<PostListResponse> toPage(Page<Post> posts) {
+    List<PostListResponse> content =
+        posts.getContent().stream().map(postMapper::toListResponse).toList();
+    applyAuthorAvatars(content);
+    return PageResponse.<PostListResponse>builder()
+        .content(content)
+        .page(posts.getNumber())
+        .size(posts.getSize())
+        .totalElements(posts.getTotalElements())
+        .totalPages(posts.getTotalPages())
+        .first(posts.isFirst())
+        .last(posts.isLast())
+        .build();
+  }
+
+  /**
+   * Resolves every author avatar in the batch with a single query. A member with no profile row yet
+   * (BR-PROFILE-003) has no avatar, which is null rather than an error.
+   */
+  private void applyAuthorAvatars(List<PostListResponse> responses) {
+    Set<UUID> authorIds =
+        responses.stream()
+            .map(PostListResponse::getUserId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+    if (authorIds.isEmpty()) {
+      return;
+    }
+    // Built by hand rather than Collectors.toMap: avatars are nullable and toMap rejects nulls.
+    Map<UUID, String> avatars = new HashMap<>();
+    for (UserProfile profile : userProfileRepository.findByUserIdIn(authorIds)) {
+      avatars.put(profile.getUser().getId(), profile.getAvatarUrl());
+    }
+    responses.forEach(response -> response.setAvatarUrl(avatars.get(response.getUserId())));
   }
 
   /** BR-CONTENT-004: only existing, active categories may be assigned. */

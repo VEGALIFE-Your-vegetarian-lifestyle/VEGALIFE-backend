@@ -30,6 +30,6 @@ public class AdminPostListResponse {
   private Instant createdAt;
 
   private UUID userId;
-  private String username;
+  private String displayName;
   private String email;
 }

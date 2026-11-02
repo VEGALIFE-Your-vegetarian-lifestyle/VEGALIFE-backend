@@ -12,7 +12,7 @@ public class CommentThreadResponse {
 
   UUID id;
   UUID userId;
-  String username;
+  String displayName;
   String avatarUrl;
   String content;
   boolean edited;

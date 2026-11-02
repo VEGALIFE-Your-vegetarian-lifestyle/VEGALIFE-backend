@@ -75,7 +75,7 @@ class OutboxEmailServiceIntegrationTest {
 
   private String uniqueSuffix;
   private String email;
-  private String username;
+  private String displayName;
 
   @BeforeEach
   void setUp() {
@@ -83,13 +83,13 @@ class OutboxEmailServiceIntegrationTest {
     otpCodeRepository.deleteAll();
     userRepository.deleteAll();
     uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
-    username = "outboxuser-" + uniqueSuffix;
+    displayName = "outboxuser-" + uniqueSuffix;
     email = "outbox-" + uniqueSuffix + "@test.com";
   }
 
   private RegisterRequest registerRequest() {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername(username);
+    request.setDisplayName(displayName);
     request.setEmail(email);
     request.setPassword("password123");
     request.setConfirmPassword("password123");
@@ -126,7 +126,7 @@ class OutboxEmailServiceIntegrationTest {
     OutboundEmailPayload payload =
         objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
     assertThat(payload.type()).isEqualTo(OutboundEmailPayload.Type.EMAIL_VERIFICATION);
-    assertThat(payload.username()).isEqualTo(username);
+    assertThat(payload.displayName()).isEqualTo(displayName);
     assertThat(payload.otp()).matches("\\d{6}");
     assertThat(payload.expiryMinutes()).isEqualTo(10);
 
@@ -148,7 +148,7 @@ class OutboxEmailServiceIntegrationTest {
     OutboundEmailPayload payload =
         objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
     assertThat(payload.type()).isEqualTo(OutboundEmailPayload.Type.PASSWORD_RESET);
-    assertThat(payload.username()).isEqualTo(username);
+    assertThat(payload.displayName()).isEqualTo(displayName);
     assertThat(payload.otp()).matches("\\d{6}");
     assertThat(payload.expiryMinutes()).isEqualTo(10);
 

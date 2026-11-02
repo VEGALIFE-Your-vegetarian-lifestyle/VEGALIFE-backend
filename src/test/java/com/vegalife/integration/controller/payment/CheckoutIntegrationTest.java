@@ -87,7 +87,7 @@ class CheckoutIntegrationTest {
   void setUp() {
     testUser =
         User.builder()
-            .username("checkoutuser")
+            .displayName("checkoutuser")
             .email("checkout@example.com")
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)

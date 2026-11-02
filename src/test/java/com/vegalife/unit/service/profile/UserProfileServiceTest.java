@@ -47,7 +47,7 @@ class UserProfileServiceTest {
   @BeforeEach
   void setUp() {
     userId = UUID.randomUUID();
-    user = User.builder().id(userId).username("testuser").build();
+    user = User.builder().id(userId).displayName("testuser").build();
     existingProfile =
         UserProfile.builder()
             .id(UUID.randomUUID())
@@ -73,7 +73,7 @@ class UserProfileServiceTest {
     expectedResponse =
         ProfileResponse.builder()
             .userId(userId)
-            .username("testuser")
+            .displayName("testuser")
             .email("test@example.com")
             .heightCm(new BigDecimal("175.5"))
             .weightKg(new BigDecimal("70.2"))
@@ -174,7 +174,7 @@ class UserProfileServiceTest {
   @Test
   void getProfile_whenProfileMissing_shouldCreateEmptyProfile() {
     ProfileResponse emptyProfileResponse =
-        ProfileResponse.builder().userId(userId).username("testuser").build();
+        ProfileResponse.builder().userId(userId).displayName("testuser").build();
 
     when(profileRepository.findByUserId(userId)).thenReturn(Optional.empty());
     when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(user));

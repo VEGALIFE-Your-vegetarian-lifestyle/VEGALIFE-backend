@@ -6,6 +6,7 @@ import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.user.UserRepository;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +26,7 @@ class UserRepositoryTest {
   void findByEmail_existingEmail_returnsUser() {
     User user =
         User.builder()
-            .username("testuser")
+            .displayName("testuser")
             .email("test@example.com")
             .passwordHash("hash")
             .role(UserRole.USER)
@@ -39,7 +40,7 @@ class UserRepositoryTest {
 
     assertThat(found).isPresent();
     assertThat(found.get().getEmail()).isEqualTo("test@example.com");
-    assertThat(found.get().getUsername()).isEqualTo("testuser");
+    assertThat(found.get().getDisplayName()).isEqualTo("testuser");
   }
 
   @Test
@@ -50,30 +51,39 @@ class UserRepositoryTest {
   }
 
   @Test
-  void findByUsername_existingUsername_returnsUser() {
-    User user =
+  void save_twoUsersWithSameDisplayName_bothPersist() {
+    // ADR-019: display_name is not unique — it is a label, not an identifier.
+    User first =
         User.builder()
-            .username("testuser")
-            .email("test@example.com")
+            .displayName("testuser")
+            .email("first@example.com")
+            .passwordHash("hash")
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
+            .emailVerified(true)
+            .build();
+    User second =
+        User.builder()
+            .displayName("testuser")
+            .email("second@example.com")
             .passwordHash("hash")
             .role(UserRole.USER)
             .status(UserStatus.activated)
             .emailVerified(true)
             .build();
 
-    entityManager.persistAndFlush(user);
+    userRepository.saveAllAndFlush(List.of(first, second));
 
-    Optional<User> found = userRepository.findByUsername("testuser");
-
-    assertThat(found).isPresent();
-    assertThat(found.get().getUsername()).isEqualTo("testuser");
+    assertThat(userRepository.findAll())
+        .filteredOn(user -> "testuser".equals(user.getDisplayName()))
+        .hasSize(2);
   }
 
   @Test
   void existsByEmail_existingEmail_returnsTrue() {
     User user =
         User.builder()
-            .username("testuser")
+            .displayName("testuser")
             .email("test@example.com")
             .passwordHash("hash")
             .role(UserRole.USER)
@@ -96,29 +106,10 @@ class UserRepositoryTest {
   }
 
   @Test
-  void existsByUsername_existingUsername_returnsTrue() {
-    User user =
-        User.builder()
-            .username("testuser")
-            .email("test@example.com")
-            .passwordHash("hash")
-            .role(UserRole.USER)
-            .status(UserStatus.activated)
-            .emailVerified(true)
-            .build();
-
-    entityManager.persistAndFlush(user);
-
-    boolean exists = userRepository.existsByUsername("testuser");
-
-    assertThat(exists).isTrue();
-  }
-
-  @Test
   void save_userWithAllFields_persistsCorrectly() {
     User user =
         User.builder()
-            .username("testuser")
+            .displayName("testuser")
             .email("test@example.com")
             .passwordHash("hash")
             .role(UserRole.USER)
@@ -132,7 +123,7 @@ class UserRepositoryTest {
     assertThat(saved.getId()).isNotNull();
     assertThat(saved.getCreatedAt()).isNotNull();
     assertThat(saved.getUpdatedAt()).isNotNull();
-    assertThat(saved.getUsername()).isEqualTo("testuser");
+    assertThat(saved.getDisplayName()).isEqualTo("testuser");
     assertThat(saved.getEmail()).isEqualTo("test@example.com");
     assertThat(saved.getRole()).isEqualTo(UserRole.USER);
     assertThat(saved.getStatus()).isEqualTo(UserStatus.created);
