@@ -6,12 +6,14 @@ import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
+import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
@@ -19,6 +21,8 @@ import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.service.filter.ContentFilterService.FilterResult;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
+import com.vegalife.shared.exception.EmbeddingClientException;
+import com.vegalife.shared.exception.RetryableDeliveryException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,8 +40,9 @@ import org.springframework.transaction.annotation.Transactional;
  * embedding scoring, FR-006 bands) and applies the verdict. {@code PASSED} publishes the post —
  * every queued message was enqueued by an explicit publish request (BR-FILTER-005); {@code
  * REJECTED} / {@code NEEDS_REVIEW} flag the post, move it to {@code unpublished} and WARN (FR-009).
- * Any failure propagates so the queue retries; permanent failure is the existing FAILED@24h
- * handling of the outbound job. No {@code prev_status} tracking.
+ * A transient failure is rethrown as retryable so the queue waits the provider out; a permanent
+ * rejection cannot be retried into success, so the post goes to manual review immediately with the
+ * cause recorded in {@code moderation_log} (ADR-020). No {@code prev_status} tracking.
  *
  * <p>Duplicate detection (issue #156, ADR-015) runs before the verdict is applied and before the
  * post's vector is stored. Storing first would make every post match itself at similarity 1.0. This
@@ -49,6 +54,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
 
+  /** Recorded when the filter itself could not run, as distinct from a verdict (ADR-020). */
+  private static final String FILTER_UNAVAILABLE = "FILTER_UNAVAILABLE";
+
+  private static final String POST_TARGET = "POST";
+
   private final PostRepository postRepository;
   private final ContentFilterService contentFilterService;
   private final RecipeRepository recipeRepository;
@@ -58,6 +68,7 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   private final ActiveEmbeddingModel activeEmbeddingModel;
   private final ObjectMapper objectMapper;
   private final EmbeddingComponentScorer.Factory componentScorerFactory;
+  private final ModerationLogRepository moderationLogRepository;
 
   @Override
   public OutboundChannel channel() {
@@ -78,7 +89,29 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
                             + message.getId()
                             + " references missing post "
                             + payload.postId()));
-    FilterResult result = contentFilterService.filter(filterBody(post));
+    FilterResult result;
+    try {
+      result = contentFilterService.filter(filterBody(post));
+    } catch (EmbeddingClientException e) {
+      if (!e.isTerminal()) {
+        throw new RetryableDeliveryException(
+            "Content filter could not embed post " + post.getId() + " (" + e.getMessage() + ")",
+            e.getRetryAfter(),
+            e);
+      }
+      // A permanent rejection cannot be retried into success: settle the post now and let the
+      // message complete, because its purpose - "get this post judged" - is discharged by the
+      // review queue. Marking it FAILED would only misreport it (ADR-020).
+      applyFilterUnavailable(post, e);
+      postRepository.save(post);
+      log.error(
+          "Content filter could not run for post {} (outbound message {}): {}. The post is queued"
+              + " for manual review instead of being retried.",
+          post.getId(),
+          message.getId(),
+          e.getMessage());
+      return;
+    }
     FilterVerdict verdict = result.verdict();
     post.setContentScore(verdict.score());
 
@@ -139,6 +172,78 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
           postId,
           e.getMessage());
     }
+  }
+
+  /**
+   * Applies the "filter unavailable" outcome: never visible, never attributed to the model's
+   * judgement. Recorded as a system action ({@code actor_id} null) with the classified cause.
+   *
+   * <p>The reason goes to {@code moderation_log} rather than a new {@code post.flag} value, so an
+   * operator can tell "the filter could not run" from "the filter judged this" without widening the
+   * verdict axis ADR-011 keeps narrow.
+   */
+  private void applyFilterUnavailable(Post post, EmbeddingClientException e) {
+    post.setFlag(PostFlag.NEEDS_REVIEW);
+    post.setStatus(PostStatus.unpublished);
+    moderationLogRepository.save(
+        ModerationLog.builder()
+            .action(FILTER_UNAVAILABLE)
+            .targetType(POST_TARGET)
+            .targetId(post.getId())
+            .reason(describeFailure(e))
+            .build());
+  }
+
+  /** Stable, log-ready cause: reason code plus upstream status, never the provider's full body. */
+  static String describeFailure(EmbeddingClientException e) {
+    String status = e.getUpstreamStatus() == null ? "no response" : "HTTP " + e.getUpstreamStatus();
+    String code = e.getProviderCode() == null ? "" : " " + e.getProviderCode();
+    return "FILTER_UNAVAILABLE: " + e.getReason() + " (" + status + ")" + code;
+  }
+
+  /**
+   * A message that was abandoned before delivery (permanent rejection or a retry that could not fit
+   * inside max age) still owes the post a terminal state — the member's post must not stay {@code
+   * PENDING} and invisible forever (ADR-020, FR-011).
+   */
+  @Override
+  @Transactional
+  public void onDeliveryAbandoned(OutboundMessage message, RuntimeException cause) {
+    ContentFilterPayload payload;
+    try {
+      payload = parse(message);
+    } catch (RuntimeException e) {
+      // The payload is already unreadable; there is no post to settle.
+      return;
+    }
+    Optional<Post> found = postRepository.findById(payload.postId());
+    if (found.isEmpty()) {
+      return;
+    }
+    Post post = found.get();
+    if (post.getFlag() != PostFlag.PENDING) {
+      // Already settled by an earlier attempt; never overwrite a real verdict.
+      return;
+    }
+    String reason =
+        cause instanceof EmbeddingClientException embedding
+            ? describeFailure(embedding)
+            : "FILTER_UNAVAILABLE: " + cause.getMessage();
+    post.setFlag(PostFlag.NEEDS_REVIEW);
+    post.setStatus(PostStatus.unpublished);
+    postRepository.save(post);
+    moderationLogRepository.save(
+        ModerationLog.builder()
+            .action(FILTER_UNAVAILABLE)
+            .targetType(POST_TARGET)
+            .targetId(post.getId())
+            .reason(reason)
+            .build());
+    log.error(
+        "Outbound message {} was abandoned; post {} moved to NEEDS_REVIEW: {}",
+        message.getId(),
+        post.getId(),
+        reason);
   }
 
   private static void apply(Post post, FilterVerdict verdict) {

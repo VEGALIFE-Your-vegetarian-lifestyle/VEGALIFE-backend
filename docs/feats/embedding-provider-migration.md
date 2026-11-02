@@ -116,6 +116,15 @@ fail in a way operators can see rather than silently doing nothing.
   this, an outage is indistinguishable from real moderation work.
 - **FR-013**: The failure is logged at ERROR with the upstream status.
 
+> **Implementation status (2026-11-02).** FR-011/FR-012 were implemented
+> for the component path (ADR-016) but not for the post-body path, and
+> FR-013 was never implemented at all: every provider failure collapsed
+> into one unqualified message. [ADR-020](../adrs/020-embedding-failure-terminal-vs-retryable.md)
+> closes that gap — failures are now classified (reason, upstream status,
+> retry hint), permanent rejections reach the review state immediately
+> with a `moderation_log` row instead of retrying to `FAILED@24h`, and
+> retryable ones honour the provider's `Retry-After`.
+
 ### Calibration
 
 - **FR-014**: Centroids and test fixtures are regenerated against Gemini.
@@ -254,11 +263,14 @@ Not yet done, deliberately:
 - **Re-enabling the filter.** Non-goal by design. `app.filter.enabled` stays
   `false` until the re-enable change lands, so this change cannot alter live
   moderation behaviour.
-- **FR-011 / FR-012 (failure reason).** The existing behaviour already
-  satisfies FR-011: an embedding failure propagates, the outbox drainer logs
-  it at ERROR with the cause chain and retries the message. FR-012's
-  distinguishing reason code is a schema change that belongs with the
-  moderation work and is not introduced here.
+- **FR-011 / FR-012 / FR-013 (failure reason) — implemented.** Failure
+  classification landed with
+  [ADR-020](../adrs/020-embedding-failure-terminal-vs-retryable.md):
+  `EmbeddingClientException` carries the reason, upstream status, the
+  provider's error code and its retry hint; permanent rejections settle
+  the post at `NEEDS_REVIEW` with a `moderation_log` `FILTER_UNAVAILABLE`
+  row, and retryable ones are retried no earlier than the provider's
+  `Retry-After`.
 
 ## Risks / open questions
 
@@ -270,8 +282,10 @@ Not yet done, deliberately:
   fixtures are artefacts of one provider and one model. Re-arming HF
   requires regenerating them, not just flipping the property — a trap
   worth stating in the operator docs.
-- **Free-tier limits unverified.** Mitigated by FR-011: quota exhaustion
-  degrades to review rather than failing publishes.
+- **Free-tier limits unverified.** A quota rejection is retryable and is
+  honoured at the provider's `Retry-After`, so exhaustion delays
+  publishing rather than dropping posts; a permanent rejection (bad key,
+  unknown model) degrades to review instead (ADR-020).
 - **`centroids.json` is also claimed by duplicate detection.** Only one
   change may own that file at a time.
 - **Determinism is assumed, not yet proven.** AC-2 tests it. If Gemini

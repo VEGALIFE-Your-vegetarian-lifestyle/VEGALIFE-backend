@@ -93,8 +93,9 @@ public class GeminiEmbeddingModel implements EmbeddingModel {
               .retrieve()
               .body(BatchResponse.class);
     } catch (RuntimeException e) {
-      throw new EmbeddingClientException(
-          "Gemini embedding call failed for model " + properties.getModel(), e);
+      // Never rethrow the flat message this used to throw: it discarded the provider's status and
+      // made a lapsed credential indistinguishable from an exhausted quota (issue #175).
+      throw EmbeddingFailureClassifier.classify(e, "Gemini", properties.getModel());
     }
 
     if (response == null || response.embeddings() == null) {

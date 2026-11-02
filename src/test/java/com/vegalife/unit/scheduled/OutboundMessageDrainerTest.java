@@ -23,6 +23,8 @@ import com.vegalife.repository.outbound.OutboundMessageQueueDao;
 import com.vegalife.scheduled.OutboundMessageDrainer;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
 import com.vegalife.service.outbound.OutboundMessageProperties;
+import com.vegalife.shared.exception.PermanentDeliveryException;
+import com.vegalife.shared.exception.RetryableDeliveryException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -75,7 +77,7 @@ class OutboundMessageDrainerTest {
     OutboundMessage message = message(1, Instant.now(), null);
     when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
         .thenReturn(List.of(message));
-    doThrow(new RuntimeException("smtp down")).when(adapter).deliver(message);
+    doThrow(new RetryableDeliveryException("smtp down", null, null)).when(adapter).deliver(message);
     when(queueDao.scheduleRetry(
             eq(message.getId()), eq(OutboundStatus.PENDING), any(Instant.class), anyString()))
         .thenReturn(true);
@@ -96,7 +98,7 @@ class OutboundMessageDrainerTest {
     OutboundMessage message = message(3, Instant.now(), null);
     when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
         .thenReturn(List.of(message));
-    doThrow(new RuntimeException("smtp down")).when(adapter).deliver(message);
+    doThrow(new RetryableDeliveryException("smtp down", null, null)).when(adapter).deliver(message);
     when(queueDao.scheduleRetry(
             eq(message.getId()), eq(OutboundStatus.PENDING), any(Instant.class), anyString()))
         .thenReturn(true);
@@ -117,7 +119,7 @@ class OutboundMessageDrainerTest {
     OutboundMessage message = message(4, Instant.now(), null);
     when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
         .thenReturn(List.of(message));
-    doThrow(new RuntimeException("smtp down")).when(adapter).deliver(message);
+    doThrow(new RetryableDeliveryException("smtp down", null, null)).when(adapter).deliver(message);
     when(queueDao.scheduleRetry(
             eq(message.getId()), eq(OutboundStatus.DEFERRED), any(Instant.class), anyString()))
         .thenReturn(true);
@@ -226,7 +228,7 @@ class OutboundMessageDrainerTest {
             eq(failing.getId()), eq(OutboundStatus.PENDING), any(Instant.class), anyString()))
         .thenReturn(true);
     doNothing().when(adapter).deliver(delivered);
-    doThrow(new RuntimeException("smtp down")).when(adapter).deliver(failing);
+    doThrow(new RetryableDeliveryException("smtp down", null, null)).when(adapter).deliver(failing);
 
     Logger logger = (Logger) LoggerFactory.getLogger(OutboundMessageDrainer.class);
     ListAppender<ILoggingEvent> appender = new ListAppender<>();
@@ -250,6 +252,155 @@ class OutboundMessageDrainerTest {
     } finally {
       logger.detachAppender(appender);
     }
+  }
+
+  /** ADR-020: a permanent rejection is abandoned at once instead of burning the retry ladder. */
+  @Test
+  void shouldAbandonPermanentFailureWithoutRetrying() {
+    OutboundMessage message = message(1, Instant.now(), null);
+    when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
+        .thenReturn(List.of(message));
+    doThrow(new PermanentDeliveryException("provider rejected the request"))
+        .when(adapter)
+        .deliver(message);
+    when(queueDao.markTerminal(eq(message.getId()), eq(OutboundStatus.FAILED), anyString()))
+        .thenReturn(true);
+
+    drainer.drainOnce();
+
+    verify(queueDao, never())
+        .scheduleRetry(any(UUID.class), any(OutboundStatus.class), any(Instant.class), anyString());
+    verify(queueDao).markTerminal(eq(message.getId()), eq(OutboundStatus.FAILED), anyString());
+    verify(adapter).onDeliveryAbandoned(eq(message), any(RuntimeException.class));
+  }
+
+  /** The 116-attempt bug: a 400-class rejection must not be deferred for a day. */
+  @Test
+  void shouldNotDeferPermanentFailureEvenPastTheFastRetryWindow() {
+    OutboundMessage message = message(116, Instant.now().minus(Duration.ofHours(10)), null);
+    when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
+        .thenReturn(List.of(message));
+    doThrow(new PermanentDeliveryException("invalid argument")).when(adapter).deliver(message);
+    when(queueDao.markTerminal(eq(message.getId()), eq(OutboundStatus.FAILED), anyString()))
+        .thenReturn(true);
+
+    drainer.drainOnce();
+
+    verify(queueDao, never())
+        .scheduleRetry(any(UUID.class), any(OutboundStatus.class), any(Instant.class), anyString());
+    verify(queueDao).markTerminal(eq(message.getId()), eq(OutboundStatus.FAILED), anyString());
+  }
+
+  /** The provider's hint is a floor: reacting sooner re-arms the limit being waited on. */
+  @Test
+  void shouldNeverRetryEarlierThanTheProviderHint() {
+    OutboundMessage message = message(1, Instant.now(), null);
+    when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
+        .thenReturn(List.of(message));
+    doThrow(new RetryableDeliveryException("ratelimited", Duration.ofSeconds(40), null))
+        .when(adapter)
+        .deliver(message);
+    when(queueDao.scheduleRetry(
+            eq(message.getId()), eq(OutboundStatus.PENDING), any(Instant.class), anyString()))
+        .thenReturn(true);
+
+    Instant before = Instant.now();
+    drainer.drainOnce();
+
+    ArgumentCaptor<Instant> nextAttemptAt = ArgumentCaptor.forClass(Instant.class);
+    verify(queueDao)
+        .scheduleRetry(
+            eq(message.getId()), eq(OutboundStatus.PENDING), nextAttemptAt.capture(), anyString());
+    // Configured first delay is 10s; the provider asked for 40s, so 40s wins.
+    assertThat(nextAttemptAt.getValue())
+        .isAfterOrEqualTo(before.plus(Duration.ofSeconds(40)))
+        .isBefore(before.plus(Duration.ofSeconds(45)));
+  }
+
+  /** A retry landing past max age is pointless: the message is abandoned and the adapter told. */
+  @Test
+  void shouldAbandonWhenTheRetryWouldExceedMaxAge() {
+    OutboundMessage message =
+        message(1, Instant.now().minus(Duration.ofHours(23).plusMinutes(55)), null);
+    when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
+        .thenReturn(List.of(message));
+    doThrow(new RetryableDeliveryException("ratelimited", Duration.ofMinutes(30), null))
+        .when(adapter)
+        .deliver(message);
+    when(queueDao.markTerminal(eq(message.getId()), eq(OutboundStatus.FAILED), anyString()))
+        .thenReturn(true);
+
+    drainer.drainOnce();
+
+    verify(queueDao, never())
+        .scheduleRetry(any(UUID.class), any(OutboundStatus.class), any(Instant.class), anyString());
+    verify(queueDao).markTerminal(eq(message.getId()), eq(OutboundStatus.FAILED), anyString());
+    verify(adapter).onDeliveryAbandoned(eq(message), any(RuntimeException.class));
+  }
+
+  /** A 429 with no hint is backoff, not permanence: it must still be retried. */
+  @Test
+  void shouldStillRetryWhenNoHintIsGiven() {
+    OutboundMessage message = message(1, Instant.now(), null);
+    when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
+        .thenReturn(List.of(message));
+    doThrow(new RetryableDeliveryException("ratelimited", null, null))
+        .when(adapter)
+        .deliver(message);
+    when(queueDao.scheduleRetry(
+            eq(message.getId()), eq(OutboundStatus.PENDING), any(Instant.class), anyString()))
+        .thenReturn(true);
+
+    drainer.drainOnce();
+
+    verify(queueDao)
+        .scheduleRetry(
+            eq(message.getId()), eq(OutboundStatus.PENDING), any(Instant.class), anyString());
+    verify(queueDao, never()).markTerminal(any(UUID.class), any(OutboundStatus.class), anyString());
+  }
+
+  /**
+   * The safety valve for every adapter that cannot classify its failures: an SMTP outage, a
+   * provider 5xx and a malformed payload are indistinguishable from here, and ADR-020 does not
+   * license guessing. Undeclared means retry.
+   */
+  @Test
+  void shouldKeepRetryingAnUndeclaredFailure() {
+    OutboundMessage message = message(1, Instant.now(), null);
+    when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
+        .thenReturn(List.of(message));
+    doThrow(new IllegalStateException("smtp down")).when(adapter).deliver(message);
+    when(queueDao.scheduleRetry(
+            eq(message.getId()), eq(OutboundStatus.PENDING), any(Instant.class), anyString()))
+        .thenReturn(true);
+
+    drainer.drainOnce();
+
+    verify(queueDao)
+        .scheduleRetry(
+            eq(message.getId()), eq(OutboundStatus.PENDING), any(Instant.class), anyString());
+    verify(queueDao, never()).markTerminal(any(UUID.class), any(OutboundStatus.class), anyString());
+    verify(adapter, never()).onDeliveryAbandoned(any(), any());
+  }
+
+  /** A hook that throws must not lose the terminal transition that already succeeded. */
+  @Test
+  void shouldSurviveAnAdapterHookThatThrows() {
+    OutboundMessage message = message(1, Instant.now(), null);
+    when(queueDao.claimDue(any(Instant.class), anyString(), eq(BATCH_SIZE)))
+        .thenReturn(List.of(message));
+    doThrow(new PermanentDeliveryException("provider rejected the request"))
+        .when(adapter)
+        .deliver(message);
+    doThrow(new IllegalStateException("hook exploded"))
+        .when(adapter)
+        .onDeliveryAbandoned(eq(message), any(RuntimeException.class));
+    when(queueDao.markTerminal(eq(message.getId()), eq(OutboundStatus.FAILED), anyString()))
+        .thenReturn(true);
+
+    drainer.drainOnce();
+
+    verify(queueDao).markTerminal(eq(message.getId()), eq(OutboundStatus.FAILED), anyString());
   }
 
   private static OutboundMessage message(int attempts, Instant createdAt, Instant expiresAt) {

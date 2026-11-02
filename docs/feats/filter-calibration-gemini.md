@@ -133,12 +133,15 @@ would have defeated the point of the migration.
 
 The operational consequence is that **every publish now makes a Gemini
 call**. If that call fails the publish request still succeeds — the post
-is queued and the outbox retries — but a prolonged Gemini outage means
-posts sit `PENDING` until the 24h sweep moves them to `NEEDS_REVIEW`.
-`EMBED_API_KEY` must therefore be set in any environment where the filter
-is left enabled. Setting `FILTER_ENABLED=false` remains available as a
-deliberate outage mode; it bypasses the filter entirely rather than
-failing posts.
+is queued — and what happens next depends on why it failed: a transient
+error is retried with the provider's `Retry-After` honoured, while a
+permanent rejection (bad or missing key, unknown model) moves the post to
+`NEEDS_REVIEW` at once with a `moderation_log` `FILTER_UNAVAILABLE` row
+(ADR-020). No post is left `PENDING` waiting on retries that cannot
+succeed. `EMBED_API_KEY` must therefore be set in any environment where
+the filter is left enabled. Setting `FILTER_ENABLED=false` remains
+available as a deliberate outage mode; it bypasses the filter entirely
+rather than failing posts.
 
 `FilterDefaultsTest` pins both the `FilterProperties` default and the
 `${FILTER_ENABLED:true}` placeholder, so flipping this back requires a

@@ -2,6 +2,7 @@ package com.vegalife.unit.infrastructure.embedding;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -111,7 +112,11 @@ class HfEmbeddingModelTest {
             EmbeddingClientException.class,
             () -> model.call(new EmbeddingRequest(List.of("text"), null)));
 
+    assertTrue(ex.getMessage().contains("HuggingFace"));
     assertTrue(ex.getMessage().contains("org/model-x"));
     assertInstanceOf(RestClientResponseException.class, ex.getCause());
+    // Shares the Gemini client's classification rather than inventing its own.
+    assertEquals(EmbeddingClientException.Reason.UPSTREAM_ERROR, ex.getReason());
+    assertFalse(ex.isTerminal());
   }
 }
