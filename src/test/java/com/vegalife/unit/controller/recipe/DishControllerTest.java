@@ -6,7 +6,9 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.controller.recipe.DishController;
 import com.vegalife.dto.request.recipe.DishListRequest;
+import com.vegalife.dto.response.recipe.DishIngredientSuggestionResponse;
 import com.vegalife.dto.response.recipe.DishResponse;
+import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.service.recipe.DishService;
 import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
@@ -24,6 +26,8 @@ import org.springframework.http.ResponseEntity;
 class DishControllerTest {
 
   @Mock private DishService dishService;
+
+  @Mock private DishIngredientService dishIngredientService;
 
   @InjectMocks private DishController dishController;
 
@@ -50,5 +54,28 @@ class DishControllerTest {
     assertThat(result.getBody().getMessage()).isEqualTo("Dishes retrieved successfully");
     assertThat(result.getBody().getData()).isEqualTo(page);
     verify(dishService).listDishes(request);
+  }
+
+  @Test
+  void suggestIngredients_returnsFlatArrayFromService() {
+    UUID dishId = UUID.randomUUID();
+    List<DishIngredientSuggestionResponse> suggestions =
+        List.of(
+            DishIngredientSuggestionResponse.builder()
+                .ingredientId(UUID.randomUUID())
+                .name("rice noodles")
+                .required(true)
+                .build());
+    when(dishIngredientService.listSuggestions(dishId)).thenReturn(suggestions);
+
+    ResponseEntity<ApiResponse<List<DishIngredientSuggestionResponse>>> result =
+        dishController.suggestIngredients(dishId);
+
+    assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(result.getBody().isSuccess()).isTrue();
+    assertThat(result.getBody().getMessage())
+        .isEqualTo("Dish ingredient suggestions retrieved successfully");
+    assertThat(result.getBody().getData()).isEqualTo(suggestions);
+    verify(dishIngredientService).listSuggestions(dishId);
   }
 }

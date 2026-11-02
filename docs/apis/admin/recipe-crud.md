@@ -70,6 +70,7 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
             "unit": "g"
           }
         ],
+        "missingRequiredIngredients": [],
         "createdAt": "2026-10-24T08:00:00Z",
         "updatedAt": "2026-10-24T08:00:00Z",
         "userId": "9f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
@@ -93,6 +94,7 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
 | `moderationStatus` | Review state. A recipe can be `ACTIVE` and still `PENDING`. |
 | `score` | Relevance score at submission time. `null` = never scored. |
 | `dishModerationStatus`, `ingredients[].moderationStatus` | The shared names' own states. |
+| `missingRequiredIngredients` | Names of the dish's `required` ingredients this recipe omits (BR-DISH-002). Advisory: it never changes `moderationStatus` and never blocks approve/reject. Empty array when nothing is missing. |
 
 ## PATCH /api/admin/recipes/{recipeId}
 
@@ -128,12 +130,20 @@ listed or readable. Returns `200`; `404` if it is already gone.
 
 Body (optional): `{ "reason": "instructions verified" }`
 
-Approves **the recipe row only**. Its dish and ingredients are separate shared names
-with their own endpoints. Approving a post already covers all of them at once;
-doing it implicitly here would let one recipe approval publish a name that a
-different post is still waiting to have reviewed.
+Approves the recipe and, in the same transaction, every `PENDING` dish and ingredient
+name it references. Approving a recipe is a review of that recipe, dish and ingredients
+included, so the reviewer should not have to hunt down each pending name afterwards.
 
-An already-approved recipe is a no-op — no state change, no log entry.
+- A name already `APPROVED` is left alone; a name `REJECTED` is **left rejected**.
+  Rejection stays permanent (BR-DISH-001) — the explicit
+  `POST /api/admin/dishes/{dishId}/approve` endpoint remains the only way back.
+- This matches what approving a **post** already does to its components, so the two
+  approval paths cannot disagree about what "approved" means.
+- Each name actually changed writes its own `APPROVE_COMPONENT` `moderation_log` row,
+  plus the recipe's own row.
+- Seeded `dish_ingredient` entries land in the same transaction (BR-DISH-003).
+
+An already-approved recipe is a no-op — no state change, no log entry, no name approval.
 
 ## POST /api/admin/recipes/{recipeId}/reject
 
@@ -141,10 +151,17 @@ Body (optional): `{ "reason": "instructions are off-topic" }`
 
 Rejects the recipe row. Nothing is deleted.
 
+Rejection does **not** cascade to the recipe's dish or ingredient names, including ones
+still `PENDING` — approval publishes names, rejection never unpublishes them. A name
+approved on its own merits, possibly by an earlier post, must not be knocked out by one
+bad recipe.
+
 ## Business Rules
 
 - Approval is what makes a recipe searchable; search filters on `APPROVED`
   (BR-DISH-001, ADR-016).
+- Approving a recipe approves its pending dish and ingredient names, but never resurrects
+  a rejected one.
 - The recipe score escalates a passing post to `NEEDS_REVIEW` but never downgrades a
   `REJECTED` verdict.
 - Every real change writes a `moderation_log` row (`DELETE_RECIPE`,

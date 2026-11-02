@@ -17,6 +17,7 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `admin/post-comments-commentid-moderate.md` | `POST /api/admin/comments/{commentId}/moderate` | Soft-delete a comment with a required reason (Admin) |
 | `admin/get-dashboard.md` | `GET /api/admin/dashboard` | Aggregated, time-range-filtered platform metrics, cached (Admin) |
 | `admin/dish-and-ingredient-crud.md` | `GET/POST/PATCH/DELETE /api/admin/dishes[/{dishId}][/approve\|/reject]` | Manage dish names, including review state; `admin/ingredients` mirrors it (Admin) |
+| `admin/dish-ingredient-crud.md` | `GET/POST/PATCH/DELETE /api/admin/dishes/{dishId}/ingredients[/{ingredientId}]` | Curate a dish's associated ingredients and which are required (Admin) |
 | `admin/post-locations.md` | `POST /api/admin/locations` | Create a location (Admin) |
 | `admin/patch-locations-locationid.md` | `PATCH /api/admin/locations/{locationId}` | Edit a location (Admin) |
 | `admin/delete-locations-locationid.md` | `DELETE /api/admin/locations/{locationId}` | Soft-delete a location (Admin) |
@@ -49,6 +50,8 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `post/get-categories.md` | `GET /api/categories` | List active content categories (public) |
 | `recipes/get-dishes.md` | `GET /api/dishes` | List active dishes for recipe-create autocomplete (authenticated) |
 | `recipes/get-dishes-suggestions.md` | `GET /api/dishes/suggestions` | Suggest plannable dishes with allergy-filtered recipe recommendations (authenticated) |
+| `recipes/get-dishes-dishid.md` | `GET /api/dishes/{dishId}` | Read one approved dish; pending/rejected names answer 404 (authenticated) |
+| `recipes/get-dishes-dishid-ingredients-suggestions.md` | `GET /api/dishes/{dishId}/ingredients/suggestions` | Read an approved dish's curated ingredient list, with its advisory `required` flags (authenticated) |
 | `ingredients/get-ingredients.md` | `GET /api/ingredients` | List ingredients paginated, with case-insensitive name filter (authenticated) |
 | `locations/get-locations.md` | `GET /api/locations` | List recommend locations with rating/type/price/open-now filters (authenticated) |
 | `locations/get-locations-nearby.md` | `GET /api/locations/nearby` | List every active location within a radius, nearest first, no pagination (authenticated) |
@@ -86,6 +89,8 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `profile/get-profile.md` | `GET /api/profile` | Get own profile (authenticated; auto-creates empty row) |
 | `profile/get-profile-userid.md` | `GET /api/profile/{userId}` | Get a member's profile (public) |
 | `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |
+| `recipes/get-recipes-me.md` | `GET /api/recipes/me` | List own recipes, newest first, unpaginated (authenticated) |
+| `recipes/get-recipes-recipeid.md` | `GET /api/recipes/{recipeId}` | Read one own recipe by id; another member's recipe answers 404 (authenticated; owner only) |
 | `search/get-search.md` | `GET /api/search` | Keyword search across posts, videos, and recipes (public) |
 | `subscriptions/get-subscriptions.md` | `GET /api/subscriptions` | List active AI plans with limits and price (public) |
 | `subscriptions/get-me.md` | `GET /api/subscriptions/me` | Get own AI subscription: tier, usage, plan, latest payment (authenticated) |

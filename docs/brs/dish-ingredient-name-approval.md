@@ -22,6 +22,7 @@ no owner and are shared by every user, recipe and menu.
 | Admin creates it via the admin CRUD endpoint | `APPROVED` |
 | Any row that existed before this rule was introduced | `APPROVED` (migration backfill) |
 | Admin approves a post that references it | `APPROVED` |
+| Admin approves a recipe that references it | `APPROVED` |
 | Admin rejects a post that references it, while still `PENDING` | `REJECTED` |
 | Admin rejects it directly from the admin CRUD endpoint | `REJECTED` |
 
@@ -38,11 +39,15 @@ no owner and are shared by every user, recipe and menu.
 ## Approving a post approves its names
 
 Approving a post sets every `PENDING` dish, ingredient and recipe it references to
-`APPROVED`, in the same transaction. This is the only routine path by which a
-user-introduced name becomes visible; there is no separate dish queue.
+`APPROVED`, in the same transaction. Approving a **recipe** does the same for the dish and
+ingredients that recipe references — a recipe is reviewed together with what it names, so
+the reviewer does not have to approve each pending name separately.
 
-Consequence: **any post that introduces a new name requires admin review before
-that name is visible**, even if the post's own text would have passed the filter.
+Neither path re-approves a `REJECTED` name: rejection is permanent, and the explicit
+per-name approve endpoint is the only way back.
+
+Consequence: **any post or recipe that introduces a new name requires admin review before
+that name is visible**, even if the object's own text would have passed the filter.
 
 ## Editing
 

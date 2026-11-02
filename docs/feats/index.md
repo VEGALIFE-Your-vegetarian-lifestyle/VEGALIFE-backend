@@ -58,3 +58,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `duplicate-post-detection.md`       | Duplicate Post Detection                  | In Progress | 2026-10-18 |
 | `google-login.md`                   | Sign In with Google                       | In progress | 2026-10-26 |
 | `post-author-in-response.md`        | Post Responses Carry Their Author's Identity | Implemented | 2026-11-02 |
+| `dish-ingredient-suggestions.md`    | Dish Ingredient Suggestions and Advisory Required Flag | Implemented | 2026-11-02 |

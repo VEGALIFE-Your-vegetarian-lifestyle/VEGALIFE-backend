@@ -33,6 +33,7 @@ import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.service.admin.AdminPostService;
+import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -71,6 +72,8 @@ class AdminPostServiceTest {
   @Mock private DishRepository dishRepository;
 
   @Mock private IngredientRepository ingredientRepository;
+
+  @Mock private DishIngredientService dishIngredientService;
 
   @InjectMocks private AdminPostService adminPostService;
 
@@ -300,6 +303,8 @@ class AdminPostServiceTest {
     verify(recipeRepository).save(recipe);
     verify(dishRepository).save(dish);
     verify(ingredientRepository).save(ingredient);
+    // The approved recipe contributes its ingredients to the dish's suggestion list (BR-DISH-003).
+    verify(dishIngredientService).seedFromApprovedRecipe(recipe);
   }
 
   @Test

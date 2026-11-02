@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.vegalife.dto.mapper.admin.AdminDishIngredientMapper;
 import com.vegalife.dto.request.admin.AdminDishCreateRequest;
 import com.vegalife.dto.request.admin.AdminDishUpdateRequest;
 import com.vegalife.dto.response.admin.AdminDishResponse;
@@ -14,6 +15,7 @@ import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.repository.admin.ModerationLogRepository;
+import com.vegalife.repository.recipe.DishIngredientRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.service.admin.AdminDishService;
 import com.vegalife.shared.exception.DuplicateResourceException;
@@ -33,6 +35,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AdminDishServiceTest {
 
   @Mock private DishRepository dishRepository;
+
+  @Mock private DishIngredientRepository dishIngredientRepository;
+
+  @Mock private AdminDishIngredientMapper adminDishIngredientMapper;
 
   @Mock private ModerationLogRepository moderationLogRepository;
 

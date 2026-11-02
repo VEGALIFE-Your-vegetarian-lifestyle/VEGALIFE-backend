@@ -56,6 +56,8 @@ ingredient names behind admin approval before they are visible.
 | R7 | A post is flagged `NEEDS_REVIEW` if its content score is below the accept threshold, its recipe score is below the recipe threshold, or any dish/ingredient it references is `PENDING`. |
 | R8 | `GET /api/admin/posts/{id}` returns the post with its content score, recipe score, and each referenced dish/ingredient as `{id, type, name, moderationStatus}`. |
 | R9 | `POST /api/admin/posts/{id}/approve` publishes the post and sets every `PENDING` dish, ingredient and recipe it references to `APPROVED`. |
+| R9a | `POST /api/admin/recipes/{id}/approve` approves the recipe and, in the same transaction, every `PENDING` dish and ingredient name it references. A `REJECTED` name is left rejected (BR-DISH-001). |
+| R9b | Rejecting a recipe does not change the review state of its dish or ingredient names. |
 | R10 | `POST /api/admin/posts/{id}/reject` unpublishes the post and sets referenced rows that are still `PENDING` to `REJECTED`. Rows already `APPROVED` are untouched. Nothing is deleted. |
 | R11 | Public dish and ingredient listings return `APPROVED` rows only. A recipe whose dish is `PENDING` is still returned, with the dish marked pending. |
 | R12 | A failure to score a component writes a `NULL` score and queues the post for review; the publish request itself still succeeds. |

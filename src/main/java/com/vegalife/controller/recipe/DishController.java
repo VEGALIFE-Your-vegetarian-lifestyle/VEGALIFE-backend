@@ -2,8 +2,10 @@ package com.vegalife.controller.recipe;
 
 import com.vegalife.dto.request.recipe.DishListRequest;
 import com.vegalife.dto.request.recipe.DishSuggestionRequest;
+import com.vegalife.dto.response.recipe.DishIngredientSuggestionResponse;
 import com.vegalife.dto.response.recipe.DishResponse;
 import com.vegalife.dto.response.recipe.DishSuggestionResponse;
+import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.service.recipe.DishService;
 import com.vegalife.service.recipe.DishSuggestionFacade;
 import com.vegalife.shared.dto.ApiResponse;
@@ -11,6 +13,7 @@ import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -39,6 +42,7 @@ public class DishController {
 
   private final DishService dishService;
   private final DishSuggestionFacade dishSuggestionFacade;
+  private final DishIngredientService dishIngredientService;
 
   @GetMapping
   public ResponseEntity<ApiResponse<PageResponse<DishResponse>>> listDishes(
@@ -52,6 +56,22 @@ public class DishController {
   public ResponseEntity<ApiResponse<DishResponse>> getDish(@PathVariable UUID dishId) {
     return ResponseEntity.ok(
         ApiResponse.success(dishService.getDish(dishId), "Dish retrieved successfully"));
+  }
+
+  /**
+   * The ingredients this dish normally contains, to prefill the create-recipe form (BR-DISH-002).
+   *
+   * <p>A plain array, not a page: a dish's ingredient set is bounded by curation effort, and a
+   * form-prefill call should not need a paging loop. Only approved dish and ingredient names
+   * resolve (BR-DISH-001).
+   */
+  @GetMapping("/{dishId}/ingredients/suggestions")
+  public ResponseEntity<ApiResponse<List<DishIngredientSuggestionResponse>>> suggestIngredients(
+      @PathVariable UUID dishId) {
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            dishIngredientService.listSuggestions(dishId),
+            "Dish ingredient suggestions retrieved successfully"));
   }
 
   /**
