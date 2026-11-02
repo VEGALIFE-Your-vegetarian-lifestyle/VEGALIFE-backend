@@ -116,6 +116,15 @@ fail in a way operators can see rather than silently doing nothing.
   this, an outage is indistinguishable from real moderation work.
 - **FR-013**: The failure is logged at ERROR with the upstream status.
 
+> **Implementation status (2026-11-02).** FR-011/FR-012 were implemented
+> for the component path (ADR-016) but not for the post-body path, and
+> FR-013 was never implemented at all: every provider failure collapsed
+> into one unqualified message. [ADR-020](../adrs/020-embedding-failure-terminal-vs-retryable.md)
+> closes that gap — failures are now classified (reason, upstream status,
+> retry hint), permanent rejections reach the review state immediately
+> with a `moderation_log` row instead of retrying to `FAILED@24h`, and
+> retryable ones honour the provider's `Retry-After`.
+
 ### Calibration
 
 - **FR-014**: Centroids and test fixtures are regenerated against Gemini.

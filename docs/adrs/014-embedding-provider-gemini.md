@@ -111,6 +111,12 @@ Two constraints bound any replacement:
    "the filter could not run" — without that, an outage manufactures a
    queue indistinguishable from real moderation work.
 
+   *Amended by [ADR-020](020-embedding-failure-terminal-vs-retryable.md):
+   the destination is unchanged, but the route now depends on the failure.
+   A permanent provider rejection reaches this review state immediately;
+   a transient one is retried, honouring the provider's `Retry-After`, and
+   only falls here if the retry would overshoot `app.outbound.max-age`.*
+
 ## Alternatives considered
 
 **Keep HuggingFace and add credits.** Rejected as the primary path: it
