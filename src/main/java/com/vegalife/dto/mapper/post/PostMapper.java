@@ -36,11 +36,17 @@ public interface PostMapper {
   @Mapping(target = "categoryIds", source = "categories")
   @Mapping(target = "mediaIds", source = "media")
   @Mapping(target = "recipeIds", expression = "java(new java.util.HashSet<>())")
+  @Mapping(target = "userId", source = "user.id")
+  @Mapping(target = "displayName", source = "user.displayName")
+  @Mapping(target = "avatarUrl", ignore = true)
   PostListResponse toListResponse(Post post);
 
   @Mapping(target = "categoryIds", source = "post.categories")
   @Mapping(target = "mediaIds", source = "post.media")
   @Mapping(target = "recipeIds", source = "recipeIds")
+  @Mapping(target = "userId", source = "post.user.id")
+  @Mapping(target = "displayName", source = "post.user.displayName")
+  @Mapping(target = "avatarUrl", ignore = true)
   PostListResponse toListResponse(Post post, Set<UUID> recipeIds);
 
   default Set<UUID> categoryIds(Set<Category> categories) {
