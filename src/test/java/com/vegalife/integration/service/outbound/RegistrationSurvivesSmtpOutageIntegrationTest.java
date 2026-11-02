@@ -142,7 +142,7 @@ class RegistrationSurvivesSmtpOutageIntegrationTest {
 
   private RegisterRequest registerRequest() {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername("outageuser-" + uniqueSuffix);
+    request.setDisplayName("outageuser-" + uniqueSuffix);
     request.setEmail(email);
     request.setPassword("password123");
     request.setConfirmPassword("password123");

@@ -23,7 +23,7 @@ public interface AdminRecipeMapper {
   @Mapping(target = "categoryIds", source = "posts")
   @Mapping(target = "ingredients", source = "recipeIngredients")
   @Mapping(target = "userId", source = "user.id")
-  @Mapping(target = "username", source = "user.username")
+  @Mapping(target = "displayName", source = "user.displayName")
   @Mapping(target = "email", source = "user.email")
   AdminRecipeListResponse toResponse(Recipe recipe);
 

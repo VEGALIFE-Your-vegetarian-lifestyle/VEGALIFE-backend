@@ -80,7 +80,7 @@ class AuthServiceTest {
   void setUp() {
     userId = UUID.randomUUID();
     validRegisterRequest = new RegisterRequest();
-    validRegisterRequest.setUsername("testuser");
+    validRegisterRequest.setDisplayName("testuser");
     validRegisterRequest.setEmail("test@example.com");
     validRegisterRequest.setPassword("password123");
     validRegisterRequest.setConfirmPassword("password123");
@@ -95,7 +95,7 @@ class AuthServiceTest {
     user =
         User.builder()
             .id(userId)
-            .username("testuser")
+            .displayName("testuser")
             .email("test@example.com")
             .passwordHash("encoded")
             .role(UserRole.USER)
@@ -124,7 +124,6 @@ class AuthServiceTest {
   @Test
   void register_success() {
     when(userRepository.existsByEmail(validRegisterRequest.getEmail())).thenReturn(false);
-    when(userRepository.existsByUsername(validRegisterRequest.getUsername())).thenReturn(false);
     when(passwordEncoder.encode(validRegisterRequest.getPassword())).thenReturn(encodedPassword);
     when(authMapper.toEntity(validRegisterRequest, encodedPassword)).thenReturn(user);
     when(userRepository.save(any(User.class))).thenReturn(user);
@@ -132,7 +131,7 @@ class AuthServiceTest {
         .thenReturn(
             RegisterResponse.builder()
                 .userId(userId)
-                .username("testuser")
+                .displayName("testuser")
                 .email("test@example.com")
                 .build());
 
@@ -140,7 +139,7 @@ class AuthServiceTest {
 
     assertThat(response).isNotNull();
     assertThat(response.getUserId()).isEqualTo(userId);
-    assertThat(response.getUsername()).isEqualTo("testuser");
+    assertThat(response.getDisplayName()).isEqualTo("testuser");
     assertThat(response.getEmail()).isEqualTo("test@example.com");
 
     verify(userRepository).save(user);
@@ -167,16 +166,6 @@ class AuthServiceTest {
   }
 
   @Test
-  void register_duplicateUsername_throwsException() {
-    when(userRepository.existsByEmail(validRegisterRequest.getEmail())).thenReturn(false);
-    when(userRepository.existsByUsername(validRegisterRequest.getUsername())).thenReturn(true);
-
-    assertThatThrownBy(() -> authService.register(validRegisterRequest))
-        .isInstanceOf(DuplicateResourceException.class)
-        .hasMessage("Username already taken");
-  }
-
-  @Test
   void verifyEmail_success() {
     user.setEmailVerified(false);
     user.setStatus(UserStatus.created);
@@ -199,7 +188,7 @@ class AuthServiceTest {
         .thenReturn(
             RegisterResponse.builder()
                 .userId(userId)
-                .username("testuser")
+                .displayName("testuser")
                 .email("test@example.com")
                 .build());
 
@@ -222,7 +211,7 @@ class AuthServiceTest {
         .thenReturn(
             RegisterResponse.builder()
                 .userId(userId)
-                .username("testuser")
+                .displayName("testuser")
                 .email("test@example.com")
                 .build());
 
@@ -317,7 +306,7 @@ class AuthServiceTest {
         .thenReturn(
             LoginResponse.builder()
                 .userId(userId)
-                .username("testuser")
+                .displayName("testuser")
                 .email("test@example.com")
                 .build());
 
@@ -335,12 +324,10 @@ class AuthServiceTest {
   void login_userNotFound_throwsException() {
     when(userRepository.findByEmail(validLoginRequest.getIdentifier()))
         .thenReturn(Optional.empty());
-    when(userRepository.findByUsername(validLoginRequest.getIdentifier()))
-        .thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> authService.login(validLoginRequest))
         .isInstanceOf(InvalidTokenException.class)
-        .hasMessage("Invalid email/username or password");
+        .hasMessage("Invalid email or password");
   }
 
   @Test
@@ -351,7 +338,7 @@ class AuthServiceTest {
 
     assertThatThrownBy(() -> authService.login(validLoginRequest))
         .isInstanceOf(InvalidTokenException.class)
-        .hasMessage("Invalid email/username or password");
+        .hasMessage("Invalid email or password");
 
     // The encoder must never see a null hash: that path throws instead of returning false.
     verify(passwordEncoder, never()).matches(anyString(), ArgumentMatchers.isNull());
@@ -366,7 +353,7 @@ class AuthServiceTest {
 
     assertThatThrownBy(() -> authService.login(validLoginRequest))
         .isInstanceOf(InvalidTokenException.class)
-        .hasMessage("Invalid email/username or password");
+        .hasMessage("Invalid email or password");
   }
 
   @Test
@@ -427,33 +414,20 @@ class AuthServiceTest {
   }
 
   @Test
-  void login_usernameIdentifier_success() {
-    when(userRepository.findByEmail(validLoginRequest.getIdentifier()))
-        .thenReturn(Optional.empty());
-    when(userRepository.findByUsername(validLoginRequest.getIdentifier()))
-        .thenReturn(Optional.of(user));
-    when(passwordEncoder.matches(validLoginRequest.getPassword(), user.getPasswordHash()))
-        .thenReturn(true);
-    when(jwtTokenService.generateAccessToken(user)).thenReturn(accessToken);
-    when(jwtTokenService.generateRefreshToken(user)).thenReturn(refreshToken);
-    when(userRepository.save(any(User.class))).thenReturn(user);
-    when(loginMapper.toLoginResponse(user))
-        .thenReturn(
-            LoginResponse.builder()
-                .userId(userId)
-                .username("testuser")
-                .email("test@example.com")
-                .build());
+  void login_displayNameIdentifier_throwsGenericException() {
+    // ADR-019: the display name is not unique, so it is not a login identifier. Submitting one
+    // fails exactly like an unknown email — no lookup by anything but email happens.
+    when(userRepository.findByEmail("testuser")).thenReturn(Optional.empty());
 
-    LoginRequest usernameRequest = new LoginRequest();
-    usernameRequest.setIdentifier("testuser");
-    usernameRequest.setPassword("password123");
+    LoginRequest displayNameRequest = new LoginRequest();
+    displayNameRequest.setIdentifier("testuser");
+    displayNameRequest.setPassword("password123");
 
-    LoginResponse response = authService.login(usernameRequest);
+    assertThatThrownBy(() -> authService.login(displayNameRequest))
+        .isInstanceOf(InvalidTokenException.class)
+        .hasMessage("Invalid email or password");
 
-    assertThat(response).isNotNull();
-    assertThat(response.getAccessToken()).isEqualTo(accessToken);
-    assertThat(response.getRefreshToken()).isEqualTo(refreshToken);
+    verify(passwordEncoder, never()).matches(anyString(), anyString());
   }
 
   @Test
@@ -472,7 +446,7 @@ class AuthServiceTest {
         .thenReturn(
             LoginResponse.builder()
                 .userId(userId)
-                .username("testuser")
+                .displayName("testuser")
                 .email("test@example.com")
                 .build());
 
@@ -606,7 +580,7 @@ class AuthServiceTest {
     User unverified =
         User.builder()
             .id(userId)
-            .username("testuser")
+            .displayName("testuser")
             .email("test@example.com")
             .passwordHash("encoded")
             .role(UserRole.USER)

@@ -82,7 +82,7 @@ class RecipeControllerIntegrationTest {
   void setUp() {
     User testUser =
         User.builder()
-            .username("recipeuser")
+            .displayName("recipeuser")
             .email("recipe@example.com")
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)

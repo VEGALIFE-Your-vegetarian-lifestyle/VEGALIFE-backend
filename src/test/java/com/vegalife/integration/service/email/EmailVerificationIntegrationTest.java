@@ -75,7 +75,7 @@ class EmailVerificationIntegrationTest {
 
   private RegisterRequest registerRequest() {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername("integrationuser-" + uniqueSuffix);
+    request.setDisplayName("integrationuser-" + uniqueSuffix);
     request.setEmail("integration-" + uniqueSuffix + "@test.com");
     request.setPassword("password123");
     request.setConfirmPassword("password123");

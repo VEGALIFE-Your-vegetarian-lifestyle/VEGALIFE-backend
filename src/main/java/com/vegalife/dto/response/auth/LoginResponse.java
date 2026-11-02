@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 public class LoginResponse {
 
   private UUID userId;
-  private String username;
+  private String displayName;
   private String email;
   private String accessToken;
   private String refreshToken;

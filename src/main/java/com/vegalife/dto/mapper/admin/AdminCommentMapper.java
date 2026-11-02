@@ -11,7 +11,7 @@ public interface AdminCommentMapper {
 
   AdminCommentMapper INSTANCE = Mappers.getMapper(AdminCommentMapper.class);
 
-  @Mapping(target = "username", ignore = true)
+  @Mapping(target = "displayName", ignore = true)
   @Mapping(
       target = "status",
       expression = "java(comment.getDeletedAt() == null ? \"active\" : \"removed\")")

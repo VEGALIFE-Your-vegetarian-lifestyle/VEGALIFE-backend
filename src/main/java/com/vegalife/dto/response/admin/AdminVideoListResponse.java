@@ -29,7 +29,7 @@ public class AdminVideoListResponse {
   private Instant updatedAt;
 
   private UUID userId;
-  private String username;
+  private String displayName;
   private String email;
 
   private List<AdminVideoPostResponse> posts;

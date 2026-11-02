@@ -89,10 +89,10 @@ class AuthControllerIntegrationTest {
     doNothing().when(emailService).sendPasswordResetOtp(anyString(), anyString(), anyString());
   }
 
-  private User createActivatedUser(String username, String email) {
+  private User createActivatedUser(String displayName, String email) {
     return userRepository.save(
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash(passwordEncoder.encode("oldPassword1"))
             .role(UserRole.USER)
@@ -113,9 +113,9 @@ class AuthControllerIntegrationTest {
     return captor.getValue();
   }
 
-  private void registerUser(String username, String email) throws Exception {
+  private void registerUser(String displayName, String email) throws Exception {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername(username);
+    request.setDisplayName(displayName);
     request.setEmail(email);
     request.setPassword("password123");
     request.setConfirmPassword("password123");
@@ -179,7 +179,7 @@ class AuthControllerIntegrationTest {
     registerUser("user1", "duplicate@test.com");
 
     RegisterRequest secondRequest = new RegisterRequest();
-    secondRequest.setUsername("user2");
+    secondRequest.setDisplayName("user2");
     secondRequest.setEmail("duplicate@test.com");
     secondRequest.setPassword("password123");
     secondRequest.setConfirmPassword("password123");
@@ -195,11 +195,12 @@ class AuthControllerIntegrationTest {
   }
 
   @Test
-  void register_duplicateUsername_returnsConflict() throws Exception {
+  void register_sameDisplayNameOnDifferentEmail_succeeds() throws Exception {
+    // ADR-019: display_name is not unique, so re-using one is not a conflict.
     registerUser("sameuser", "user1@test.com");
 
     RegisterRequest secondRequest = new RegisterRequest();
-    secondRequest.setUsername("sameuser");
+    secondRequest.setDisplayName("sameuser");
     secondRequest.setEmail("user2@test.com");
     secondRequest.setPassword("password123");
     secondRequest.setConfirmPassword("password123");
@@ -209,9 +210,10 @@ class AuthControllerIntegrationTest {
             post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(secondRequest)))
-        .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Username already taken"));
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.displayName").value("sameuser"))
+        .andExpect(jsonPath("$.data.email").value("user2@test.com"));
   }
 
   @Test
@@ -381,7 +383,7 @@ class AuthControllerIntegrationTest {
     User suspendedUser =
         userRepository.save(
             User.builder()
-                .username("suspendedlogin")
+                .displayName("suspendedlogin")
                 .email("suspendedlogin@test.com")
                 .passwordHash(passwordEncoder.encode("password123"))
                 .role(UserRole.USER)
@@ -405,7 +407,7 @@ class AuthControllerIntegrationTest {
   void login_deactivatedAccount_returnsBadRequestWithNotActiveMessage() throws Exception {
     userRepository.save(
         User.builder()
-            .username("deactlogin")
+            .displayName("deactlogin")
             .email("deactlogin@test.com")
             .passwordHash(passwordEncoder.encode("password123"))
             .role(UserRole.USER)
@@ -427,7 +429,7 @@ class AuthControllerIntegrationTest {
     User suspendedUser =
         userRepository.save(
             User.builder()
-                .username("refreshsuspended")
+                .displayName("refreshsuspended")
                 .email("refreshsuspended@test.com")
                 .passwordHash(passwordEncoder.encode("password123"))
                 .role(UserRole.USER)

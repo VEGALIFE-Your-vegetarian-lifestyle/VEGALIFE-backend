@@ -15,7 +15,7 @@ public class UserListResponse {
 
   private UUID id;
   private String email;
-  private String username;
+  private String displayName;
   private String role;
   private String status;
   private Instant createdAt;

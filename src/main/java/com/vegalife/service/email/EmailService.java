@@ -4,9 +4,9 @@ import com.vegalife.service.outbound.OutboundEmailPayload;
 
 public interface EmailService {
 
-  void sendVerificationOtp(String to, String username, String otp);
+  void sendVerificationOtp(String to, String displayName, String otp);
 
-  void sendPasswordResetOtp(String to, String username, String otp);
+  void sendPasswordResetOtp(String to, String displayName, String otp);
 
-  void sendPaymentReceipt(String to, String username, OutboundEmailPayload.Receipt receipt);
+  void sendPaymentReceipt(String to, String displayName, OutboundEmailPayload.Receipt receipt);
 }

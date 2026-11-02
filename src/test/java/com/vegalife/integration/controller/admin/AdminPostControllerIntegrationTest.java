@@ -141,7 +141,7 @@ class AdminPostControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].publishedAt").exists())
         .andExpect(jsonPath("$.data.content[0].createdAt").exists())
         .andExpect(jsonPath("$.data.content[0].userId").value(author2.getId().toString()))
-        .andExpect(jsonPath("$.data.content[0].username").value("secondauthor"))
+        .andExpect(jsonPath("$.data.content[0].displayName").value("secondauthor"))
         .andExpect(jsonPath("$.data.content[0].email").value("second.author@example.com"))
         .andExpect(jsonPath("$.data.content[0].passwordHash").doesNotExist())
         .andExpect(jsonPath("$.data.content[1].title").value("Zebra draft"))
@@ -172,7 +172,7 @@ class AdminPostControllerIntegrationTest {
                     containsInAnyOrder(
                         "created", "processed", "published", "unpublished", "hidden", "published")))
         .andExpect(
-            jsonPath("$.data.content[*].username")
+            jsonPath("$.data.content[*].displayName")
                 .value(
                     containsInAnyOrder(
                         "memberposter",
@@ -253,7 +253,7 @@ class AdminPostControllerIntegrationTest {
         .andExpect(jsonPath("$.data.totalElements").value(1))
         .andExpect(jsonPath("$.data.content.length()").value(1))
         .andExpect(jsonPath("$.data.content[0].title").value("Author post"))
-        .andExpect(jsonPath("$.data.content[0].username").value("secondauthor"))
+        .andExpect(jsonPath("$.data.content[0].displayName").value("secondauthor"))
         .andExpect(jsonPath("$.data.content[0].userId").value(author2.getId().toString()));
   }
 
@@ -491,10 +491,10 @@ class AdminPostControllerIntegrationTest {
         .andExpect(status().isBadRequest());
   }
 
-  private User createUser(String username, String email, UserRole role) {
+  private User createUser(String displayName, String email, UserRole role) {
     return userRepository.save(
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(role)

@@ -169,10 +169,10 @@ class RecipeSpecificationsTest {
     return recipeRepository.findAll(spec, PageRequest.of(0, 20, sort));
   }
 
-  private User createUser(String username, String email) {
+  private User createUser(String displayName, String email) {
     User user =
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash("password-hash")
             .role(UserRole.USER)

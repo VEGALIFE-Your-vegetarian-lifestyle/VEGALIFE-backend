@@ -57,10 +57,10 @@ class PostRepositoryTest {
     assertThat(result.getTotalElements()).isZero();
   }
 
-  private User createUser(String username, String email) {
+  private User createUser(String displayName, String email) {
     User user =
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash("password-hash")
             .role(UserRole.USER)

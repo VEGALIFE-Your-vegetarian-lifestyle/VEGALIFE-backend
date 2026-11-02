@@ -51,7 +51,7 @@ class GoogleAuthServiceTest {
     verifiedUser =
         User.builder()
             .id(UUID.randomUUID())
-            .username("johndoe")
+            .displayName("johndoe")
             .email(EMAIL)
             .emailVerified(true)
             .status(UserStatus.activated)
@@ -67,7 +67,9 @@ class GoogleAuthServiceTest {
 
     lenient()
         .when(identityProvider.resolve(CODE))
-        .thenReturn(new GoogleIdentityProvider.GoogleIdentity(SUBJECT, EMAIL, true, "J"));
+        .thenReturn(
+            new GoogleIdentityProvider.GoogleIdentity(
+                SUBJECT, EMAIL, true, "John Doe", "John", "Doe"));
     lenient().when(authService.issueTokens(any(User.class))).thenReturn(expectedResponse);
   }
 
@@ -153,7 +155,7 @@ class GoogleAuthServiceTest {
 
     assertThatThrownBy(() -> googleAuthService.loginWithGoogle(CODE))
         .isInstanceOf(InvalidTokenException.class)
-        .hasMessage("Invalid email/username or password");
+        .hasMessage("Invalid email or password");
   }
 
   @Test
@@ -169,7 +171,7 @@ class GoogleAuthServiceTest {
     verify(userRepository).saveAndFlush(savedUser.capture());
     User created = savedUser.getValue();
     assertThat(created.getEmail()).isEqualTo(EMAIL);
-    assertThat(created.getUsername()).isEqualTo("johndoe");
+    assertThat(created.getDisplayName()).isEqualTo("John Doe");
     assertThat(created.getEmailVerified()).isTrue();
     assertThat(created.getStatus()).isEqualTo(UserStatus.activated);
     assertThat(created.getRole()).isEqualTo(UserRole.USER);
@@ -192,29 +194,62 @@ class GoogleAuthServiceTest {
         .hasMessage("This account is already linked to a different Google account");
   }
 
-  // --- username derivation (BR-AUTH-006) ---
+  // --- display name seeding (ADR-019) ---
 
   @Test
-  void candidateUsername_normalisesAndKeepsValidLocalPart() {
-    assertThat(GoogleAuthService.candidateUsername("John.Doe@gmail.com", 0)).isEqualTo("john.doe");
+  void resolveDisplayName_prefersGoogleFullName() {
+    assertThat(
+            GoogleAuthService.resolveDisplayName(
+                identity("  Ada Lovelace  ", "Ada", "Lovelace", "ada@gmail.com")))
+        .isEqualTo("Ada Lovelace");
   }
 
   @Test
-  void candidateUsername_padsTooShortLocalPartToMinimumLength() {
-    assertThat(GoogleAuthService.candidateUsername("a@gmail.com", 0))
-        .isEqualTo("auser")
-        .hasSizeGreaterThanOrEqualTo(3);
+  void resolveDisplayName_joinsGivenAndFamilyWhenFullNameAbsent() {
+    assertThat(
+            GoogleAuthService.resolveDisplayName(
+                identity("   ", "Ada", "Lovelace", "ada@gmail.com")))
+        .isEqualTo("Ada Lovelace");
   }
 
   @Test
-  void candidateUsername_stripsUnsupportedCharacters() {
-    assertThat(GoogleAuthService.candidateUsername("josé+tag@gmail.com", 0)).isEqualTo("jostag");
+  void resolveDisplayName_fallsBackToSingleNamePart() {
+    assertThat(GoogleAuthService.resolveDisplayName(identity(null, "Ada", null, "ada@gmail.com")))
+        .isEqualTo("Ada");
+    assertThat(GoogleAuthService.resolveDisplayName(identity(null, null, "Lovelace", "a@b.com")))
+        .isEqualTo("Lovelace");
   }
 
   @Test
-  void candidateUsername_suffixesOnRetryWithinLengthBound() {
-    String localPart = "x".repeat(60) + "@gmail.com";
-    String retried = GoogleAuthService.candidateUsername(localPart, 3);
-    assertThat(retried).hasSizeLessThanOrEqualTo(50).endsWith("_3");
+  void resolveDisplayName_fallsBackToEmailLocalPart() {
+    assertThat(
+            GoogleAuthService.resolveDisplayName(identity(null, null, null, "john.doe@gmail.com")))
+        .isEqualTo("john.doe");
+  }
+
+  @Test
+  void resolveDisplayName_fallsBackToConstantWhenEverythingIsBlank() {
+    assertThat(GoogleAuthService.resolveDisplayName(identity(" ", " ", " ", " ")))
+        .isEqualTo("Vegalife user");
+  }
+
+  @Test
+  void resolveDisplayName_capsAtColumnWidthWithoutSplittingSurrogatePair() {
+    // 101 chars: one too many for VARCHAR(100), and the 100th is a high surrogate.
+    String oversized = "a".repeat(99) + "\uD83D\uDE00" + "b";
+
+    String resolved =
+        GoogleAuthService.resolveDisplayName(identity(oversized, null, null, "a@b.com"));
+
+    // Truncated to 99 rather than slicing the pair in half, and never rebuilt as "?`".
+    assertThat(resolved).hasSize(99);
+    assertThat(Character.isHighSurrogate(resolved.charAt(98))).isFalse();
+    assertThat(resolved).isEqualTo("a".repeat(99));
+  }
+
+  private static GoogleIdentityProvider.GoogleIdentity identity(
+      String name, String givenName, String familyName, String email) {
+    return new GoogleIdentityProvider.GoogleIdentity(
+        SUBJECT, email, true, name, givenName, familyName);
   }
 }

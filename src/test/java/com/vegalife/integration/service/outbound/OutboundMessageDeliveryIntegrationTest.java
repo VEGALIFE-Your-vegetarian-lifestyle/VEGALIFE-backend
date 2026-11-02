@@ -82,7 +82,7 @@ class OutboundMessageDeliveryIntegrationTest {
 
   private String uniqueSuffix;
   private String email;
-  private String username;
+  private String displayName;
 
   @BeforeEach
   void setUp() throws Exception {
@@ -93,7 +93,7 @@ class OutboundMessageDeliveryIntegrationTest {
     otpCodeRepository.deleteAll();
     userRepository.deleteAll();
     uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
-    username = "deliveryuser-" + uniqueSuffix;
+    displayName = "deliveryuser-" + uniqueSuffix;
     email = "delivery-" + uniqueSuffix + "@test.com";
   }
 
@@ -167,7 +167,7 @@ class OutboundMessageDeliveryIntegrationTest {
 
   private RegisterRequest registerRequest() {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername(username);
+    request.setDisplayName(displayName);
     request.setEmail(email);
     request.setPassword("password123");
     request.setConfirmPassword("password123");

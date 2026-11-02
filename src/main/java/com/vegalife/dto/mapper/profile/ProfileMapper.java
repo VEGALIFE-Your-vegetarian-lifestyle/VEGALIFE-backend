@@ -30,7 +30,7 @@ public interface ProfileMapper {
   UserProfile toEntity(UpdateProfileRequest request);
 
   @Mapping(target = "userId", source = "user.id")
-  @Mapping(target = "username", source = "user.username")
+  @Mapping(target = "displayName", source = "user.displayName")
   @Mapping(target = "email", source = "user.email")
   @Mapping(target = "preferences", source = "dietaryPreferences.preferences")
   @Mapping(target = "dislikes", source = "dietaryPreferences.dislikes")

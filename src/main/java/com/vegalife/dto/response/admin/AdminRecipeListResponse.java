@@ -49,7 +49,7 @@ public class AdminRecipeListResponse {
   private Instant updatedAt;
 
   private UUID userId;
-  private String username;
+  private String displayName;
   private String email;
 
   @Data

@@ -68,7 +68,7 @@ public class JwtTokenService {
         .add(audience)
         .and()
         .id(jti)
-        .claim("username", user.getUsername())
+        .claim("displayName", user.getDisplayName())
         .claim("role", user.getRole().name())
         .issuedAt(Date.from(now))
         .expiration(Date.from(expiry))
@@ -93,7 +93,7 @@ public class JwtTokenService {
                 .build();
 
         refreshTokenRepository.save(refreshToken);
-        log.debug("Generated refresh token for user: {}", user.getUsername());
+        log.debug("Generated refresh token for user: {}", user.getDisplayName());
         return rawToken;
       } catch (org.springframework.dao.DataIntegrityViolationException e) {
         log.debug("Token hash collision, retrying (attempt {}/{})", attempt + 1, maxAttempts);
@@ -210,7 +210,7 @@ public class JwtTokenService {
             rt -> {
               rt.setRevokedAt(Instant.now());
               refreshTokenRepository.save(rt);
-              log.debug("Revoked refresh token for user: {}", rt.getUser().getUsername());
+              log.debug("Revoked refresh token for user: {}", rt.getUser().getDisplayName());
             });
   }
 

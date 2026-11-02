@@ -77,7 +77,13 @@ public class GoogleIdTokenVerifier {
       throw new GoogleAuthException("Google account email is not verified");
     }
 
-    return new GoogleUserInfo(subject, email, true, claims.get("name", String.class));
+    return new GoogleUserInfo(
+        subject,
+        email,
+        true,
+        claims.get("name", String.class),
+        claims.get("given_name", String.class),
+        claims.get("family_name", String.class));
   }
 
   private Claims parseAndVerifySignature(String idToken) {

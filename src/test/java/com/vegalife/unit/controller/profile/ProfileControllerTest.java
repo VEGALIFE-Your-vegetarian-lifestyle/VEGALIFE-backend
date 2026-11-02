@@ -48,7 +48,7 @@ class ProfileControllerTest {
     profileResponse =
         ProfileResponse.builder()
             .userId(userId)
-            .username("testuser")
+            .displayName("testuser")
             .email("test@example.com")
             .heightCm(new BigDecimal("175.5"))
             .weightKg(new BigDecimal("70.2"))

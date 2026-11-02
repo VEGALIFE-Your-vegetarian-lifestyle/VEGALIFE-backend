@@ -46,7 +46,7 @@ public class AdminPostDetailResponse {
   private List<ComponentSummary> names;
 
   private UUID userId;
-  private String username;
+  private String displayName;
   private String email;
 
   /**

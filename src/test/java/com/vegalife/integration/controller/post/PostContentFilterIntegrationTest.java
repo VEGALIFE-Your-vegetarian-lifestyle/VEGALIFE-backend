@@ -418,10 +418,10 @@ class PostContentFilterIntegrationTest {
     return v;
   }
 
-  private User createUser(String username, String email) {
+  private User createUser(String displayName, String email) {
     return userRepository.save(
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)

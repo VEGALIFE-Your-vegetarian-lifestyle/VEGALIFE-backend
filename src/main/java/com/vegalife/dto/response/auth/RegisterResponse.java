@@ -13,6 +13,6 @@ import lombok.NoArgsConstructor;
 public class RegisterResponse {
 
   private UUID userId;
-  private String username;
+  private String displayName;
   private String email;
 }

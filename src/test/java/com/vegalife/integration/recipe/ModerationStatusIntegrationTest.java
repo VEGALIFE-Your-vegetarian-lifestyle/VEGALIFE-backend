@@ -87,7 +87,7 @@ class ModerationStatusIntegrationTest {
     author =
         userRepository.saveAndFlush(
             User.builder()
-                .username("moderator")
+                .displayName("moderator")
                 .email("moderator@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)

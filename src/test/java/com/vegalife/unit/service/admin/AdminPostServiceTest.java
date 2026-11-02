@@ -84,7 +84,7 @@ class AdminPostServiceTest {
     author =
         User.builder()
             .id(UUID.randomUUID())
-            .username("janedoe")
+            .displayName("janedoe")
             .email("jane@example.com")
             .passwordHash("$2a$10$secret")
             .role(UserRole.USER)
@@ -112,7 +112,7 @@ class AdminPostServiceTest {
             .viewCount(7)
             .createdAt(post.getCreatedAt())
             .userId(author.getId())
-            .username("janedoe")
+            .displayName("janedoe")
             .email("jane@example.com")
             .build();
     expectedPageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));

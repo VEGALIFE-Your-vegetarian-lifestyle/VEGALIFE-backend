@@ -17,7 +17,7 @@ public class CommentListResponse {
   private UUID postId;
   private UUID parentId;
   private UUID userId;
-  private String username;
+  private String displayName;
   private String content;
   private String status;
   private int reportCount;

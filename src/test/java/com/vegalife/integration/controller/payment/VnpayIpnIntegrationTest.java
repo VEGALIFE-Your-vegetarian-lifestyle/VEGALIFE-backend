@@ -102,7 +102,7 @@ class VnpayIpnIntegrationTest {
   void setUp() {
     testUser =
         User.builder()
-            .username("ipnuser")
+            .displayName("ipnuser")
             .email("ipn@example.com")
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)

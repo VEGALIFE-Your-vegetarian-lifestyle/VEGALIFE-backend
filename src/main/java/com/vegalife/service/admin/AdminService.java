@@ -96,15 +96,15 @@ public class AdminService {
 
     Set<UUID> authorIds =
         page.getContent().stream().map(Comment::getUserId).collect(Collectors.toSet());
-    Map<UUID, String> usernames =
+    Map<UUID, String> displayNames =
         userRepository.findAllById(authorIds).stream()
-            .collect(Collectors.toMap(User::getId, User::getUsername));
+            .collect(Collectors.toMap(User::getId, User::getDisplayName));
 
     Page<CommentListResponse> mapped =
         page.map(
             comment -> {
               CommentListResponse response = adminCommentMapper.toResponse(comment);
-              response.setUsername(usernames.get(comment.getUserId()));
+              response.setDisplayName(displayNames.get(comment.getUserId()));
               return response;
             });
 
@@ -245,6 +245,11 @@ public class AdminService {
     String property = parts[0].trim();
     if (property.isBlank()) {
       throw new ValidationException("Sort property must not be blank");
+    }
+    // `username` was a valid sort property until ADR-019 renamed the column. Translate it rather
+    // than let Spring Data throw a PropertyReferenceException, which would surface as a 500.
+    if ("username".equals(property)) {
+      property = "displayName";
     }
     Sort.Direction direction =
         parts.length == 2 && parts[1].trim().equalsIgnoreCase("asc")

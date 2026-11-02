@@ -79,9 +79,9 @@ class AuthServiceIntegrationTest {
     return request;
   }
 
-  private RegisterRequest registerRequest(String username, String email) {
+  private RegisterRequest registerRequest(String displayName, String email) {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername(username);
+    request.setDisplayName(displayName);
     request.setEmail(email);
     request.setPassword("password123");
     request.setConfirmPassword("password123");
@@ -91,7 +91,7 @@ class AuthServiceIntegrationTest {
   @Test
   void register_savesUserToDatabase() {
     RegisterRequest request = new RegisterRequest();
-    request.setUsername("dbuser");
+    request.setDisplayName("dbuser");
     request.setEmail("dbuser@test.com");
     request.setPassword("password123");
     request.setConfirmPassword("password123");
@@ -99,11 +99,11 @@ class AuthServiceIntegrationTest {
     RegisterResponse response = authService.register(request);
 
     assertThat(response).isNotNull();
-    assertThat(response.getUsername()).isEqualTo("dbuser");
+    assertThat(response.getDisplayName()).isEqualTo("dbuser");
     assertThat(response.getEmail()).isEqualTo("dbuser@test.com");
 
     User savedUser = userRepository.findByEmail("dbuser@test.com").orElseThrow();
-    assertThat(savedUser.getUsername()).isEqualTo("dbuser");
+    assertThat(savedUser.getDisplayName()).isEqualTo("dbuser");
     assertThat(savedUser.getEmail()).isEqualTo("dbuser@test.com");
     assertThat(savedUser.getPasswordHash()).isNotNull();
     assertThat(savedUser.getEmailVerified()).isFalse();
@@ -114,14 +114,14 @@ class AuthServiceIntegrationTest {
   @Test
   void register_duplicateEmail_throwsException() {
     RegisterRequest request1 = new RegisterRequest();
-    request1.setUsername("user1");
+    request1.setDisplayName("user1");
     request1.setEmail("same@test.com");
     request1.setPassword("password123");
     request1.setConfirmPassword("password123");
     authService.register(request1);
 
     RegisterRequest request2 = new RegisterRequest();
-    request2.setUsername("user2");
+    request2.setDisplayName("user2");
     request2.setEmail("same@test.com");
     request2.setPassword("password123");
     request2.setConfirmPassword("password123");
@@ -132,23 +132,25 @@ class AuthServiceIntegrationTest {
   }
 
   @Test
-  void register_duplicateUsername_throwsException() {
+  void register_twoMembersWithTheSameDisplayName_bothSucceed() {
+    // ADR-019: display_name is a label, not an identifier, so it is not unique.
     RegisterRequest request1 = new RegisterRequest();
-    request1.setUsername("sameuser");
+    request1.setDisplayName("sameuser");
     request1.setEmail("user1@test.com");
     request1.setPassword("password123");
     request1.setConfirmPassword("password123");
     authService.register(request1);
 
     RegisterRequest request2 = new RegisterRequest();
-    request2.setUsername("sameuser");
+    request2.setDisplayName("sameuser");
     request2.setEmail("user2@test.com");
     request2.setPassword("password123");
     request2.setConfirmPassword("password123");
 
-    assertThatThrownBy(() -> authService.register(request2))
-        .isInstanceOf(DuplicateResourceException.class)
-        .hasMessage("Username already taken");
+    RegisterResponse response = authService.register(request2);
+
+    assertThat(response.getDisplayName()).isEqualTo("sameuser");
+    assertThat(response.getEmail()).isEqualTo("user2@test.com");
   }
 
   @Test

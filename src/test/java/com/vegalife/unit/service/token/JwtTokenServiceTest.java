@@ -50,7 +50,7 @@ class JwtTokenServiceTest {
     user =
         User.builder()
             .id(userId)
-            .username("testuser")
+            .displayName("testuser")
             .email("test@example.com")
             .passwordHash("encodedPassword")
             .role(UserRole.USER)

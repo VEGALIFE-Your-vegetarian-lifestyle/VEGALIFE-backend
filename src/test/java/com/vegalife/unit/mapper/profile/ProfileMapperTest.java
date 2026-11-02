@@ -93,7 +93,7 @@ class ProfileMapperTest {
   void toResponse_flattensTheValueTypeAndComputesBmi() {
     UserProfile profile =
         UserProfile.builder()
-            .user(User.builder().id(java.util.UUID.randomUUID()).username("u").build())
+            .user(User.builder().id(java.util.UUID.randomUUID()).displayName("u").build())
             .heightCm(new BigDecimal("170.00"))
             .weightKg(new BigDecimal("70.00"))
             .dietaryPreferences(
@@ -121,7 +121,7 @@ class ProfileMapperTest {
   void toResponse_nullsEverythingWhenTheProfileHasNoDietaryData() {
     UserProfile profile =
         UserProfile.builder()
-            .user(User.builder().id(java.util.UUID.randomUUID()).username("u").build())
+            .user(User.builder().id(java.util.UUID.randomUUID()).displayName("u").build())
             .build();
 
     ProfileResponse response = mapper.toResponse(profile);

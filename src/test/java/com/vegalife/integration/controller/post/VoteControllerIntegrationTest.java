@@ -211,10 +211,10 @@ class VoteControllerIntegrationTest {
         .andExpect(jsonPath("$.message").value("Post not found"));
   }
 
-  private User saveUser(String username, String email) {
+  private User saveUser(String displayName, String email) {
     return userRepository.save(
         User.builder()
-            .username(username)
+            .displayName(displayName)
             .email(email)
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)

@@ -73,7 +73,7 @@ class ProfileControllerIntegrationTest {
   void setUp() {
     testUser =
         User.builder()
-            .username("profileuser")
+            .displayName("profileuser")
             .email("profile@example.com")
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)
@@ -372,7 +372,7 @@ class ProfileControllerIntegrationTest {
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Profile retrieved successfully"))
         .andExpect(jsonPath("$.data.userId").value(testUser.getId().toString()))
-        .andExpect(jsonPath("$.data.username").value("profileuser"))
+        .andExpect(jsonPath("$.data.displayName").value("profileuser"))
         .andExpect(jsonPath("$.data.email").value("profile@example.com"));
 
     // Reading a user without a profile row must have created an empty one
@@ -391,7 +391,7 @@ class ProfileControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.data.userId").value(testUser.getId().toString()))
-        .andExpect(jsonPath("$.data.username").value("profileuser"))
+        .andExpect(jsonPath("$.data.displayName").value("profileuser"))
         .andExpect(jsonPath("$.data.email").value("profile@example.com"));
   }
 
@@ -430,7 +430,7 @@ class ProfileControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.data.userId").value(testUser.getId().toString()))
-        .andExpect(jsonPath("$.data.username").value("profileuser"))
+        .andExpect(jsonPath("$.data.displayName").value("profileuser"))
         .andExpect(jsonPath("$.data.email").value("profile@example.com"))
         .andExpect(jsonPath("$.data.avatarUrl").value("https://example.com/new-avatar.jpg"))
         .andExpect(jsonPath("$.data.id").doesNotExist());

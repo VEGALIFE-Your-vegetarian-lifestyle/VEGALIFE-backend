@@ -80,7 +80,7 @@ class AiChatProviderSmokeIntegrationTest {
     user =
         userRepository.save(
             User.builder()
-                .username("smoke" + UUID.randomUUID())
+                .displayName("smoke" + UUID.randomUUID())
                 .email(UUID.randomUUID() + "@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)

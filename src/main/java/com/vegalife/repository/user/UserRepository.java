@@ -17,11 +17,7 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
   Optional<User> findByEmail(String email);
 
-  Optional<User> findByUsername(String username);
-
   boolean existsByEmail(String email);
-
-  boolean existsByUsername(String username);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select u from User u where u.id = :id")

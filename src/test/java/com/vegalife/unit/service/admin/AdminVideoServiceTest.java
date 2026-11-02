@@ -66,7 +66,7 @@ class AdminVideoServiceTest {
     uploader =
         User.builder()
             .id(UUID.randomUUID())
-            .username("janedoe")
+            .displayName("janedoe")
             .email("jane@example.com")
             .passwordHash("$2a$10$secret")
             .role(UserRole.USER)
@@ -117,7 +117,7 @@ class AdminVideoServiceTest {
             .createdAt(video.getCreatedAt())
             .updatedAt(video.getUpdatedAt())
             .userId(uploader.getId())
-            .username("janedoe")
+            .displayName("janedoe")
             .email("jane@example.com")
             .build();
     postResponse =

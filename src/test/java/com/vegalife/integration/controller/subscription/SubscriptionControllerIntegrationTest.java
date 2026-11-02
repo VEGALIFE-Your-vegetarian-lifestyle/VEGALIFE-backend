@@ -94,7 +94,7 @@ class SubscriptionControllerIntegrationTest {
   void setUp() {
     testUser =
         User.builder()
-            .username("subuser")
+            .displayName("subuser")
             .email("sub@example.com")
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)
@@ -464,7 +464,7 @@ class SubscriptionControllerIntegrationTest {
     User otherUser =
         userRepository.save(
             User.builder()
-                .username("subuser2")
+                .displayName("subuser2")
                 .email("sub2@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)

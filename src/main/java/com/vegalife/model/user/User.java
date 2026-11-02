@@ -22,8 +22,13 @@ public class User {
   @Column(name = "id", updatable = false, nullable = false)
   private UUID id;
 
-  @Column(name = "username", length = 50, nullable = false, unique = true)
-  private String username;
+  /**
+   * Human-facing name shown wherever the account is presented (comments, admin lists, emails).
+   * Deliberately not unique and never used to authenticate — {@code email} is the only login
+   * identifier since ADR-019. Two accounts may share a display name.
+   */
+  @Column(name = "display_name", length = 100, nullable = false)
+  private String displayName;
 
   @Column(name = "email", length = 100, nullable = false, unique = true)
   private String email;

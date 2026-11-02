@@ -149,7 +149,7 @@ public class AdminPostService {
         .recipes(recipeSummaries)
         .names(nameSummaries)
         .userId(post.getUser().getId())
-        .username(post.getUser().getUsername())
+        .displayName(post.getUser().getDisplayName())
         .email(post.getUser().getEmail())
         .build();
   }

@@ -43,7 +43,7 @@ class AdminVideoControllerTest {
             .mimeType("video/mp4")
             .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
             .userId(UUID.randomUUID())
-            .username("janedoe")
+            .displayName("janedoe")
             .email("jane@example.com")
             .posts(List.of())
             .build();

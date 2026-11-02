@@ -75,7 +75,7 @@ class LocationControllerIntegrationTest {
     User user =
         userRepository.save(
             User.builder()
-                .username("diner")
+                .displayName("diner")
                 .email("diner@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)

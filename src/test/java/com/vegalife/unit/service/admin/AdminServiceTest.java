@@ -71,7 +71,7 @@ class AdminServiceTest {
     user =
         User.builder()
             .id(UUID.randomUUID())
-            .username("jane")
+            .displayName("jane")
             .email("jane@example.com")
             .passwordHash("$2a$10$secret")
             .role(UserRole.USER)
@@ -81,7 +81,7 @@ class AdminServiceTest {
     userResponse =
         UserListResponse.builder()
             .id(user.getId())
-            .username("jane")
+            .displayName("jane")
             .email("jane@example.com")
             .role("USER")
             .status("activated")
@@ -199,7 +199,7 @@ class AdminServiceTest {
   }
 
   @Test
-  void listComments_withDefaults_usesDefaultPaginationAndResolvesUsername() {
+  void listComments_withDefaults_usesDefaultPaginationAndResolvesDisplayName() {
     Page<Comment> page = new PageImpl<>(List.of(comment), expectedPageable, 1);
     CommentListResponse commentResponse =
         CommentListResponse.builder()
@@ -218,7 +218,7 @@ class AdminServiceTest {
     PageResponse<CommentListResponse> result = adminService.listComments(new CommentListRequest());
 
     assertThat(result.getContent()).hasSize(1);
-    assertThat(result.getContent().getFirst().getUsername()).isEqualTo("jane");
+    assertThat(result.getContent().getFirst().getDisplayName()).isEqualTo("jane");
     assertThat(result.getPage()).isZero();
     assertThat(result.getSize()).isEqualTo(20);
     assertThat(result.getTotalElements()).isEqualTo(1);
@@ -382,7 +382,7 @@ class AdminServiceTest {
     UserListResponse activatedResponse =
         UserListResponse.builder()
             .id(user.getId())
-            .username("jane")
+            .displayName("jane")
             .email("jane@example.com")
             .role("USER")
             .status("activated")
