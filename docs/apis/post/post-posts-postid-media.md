@@ -46,6 +46,9 @@ Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, 
   "message": "Media attached successfully",
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
+    "userId": "9f1c2f4a-8a3b-4c5d-9e6f-7a8b9c0d1e2f",
+    "displayName": "John Doe",
+    "avatarUrl": "https://res.cloudinary.com/vegalife/avatar/john.jpg",
     "mediaIds": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
     "recipeIds": [],
     "status": "created"

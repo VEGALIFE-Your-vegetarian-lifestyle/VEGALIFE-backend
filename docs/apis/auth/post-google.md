@@ -41,7 +41,7 @@ None
   "message": "Google login successful",
   "data": {
     "userId": "uuid",
-    "username": "string",
+    "displayName": "string",
     "email": "string",
     "accessToken": "string — JWT access token",
     "refreshToken": "string — opaque refresh token",
@@ -57,7 +57,7 @@ both responses with one code path.
 | Field | Type | Description |
 |-------|------|-------------|
 | data.userId | uuid | The Vegalife user id — the same one password login returns for a linked account |
-| data.username | string | Account username (generated for a Google-created account) |
+| data.displayName | string | Display name, seeded from the Google profile on account creation and never rewritten afterwards |
 | data.email | string | Account email |
 | data.accessToken | string | Short-lived JWT (15 min) |
 | data.refreshToken | string | Long-lived opaque token (7 days) |
@@ -74,7 +74,7 @@ both responses with one code path.
 | 400 | Matched account's email is not verified | "Email not verified. Please verify your email before logging in." |
 | 400 | Matched account is suspended | "Account is suspended" |
 | 400 | Matched account is deactivated | "Account is not active" |
-| 400 | Matched account is soft-deleted | "Invalid email/username or password" |
+| 400 | Matched account is soft-deleted | "Invalid email or password" |
 | 500 | Server error | "Internal server error" |
 
 > Note: like the rest of `/api/auth/**`, business failures are raised as
@@ -84,7 +84,7 @@ both responses with one code path.
 ## Business Rules
 - BR-AUTH-001: Unique User Identity
 - BR-AUTH-003: Email Verification Required for Activation
-- BR-AUTH-006: Username Format and Length (3-50 chars)
+- BR-AUTH-006: retired by ADR-019 (no username)
 - BR-AUTH-008: Login Requires Valid Credentials and Activated Account
 - BR-AUTH-022: Google Sign-In Resolves to an Existing Identity or Auto-Links on Verified Email
 - BR-AUTH-023: Accounts Created Through Google Start Verified and Activated
@@ -98,7 +98,7 @@ both responses with one code path.
    - Found → apply the account-state gate (same messages as `AuthService.login`) and sign in.
 6. Else look up a user by the token's email.
    - Found → auto-link only when the token is verified **and** the account is `email_verified=true` and `status=activated`; otherwise → 400 with the matching message. Insert the identity row, log at WARN, sign in.
-7. Else create the account (`email_verified=true`, `status=activated`, `password_hash=NULL`, generated username), insert the identity row, sign in.
+7. Else create the account (`email_verified=true`, `status=activated`, `password_hash=NULL`, display name resolved from the Google profile: `name` → `given_name` + `family_name` → email local part → `Vegalife user`), insert the identity row, sign in.
 8. Common tail: mint access + refresh tokens, stamp `last_login_at`, return 200.
 
 ## Example
@@ -117,7 +117,7 @@ curl -X POST http://localhost:8080/api/auth/google \
   "message": "Google login successful",
   "data": {
     "userId": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "johndoe",
+    "displayName": "John Doe",
     "email": "john.doe@gmail.com",
     "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
     "refreshToken": "aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890",
@@ -138,5 +138,5 @@ curl -X POST http://localhost:8080/api/auth/google \
 
 ## Related
 - Feature Spec: `docs/feats/google-login.md`
-- ADR: `docs/adrs/017-google-login.md`
+- ADR: `docs/adrs/017-google-login.md`, `docs/adrs/019-display-name-instead-of-username.md`
 - Business Rules: `docs/brs/auth.md`

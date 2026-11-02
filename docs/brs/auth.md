@@ -4,12 +4,12 @@
 
 | Rule ID | Title | Status | Last Reviewed |
 |---------|-------|--------|---------------|
-| BR-AUTH-001 | Unique User Identity | Active | 2026-09-22 |
+| BR-AUTH-001 | Unique User Identity (email) | Active | 2026-11-02 |
 | BR-AUTH-002 | Password Confirmation Match | Active | 2026-09-22 |
 | BR-AUTH-003 | Email Verification Required for Activation | Active | 2026-09-24 |
 | BR-AUTH-004 | Email Verification OTP Expiration (10 min) | Active | 2026-09-24 |
 | BR-AUTH-005 | Password Minimum Length (8 chars) | Active | 2026-09-22 |
-| BR-AUTH-006 | Username Format and Length (3-50 chars) | Active | 2026-09-22 |
+| BR-AUTH-006 | Username Format and Length (3-50 chars) | Retired by ADR-019 | 2026-11-02 |
 | BR-AUTH-007 | Email Format and Length (valid, max 100 chars) | Active | 2026-09-22 |
 | BR-AUTH-008 | Login Requires Valid Credentials and Activated Account | Active | 2026-09-22 |
 | BR-AUTH-009 | Access Token Short Lifetime (15 minutes) | Active | 2026-09-22 |
@@ -27,6 +27,7 @@
 | BR-AUTH-021 | Email Verification OTP Lifecycle and Resend | Active | 2026-09-24 |
 | BR-AUTH-022 | Google Sign-In Resolves to an Existing Identity or Auto-Links on Verified Email | Active | 2026-10-26 |
 | BR-AUTH-023 | Accounts Created Through Google Start Verified and Activated | Active | 2026-10-26 |
+| BR-AUTH-024 | Display Name Format and Length (2-100 chars, not unique) | Active | 2026-11-02 |
 
 ---
 
@@ -39,21 +40,25 @@
 Active
 
 ## Statement
-A user's email and username must each be unique across the system.
+A user's email must be unique across the system. The display name is a label, not an identity, and is deliberately **not** unique (ADR-019).
 
 ## Rationale
-Prevents account confusion, ensures reliable login/identification, and supports password recovery via email.
+Email is the only credential-backed identity: it is what verification, password
+reset and Google auto-linking key on. A display name has to be freely
+human-readable, and forcing it to be unique both blocks legitimate names and
+forces suffixing for accounts created from a Google token.
 
 ## Scope & Exceptions
-Applies to all user registrations. No exceptions.
+Applies to all user registrations. No exceptions; uniqueness is enforced on
+email only.
 
 ## Enforcement
-- `AuthService.register()` checks `userRepository.existsByEmail()` and `existsByUsername()` before creation
-- Database: Unique constraints on `user.email` and `user.username`
-- API: Returns 409 Conflict with message "Email already registered" or "Username already taken"
+- `AuthService.register()` checks `userRepository.existsByEmail()` before creation
+- Database: Unique constraint on `user.email`; `user.display_name` has no unique constraint
+- API: Returns 409 Conflict with message "Email already registered"
 
 ## Last Reviewed
-2026-09-22, by <name/role>
+2026-11-02, by <name/role> — narrowed to email by ADR-019
 
 ---
 
@@ -167,29 +172,32 @@ Applies to all password fields in registration. No exceptions.
 
 ---
 
-# Business Rule: Username Format and Length (3-50 chars)
+# Business Rule: Display Name Format and Length (2-100 chars)
 
 ## Rule ID
 `BR-AUTH-006`
 
 ## Status
-Active
+Retired by ADR-019 — replaced by BR-AUTH-024
 
 ## Statement
-Usernames must be 3-50 characters.
+_Retired._ This rule constrained a unique `username` (3-50 characters, unique
+across the system). `user.username` no longer exists; a non-unique
+`display_name` replaced it, governed by BR-AUTH-024.
 
 ## Rationale
-Prevents extremely short/long usernames, ensures display compatibility.
+The rule existed to keep a unique handle readable. With the handle gone, its
+length bound moved to the display name and its uniqueness requirement was
+dropped entirely.
 
 ## Scope & Exceptions
-Applies to all username fields in registration. No exceptions.
+None — the rule is not enforced anywhere.
 
 ## Enforcement
-- DTO: `@Size(min=3, max=50)` on `RegisterRequest.username`
-- API: Returns 400 with "Username must be between 3 and 50 characters"
+- Removed: `@Size(min=3, max=50)` on `RegisterRequest.username`, `existsByUsername()`, and the `user_username_key` unique constraint were all deleted
 
 ## Last Reviewed
-2026-09-22, by <name/role>
+2026-11-02, by <name/role> — retired
 
 ---
 
@@ -228,10 +236,10 @@ Applies to all email fields in registration. No exceptions.
 Active
 
 ## Statement
-A user can only log in with valid email/username and password. The account must have `emailVerified=true` and `status=ACTIVATED`.
+A user can only log in with a registered email and the matching password. The account must have `emailVerified=true` and `status=ACTIVATED`. Email is the only login identifier (ADR-019); a submitted display name is treated as an unknown email and rejected with the generic message.
 
 ## Rationale
-Prevents unverified or deactivated accounts from accessing protected resources.
+Prevents unverified or deactivated accounts from accessing protected resources. Restricting the identifier to email removes the ambiguity a non-unique name would introduce.
 
 ## Scope & Exceptions
 Applies to all login attempts. No exceptions.
@@ -241,7 +249,7 @@ Applies to all login attempts. No exceptions.
 - Returns 401 for invalid credentials, 403 for unverified/inactive account
 
 ## Last Reviewed
-2026-09-22, by <name/role>
+2026-11-02, by <name/role> — identifier narrowed to email by ADR-019
 
 ---
 
@@ -615,7 +623,7 @@ Signing in with Google resolves to exactly one Vegalife account, in this order:
 1. If the Google subject (`sub`) is already recorded as a `GOOGLE` identity, that account is used. The email is not consulted.
 2. Otherwise, if the ID token's email matches an existing account **and** the ID token reports `email_verified=true` **and** that account has `email_verified=true` and `status=activated`, the Google identity is linked to that account and the user is signed in.
 3. Otherwise, if no account matches, a new account is created (BR-AUTH-023) and linked.
-4. Otherwise the sign-in is refused with the same message `AuthService.login` returns for the matched account's state ("Email not verified…", "Account is suspended", "Account is not active", or the generic "Invalid email/username or password" for a soft-deleted account), and **no identity row is inserted**.
+4. Otherwise the sign-in is refused with the same message `AuthService.login` returns for the matched account's state ("Email not verified…", "Account is suspended", "Account is not active", or the generic "Invalid email or password" for a soft-deleted account), and **no identity row is inserted**.
 
 An ID token without `email_verified=true` is always refused, regardless of what it matches. An account may hold at most one `GOOGLE` identity, and a Google subject may belong to at most one account. There is no way to link Google from inside an authenticated session, and no way to unlink it.
 
@@ -645,9 +653,9 @@ Applies to `POST /api/auth/google` only. Password login and password-reset are u
 Active
 
 ## Statement
-A Vegalife account first created by a Google sign-in is persisted with `email_verified=true`, `status=activated` and `role=USER`, and has no local password (`password_hash IS NULL`). It receives no email-verification OTP. Its username is derived from the Google email's local part, padded to at least 3 characters and truncated to at most 50, and made unique by retrying on the unique constraint.
+A Vegalife account first created by a Google sign-in is persisted with `email_verified=true`, `status=activated` and `role=USER`, and has no local password (`password_hash IS NULL`). It receives no email-verification OTP. Its display name is seeded from the Google profile — the `name` claim, else `given_name` + `family_name`, else the email local part, else the constant `Vegalife user` — trimmed and capped at 100 characters (BR-AUTH-024). It is written **only** at creation; later Google sign-ins never modify it.
 
-A `POST /api/auth/login` attempt against an account whose `password_hash` is NULL is rejected with the same HTTP 400 "Invalid email/username or password" used for a wrong password — never a server error, and never a message that distinguishes a Google-only account.
+A `POST /api/auth/login` attempt against an account whose `password_hash` is NULL is rejected with the same HTTP 400 "Invalid email or password" used for a wrong password — never a server error, and never a message that distinguishes a Google-only account.
 
 Such an account can obtain a local password only through the existing forgot-password flow (BR-AUTH-017, BR-AUTH-020), which overwrites the NULL hash.
 
@@ -658,10 +666,45 @@ Google has already verified the address at the moment the account is created, so
 Applies only to accounts created by the Google flow. Accounts created through `POST /api/auth/register` keep `email_verified=false` and `status=created` (BR-AUTH-003). An existing account that is auto-linked (BR-AUTH-022 step 2) keeps its own state and password unchanged.
 
 ## Enforcement
-- `service/auth/GoogleAuthService`: new-account path sets the three fields, `password_hash = null`, and generates the username
-- `service/auth/AuthService.login()`: null `password_hash` → `InvalidTokenException("Invalid email/username or password")` before `PasswordEncoder.matches` is called
-- Database: `user.password_hash` nullable (`V44`); `user.username` / `user.email` remain UNIQUE
+- `service/auth/GoogleAuthService`: new-account path sets the three fields, `password_hash = null`, and seeds the display name from the Google profile
+- `service/auth/AuthService.login()`: null `password_hash` → `InvalidTokenException("Invalid email or password")` before `PasswordEncoder.matches` is called
+- Database: `user.password_hash` nullable (`V44`); `user.email` UNIQUE, `user.display_name` not unique (`V45`)
 - API: `POST /api/auth/google`, `POST /api/auth/login`
 
 ## Last Reviewed
 2026-10-26, by Lê Đình Duy (backend)
+
+---
+
+# Business Rule: Display Name Format and Length (2-100 chars, not unique)
+
+## Rule ID
+`BR-AUTH-024`
+
+## Status
+Active
+
+## Statement
+Every account has a `displayName` of 2-100 characters. It is required at
+registration, has no uniqueness constraint, and is never used as a login
+identifier. A Google-created account is seeded once from the Google profile; no
+later sign-in rewrites it.
+
+## Rationale
+The display name is a label shown next to a member's posts and comments, so it
+must accommodate real names of different lengths and must not force suffixing
+when two members share one. Keeping it out of the login identifier protects the
+unique-identity rule (BR-AUTH-001).
+
+## Scope & Exceptions
+Applies to registration and to Google account creation. Profile editing of the
+display name is outside this rule's scope. No exceptions.
+
+## Enforcement
+- DTO: `@NotBlank` + `@Size(min=2, max=100)` on `RegisterRequest.displayName`
+- `service/auth/GoogleAuthService.resolveDisplayName(...)`: trims, caps at 100 characters without splitting a surrogate pair, and falls back to `Vegalife user`
+- Database: `user.display_name VARCHAR(100) NOT NULL`, no unique index (`V45`)
+- API: `POST /api/auth/register`, `POST /api/auth/google`
+
+## Last Reviewed
+2026-11-02, by <name/role>

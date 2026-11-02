@@ -22,3 +22,4 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [016-component-level-moderation.md](016-component-level-moderation.md) | Moderate Components Without Per-Occurrence Verdict Storage | Accepted | 2026-10-23 |
 | [017-google-login.md](017-google-login.md) | Sign In With Google by Exchanging an Authorization Code and Auto-Linking on Verified Email | Accepted | 2026-10-26 |
 | [018-clean-architecture-package-dependencies.md](018-clean-architecture-package-dependencies.md) | Enforce Clean-Architecture Package Dependencies (Inner Layers Never Depend on Outer Layers) | Accepted | 2026-10-30 |
+| [019-display-name-instead-of-username.md](019-display-name-instead-of-username.md) | Replace the Unique `username` Handle With a Non-Unique `display_name` | Accepted | 2026-11-02 |

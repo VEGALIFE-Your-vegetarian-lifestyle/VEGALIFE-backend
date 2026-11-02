@@ -45,7 +45,7 @@ No request body
         "postId": "660e8400-e29b-41d4-a716-446655440000",
         "parentId": null,
         "userId": "770e8400-e29b-41d4-a716-446655440000",
-        "username": "jane",
+        "displayName": "jane",
         "content": "Great recipe!",
         "status": "active",
         "reportCount": 3,
@@ -72,7 +72,7 @@ No request body
 | data.content[].postId | uuid | Post the comment belongs to |
 | data.content[].parentId | uuid \| null | Parent comment id for replies; null for top-level comments |
 | data.content[].userId | uuid | Author's user id |
-| data.content[].username | string | Author's username |
+| data.content[].displayName | string | Author's display name |
 | data.content[].content | string | Comment text |
 | data.content[].status | string | `active` (not deleted) or `removed` (soft-deleted) |
 | data.content[].reportCount | integer | Times a user has reported this comment (issue #6); `0` if never reported. |
@@ -118,7 +118,7 @@ curl -X GET "http://localhost:8080/api/admin/comments?page=0&size=20&status=acti
         "postId": "660e8400-e29b-41d4-a716-446655440000",
         "parentId": null,
         "userId": "770e8400-e29b-41d4-a716-446655440000",
-        "username": "jane",
+        "displayName": "jane",
         "content": "Great recipe!",
         "status": "active",
         "createdAt": "2026-09-28T10:00:00Z",

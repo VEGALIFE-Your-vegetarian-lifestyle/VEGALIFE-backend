@@ -32,7 +32,7 @@ Admins review video content for policy violations (issue #3, Content Moderation 
 - [ ] FR-001: `GET /api/admin/videos` returns a paginated list of video uploads to callers with role ADMIN.
 - [ ] FR-002: Only non-deleted `media` rows whose `mimeType` is a video type are returned; image rows are never returned.
 - [ ] FR-003: The result spans all uploaders and all `Media.Status` values (`uploading`, `succeed`, `failed`).
-- [ ] FR-004: Each item includes `id`, `mediaUrl`, `thumbnailUrl`, `description`, `status`, `durationSeconds`, `fileSizeBytes`, `mimeType`, `width`, `height`, `externalId`, `createdAt`, `updatedAt`, plus uploader `userId`, `username`, `email`, plus `posts` — the non-deleted posts the video is attached to (each with `id`, `title`, `status`), empty when the video is not yet attached to any post.
+- [ ] FR-004: Each item includes `id`, `mediaUrl`, `thumbnailUrl`, `description`, `status`, `durationSeconds`, `fileSizeBytes`, `mimeType`, `width`, `height`, `externalId`, `createdAt`, `updatedAt`, plus uploader `userId`, `displayName`, `email`, plus `posts` — the non-deleted posts the video is attached to (each with `id`, `title`, `status`), empty when the video is not yet attached to any post.
 - [ ] FR-005: Optional query filters: `status` (Media.Status), `userId` (UUID uploader), `createdFrom`, `createdTo` (ISO-8601 datetime on `createdAt`).
 - [ ] FR-006: Pagination via `page` (0-based, default 0), `size` (default 20, max 100), optional `sort` (default `createdAt,desc`); sort property must be one of `createdAt`, `updatedAt`, `durationSeconds`, `fileSizeBytes`, otherwise 400.
 - [ ] FR-007: Soft-deleted media (`deletedAt != null`) is never returned.

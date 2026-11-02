@@ -45,6 +45,9 @@ No request body.
     "content": [
       {
         "id": "550e8400-e29b-41d4-a716-446655440000",
+        "userId": "9f1c2f4a-8a3b-4c5d-9e6f-7a8b9c0d1e2f",
+        "displayName": "John Doe",
+        "avatarUrl": "https://res.cloudinary.com/vegalife/avatar/john.jpg",
         "title": "Easy tofu bowl",
         "rawContent": {"type": "doc", "content": []},
         "featuredImageUrl": "https://example.com/tofu-bowl.jpg",
@@ -74,6 +77,9 @@ No request body.
 | message | string | `Posts retrieved successfully`. |
 | data.content | array | Posts on this page. An empty array is returned when there are no matching posts. |
 | data.content[].id | uuid | Post identifier. |
+| data.content[].userId | uuid | Author's user id — the stable, unique way to address the author (the display name is not unique, ADR-019). |
+| data.content[].displayName | string | Author's display name, for rendering. |
+| data.content[].avatarUrl | string or null | Author's avatar URL; `null` when the author has no profile row yet (BR-PROFILE-003). |
 | data.content[].title | string | Post title. |
 | data.content[].rawContent | object | Rich-text document produced by the frontend editor (issue #101). |
 | data.content[].featuredImageUrl | string or null | Featured image URL, if present. |
@@ -106,6 +112,7 @@ No request body.
 - All post statuses are included so the owner can manage drafts, hidden, and unpublished (filter-failed) posts. Soft-deleted posts are excluded.
 - `flag` is returned for every post; `null` means the post has never been queued for content filtering (BR-FILTER-007).
 - A valid JWT is required by the existing security configuration.
+- Every item carries its author summary (`userId`, `displayName`, `avatarUrl`), resolved with one batched avatar lookup per page — never one query per post.
 - Results use zero-based pagination and are ordered by creation time, newest first.
 
 ## Related

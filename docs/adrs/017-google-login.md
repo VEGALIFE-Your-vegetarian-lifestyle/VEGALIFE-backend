@@ -62,11 +62,12 @@ Concretely:
    `email_verified=true` and `status=activated`. Every other matched state is
    rejected with the message `AuthService.login` would produce for that state.
 5. A newly created account gets `email_verified=true` and `status=activated`
-   (Google already proved the address), `password_hash = NULL`, and a generated
-   username that satisfies BR-AUTH-006.
+   (Google already proved the address) and `password_hash = NULL`. Its display
+   name is seeded from the Google profile (ADR-019 supersedes this ADR's
+   generated-username rule).
 6. `user.password_hash` becomes nullable. `AuthService.login` treats a null
    hash as "no local password" and returns the same generic
-   "Invalid email/username or password" it returns for a wrong password.
+   "Invalid email or password" it returns for a wrong password.
 7. There is no in-session "connect Google" endpoint and no unlink endpoint.
 
 ## Considered options
@@ -123,7 +124,7 @@ Concretely:
   the user id so an incident is traceable.
 - The login endpoint now has to distinguish "account has no local password"
   from "wrong password". Both must produce the identical
-  `"Invalid email/username or password"` response; the `login()` guard is what
+  `"Invalid email or password"` response; the `login()` guard is what
   keeps that true, and it is covered by a unit test.
 - `password_hash` being nullable weakens a database-level invariant; any future
   code that assumes it is non-null must be reviewed. The only such code today is
@@ -131,9 +132,10 @@ Concretely:
 - No link and no unlink endpoint by decision: a user can never attach Google to
   an account from inside a session, and can never detach it. A Google-only user
   who wants a password must use the existing forgot-password flow.
-- Username generation from the email local part can collide; it is resolved by a
+- ~~Username generation from the email local part can collide; it is resolved by a
   save-and-retry loop on the unique constraint, which means a failed attempt
-  must not have side effects outside the transaction.
+  must not have side effects outside the transaction.~~ Superseded by ADR-019:
+  there is no generated username, so there is no collision to retry.
 
 ## Verification
 

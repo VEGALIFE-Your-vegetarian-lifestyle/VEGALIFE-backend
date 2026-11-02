@@ -46,7 +46,7 @@ dietary field leaves all non-dietary fields untouched.
   "message": "Profile updated successfully",
   "data": {
     "userId": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "johndoe",
+    "displayName": "johndoe",
     "email": "john@example.com",
     "heightCm": 175.5,
     "weightKg": 70.2,
@@ -69,7 +69,7 @@ dietary field leaves all non-dietary fields untouched.
 | message | string | "Profile updated successfully" |
 | data | object | `ProfileResponse` — identical shape to both GET endpoints |
 | data.userId | uuid | Associated user identifier |
-| data.username | string | The user's username |
+| data.displayName | string | The member's display name |
 | data.email | string | The user's email address |
 | data.heightCm | number | Height in centimeters |
 | data.weightKg | number | Weight in kilograms |
@@ -155,7 +155,7 @@ curl -X PUT http://localhost:8080/api/profile \
   "message": "Profile updated successfully",
   "data": {
     "userId": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "johndoe",
+    "displayName": "johndoe",
     "email": "john@example.com",
     "heightCm": 175.5,
     "weightKg": 70.2,

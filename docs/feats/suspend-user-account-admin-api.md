@@ -32,7 +32,7 @@ Admins currently cannot disable abusive or spam accounts without deleting data. 
 ### Functional Requirements
 - [x] FR-001: `POST /api/admin/users/{userId}/suspend` requires role ADMIN.
 - [x] FR-002: On success, the user's `status` is set to `suspended` and all outstanding refresh tokens for that user are revoked.
-- [x] FR-003: Response is 200 with the same user summary shape as list (`id`, `email`, `username`, `role`, `status`, `createdAt`).
+- [x] FR-003: Response is 200 with the same user summary shape as list (`id`, `email`, `displayName`, `role`, `status`, `createdAt`).
 - [x] FR-004: Missing or soft-deleted user → 404.
 - [x] FR-005: User already `suspended` → 409.
 - [x] FR-006: Login for a suspended account fails with a clear inactive-account message (distinct from invalid credentials / unverified email).

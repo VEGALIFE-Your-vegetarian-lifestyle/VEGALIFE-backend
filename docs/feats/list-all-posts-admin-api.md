@@ -30,7 +30,7 @@ Admins review reported and flagged content, but the post list endpoints that exi
 ### Functional Requirements
 - [x] FR-001: `GET /api/admin/posts` returns a paginated list of posts to callers with role ADMIN.
 - [x] FR-002: The result spans all authors and all `Post.Status` values (`created`, `processed`, `published`, `unpublished`, `hidden`), and can be filtered by content-filter verdict (`flag`) as well as status.
-- [x] FR-003: Each item includes `id`, `title`, `content`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `status`, `flag`, `viewCount`, `publishedAt`, `createdAt`, plus author `userId`, `username`, `email` (`type`/`videoUrl` removed by issue #101).
+- [x] FR-003: Each item includes `id`, `title`, `content`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `status`, `flag`, `viewCount`, `publishedAt`, `createdAt`, plus author `userId`, `displayName`, `email` (`type`/`videoUrl` removed by issue #101).
 - [x] FR-004: Optional query filters: `status` (Post.Status), `userId` (UUID), `categoryId` (UUID), `createdFrom`, `createdTo` (ISO-8601 datetime on `createdAt`).
 - [x] FR-005: Pagination via `page` (0-based, default 0), `size` (default 20, max 100), optional `sort` (default `createdAt,desc`); sort property must be one of `createdAt`, `publishedAt`, `updatedAt`, `viewCount`, `title`, otherwise 400.
 - [x] FR-006: Soft-deleted posts (`deletedAt != null`) are never returned.
@@ -39,7 +39,7 @@ Admins review reported and flagged content, but the post list endpoints that exi
 
 ### Non-Functional Requirements
 - [x] NFR-SEC-001: Endpoint path `/api/admin/**` is restricted to `ROLE_ADMIN` by the existing security filter chain rule.
-- [x] NFR-SEC-002: The response DTO exposes no `passwordHash` or other account secrets; author fields are limited to `userId`, `username`, `email`.
+- [x] NFR-SEC-002: The response DTO exposes no `passwordHash` or other account secrets; author fields are limited to `userId`, `displayName`, `email`.
 - [x] NFR-MAINT-001: Response wrapped in `ApiResponse<T>` with pagination shape from `shared/dto/PageResponse`.
 - [x] NFR-MAINT-002: Controller stays thin; filter parsing and page assembly live in a service; predicates live in a `PostSpecifications` class.
 - [x] NFR-SCALE-001: The `categoryId` filter returns each matching post exactly once (join is de-duplicated).

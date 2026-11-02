@@ -54,7 +54,7 @@ No request body
         "createdAt": "2026-09-28T08:00:00Z",
         "updatedAt": "2026-09-28T08:02:11Z",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "username": "jane",
+        "displayName": "jane",
         "email": "jane@example.com",
         "posts": [
           {
@@ -94,7 +94,7 @@ No request body
 | data.content[].createdAt | string | ISO-8601 creation timestamp |
 | data.content[].updatedAt | string | ISO-8601 last-update timestamp |
 | data.content[].userId | uuid | Uploader user id, nullable for rows without an uploader |
-| data.content[].username | string | Uploader username, nullable |
+| data.content[].displayName | string | Uploader's display name, nullable |
 | data.content[].email | string | Uploader email, nullable |
 | data.content[].posts | array | Non-deleted posts this video is attached to; empty when unattached |
 | data.content[].posts[].id | uuid | Post id |
@@ -152,7 +152,7 @@ curl -X GET "http://localhost:8080/api/admin/videos?page=0&size=20&status=succee
         "createdAt": "2026-09-28T08:00:00Z",
         "updatedAt": "2026-09-28T08:02:11Z",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "username": "jane",
+        "displayName": "jane",
         "email": "jane@example.com",
         "posts": [
           {

@@ -94,7 +94,7 @@ In `docs/apis/index.md`, list as:
 ```bash
 curl -X POST /api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"username":"johndoe","email":"john@example.com","password":"securePass123","confirmPassword":"securePass123"}'
+  -d '{"displayName":"John Doe","email":"john@example.com","password":"securePass123","confirmPassword":"securePass123"}'
 ```
 
 ### Success Response (201)
@@ -104,7 +104,7 @@ curl -X POST /api/auth/register \
   "message": "User registered successfully",
   "data": {
     "userId": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "johndoe",
+    "displayName": "John Doe",
     "email": "john@example.com"
   }
 }

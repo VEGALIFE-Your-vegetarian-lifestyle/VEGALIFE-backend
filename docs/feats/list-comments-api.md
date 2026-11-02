@@ -21,7 +21,7 @@ Comments can be created, edited, and deleted, but there is still no endpoint to 
 - Let anyone (no authentication required, per `BR-COMMENT-001`) fetch a published post's comments as a nested thread.
 - Paginate top-level comments so a post with many root-level comments doesn't return unbounded data.
 - Render a soft-deleted comment as a `"[deleted]"` placeholder, with no author identity, while keeping its replies attached at the correct place in the tree.
-- Include basic author info (`userId`, `username`, `avatarUrl`) on each live comment.
+- Include basic author info (`userId`, `displayName`, `avatarUrl`) on each live comment.
 
 ## Non-goals
 
@@ -38,8 +38,8 @@ Comments can be created, edited, and deleted, but there is still no endpoint to 
 - [ ] FR-002: The target post must exist, be non-deleted, and have status `published`; otherwise the API returns `404` (same post-visibility rule `createComment` already uses).
 - [ ] FR-003: Top-level comments (`parentId IS NULL`) are returned paginated, oldest first, using the same `page`/`size` query parameters and defaults (`page=0`, `size=20`, max `size=100`) as other list endpoints (`PostListRequest`).
 - [ ] FR-004: Each returned comment includes its full reply subtree, recursively, each reply carrying the same shape as its parent.
-- [ ] FR-005: A soft-deleted comment (`deletedAt != null`) is included in the tree (so its replies keep their place) but is rendered with `content: "[deleted]"`, `deleted: true`, and `userId`/`username`/`avatarUrl` all `null`.
-- [ ] FR-006: A live (non-deleted) comment includes `userId`, `username`, and `avatarUrl` (`null` if the author has no profile row yet, per `BR-PROFILE-003`).
+- [ ] FR-005: A soft-deleted comment (`deletedAt != null`) is included in the tree (so its replies keep their place) but is rendered with `content: "[deleted]"`, `deleted: true`, and `userId`/`displayName`/`avatarUrl` all `null`.
+- [ ] FR-006: A live (non-deleted) comment includes `userId`, `displayName`, and `avatarUrl` (`null` if the author has no profile row yet, per `BR-PROFILE-003`).
 - [ ] FR-007: `edited` reflects the comment's own edited flag (`BR-COMMENT-002`) regardless of deletion.
 
 ### Non-Functional Requirements
@@ -49,7 +49,7 @@ Comments can be created, edited, and deleted, but there is still no endpoint to 
 
 ## Design overview
 
-Add `GET /api/posts/{postId}/comments` to the existing `CommentController` (no `@PreAuthorize`, not covered by the controller's bearer `@SecurityRequirement` since that moved to the individual authenticated handlers). `CommentService.getComments` loads the published post (404 otherwise), fetches every comment for the post in one query, partitions it into roots and a `parentId -> children` map, paginates the roots in memory, bulk-loads usernames (`UserRepository.findAllById`) and avatar URLs (`UserProfileRepository.findByUserIdIn`, new method) for every live author appearing in the page's subtrees, and recursively maps each root (and its descendants) into a new `CommentThreadResponse` DTO.
+Add `GET /api/posts/{postId}/comments` to the existing `CommentController` (no `@PreAuthorize`, not covered by the controller's bearer `@SecurityRequirement` since that moved to the individual authenticated handlers). `CommentService.getComments` loads the published post (404 otherwise), fetches every comment for the post in one query, partitions it into roots and a `parentId -> children` map, paginates the roots in memory, bulk-loads display names (`UserRepository.findAllById`) and avatar URLs (`UserProfileRepository.findByUserIdIn`, new method) for every live author appearing in the page's subtrees, and recursively maps each root (and its descendants) into a new `CommentThreadResponse` DTO.
 
 ## Success metrics
 
@@ -59,7 +59,7 @@ All acceptance scenarios below pass in automated tests before merge.
 
 **As** any visitor, **I want to** read a post's comments as a nested thread, **so that** I can follow the discussion including replies, without needing an account.
 
-- [ ] Given a published post with top-level comments and replies, when the thread is requested, then the response returns root comments with their replies nested underneath, each carrying `userId`, `username`, `avatarUrl`, `content`, `edited`, `deleted`, and timestamps.
+- [ ] Given a published post with top-level comments and replies, when the thread is requested, then the response returns root comments with their replies nested underneath, each carrying `userId`, `displayName`, `avatarUrl`, `content`, `edited`, `deleted`, and timestamps.
 - [ ] Given more root comments than fit on one page, when a page is requested, then only that page's root comments are returned, paginated the same way other list endpoints are (`page`, `size`, `totalElements`, `totalPages`, `first`, `last`).
 - [ ] Given a soft-deleted comment with live replies, when the thread is requested, then the deleted comment appears with `content: "[deleted]"`, `deleted: true`, no author fields, and its replies still nested underneath it.
 - [ ] Given no `Authorization` header at all, when the thread is requested, then it still succeeds (`200 OK`) — this endpoint requires no authentication.

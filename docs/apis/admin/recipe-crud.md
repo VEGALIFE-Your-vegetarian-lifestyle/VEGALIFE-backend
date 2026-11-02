@@ -73,7 +73,7 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
         "createdAt": "2026-10-24T08:00:00Z",
         "updatedAt": "2026-10-24T08:00:00Z",
         "userId": "9f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
-        "username": "jane",
+        "displayName": "jane",
         "email": "jane@example.com"
       }
     ],

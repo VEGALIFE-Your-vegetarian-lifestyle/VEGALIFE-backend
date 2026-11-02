@@ -17,7 +17,7 @@ account gets a new Vegalife account and is signed straight in.
 
 ## Problem / motivation
 
-Today the only way into a Vegalife account is to register with a username, an
+Today the only way into a Vegalife account is to register with a display name, an
 email address, a password, and then verify a 6-digit OTP. That friction is the
 one thing between a visitor and their first post. Issue #31 records the product
 ask: "Users want quick sign-in without creating new credentials. Increases
@@ -63,20 +63,23 @@ This is applicable because the JWT half already ships — `JwtTokenService` and
   backend inserts the identity row (auto-link) and signs that user in.
 - [ ] FR-004: When no identity row exists and no account matches the email, a
   new account is created with `email_verified=true`, `status=activated`,
-  `role=USER`, `password_hash=NULL`, and a generated unique username; the
-  identity row is inserted; the user is signed in.
+  `role=USER`, `password_hash=NULL`, and a display name seeded from the Google
+  profile; the identity row is inserted; the user is signed in.
 - [ ] FR-005: An ID token whose `email_verified` claim is not `true` is
   rejected with HTTP 400 and no account is created or linked.
 - [ ] FR-006: An identity that resolves to an account in a state that password
   login would refuse (`email_verified=false`, `deactivated`, `suspended`,
   soft-deleted) is rejected with the same message password login gives for that
   state, and no identity row is inserted.
-- [ ] FR-007: A generated username is 3-50 characters, unique, and derived from
-  the email local part; collisions are resolved by retrying against the unique
-  constraint.
-- [ ] FR-008: `POST /api/auth/login` with an email/username whose
-  `password_hash` is NULL returns HTTP 400 "Invalid email/username or password"
+- [ ] FR-007: The display name of a Google-created account is seeded once, in
+  this order: the ID token's `name` claim → `given_name` + `family_name` → the
+  email local part → `Vegalife user`, trimmed and capped at 100 characters
+  without splitting a surrogate pair. It is never rewritten by a later sign-in
+  (ADR-019, BR-AUTH-024).
+- [ ] FR-008: `POST /api/auth/login` with an email whose
+  `password_hash` is NULL returns HTTP 400 "Invalid email or password"
   — never a 500, and never a message that reveals the account is Google-only.
+  Login accepts an email only; a display name is not an identifier.
 - [ ] FR-009: `POST /api/auth/google` is reachable without authentication;
   every other endpoint's authorization is unchanged.
 

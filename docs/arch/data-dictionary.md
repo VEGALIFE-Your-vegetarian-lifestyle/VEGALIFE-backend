@@ -7,7 +7,7 @@ _Description: Stores user account credentials, status, and role-based access con
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
 | id | UUID | PK | No | Unique identifier for each user |
-| username | VARCHAR(50) | Unique | No | Unique login username |
+| display_name | VARCHAR(100) | - | No | Display name shown next to the member's content; **not unique** (ADR-019) |
 | email | VARCHAR(100) | Unique | No | Registered email address |
 | password_hash | VARCHAR(255) | - | No | BCrypt hashed password |
 | role | VARCHAR(20) | - | No | User role: ADMIN, USER |
@@ -577,7 +577,7 @@ _Description: Persistent outbound message queue (transactional outbox) for email
 | id | UUID | PK | No | Unique identifier for each outbound message |
 | channel | VARCHAR(16) | - | No | Delivery channel: EMAIL |
 | recipient | VARCHAR(255) | - | No | Destination address (email) |
-| payload | JSONB | - | Yes | Message body JSON (type, username, otp, expiryMinutes); cleared when the row reaches a terminal status |
+| payload | JSONB | - | Yes | Message body JSON (type, displayName, otp, expiryMinutes); cleared when the row reaches a terminal status |
 | status | VARCHAR(32) | - | No | PENDING, PROCESSING, COMPLETED, DEFERRED, FAILED or EXPIRED (default PENDING) |
 | attempts | INT | - | No | Monotonic attempt counter, incremented when a worker claims the row (default 0) |
 | next_attempt_at | TIMESTAMPTZ | - | No | Earliest time the row may be claimed (default NOW()) |

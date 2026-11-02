@@ -30,7 +30,7 @@ Admins need to review recipes for quality and safety (issue #4, Content Moderati
 ### Functional Requirements
 - [ ] FR-001: `GET /api/admin/recipes` returns a paginated list of recipes to callers with role ADMIN.
 - [ ] FR-002: The result spans all authors; soft-deleted recipes are included and reported with `status = DELETED`.
-- [ ] FR-003: Each item includes `id`, `name`, `description`, `instructions`, `prepTimeMinutes`, `cookTimeMinutes`, `servings`, `difficulty`, `status`, `categoryIds`, `ingredients` (`ingredientId`, `name`, `amount`, `unit`), `dishId`, `dishName`, `createdAt`, `updatedAt`, plus author `userId`, `username`, `email`.
+- [ ] FR-003: Each item includes `id`, `name`, `description`, `instructions`, `prepTimeMinutes`, `cookTimeMinutes`, `servings`, `difficulty`, `status`, `categoryIds`, `ingredients` (`ingredientId`, `name`, `amount`, `unit`), `dishId`, `dishName`, `createdAt`, `updatedAt`, plus author `userId`, `displayName`, `email`.
 - [ ] FR-004: `status` is derived, not stored: `ACTIVE` when `deletedAt` is null, `DELETED` otherwise. There is no `status` query parameter.
 - [ ] FR-005: Optional query filters: `userId` (UUID), `categoryId` (UUID, matched through `post_recipe` → `post_category`), `createdFrom`, `createdTo` (ISO-8601 datetime on `createdAt`).
 - [ ] FR-006: Pagination via `page` (0-based, default 0), `size` (default 20, max 100), optional `sort` (default `createdAt,desc`); sort property must be one of `createdAt`, `updatedAt`, `name`, otherwise 400.
@@ -40,7 +40,7 @@ Admins need to review recipes for quality and safety (issue #4, Content Moderati
 
 ### Non-Functional Requirements
 - [ ] NFR-SEC-001: Endpoint path `/api/admin/**` is restricted to `ROLE_ADMIN` by the existing security filter chain rule (`SecurityConfig`).
-- [ ] NFR-SEC-002: The response DTO exposes no credentials or account secrets; author fields are limited to `userId`, `username`, `email`.
+- [ ] NFR-SEC-002: The response DTO exposes no credentials or account secrets; author fields are limited to `userId`, `displayName`, `email`.
 - [ ] NFR-MAINT-001: Response wrapped in `ApiResponse<T>` with pagination shape from `shared/dto/PageResponse`.
 - [ ] NFR-MAINT-002: Controller stays thin; filter parsing and page assembly live in a service; predicates live in a `RecipeSpecifications` class, mirroring `PostSpecifications`.
 - [ ] NFR-MAINT-003: No Flyway migration is added — the feature maps the existing schema as-is.

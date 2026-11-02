@@ -13,7 +13,7 @@ Implement JWT-based authentication with short-lived access tokens and long-lived
 Users need to authenticate and maintain sessions. JWT enables stateless auth for scalable microservices. The current implementation only has user registration and email verification (Issue #20). Login, token refresh, and logout are missing.
 
 ## Goals
-- Users can log in with email/username + password and receive access + refresh tokens
+- Users can log in with email + password and receive access + refresh tokens
 - Short-lived access JWTs (5-15 min) with standard claims (sub, iss, aud, jti, iat, exp)
 - Long-lived opaque refresh tokens (7+ days) with SHA-256 hash stored in DB
 - Refresh endpoint issues new access tokens without rotating refresh token (initially)
@@ -29,7 +29,7 @@ Users need to authenticate and maintain sessions. JWT enables stateless auth for
 ## Requirements
 
 ### Functional Requirements
-- [ ] FR-001: POST `/api/auth/login` accepts email/username + password, returns access token + refresh token
+- [ ] FR-001: POST `/api/auth/login` accepts an email + password, returns access token + refresh token (email is the only identifier — ADR-019)
 - [ ] FR-002: POST `/api/auth/refresh` accepts raw refresh token, returns new access token (same refresh token valid)
 - [ ] FR-003: POST `/api/auth/logout` revokes refresh token; optionally blacklists current access token
 - [ ] FR-004: Access JWT contains claims: sub (userId), iss (api issuer), aud (intended audience), jti (unique JWT ID), iat, exp

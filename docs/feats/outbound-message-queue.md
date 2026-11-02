@@ -52,7 +52,7 @@ registration.
 
 - [x] FR-001: Register, forgot-password, and resend enqueue an
       `outbound_message` row (channel EMAIL, payload
-      `{username, otp, expiryMinutes}`, `expires_at` = now + 10 min)
+      `{displayName, otp, expiryMinutes}`, `expires_at` = now + 10 min)
       in the same transaction that creates the OTP, and never call
       SMTP on the request thread.
 - [x] FR-002: With SMTP unreachable, each of the three flows still

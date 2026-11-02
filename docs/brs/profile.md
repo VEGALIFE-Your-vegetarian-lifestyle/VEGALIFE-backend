@@ -119,7 +119,7 @@ Active
 ## Statement
 Any member's profile is readable without authentication at
 `GET /api/profile/{userId}`. The public response contains exactly the
-`ProfileResponse` fields — `userId`, `username`, `email`, `heightCm`,
+`ProfileResponse` fields — `userId`, `displayName`, `email`, `heightCm`,
 `weightKg`, `bmi`, `age`, `gender`, `description`, `avatarUrl`,
 `preferences`, `dislikes`, `allergies`, `restrictions`, `healthGoal`,
 `updatedAt` — and nothing else. There is no per-user visibility toggle;

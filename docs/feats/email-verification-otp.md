@@ -72,7 +72,7 @@ No verification link is created or sent.
 activates the account. Unknown email → 400 `Invalid or already used verification
 code` (mirrors reset-password anti-enumeration). Already-verified account → 200
 idempotent success without consuming an OTP. Success response shape is the same
-`RegisterResponse` as today (user id, email, username, status, timestamps).
+`RegisterResponse` as today (user id, email, displayName, status, timestamps).
 
 ### FR-004 — Invalid / used OTP
 
