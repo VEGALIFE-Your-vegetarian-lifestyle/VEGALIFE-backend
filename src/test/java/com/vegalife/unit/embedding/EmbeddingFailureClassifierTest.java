@@ -134,6 +134,27 @@ class EmbeddingFailureClassifierTest {
   }
 
   @Test
+  void quotaWithoutARetryAfterHeaderReadsTheGrpcRetryDelay() {
+    // Gemini's real 429 body: no Retry-After header, the hint lives in details[].retryDelay.
+    server
+        .expect(requestTo(ENDPOINT))
+        .andRespond(
+            withStatus(HttpStatus.TOO_MANY_REQUESTS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(
+                    """
+                    {"error":{"code":429,"status":"RESOURCE_EXHAUSTED",
+                    "details":[{"@type":"type.googleapis.com/google.rpc.RetryInfo",
+                    "retryDelay":"37.500s"}]}}
+                    """));
+
+    EmbeddingClientException failure = capture();
+
+    assertThat(failure.getReason()).isEqualTo(Reason.RATE_LIMITED);
+    assertThat(failure.getRetryAfter()).isEqualTo(Duration.ofMillis(37_500));
+  }
+
+  @Test
   void serverErrorIsRetryable() {
     server
         .expect(requestTo(ENDPOINT))

@@ -85,8 +85,7 @@ final class EmbeddingFailureClassifier {
     String providerCode = providerCode(body);
     String providerMessage = providerMessage(body);
     Reason reason = reasonFor(status, providerCode);
-    Duration retryAfter =
-        parseRetryAfter(response.getResponseHeaders().getFirst(RETRY_AFTER_HEADER));
+    Duration retryAfter = retryAfter(response, body);
 
     StringBuilder message =
         new StringBuilder("Gemini embedding call failed for model ")
@@ -218,6 +217,20 @@ final class EmbeddingFailureClassifier {
   }
 
   /**
+   * The provider's own retry hint, from the {@code Retry-After} header when present, otherwise from
+   * the gRPC {@code RetryInfo} detail in the body.
+   *
+   * <p>Gemini's quota rejections usually carry no header at all and put the hint in {@code
+   * details[].retryDelay} instead, as a protobuf duration string ({@code "37s"}). Reading only the
+   * header would silently discard every quota hint, which is the defect ADR-020 exists to fix.
+   */
+  private static Duration retryAfter(RestClientResponseException response, String body) {
+    Duration fromHeader =
+        parseRetryAfter(response.getResponseHeaders().getFirst(RETRY_AFTER_HEADER));
+    return fromHeader != null ? fromHeader : retryDelay(body);
+  }
+
+  /**
    * Parses the {@code Retry-After} header, which may be delta-seconds or an HTTP date. Only the
    * numeric form is honoured; a date form is rare for this API and guessing it wrong would be worse
    * than falling back to normal backoff.
@@ -232,6 +245,36 @@ final class EmbeddingFailureClassifier {
     } catch (NumberFormatException e) {
       return null;
     }
+  }
+
+  /** Reads {@code error.details[].retryDelay}, a protobuf duration such as {@code "37s"}. */
+  private static Duration retryDelay(String body) {
+    JsonNode error = readError(body);
+    if (error == null) {
+      return null;
+    }
+    JsonNode details = error.path("details");
+    if (!details.isArray()) {
+      return null;
+    }
+    for (JsonNode detail : details) {
+      JsonNode delay = detail.path("retryDelay");
+      if (!delay.isTextual()) {
+        continue;
+      }
+      String value = delay.asText().trim();
+      if (!value.endsWith("s")) {
+        continue;
+      }
+      try {
+        double seconds = Double.parseDouble(value.substring(0, value.length() - 1));
+        return seconds <= 0 ? null : Duration.ofMillis(Math.round(seconds * 1000));
+      } catch (NumberFormatException e) {
+        // Not the shape we expect; fall through to no hint rather than guessing.
+        return null;
+      }
+    }
+    return null;
   }
 
   private static String describe(Reason reason) {
