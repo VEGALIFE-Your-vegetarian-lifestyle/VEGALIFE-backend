@@ -31,6 +31,7 @@ import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.service.recipe.RecipeService;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -65,6 +66,8 @@ class RecipeServiceTest {
   @Mock private UserRepository userRepository;
 
   @Mock private RecipeMapper recipeMapper;
+
+  @Mock private DishIngredientService dishIngredientService;
 
   @Mock private TransactionTemplate transactionTemplate;
 
@@ -407,6 +410,30 @@ class RecipeServiceTest {
     when(recipeMapper.toResponse(eq(recipe), eq("tofu stir-fry"), anyList())).thenReturn(expected);
 
     assertThat(recipeService.getRecipe(userId, recipeId)).isSameAs(expected);
+  }
+
+  @Test
+  void getRecipe_attachesAdvisoryMissingRequiredIngredients() {
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .user(user)
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .build();
+    RecipeResponse expected = RecipeResponse.builder().id(recipeId).build();
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.of(recipe));
+    when(recipeIngredientRepository.findByRecipeId(recipeId)).thenReturn(List.of());
+    when(recipeMapper.toResponse(eq(recipe), eq("tofu stir-fry"), anyList())).thenReturn(expected);
+    when(dishIngredientService.missingRequiredIngredientNames(eq(dishId), anyList()))
+        .thenReturn(List.of("tofu"));
+
+    RecipeResponse result = recipeService.getRecipe(userId, recipeId);
+
+    // The warning is attached on read and never blocks; the recipe itself is returned untouched.
+    assertThat(result.getMissingRequiredIngredients()).containsExactly("tofu");
   }
 
   @Test

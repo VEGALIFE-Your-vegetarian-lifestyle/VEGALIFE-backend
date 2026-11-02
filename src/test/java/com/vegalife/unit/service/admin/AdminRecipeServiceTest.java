@@ -19,11 +19,17 @@ import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
+import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.admin.ModerationLogRepository;
+import com.vegalife.repository.recipe.DishRepository;
+import com.vegalife.repository.recipe.IngredientRepository;
+import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.service.admin.AdminRecipeService;
+import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -53,6 +59,14 @@ class AdminRecipeServiceTest {
   @Mock private AdminRecipeMapper adminRecipeMapper;
 
   @Mock private ModerationLogRepository moderationLogRepository;
+
+  @Mock private DishRepository dishRepository;
+
+  @Mock private IngredientRepository ingredientRepository;
+
+  @Mock private RecipeIngredientRepository recipeIngredientRepository;
+
+  @Mock private DishIngredientService dishIngredientService;
 
   @InjectMocks private AdminRecipeService adminRecipeService;
 
@@ -377,6 +391,69 @@ class AdminRecipeServiceTest {
 
     verify(recipeRepository, never()).saveAndFlush(any(Recipe.class));
     verify(moderationLogRepository, never()).save(any(ModerationLog.class));
+  }
+
+  @Test
+  void approveRecipe_approvesPendingDishAndIngredientsAndSeedsSuggestions() {
+    UUID adminId = UUID.randomUUID();
+    recipe.setModerationStatus(ModerationStatus.PENDING);
+    Dish dish = recipe.getDish();
+    dish.setModerationStatus(ModerationStatus.PENDING);
+    Ingredient tofu =
+        Ingredient.builder()
+            .id(UUID.randomUUID())
+            .name("tofu")
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    RecipeIngredient line =
+        RecipeIngredient.builder()
+            .recipeId(recipe.getId())
+            .ingredientId(tofu.getId())
+            .ingredient(tofu)
+            .build();
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
+        .thenReturn(Optional.of(recipe));
+    when(recipeRepository.saveAndFlush(recipe)).thenReturn(recipe);
+    when(recipeIngredientRepository.findByRecipeId(recipe.getId())).thenReturn(List.of(line));
+    when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
+
+    adminRecipeService.approveRecipe(adminId, recipe.getId(), "looks good");
+
+    // Approving the recipe is a human accepting the names it introduced.
+    assertThat(dish.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
+    assertThat(tofu.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
+    verify(dishRepository).save(dish);
+    verify(ingredientRepository).save(tofu);
+    // ...and the approved recipe contributes its ingredients to the dish's suggestion list.
+    verify(dishIngredientService).seedFromApprovedRecipe(recipe);
+
+    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
+    verify(moderationLogRepository, atLeastOnce()).save(captor.capture());
+    assertThat(captor.getAllValues())
+        .extracting(ModerationLog::getTargetType)
+        .containsExactlyInAnyOrder("RECIPE", "DISH", "INGREDIENT");
+  }
+
+  @Test
+  void approveRecipe_leavesRejectedNameRejected() {
+    recipe.setModerationStatus(ModerationStatus.PENDING);
+    Dish rejectedDish =
+        Dish.builder()
+            .id(UUID.randomUUID())
+            .name("not food")
+            .moderationStatus(ModerationStatus.REJECTED)
+            .build();
+    recipe.setDish(rejectedDish);
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
+        .thenReturn(Optional.of(recipe));
+    when(recipeRepository.saveAndFlush(recipe)).thenReturn(recipe);
+    when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
+
+    adminRecipeService.approveRecipe(UUID.randomUUID(), recipe.getId(), null);
+
+    // A rejection is permanent (BR-DISH-001): approving a recipe must not launder the name.
+    assertThat(rejectedDish.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
+    verify(dishRepository, never()).save(any(Dish.class));
   }
 
   private ModerationLog lastLog() {

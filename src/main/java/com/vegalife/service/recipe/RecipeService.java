@@ -50,6 +50,7 @@ public class RecipeService {
   private final RecipeIngredientRepository recipeIngredientRepository;
   private final UserRepository userRepository;
   private final RecipeMapper recipeMapper;
+  private final DishIngredientService dishIngredientService;
   private final TransactionTemplate transactionTemplate;
 
   /**
@@ -83,8 +84,7 @@ public class RecipeService {
             .filter(found -> found.getUser().getId().equals(callerId))
             .orElseThrow(() -> new ResourceNotFoundException("Recipe not found"));
 
-    return recipeMapper.toResponse(
-        recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe));
+    return toResponse(recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe));
   }
 
   /** Every non-deleted recipe the caller created, newest first. */
@@ -92,10 +92,25 @@ public class RecipeService {
   public List<RecipeResponse> listMyRecipes(UUID callerId) {
     return recipeRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(callerId).stream()
         .map(
-            recipe ->
-                recipeMapper.toResponse(
-                    recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe)))
+            recipe -> toResponse(recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe)))
         .toList();
+  }
+
+  /**
+   * Maps a recipe and attaches the advisory missing-required-ingredient warning.
+   *
+   * <p>Derived on every read rather than stored: the dish's required set is curated independently
+   * of any one recipe and changes without touching it (BR-DISH-002). The warning never blocks a
+   * write, so attaching it here — after the recipe is already saved — is the whole enforcement.
+   */
+  private RecipeResponse toResponse(
+      Recipe recipe, String dishName, List<RecipeIngredientResponse> ingredients) {
+    RecipeResponse response = recipeMapper.toResponse(recipe, dishName, ingredients);
+    List<UUID> presentIds =
+        ingredients.stream().map(RecipeIngredientResponse::getIngredientId).toList();
+    response.setMissingRequiredIngredients(
+        dishIngredientService.missingRequiredIngredientNames(recipe.getDish().getId(), presentIds));
+    return response;
   }
 
   private List<RecipeIngredientResponse> ingredientResponsesOf(Recipe recipe) {
@@ -179,7 +194,7 @@ public class RecipeService {
 
     log.info("Recipe {} created for user {}", recipe.getId(), userId);
 
-    return recipeMapper.toResponse(recipe, dishName, ingredientResponses);
+    return toResponse(recipe, dishName, ingredientResponses);
   }
 
   /**

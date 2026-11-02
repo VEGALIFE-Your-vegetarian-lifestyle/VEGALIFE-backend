@@ -45,6 +45,10 @@ public class AdminRecipeListResponse {
 
   private Set<UUID> categoryIds;
   private List<IngredientItem> ingredients;
+
+  /** Same advisory field as the member response (BR-DISH-002): never blocks, never stored. */
+  private List<String> missingRequiredIngredients;
+
   private Instant createdAt;
   private Instant updatedAt;
 

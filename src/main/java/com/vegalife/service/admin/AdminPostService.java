@@ -20,6 +20,7 @@ import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -60,6 +61,7 @@ public class AdminPostService {
   private final RecipeIngredientRepository recipeIngredientRepository;
   private final DishRepository dishRepository;
   private final IngredientRepository ingredientRepository;
+  private final DishIngredientService dishIngredientService;
 
   @Transactional(readOnly = true)
   public PageResponse<AdminPostListResponse> listPosts(PostListRequest request) {
@@ -249,7 +251,13 @@ public class AdminPostService {
     return post;
   }
 
-  /** Approve every component of the post, leaving REJECTED names refused. */
+  /**
+   * Approve every component of the post, leaving REJECTED names refused, then record each
+   * now-approved recipe's ingredient list as a suggestion for its dish (BR-DISH-003).
+   *
+   * <p>The seeding half is what keeps the two approval paths from diverging: a recipe approved via
+   * its post contributes exactly what one approved via the recipe queue does.
+   */
   private void approveComponents(UUID postId, UUID adminId, String reason) {
     Components components = componentsOf(postId);
 
@@ -271,6 +279,12 @@ public class AdminPostService {
           ingredient.getModerationStatus(), "INGREDIENT", ingredient.getId(), adminId, reason)) {
         ingredient.setModerationStatus(ModerationStatus.APPROVED);
         ingredientRepository.save(ingredient);
+      }
+    }
+
+    for (Recipe recipe : components.recipes()) {
+      if (recipe.getModerationStatus() == ModerationStatus.APPROVED) {
+        dishIngredientService.seedFromApprovedRecipe(recipe);
       }
     }
   }

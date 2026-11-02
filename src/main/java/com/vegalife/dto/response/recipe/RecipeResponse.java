@@ -39,6 +39,15 @@ public class RecipeResponse {
   private List<RecipeIngredientResponse> ingredients;
 
   /**
+   * Names of the dish's active required ingredients this recipe does not use (BR-DISH-002).
+   *
+   * <p>Advisory only: the recipe is valid and saved regardless. Derived at read time, never stored,
+   * so an ingredient an admin marks required later shows up on the next read without a backfill.
+   * Empty when nothing is missing.
+   */
+  private List<String> missingRequiredIngredients;
+
+  /**
    * Author-entered totals for the whole recipe (issue #163), never per serving. {@code null} means
    * the author did not provide the value — distinct from 0.
    */

@@ -7,14 +7,23 @@ import com.vegalife.dto.response.admin.AdminRecipeListResponse;
 import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.admin.ModerationLog;
+import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
+import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.repository.admin.ModerationLogRepository;
+import com.vegalife.repository.recipe.DishRepository;
+import com.vegalife.repository.recipe.IngredientRepository;
+import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.recipe.RecipeSpecifications;
+import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -48,6 +57,10 @@ public class AdminRecipeService {
       "Sort property must be one of: createdAt, updatedAt, name, moderationStatus, score";
 
   private final RecipeRepository recipeRepository;
+  private final DishRepository dishRepository;
+  private final IngredientRepository ingredientRepository;
+  private final RecipeIngredientRepository recipeIngredientRepository;
+  private final DishIngredientService dishIngredientService;
   private final AdminRecipeMapper adminRecipeMapper;
   private final ModerationLogRepository moderationLogRepository;
 
@@ -83,13 +96,13 @@ public class AdminRecipeService {
         page.getSize(),
         page.getTotalElements());
 
-    Page<AdminRecipeListResponse> mapped = page.map(adminRecipeMapper::toResponse);
+    Page<AdminRecipeListResponse> mapped = page.map(this::toResponse);
     return PageResponse.from(mapped);
   }
 
   @Transactional(readOnly = true)
   public AdminRecipeListResponse getRecipe(UUID recipeId) {
-    return adminRecipeMapper.toResponse(findActive(recipeId));
+    return toResponse(findActive(recipeId));
   }
 
   /**
@@ -138,7 +151,7 @@ public class AdminRecipeService {
     Recipe saved = recipeRepository.saveAndFlush(recipe);
     log.info("Admin {} updated recipe {}", adminId, saved.getId());
 
-    return adminRecipeMapper.toResponse(saved);
+    return toResponse(saved);
   }
 
   /** Soft delete: post and menu references must keep resolving, they simply stop listing it. */
@@ -153,17 +166,23 @@ public class AdminRecipeService {
   }
 
   /**
-   * Approves the recipe row only.
+   * Approves the recipe, the dish and ingredient names it introduces, and records the recipe's
+   * ingredient list as a suggestion for its dish (BR-DISH-003).
    *
-   * <p>Its dish and ingredients are separate shared names with their own endpoints. Approving a
-   * post already covers all of them at once; doing it implicitly here would let a single recipe
-   * approval publish a name that a different post is still waiting to have reviewed.
+   * <p>The names are approved here because this is the moment a human has read the recipe and
+   * accepted it: the dish and ingredients it names are, by that decision, acceptable. Only {@code
+   * PENDING} names move — a {@code REJECTED} name is a permanent block and stays blocked, so
+   * approving one recipe cannot launder a name an admin refused. Each changed name gets its own
+   * {@code APPROVE_COMPONENT} log entry, which is what makes the ripple visible in the audit trail.
+   *
+   * <p>Seeding only happens on approval, never on create: a rejected or junk recipe must not be
+   * able to pollute the shared per-dish list.
    */
   @Transactional
   public AdminRecipeListResponse approveRecipe(UUID adminId, UUID recipeId, String reason) {
     Recipe recipe = findActive(recipeId);
     if (recipe.getModerationStatus() == ModerationStatus.APPROVED) {
-      return adminRecipeMapper.toResponse(recipe);
+      return toResponse(recipe);
     }
 
     recipe.setModerationStatus(ModerationStatus.APPROVED);
@@ -171,7 +190,67 @@ public class AdminRecipeService {
     logDecision(adminId, "APPROVE_COMPONENT", saved.getId(), reason);
     log.info("Admin {} approved recipe {}", adminId, saved.getId());
 
-    return adminRecipeMapper.toResponse(saved);
+    approvePendingNamesOf(saved, adminId, reason);
+    dishIngredientService.seedFromApprovedRecipe(saved);
+
+    return toResponse(saved);
+  }
+
+  /**
+   * Approves the recipe's dish and every ingredient it uses, but only where the row is still {@code
+   * PENDING}.
+   *
+   * <p>Mirrors the component handling of post approval: one log row per changed name, and a name
+   * referenced twice is one decision.
+   */
+  private void approvePendingNamesOf(Recipe recipe, UUID adminId, String reason) {
+    Dish dish = recipe.getDish();
+    if (dish != null
+        && approveIfPending(dish.getModerationStatus(), "DISH", dish.getId(), adminId, reason)) {
+      dish.setModerationStatus(ModerationStatus.APPROVED);
+      dishRepository.save(dish);
+    }
+
+    Set<UUID> seen = new HashSet<>();
+    for (RecipeIngredient line : recipeIngredientRepository.findByRecipeId(recipe.getId())) {
+      Ingredient ingredient = resolveIngredient(line);
+      if (ingredient == null || !seen.add(ingredient.getId())) {
+        continue;
+      }
+      if (approveIfPending(
+          ingredient.getModerationStatus(), "INGREDIENT", ingredient.getId(), adminId, reason)) {
+        ingredient.setModerationStatus(ModerationStatus.APPROVED);
+        ingredientRepository.save(ingredient);
+      }
+    }
+  }
+
+  /**
+   * Reads the ingredient behind a recipe line, falling back to a lookup because the association is
+   * mapped {@code insertable = false} and can still be null inside the creating transaction.
+   */
+  private Ingredient resolveIngredient(RecipeIngredient line) {
+    if (line.getIngredient() != null) {
+      return line.getIngredient();
+    }
+    return ingredientRepository.findById(line.getIngredientId()).orElse(null);
+  }
+
+  /** Whether a name may be approved: only a {@code PENDING} one, and it is logged when it moves. */
+  private boolean approveIfPending(
+      ModerationStatus current, String type, UUID id, UUID adminId, String reason) {
+    if (current != ModerationStatus.PENDING) {
+      return false;
+    }
+    moderationLogRepository.save(
+        ModerationLog.builder()
+            .actorId(adminId)
+            .action("APPROVE_COMPONENT")
+            .targetType(type)
+            .targetId(id)
+            .reason(reason)
+            .build());
+    return true;
   }
 
   /** Rejects the recipe row only; nothing is deleted, and it cannot be re-created by a member. */
@@ -179,7 +258,7 @@ public class AdminRecipeService {
   public AdminRecipeListResponse rejectRecipe(UUID adminId, UUID recipeId, String reason) {
     Recipe recipe = findActive(recipeId);
     if (recipe.getModerationStatus() == ModerationStatus.REJECTED) {
-      return adminRecipeMapper.toResponse(recipe);
+      return toResponse(recipe);
     }
 
     recipe.setModerationStatus(ModerationStatus.REJECTED);
@@ -187,13 +266,32 @@ public class AdminRecipeService {
     logDecision(adminId, "REJECT_COMPONENT", saved.getId(), reason);
     log.info("Admin {} rejected recipe {}", adminId, saved.getId());
 
-    return adminRecipeMapper.toResponse(saved);
+    return toResponse(saved);
   }
 
   private Recipe findActive(UUID recipeId) {
     return recipeRepository
         .findByIdAndDeletedAtIsNull(recipeId)
         .orElseThrow(() -> new ResourceNotFoundException("Recipe not found"));
+  }
+
+  /**
+   * Maps a recipe and attaches the advisory missing-required-ingredient warning (BR-DISH-002).
+   *
+   * <p>Filled here rather than in the mapper because it needs a repository lookup, and derived on
+   * every read rather than stored so a later curation change applies without a backfill.
+   */
+  private AdminRecipeListResponse toResponse(Recipe recipe) {
+    AdminRecipeListResponse response = adminRecipeMapper.toResponse(recipe);
+    List<UUID> presentIds =
+        response.getIngredients() == null
+            ? List.of()
+            : response.getIngredients().stream()
+                .map(AdminRecipeListResponse.IngredientItem::getIngredientId)
+                .toList();
+    response.setMissingRequiredIngredients(
+        dishIngredientService.missingRequiredIngredientNames(recipe.getDish().getId(), presentIds));
+    return response;
   }
 
   private Difficulty parseDifficulty(String difficulty) {

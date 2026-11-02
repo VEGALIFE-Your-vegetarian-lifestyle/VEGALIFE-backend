@@ -1,5 +1,6 @@
 package com.vegalife.service.admin;
 
+import com.vegalife.dto.mapper.admin.AdminDishIngredientMapper;
 import com.vegalife.dto.request.admin.AdminComponentListRequest;
 import com.vegalife.dto.request.admin.AdminDishCreateRequest;
 import com.vegalife.dto.request.admin.AdminDishUpdateRequest;
@@ -7,7 +8,9 @@ import com.vegalife.dto.response.admin.AdminDishResponse;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.DishIngredient;
 import com.vegalife.repository.admin.ModerationLogRepository;
+import com.vegalife.repository.recipe.DishIngredientRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.DishSpecifications;
 import com.vegalife.shared.dto.PageResponse;
@@ -15,8 +18,11 @@ import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -45,6 +51,8 @@ public class AdminDishService {
       "Sort property must be one of: name, createdAt, updatedAt, moderationStatus";
 
   private final DishRepository dishRepository;
+  private final DishIngredientRepository dishIngredientRepository;
+  private final AdminDishIngredientMapper adminDishIngredientMapper;
   private final ModerationLogRepository moderationLogRepository;
 
   /** Every state, including pending and rejected, so the review queue is reachable. */
@@ -62,7 +70,12 @@ public class AdminDishService {
         DishSpecifications.anyModerationWithNameFilter(request.getName(), status);
     Page<Dish> page = dishRepository.findAll(spec, pageable);
 
-    return PageResponse.from(page.map(this::toResponse));
+    // One batch query for the whole page: the embedded list is a convenience field, not a reason
+    // to issue a query per row.
+    Map<UUID, List<DishIngredient>> entriesByDish = entriesByDish(page.getContent());
+
+    return PageResponse.from(
+        page.map(dish -> toResponse(dish, entriesByDish.getOrDefault(dish.getId(), List.of()))));
   }
 
   @Transactional(readOnly = true)
@@ -247,6 +260,10 @@ public class AdminDishService {
   }
 
   private AdminDishResponse toResponse(Dish dish) {
+    return toResponse(dish, dishIngredientRepository.findActiveWithIngredient(dish.getId()));
+  }
+
+  private AdminDishResponse toResponse(Dish dish, List<DishIngredient> entries) {
     return AdminDishResponse.builder()
         .id(dish.getId())
         .name(dish.getName())
@@ -254,8 +271,18 @@ public class AdminDishService {
         .imageUrl(dish.getImageUrl())
         .cuisineType(dish.getCuisineType())
         .moderationStatus(dish.getModerationStatus().name())
+        .suggestedIngredients(entries.stream().map(adminDishIngredientMapper::toResponse).toList())
         .createdAt(dish.getCreatedAt())
         .updatedAt(dish.getUpdatedAt())
         .build();
+  }
+
+  private Map<UUID, List<DishIngredient>> entriesByDish(List<Dish> dishes) {
+    if (dishes.isEmpty()) {
+      return Map.of();
+    }
+    List<UUID> dishIds = dishes.stream().map(Dish::getId).toList();
+    return dishIngredientRepository.findActiveWithIngredientForDishes(dishIds).stream()
+        .collect(Collectors.groupingBy(DishIngredient::getDishId));
   }
 }

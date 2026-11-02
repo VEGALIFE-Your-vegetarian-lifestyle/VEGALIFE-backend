@@ -25,6 +25,9 @@ public interface AdminRecipeMapper {
   @Mapping(target = "userId", source = "user.id")
   @Mapping(target = "displayName", source = "user.displayName")
   @Mapping(target = "email", source = "user.email")
+  // Filled by the service from the dish's curated list: the warning is a derived value that needs a
+  // repository lookup, which a pure mapper must not do.
+  @Mapping(target = "missingRequiredIngredients", ignore = true)
   AdminRecipeListResponse toResponse(Recipe recipe);
 
   List<AdminRecipeListResponse> toResponseList(List<Recipe> recipes);
