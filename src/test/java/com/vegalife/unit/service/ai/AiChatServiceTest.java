@@ -23,6 +23,7 @@ import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.ai.AiConversationRepository;
 import com.vegalife.repository.ai.AiMessageRepository;
 import com.vegalife.repository.user.UserProfileRepository;
+import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.ai.AiChatService;
 import com.vegalife.service.ai.AiQuotaGuard;
 import com.vegalife.service.ai.AiToolContext;
@@ -30,6 +31,7 @@ import com.vegalife.service.ai.MenuTools;
 import com.vegalife.service.menu.MenuQueryFilterResolver;
 import com.vegalife.service.menu.MenuService;
 import com.vegalife.shared.exception.AiProviderException;
+import com.vegalife.shared.exception.AiUnavailableException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import jakarta.validation.Validation;
 import java.time.Instant;
@@ -59,6 +61,7 @@ class AiChatServiceTest {
   @Mock private AiConversationRepository conversationRepository;
   @Mock private AiMessageRepository messageRepository;
   @Mock private UserProfileRepository userProfileRepository;
+  @Mock private PlatformSettingsProvider platformSettingsProvider;
   @Mock private AiQuotaGuard quotaGuard;
   @Mock private TransactionTemplate transactionTemplate;
 
@@ -73,6 +76,7 @@ class AiChatServiceTest {
 
   @BeforeEach
   void setUp() {
+    org.mockito.Mockito.lenient().when(platformSettingsProvider.isAiChatEnabled()).thenReturn(true);
     userId = UUID.randomUUID();
     window =
         new AiQuotaGuard.QuotaWindow(
@@ -98,6 +102,7 @@ class AiChatServiceTest {
             conversationRepository,
             messageRepository,
             userProfileRepository,
+            platformSettingsProvider,
             quotaGuard,
             transactionTemplate,
             menuTools,
@@ -200,6 +205,30 @@ class AiChatServiceTest {
 
     verify(quotaGuard, never()).requireAllowance(any());
     verify(chatClient, never()).prompt();
+  }
+
+  @Test
+  void send_aiChatDisabled_throwsBefore503WithNoOwnershipOrQuotaCheck() {
+    when(platformSettingsProvider.isAiChatEnabled()).thenReturn(false);
+
+    assertThatThrownBy(
+            () -> aiChatService.send(userId, SendMessageRequest.builder().message("hi").build()))
+        .isInstanceOf(AiUnavailableException.class);
+
+    verify(conversationRepository, never()).findByIdAndUserId(any(), any());
+    verify(quotaGuard, never()).requireAllowance(any());
+  }
+
+  @Test
+  void stream_aiChatDisabled_throwsSynchronouslyWithoutOpeningEmitter() {
+    when(platformSettingsProvider.isAiChatEnabled()).thenReturn(false);
+
+    assertThatThrownBy(
+            () -> aiChatService.stream(userId, SendMessageRequest.builder().message("hi").build()))
+        .isInstanceOf(AiUnavailableException.class);
+
+    verify(conversationRepository, never()).findByIdAndUserId(any(), any());
+    verify(quotaGuard, never()).requireAllowance(any());
   }
 
   @Test

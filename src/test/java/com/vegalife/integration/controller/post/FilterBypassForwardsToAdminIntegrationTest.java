@@ -8,9 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
+import com.vegalife.model.admin.PlatformSetting;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.admin.PlatformSettingRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.PostRepository;
@@ -27,7 +29,6 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -35,15 +36,16 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * Filter bypass (interp. A): with {@code app.filter.enabled=false}, a published post is forwarded
- * straight to the admin review queue ({@code flag=NEEDS_REVIEW}, {@code status=unpublished}) with
- * no embedding call and no outbound row, and an admin can then moderate it to published.
+ * Filter bypass (interp. A): with the {@code content_filter_enabled} platform setting off (issue
+ * #13 follow-up — this used to be the static {@code app.filter.enabled} property), a published post
+ * is forwarded straight to the admin review queue ({@code flag=NEEDS_REVIEW}, {@code
+ * status=unpublished}) with no embedding call and no outbound row, and an admin can then moderate
+ * it to published.
  */
 @Testcontainers
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("integration")
-@TestPropertySource(properties = "app.filter.enabled=false")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Transactional
 class FilterBypassForwardsToAdminIntegrationTest {
@@ -75,6 +77,8 @@ class FilterBypassForwardsToAdminIntegrationTest {
 
   @Autowired private OutboundMessageRepository outboundMessageRepository;
 
+  @Autowired private PlatformSettingRepository platformSettingRepository;
+
   @Autowired private JwtTokenService jwtTokenService;
 
   private User admin;
@@ -94,6 +98,11 @@ class FilterBypassForwardsToAdminIntegrationTest {
     adminToken = jwtTokenService.generateAccessToken(admin);
     memberToken = jwtTokenService.generateAccessToken(member);
     category = categoryRepository.saveAndFlush(Category.builder().name("Dinner").build());
+
+    PlatformSetting contentFilterEnabled =
+        platformSettingRepository.findByKey("content_filter_enabled").orElseThrow();
+    contentFilterEnabled.setValue("false");
+    platformSettingRepository.saveAndFlush(contentFilterEnabled);
   }
 
   @Test

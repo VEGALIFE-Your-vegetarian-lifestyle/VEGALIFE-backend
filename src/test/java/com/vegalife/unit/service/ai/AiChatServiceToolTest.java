@@ -17,6 +17,7 @@ import com.vegalife.model.ai.AiConversation;
 import com.vegalife.repository.ai.AiConversationRepository;
 import com.vegalife.repository.ai.AiMessageRepository;
 import com.vegalife.repository.user.UserProfileRepository;
+import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.ai.AiChatService;
 import com.vegalife.service.ai.AiQuotaGuard;
 import com.vegalife.service.ai.AiToolContext;
@@ -67,6 +68,7 @@ class AiChatServiceToolTest {
   @Mock private AiConversationRepository conversationRepository;
   @Mock private AiMessageRepository messageRepository;
   @Mock private UserProfileRepository userProfileRepository;
+  @Mock private PlatformSettingsProvider platformSettingsProvider;
   @Mock private AiQuotaGuard quotaGuard;
   @Mock private TransactionTemplate transactionTemplate;
 
@@ -81,6 +83,7 @@ class AiChatServiceToolTest {
 
   @BeforeEach
   void setUp() {
+    org.mockito.Mockito.lenient().when(platformSettingsProvider.isAiChatEnabled()).thenReturn(true);
     userId = UUID.randomUUID();
     chatClient = mock(ChatClient.class);
     spec = mock(ChatClient.ChatClientRequestSpec.class);
@@ -104,6 +107,7 @@ class AiChatServiceToolTest {
             conversationRepository,
             messageRepository,
             userProfileRepository,
+            platformSettingsProvider,
             quotaGuard,
             transactionTemplate,
             menuTools,

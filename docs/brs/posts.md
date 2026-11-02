@@ -422,7 +422,7 @@ Active
 
 ## Statement
 
-The content is embedded and mean-centered — the text embedding and both centroids have the seed-corpus mean subtracted first (raw e5 embeddings are anisotropic, so an uncentered margin score collapses into a ~0.46–0.54 band no threshold can reach) — and compared by cosine similarity with two precomputed centroids, one built from on-topic seed texts and one from off-topic seed texts, both Vietnamese and English. The relevance score is the normalized margin between the two centered similarities, `score = (cos(text - mean, onTopic - mean) - cos(text - mean, offTopic - mean) + 1) / 2`, clamped to `[0, 1]`. The score maps to exactly one verdict: `score >= app.filter.accept-threshold` is `PASSED`; `score < app.filter.reject-threshold` is `REJECTED`; anything between the two is `NEEDS_REVIEW`. Thresholds are **provider-bound** and are recalibrated whenever the embedding model changes; the current values (`0.70` / `0.45`) are calibrated for `gemini-embedding-001` at 768 dimensions from the measured centered seed distribution (highest off-topic `0.3491`, lowest on-topic `0.7553`). The derivation and the selected values are recorded in [Filter Calibration: gemini-embedding-001](../feats/filter-calibration-gemini.md); thresholds derived for a previous model (e5: `0.65` / `0.43`) must not be carried across. The filter state is stored in `post.flag`, which is separate from `post.status`; `flag` is NULL only when the post has never been filtered.
+The content is embedded and mean-centered — the text embedding and both centroids have the seed-corpus mean subtracted first (raw e5 embeddings are anisotropic, so an uncentered margin score collapses into a ~0.46–0.54 band no threshold can reach) — and compared by cosine similarity with two precomputed centroids, one built from on-topic seed texts and one from off-topic seed texts, both Vietnamese and English. The relevance score is the normalized margin between the two centered similarities, `score = (cos(text - mean, onTopic - mean) - cos(text - mean, offTopic - mean) + 1) / 2`, clamped to `[0, 1]`. The score maps to exactly one verdict: `score >= accept-threshold` is `PASSED`; `score < reject-threshold` is `REJECTED`; anything between the two is `NEEDS_REVIEW`. The two thresholds are read live, per scoring call, from the `content_filter_accept_threshold` / `content_filter_reject_threshold` platform settings (issue #13 follow-up), falling back to the compiled `app.filter.accept-threshold` / `app.filter.reject-threshold` defaults on a missing, invalid, or contradictory (`reject >= accept`) stored pair — never a startup or request failure. The compiled defaults are recalibrated whenever the embedding model changes; the current values (`0.70` / `0.45`) are calibrated for `gemini-embedding-001` at 768 dimensions from the measured centered seed distribution (highest off-topic `0.3491`, lowest on-topic `0.7553`). The derivation and the selected values are recorded in [Filter Calibration: gemini-embedding-001](../feats/filter-calibration-gemini.md); thresholds derived for a previous model (e5: `0.65` / `0.43`) must not be carried across. The filter state is stored in `post.flag`, which is separate from `post.status`; `flag` is NULL only when the post has never been filtered.
 
 ## Rationale
 
@@ -434,7 +434,7 @@ Applies to every filter run. There is no `NOT_FILTERED` value: NULL means never 
 
 ## Enforcement
 
-- `EmbeddingRelevanceScorer` reads both thresholds from `app.filter.*` and returns the band; `ContentFilterService` turns it into the verdict and reasons.
+- `EmbeddingRelevanceScorer` reads both thresholds from `PlatformSettingsProvider` (falling back to `app.filter.*`) on every `score()` call and returns the band; `ContentFilterService` turns it into the verdict and reasons.
 - `post.flag VARCHAR(16)` is constrained to `PENDING`/`PASSED`/`REJECTED`/`NEEDS_REVIEW` or NULL (migration V19).
 - Unit tests cover both bands and the review band at the exact threshold boundaries; a fixture-based regression test replays captured embeddings through the configured thresholds, and `CentroidRegenerationTest` refreshes those fixtures whenever the centroids are regenerated.
 
@@ -460,6 +460,8 @@ Active
 
 A post is filtered only when it is submitted for publication or when already-visible content changes. An explicit `publish: true` on create or edit always queues a filter run. Without an explicit `publish` field, a title or plain-`content` change on a post whose status is `published` or `unpublished` (a post the filter did not pass) re-queues it for filtering; a `rawContent`-only change does not, since filtering never reads `rawContent`. A draft — created or edited without `publish: true`, `flag` NULL — is never filtered, and unpublishing with `publish: false` never triggers a filter run.
 
+When the `content_filter_enabled` platform setting is false (a deliberate outage/bypass mode), BR-FILTER-004/006/007 are bypassed for new filter triggers: a post that would have been queued is instead routed straight to the admin review queue (`flag = NEEDS_REVIEW`, `status = unpublished`, no outbound row, no embedding call). This only stops *new* filtering; a post already `flag = PENDING` from before the setting was disabled is still swept to `NEEDS_REVIEW` by the stale-pending sweep (BR-FILTER-009) once its queue row goes stale, so disabling the filter never leaves a post pending forever.
+
 ## Rationale
 
 Only content that is (or is about to be) public needs screening; screening drafts would burn embedding calls on work in progress and expose unfinished content to automated judgement.
@@ -470,7 +472,8 @@ Applies to `POST /api/posts` and `PATCH /api/posts/{postId}`. Ownership and cate
 
 ## Enforcement
 
-- Service: `PostService.createPost()` / `updatePost()` decide whether to enqueue from an explicit `publish: true` or from the content dirty check on a `published`/`unpublished` post, and enqueue in the caller's transaction.
+- Service: `PostService.createPost()` / `updatePost()` decide whether to enqueue from an explicit `publish: true` or from the content dirty check on a `published`/`unpublished` post, and enqueue in the caller's transaction. The enqueue-vs-bypass choice reads `PlatformSettingsProvider.isContentFilterEnabled()` (issue #13 follow-up), falling back to `app.filter.enabled` on a missing/invalid stored value.
+- `PendingFilterSweepJob` sweeps any post still `flag = PENDING` whose queue row is stale, regardless of the current `content_filter_enabled` value — it does not check the setting, so it covers both "message lost" and "filter was disabled mid-flight".
 - API references: `docs/apis/post/post-posts.md`, `docs/apis/post/patch-posts-postid.md`.
 
 ## Last Reviewed

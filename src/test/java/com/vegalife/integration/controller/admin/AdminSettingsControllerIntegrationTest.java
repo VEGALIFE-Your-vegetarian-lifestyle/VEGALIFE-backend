@@ -99,7 +99,7 @@ class AdminSettingsControllerIntegrationTest {
         .perform(get("/api/admin/settings").header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.data[?(@.category=='auth')]").exists());
+        .andExpect(jsonPath("$.data[?(@.category=='media')]").exists());
   }
 
   @Test
@@ -115,20 +115,31 @@ class AdminSettingsControllerIntegrationTest {
   }
 
   @Test
-  void updateSettings_asAdmin_appliesChangeAndRecordsAudit() throws Exception {
+  void updateSettings_asAdmin_appliesChangeRecordsAuditAndSetsUpdatedBy() throws Exception {
     mockMvc
         .perform(
             patch("/api/admin/settings")
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"settings\": {\"max_upload_size_mb\": \"100\"}}"))
+                .content("{\"settings\": {\"max_image_upload_mb\": \"10\"}}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true));
 
-    assertThat(platformSettingRepository.findByKey("max_upload_size_mb").orElseThrow().getValue())
-        .isEqualTo("100");
+    assertThat(platformSettingRepository.findByKey("max_image_upload_mb").orElseThrow().getValue())
+        .isEqualTo("10");
     assertThat(moderationLogRepository.findAll())
         .anySatisfy(log -> assertThat(log.getAction()).isEqualTo("UPDATE_SETTING"));
+  }
+
+  @Test
+  void updateSettings_asAdmin_valueOutOfBounds_returns400() throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/admin/settings")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"settings\": {\"max_image_upload_mb\": \"0\"}}"))
+        .andExpect(status().isBadRequest());
   }
 
   @Test
@@ -160,7 +171,7 @@ class AdminSettingsControllerIntegrationTest {
             patch("/api/admin/settings")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"settings\": {\"max_upload_size_mb\": \"100\"}}"))
+                .content("{\"settings\": {\"max_image_upload_mb\": \"10\"}}"))
         .andExpect(status().isForbidden());
   }
 }

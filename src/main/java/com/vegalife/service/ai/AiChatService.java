@@ -12,7 +12,9 @@ import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.ai.AiConversationRepository;
 import com.vegalife.repository.ai.AiMessageRepository;
 import com.vegalife.repository.user.UserProfileRepository;
+import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.shared.exception.AiProviderException;
+import com.vegalife.shared.exception.AiUnavailableException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
@@ -52,11 +54,13 @@ public class AiChatService {
   private static final int MAX_TITLE_LENGTH = 60;
   private static final long SSE_TIMEOUT_MILLIS = 180_000L;
   private static final String CHAT_OPERATION = "chat completion";
+  private static final String AI_CHAT_DISABLED_MESSAGE = "AI chat is currently unavailable";
 
   private final ChatClient.Builder chatClientBuilder;
   private final AiConversationRepository conversationRepository;
   private final AiMessageRepository messageRepository;
   private final UserProfileRepository userProfileRepository;
+  private final PlatformSettingsProvider platformSettingsProvider;
   private final AiQuotaGuard quotaGuard;
   private final TransactionTemplate transactionTemplate;
   private final MenuTools menuTools;
@@ -80,6 +84,7 @@ public class AiChatService {
 
   /** Blocking turn for {@code POST /api/ai/messages}. */
   public SendMessageResponse send(UUID userId, SendMessageRequest request) {
+    requireAiChatEnabled();
     Optional<AiConversation> existing = resolveConversation(userId, request.getConversationId());
     AiQuotaGuard.QuotaWindow window = quotaGuard.requireAllowance(userId);
 
@@ -125,6 +130,7 @@ public class AiChatService {
    * failure after the stream opens is delivered as an {@code error} event.
    */
   public SseEmitter stream(UUID userId, SendMessageRequest request) {
+    requireAiChatEnabled();
     Optional<AiConversation> existing = resolveConversation(userId, request.getConversationId());
     AiQuotaGuard.QuotaWindow window = quotaGuard.requireAllowance(userId);
     List<Message> context = buildContext(existing, request.getMessage());
@@ -212,6 +218,18 @@ public class AiChatService {
     payload.put("retryable", failure.getReason() == AiProviderException.Reason.RATE_LIMITED);
     sendEvent(emitter, "error", payload);
     emitter.complete();
+  }
+
+  /**
+   * BR-AI-007: when {@code ai_chat_enabled} is off, no turn runs — checked before ownership or
+   * quota so a disabled feature creates no conversation and consumes no quota. Reads
+   * (listing/fetching conversations) are unaffected; this guard sits only in front of the two
+   * turn-taking entry points.
+   */
+  private void requireAiChatEnabled() {
+    if (!platformSettingsProvider.isAiChatEnabled()) {
+      throw new AiUnavailableException(AI_CHAT_DISABLED_MESSAGE);
+    }
   }
 
   /**

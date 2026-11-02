@@ -3,6 +3,8 @@ package com.vegalife.unit.service.media;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -17,9 +19,11 @@ import com.vegalife.dto.response.media.MediaUploadGrantResponse;
 import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.admin.PlatformSettingRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.media.MediaProperties;
 import com.vegalife.service.media.MediaService;
 import com.vegalife.service.media.PresignedUploadProvider;
@@ -55,6 +59,8 @@ class MediaServiceTest {
 
   @Mock private OutboundMessageRepository outboundMessageRepository;
 
+  @Mock private PlatformSettingRepository platformSettingRepository;
+
   private MediaProperties mediaProperties;
   private MediaService mediaService;
 
@@ -65,6 +71,8 @@ class MediaServiceTest {
 
   @BeforeEach
   void setUp() {
+    lenient().when(platformSettingRepository.findByKey(anyString())).thenReturn(Optional.empty());
+
     mediaProperties = new MediaProperties();
     mediaProperties.getCloudinary().setCloudName("testcloud");
     mediaService =
@@ -73,6 +81,7 @@ class MediaServiceTest {
             userRepository,
             uploadProvider,
             mediaProperties,
+            new PlatformSettingsProvider(platformSettingRepository),
             mediaMapper,
             new ObjectMapper(),
             outboundMessageRepository);

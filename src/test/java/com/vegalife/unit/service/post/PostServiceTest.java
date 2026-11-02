@@ -34,6 +34,7 @@ import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
 import com.vegalife.service.post.PostService;
 import com.vegalife.shared.dto.PageResponse;
@@ -78,7 +79,7 @@ class PostServiceTest {
 
   @Spy private ObjectMapper objectMapper = new ObjectMapper();
 
-  @Mock private com.vegalife.service.filter.FilterProperties filterProperties;
+  @Mock private PlatformSettingsProvider platformSettingsProvider;
 
   @Mock private PostEmbeddingRepository postEmbeddingRepository;
 
@@ -96,7 +97,9 @@ class PostServiceTest {
   @BeforeEach
   void setUp() {
     // Default the suite to the filter-enabled path; bypass tests override this to false.
-    org.mockito.Mockito.lenient().when(filterProperties.isEnabled()).thenReturn(true);
+    org.mockito.Mockito.lenient()
+        .when(platformSettingsProvider.isContentFilterEnabled())
+        .thenReturn(true);
     // The mapper is a mock here, so give it an empty response by default. Tests that care about
     // the mapped shape stub a concrete one, which wins over this.
     org.mockito.Mockito.lenient()
@@ -171,7 +174,7 @@ class PostServiceTest {
 
   @Test
   void createPost_publishForwardsToAdminReviewWhenFilterDisabled() {
-    when(filterProperties.isEnabled()).thenReturn(false);
+    when(platformSettingsProvider.isContentFilterEnabled()).thenReturn(false);
     request.setPublish(true);
     request.setCategoryIds(Set.of(categoryId));
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
@@ -531,7 +534,7 @@ class PostServiceTest {
 
   @Test
   void updatePost_publishForwardsToAdminReviewWhenFilterDisabled() {
-    when(filterProperties.isEnabled()).thenReturn(false);
+    when(platformSettingsProvider.isContentFilterEnabled()).thenReturn(false);
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, PostStatus.created);
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))

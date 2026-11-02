@@ -14,6 +14,7 @@ import com.vegalife.model.post.Media;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ForbiddenException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -40,6 +41,7 @@ public class MediaService {
   private final UserRepository userRepository;
   private final PresignedUploadProvider uploadProvider;
   private final MediaProperties mediaProperties;
+  private final PlatformSettingsProvider platformSettingsProvider;
   private final MediaMapper mediaMapper;
   private final ObjectMapper objectMapper;
   private final OutboundMessageRepository outboundMessageRepository;
@@ -52,10 +54,10 @@ public class MediaService {
   @Transactional
   public MediaUploadGrantResponse createGrant(UUID userId, MediaUploadRequest request) {
     String contentType = request.getContentType();
-    if (!mediaProperties.getUpload().allowedTypes().contains(contentType)) {
+    if (!platformSettingsProvider.getAllowedUploadTypes().contains(contentType)) {
       throw new ValidationException("Unsupported content type: " + contentType);
     }
-    long ceiling = mediaProperties.getUpload().maxBytesFor(contentType);
+    long ceiling = platformSettingsProvider.maxUploadBytesFor(contentType);
     if (request.getSizeBytes() != null && request.getSizeBytes() > ceiling) {
       throw new ValidationException(sizeLimitMessage(contentType));
     }
@@ -117,7 +119,7 @@ public class MediaService {
             .verify(media.getExternalId(), contentType)
             .orElseThrow(() -> new ValidationException("Upload verification failed"));
 
-    if (upload.fileSizeBytes() > mediaProperties.getUpload().maxBytesFor(contentType)) {
+    if (upload.fileSizeBytes() > platformSettingsProvider.maxUploadBytesFor(contentType)) {
       media.setStatus(MediaStatus.failed);
       mediaRepository.saveAndFlush(media);
       throw new ValidationException(sizeLimitMessage(contentType));
@@ -209,8 +211,9 @@ public class MediaService {
         Math.max(
             1,
             (long)
-                Math.ceil(mediaProperties.getUpload().maxBytesFor(contentType) / 1024.0 / 1024.0));
-    return mediaProperties.getUpload().isImage(contentType)
+                Math.ceil(
+                    platformSettingsProvider.maxUploadBytesFor(contentType) / 1024.0 / 1024.0));
+    return platformSettingsProvider.isImageContentType(contentType)
         ? String.format("File exceeds the %d MB image limit", megabytes)
         : String.format("File exceeds the %d MB limit", megabytes);
   }
