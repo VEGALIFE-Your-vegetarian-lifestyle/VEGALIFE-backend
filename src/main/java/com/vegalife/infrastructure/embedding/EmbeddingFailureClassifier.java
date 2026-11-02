@@ -38,7 +38,7 @@ final class EmbeddingFailureClassifier {
 
   private static final int SERVER_ERROR_FLOOR = 500;
 
-  /** The provider asks for this many seconds; the gRPC {@code RetryInfo} detail carries it too. */
+  /** Header carrying the receiver's wait hint; Gemini's gRPC detail carries the same value. */
   private static final String RETRY_AFTER_HEADER = "Retry-After";
 
   /** Guards against a self-referential cause chain looping forever. */
