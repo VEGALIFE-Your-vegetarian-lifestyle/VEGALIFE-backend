@@ -100,7 +100,8 @@ entirely.
 
 ### BR-MCP-003 — Tool calls consume no AI quota
 Menu tool calls are steps inside one chat turn, not separate turns: they never
-invoke `AiQuotaGuard` and never increment `ai_usage`. One chat turn that
+invoke the quota gate (`RequestAllowanceService`) and never increment
+`ai_usage`. One chat turn that
 triggers N tool calls counts exactly one unit, so BR-AI-001/002 keep their
 current meaning. A turn whose tool call fails still completes and still counts
 as one unit only if the assistant reply is produced.

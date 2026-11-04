@@ -74,28 +74,35 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-DISH-001 | Dish and Ingredient Names Require Admin Approval and Rejection Is Permanent | Active | 2026-10-23 |
 | BR-DISH-002 | Dish Ingredient Suggestions and Advisory Required Flag | Active | 2026-11-02 |
 | BR-DISH-003 | Dish Ingredient Entries Come From Approved Recipes or an Administrator, and Deletion Is Permanent for Seeding | Active | 2026-11-02 |
-| BR-SUBS-001 | AI Quota Window Is the Current UTC Calendar Month | Active | 2026-10-04 |
-| BR-SUBS-002 | Plan Limits and Prices Are Data-Driven | Active | 2026-10-04 |
-| BR-SUBS-003 | Members Without a Subscription Row Are FREE by Default | Active | 2026-10-07 |
-| BR-SUBS-004 | One In-Effect Subscription Row and Its Purchase Gate | Active | 2026-10-07 |
-| BR-SUBS-005 | Cancellation Is Immediate, Cascading, and Repeat-Refused | Active | 2026-10-07 |
-| BR-SUBS-006 | Subscriptions Expire Within 24 Hours of Renewal | Active | 2026-10-07 |
-| BR-PAY-001 | The Payment Webhook Is the Sole Source of Truth for Fulfilment | Active | 2026-10-04 |
+| BR-SUBS-001 | AI Quota Window Is the Current UTC Calendar Month | Superseded by ADR-021 | 2026-11-04 |
+| BR-SUBS-002 | Plan Limits and Prices Are Data-Driven | Active | 2026-11-04 |
+| BR-SUBS-003 | Members Without a Subscription Row Are FREE by Default | Superseded by ADR-021 | 2026-11-04 |
+| BR-SUBS-004 | One In-Effect Subscription Row and Its Purchase Gate | Superseded by ADR-021 | 2026-11-04 |
+| BR-SUBS-005 | Cancellation Is Immediate, Cascading, and Repeat-Refused | Superseded by ADR-021 | 2026-11-04 |
+| BR-SUBS-006 | Subscriptions Expire Within 24 Hours of Renewal | Superseded by ADR-021 | 2026-11-04 |
+| BR-SUBS-007 | Entitlement Is the Live Sum of Granted Acquisitions and Never Expires | Active | 2026-11-04 |
+| BR-SUBS-008 | A Plan Is Claimed at Most Once per Member; Purchases May Repeat | Active | 2026-11-04 |
+| BR-SUBS-009 | Deactivation Never Revokes Granted Allowance | Active | 2026-11-04 |
+| BR-SUBS-010 | Plan Quota Edits Are Retroactive | Active | 2026-11-04 |
+| BR-SUBS-011 | Plans and Acquisition Rows Are Never Hard-Deleted | Active | 2026-11-04 |
+| BR-PAY-001 | The Payment Webhook Is the Sole Source of Truth for Fulfilment | Active | 2026-11-04 |
 | BR-PAY-002 | A Payment Counts as Paid Only on a Double Zero | Active | 2026-10-04 |
 | BR-PAY-003 | The Notified Amount Must Equal the Recorded Amount | Active | 2026-10-04 |
-| BR-PAY-004 | A Payment Succeeds at Most Once | Active | 2026-10-04 |
-| BR-PAY-005 | One In-Flight Checkout per Member and Plan | Active | 2026-10-04 |
-| BR-PAY-006 | Risk-Flagged and Reversed Transactions Never Fulfil | Active | 2026-10-04 |
-| BR-PAY-007 | The Receipt Is Emailed Exactly Once, Off the Request Thread | Active | 2026-10-04 |
-| BR-PAY-008 | Renewal Date Is Paid Time Plus One Calendar Month | Active | 2026-10-04 |
-| BR-PAY-009 | Only Active, Priced VND Plans Are Purchasable | Active | 2026-10-04 |
-| BR-AI-001 | Quota Gate Precedes the Provider Call | Active | 2026-10-07 |
-| BR-AI-002 | Only Successful Replies Count Toward Quota | Active | 2026-10-07 |
+| BR-PAY-004 | A Payment Succeeds at Most Once | Active | 2026-11-04 |
+| BR-PAY-005 | One In-Flight Checkout per Member and Plan | Active | 2026-11-04 |
+| BR-PAY-006 | Risk-Flagged and Reversed Transactions Never Fulfil | Active | 2026-11-04 |
+| BR-PAY-007 | The Receipt Is Emailed Exactly Once, Off the Request Thread | Active | 2026-11-04 |
+| BR-PAY-008 | Renewal Date Is Paid Time Plus One Calendar Month | Superseded by ADR-021 | 2026-11-04 |
+| BR-PAY-009 | Only an Active, Priced, VND Plan Can Reach Checkout | Active | 2026-11-04 |
+| BR-PAY-010 | The Ledger Records Money Only; the Acquisition Records the Plan | Active | 2026-11-04 |
+| BR-AI-001 | Quota Gate Precedes the Provider Call | Active | 2026-11-04 |
+| BR-AI-002 | Only Successful Replies Count Toward Quota | Active | 2026-11-04 |
 | BR-AI-003 | Conversation Ownership Comes from Authentication | Active | 2026-10-07 |
 | BR-AI-004 | Context Is the Stored Profile (Incl. Dietary JSON and BMI) Plus Own Conversation History | Active | 2026-10-13 |
 | BR-AI-005 | Chat Provider Is OpenAI-Compatible and Set by Dedicated Env Vars | Active | 2026-10-07 |
 | BR-AI-006 | Persona Is Scoped to Vegan and Platform Topics, With a Polite Refusal Otherwise | Active | 2026-10-13 |
 | BR-AI-007 | AI Chat Can Be Disabled Platform-Wide, With No Turn, Provider Call, or Quota | Active | 2026-11-02 |
+| BR-AI-008 | Quota Is Reported Only as `remainingUsage` | Active | 2026-11-04 |
 | BR-MENU-001 | Menu Ownership Comes from Authentication | Active | 2026-10-10 |
 | BR-MENU-002 | Menu Read Windows Are Intersections | Active | 2026-10-10 |
 | BR-MENU-003 | One Scheduled Week per User, No Overlap | Active | 2026-10-10 |

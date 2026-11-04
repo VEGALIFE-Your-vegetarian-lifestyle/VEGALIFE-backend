@@ -48,10 +48,7 @@ be used.
     "conversationId": "3f0a9d21-5f6e-4c11-9a8b-1d2e3f4a5b6c",
     "reply": "The assistant's full reply text.",
     "usage": {
-      "used": 3,
-      "limit": 20,
-      "windowStart": "2026-10-01T00:00:00Z",
-      "windowEnd": "2026-11-01T00:00:00Z"
+      "remainingUsage": 5
     }
   }
 }
@@ -63,10 +60,7 @@ be used.
 | message | string | Human-readable message |
 | data.conversationId | uuid | Conversation this turn belongs to (new or existing) |
 | data.reply | string | Full assistant reply |
-| data.usage.used | long | Requests counted this UTC month (after this one) |
-| data.usage.limit | long | Active plan `monthly_request_limit` (FREE=20, PRO=500) |
-| data.usage.windowStart | instant | UTC month window start (BR-SUBS-001) |
-| data.usage.windowEnd | instant | UTC month window end |
+| data.usage.remainingUsage | long | Requests left after this one: `max(allowance − consumed, 0)`. The only usage number returned |
 
 ### Error Responses
 | Status Code | Condition | Message |
@@ -74,7 +68,7 @@ be used.
 | 400 | Validation failed (missing/blank message, >4000 chars) | "Validation failed" |
 | 401 | Missing/invalid access token | Auth error message |
 | 404 | `conversationId` not found or owned by another member | "Conversation not found" |
-| 429 | Monthly plan quota reached (`Retry-After` header = seconds until window end) | "Monthly AI request limit reached (used/limit). Resets at the start of the next UTC month." |
+| 429 | Allowance exhausted (`remainingUsage` is 0). No `Retry-After` header — nothing resets | "No AI requests remaining. Claim a free plan or purchase one to continue." |
 | 500 | Server error | "Internal server error" |
 | 502 | AI provider call failed | "AI provider request failed" |
 
@@ -87,7 +81,8 @@ be used.
   derived BMI) + own conversation history
 - BR-AI-005 — provider configured via dedicated `AI_CHAT_*` env vars
 - BR-AI-006 — persona scoped to vegan/platform topics; polite refusal otherwise
-- BR-SUBS-001 — quota window is the current UTC calendar month
+- BR-AI-008 — quota is reported only as `remainingUsage`
+- BR-SUBS-007 — allowance is the lifetime sum of granted acquisitions, never monthly and never reset
 
 ## Example
 
@@ -107,7 +102,7 @@ curl -X POST /api/ai/messages \
   "data": {
     "conversationId": "3f0a9d21-5f6e-4c11-9a8b-1d2e3f4a5b6c",
     "reply": "Try tofu scramble with tempeh bacon and a glass of soy milk — about 30g of protein in one plate.",
-    "usage": { "used": 3, "limit": 20, "windowStart": "2026-10-01T00:00:00Z", "windowEnd": "2026-11-01T00:00:00Z" }
+    "usage": { "remainingUsage": 5 }
   }
 }
 ```

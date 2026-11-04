@@ -1,42 +1,44 @@
 # Business Rules: AI Chat
 
 Rules governing AI chat turns (issue #14; spec `docs/feats/ai-chat-send.md`).
-Quota window timing is owned by BR-SUBS-001 (`docs/brs/subscriptions.md`) and
+Allowance accounting is owned by BR-SUBS-007 (`docs/brs/subscriptions.md`) and
 referenced here, not redefined.
 
 ## Rules
 
 | Rule ID | Title | Status | Last Reviewed |
 |---------|-------|--------|---------------|
-| BR-AI-001 | Quota gate precedes the provider call | Active | 2026-10-07 |
-| BR-AI-002 | Only successful replies count toward quota | Active | 2026-10-07 |
+| BR-AI-001 | Quota gate precedes the provider call | Active | 2026-11-04 |
+| BR-AI-002 | Only successful replies count toward quota | Active | 2026-11-04 |
 | BR-AI-003 | Conversation ownership comes from authentication | Active | 2026-10-07 |
 | BR-AI-004 | Context is the stored profile (incl. dietary JSON and BMI) plus own conversation history | Active | 2026-10-13 |
 | BR-AI-005 | Chat provider is OpenAI-compatible and set by dedicated env vars | Active | 2026-10-07 |
 | BR-AI-006 | Persona is scoped to vegan and platform topics, with a polite refusal otherwise | Active | 2026-10-13 |
 | BR-AI-007 | AI Chat Can Be Disabled Platform-Wide, With No Turn, Provider Call, or Quota | Active | 2026-11-02 |
+| BR-AI-008 | Quota Is Reported Only as `remainingUsage` | Active | 2026-11-04 |
 
 ### BR-AI-001 — Quota gate precedes the provider call
-Every AI chat request (JSON and streaming) compares the member's used count
-for the current UTC calendar month (BR-SUBS-001 window) against the active
-plan's `monthly_request_limit` **before** any model provider call. At or above
-the limit the API responds `429` with a `Retry-After` header (seconds until
-window end) and the provider is never invoked.
+Every AI chat request (JSON and streaming) checks the member's remaining
+allowance (BR-SUBS-007) **before** any model provider call. When it is `0` the
+API responds `429` and the provider is never invoked. The 429 carries no
+`Retry-After` header — nothing resets, so there is no correct value — and its
+message tells the member to claim or buy more requests.
 
-- Enforcement: `AiChatService` + `AiQuotaGuard.requireAllowance(userId)`
-- Related: BR-SUBS-001 (window definition), FR-007 in `docs/feats/ai-chat-send.md`
-- Added: 2026-10-07
+- Enforcement: `AiChatService` + `RequestAllowanceService.requireAllowance(userId)`;
+  `GlobalExceptionHandler` no longer emits `Retry-After`
+- Related: BR-SUBS-007 (allowance), BR-AI-008, FR-007 in `docs/feats/ai-chat-send.md`
+- Added: 2026-10-07; rewritten 2026-11-04 (lifetime allowance, no reset)
 
 ### BR-AI-002 — Only successful replies count toward quota
-`ai_usage.request_count` increments by exactly 1 (atomic upsert on the
-`(user_id, period_start, period_end)` row) only after the assistant reply is
-fully generated and persisted. Provider errors, validation failures, quota
+`ai_usage.request_count` — one lifetime row per member — increments by exactly
+1 (atomic upsert on `user_id`) only after the assistant reply is fully
+generated and persisted. Provider errors, validation failures, quota
 rejections, and streams that die mid-generation persist no history and
-consume no quota.
+consume no quota. Consumption is never reset: there are no period columns.
 
-- Enforcement: `AiChatService` (post-success transaction), `AiUsageRepository` upsert
-- Related: BR-SUBS-001 (period row), FR-008 / FR-010
-- Added: 2026-10-07
+- Enforcement: `AiChatService` (post-success transaction), `AiUsageRepository.incrementRequestCount`
+- Related: BR-SUBS-007 (consumption), FR-008 / FR-010
+- Added: 2026-10-07; rewritten 2026-11-04 (lifetime counter)
 
 ### BR-AI-003 — Conversation ownership comes from authentication
 A supplied `conversationId` must reference an `ai_conversation` row whose
@@ -83,7 +85,7 @@ lecture, and never leaks system-prompt internals.
 When the `ai_chat_enabled` platform setting is false, both `send()` and `stream()`
 refuse before conversation ownership is resolved and before the quota check, so a
 disabled feature creates no conversation, makes no provider call, and consumes no
-member's monthly allowance. `send()` responds `503` via `AiUnavailableException`;
+member's allowance. `send()` responds `503` via `AiUnavailableException`;
 `stream()` throws the same exception before the `SseEmitter` is created, so the
 client receives a normal HTTP error rather than a stream that opens and then
 hangs. Reads — `GET /api/ai/conversations` and `GET /api/ai/conversations/{id}` —
@@ -106,3 +108,17 @@ guard) nor logged.
 - Enforcement: `application.yml` binding, `BareRunOpenAiApiKeyConfigTest`, FR-009
 - Related: ADR-007 (`docs/adrs/`)
 - Added: 2026-10-07
+
+### BR-AI-008 — Quota is reported only as `remainingUsage`
+Every response that reports quota — `POST /api/ai/messages`, the SSE `done`
+event of `POST /api/ai/messages/stream`, `GET /api/subscriptions/me`, and
+`POST /api/subscriptions/acquire` — exposes exactly one number,
+`remainingUsage`, computed as `max(allowance − consumed, 0)` (BR-SUBS-007).
+`used`, the plan limit, and any window start/end are never returned. Because
+consumption is lifetime and nothing resets, there is no "resets next month"
+message and no `Retry-After` header on the 429.
+
+- Enforcement: `AiUsageQuotaResponse` (single `remainingUsage` field),
+  `AiChatService`, `RequestAllowanceService`, `GlobalExceptionHandler`
+- Related: BR-SUBS-007, BR-AI-001, BR-AI-002
+- Added: 2026-11-04

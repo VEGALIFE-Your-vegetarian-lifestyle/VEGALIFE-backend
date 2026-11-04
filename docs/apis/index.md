@@ -21,8 +21,8 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `admin/post-locations.md` | `POST /api/admin/locations` | Create a location (Admin) |
 | `admin/patch-locations-locationid.md` | `PATCH /api/admin/locations/{locationId}` | Edit a location (Admin) |
 | `admin/delete-locations-locationid.md` | `DELETE /api/admin/locations/{locationId}` | Soft-delete a location (Admin) |
-| `admin/get-payments.md` | `GET /api/admin/payments` | List payments across all users with user/status/date filters (Admin) |
-| `admin/plan-crud.md` | `GET/POST/PATCH/DELETE /api/admin/plans[/{planId}]` | Manage AI subscription plans, including soft-deactivation (Admin) |
+| `admin/get-payments.md` | `GET /api/admin/payments` | List payments across all users, money-only, with user/status/date filters (Admin) |
+| `admin/plan-crud.md` | `GET/POST/PATCH/DELETE /api/admin/plans[/{planId}]` | Manage AI plans, request quotas, and descriptions, including soft-deactivation (Admin) |
 | `admin/get-posts.md` | `GET /api/admin/posts` | List all posts across users and statuses (Admin) |
 | `admin/post-posts-postid-moderate.md` | `POST /api/admin/posts/{postId}/moderate` | **Removed** — retained only as a record; replaced by approve/reject (ADR-016) |
 | `admin/post-posts-postid-approve.md` | `GET/POST /api/admin/posts/{postId}[/approve\|/reject]` | Read a post's component detail, approve or reject it with its components (Admin) |
@@ -64,9 +64,8 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `menus/get-menus-details.md` | `GET /api/menus/details` | Read own meal plan over a date range — every menu with its days, meals and embedded dishes (authenticated) |
 | `menus/patch-menus.md` | `PATCH /api/menus/{menuId}` | Update an owned drafted or scheduled menu's meals and preferences (authenticated) |
 | `menus/post-menu-status.md` | `POST /api/menus/{menuId}/status` | Transition an owned menu's status: schedule, cancel, or complete (authenticated) |
-| `payments/get-payments.md` | `GET /api/payments` | List own payment history, newest first, with subscription and plan context (authenticated) |
-| `payments/post-checkout.md` | `POST /api/payments/checkout` | Start (or resume) a VNPay checkout for an AI plan (authenticated) |
-| `payments/get-vnpay-ipn.md` | `GET /api/payments/vnpay/ipn` | VNPay payment notification webhook; fulfils a verified payment (public, signed) |
+| `payments/get-payments.md` | `GET /api/payments` | List own payments, newest first, money-only (authenticated) |
+| `payments/get-vnpay-ipn.md` | `GET /api/payments/vnpay/ipn` | VNPay payment notification webhook; grants a verified acquisition (public, signed) |
 | `payments/get-payments-paymentid.md` | `GET /api/payments/{paymentId}` | Read one of your payments' status from the ledger (authenticated; owner only) |
 | `post/post-posts.md` | `POST /api/posts` | Create a post for the authenticated user |
 | `post/get-posts.md` | `GET /api/posts` | List the authenticated user's posts |
@@ -92,10 +91,9 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `recipes/get-recipes-me.md` | `GET /api/recipes/me` | List own recipes, newest first, unpaginated (authenticated) |
 | `recipes/get-recipes-recipeid.md` | `GET /api/recipes/{recipeId}` | Read one own recipe by id; another member's recipe answers 404 (authenticated; owner only) |
 | `search/get-search.md` | `GET /api/search` | Keyword search across posts, videos, and recipes (public) |
-| `subscriptions/get-subscriptions.md` | `GET /api/subscriptions` | List active AI plans with limits and price (public) |
-| `subscriptions/get-me.md` | `GET /api/subscriptions/me` | Get own AI subscription: tier, usage, plan, latest payment (authenticated) |
-| `subscriptions/post-cancel.md` | `POST /api/subscriptions/me/cancel` | Cancel own AI subscription immediately, cascading scheduled successors (authenticated) |
-| `subscriptions/get-history.md` | `GET /api/subscriptions/me/history` | Paginated history of own AI subscription rows, newest first (authenticated) |
-| `subscriptions/post-purchase-eligibility.md` | `POST /api/subscriptions/me/purchase/eligibility` | Check whether a plan purchase/extension is allowed; read-only (authenticated) |
+| `subscriptions/get-subscriptions.md` | `GET /api/subscriptions` | List active AI plans with request quotas, descriptions, and price (public) |
+| `subscriptions/post-acquire.md` | `POST /api/subscriptions/acquire` | Claim a free plan or start a checkout for a paid plan (authenticated) |
+| `subscriptions/get-me.md` | `GET /api/subscriptions/me` | Read own remaining AI request allowance (authenticated) |
+| `subscriptions/get-history.md` | `GET /api/subscriptions/me/history` | Paginated acquisition history — purchases and claims — newest first (authenticated) |
 | `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts (public: published only; owner/Admin: all) |
 | `mcp/post-mcp.md` | In-process `@Tool` methods (no HTTP endpoint) | Five menu tools — get_menu, get_meal_plan, create_menu, update_menu, schedule_menu — served by the backend's own tool layer for the AI chat (ADR-013) |
