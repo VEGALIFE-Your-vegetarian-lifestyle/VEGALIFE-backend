@@ -1,10 +1,7 @@
 package com.vegalife.service.payment;
 
-import com.vegalife.dto.mapper.subscription.SubscriptionMapper;
 import com.vegalife.dto.response.payment.PaymentStatusResponse;
-import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.PaymentLedger;
-import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import java.util.UUID;
@@ -18,15 +15,16 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>The lookup is scoped to {@code (paymentId, userId)}, so another member's payment id resolves
  * exactly like an unknown one and nothing outside the caller's own ledger rows is observable. The
  * row is read as-is: no gateway call, no QueryDR, no fulfilment side effects — the IPN webhook
- * stays the only source of truth for status transitions (BR-PAY-001).
+ * stays the only source of truth for a payment's status (BR-PAY-004).
+ *
+ * <p>Money only since issue #181: the ledger no longer names a plan, so the response does not
+ * either. Callers that need the plan read the acquisition history.
  */
 @Service
 @RequiredArgsConstructor
 public class PaymentStatusService {
 
   private final PaymentLedgerRepository paymentLedgerRepository;
-  private final AiPlanRepository planRepository;
-  private final SubscriptionMapper subscriptionMapper;
 
   @Transactional(readOnly = true)
   public PaymentStatusResponse getPaymentStatus(UUID userId, UUID paymentId) {
@@ -35,15 +33,9 @@ public class PaymentStatusService {
             .findByIdAndUserId(paymentId, userId)
             .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
 
-    AiPlan plan =
-        planRepository
-            .findById(ledger.getPlanId())
-            .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
-
     return PaymentStatusResponse.builder()
         .paymentId(ledger.getId().toString())
         .status(ledger.getStatus().name())
-        .plan(subscriptionMapper.toPlanSummary(plan))
         .amount(ledger.getAmount())
         .currency(ledger.getCurrency())
         .createdAt(ledger.getCreatedAt())

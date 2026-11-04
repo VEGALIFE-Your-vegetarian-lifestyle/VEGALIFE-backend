@@ -1,10 +1,7 @@
 package com.vegalife.model.subscription;
 
-import com.vegalife.enums.subscription.SubscriptionStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -16,8 +13,23 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
+/**
+ * One plan acquisition by one member — the allowance record (issue #181, ADR-021).
+ *
+ * <p>Three states, distinguished by the two nullable columns:
+ *
+ * <ul>
+ *   <li>{@code paymentId != null}, {@code grantedAt == null} — a checkout was started and the
+ *       payment is not confirmed yet; contributes nothing to the allowance.
+ *   <li>{@code paymentId != null}, {@code grantedAt != null} — purchased; the grant is live.
+ *   <li>{@code paymentId == null}, {@code grantedAt != null} — claimed for free; {@code paymentId
+ *       == null} is what marks a claim and is backed by a partial unique index.
+ * </ul>
+ *
+ * <p>The table keeps its historical name. It no longer models a subscription: grants never expire
+ * and there is no lifecycle.
+ */
 @Entity
 @Table(name = "ai_subscription")
 @Data
@@ -37,28 +49,15 @@ public class AiSubscription {
   @Column(name = "plan_id", nullable = false)
   private UUID planId;
 
-  @Enumerated(EnumType.STRING)
-  @Column(name = "status", length = 20, nullable = false)
-  @Builder.Default
-  private SubscriptionStatus status = SubscriptionStatus.active;
+  /** The payment that paid for this acquisition; {@code null} when the plan was claimed. */
+  @Column(name = "payment_id")
+  private UUID paymentId;
 
-  @Column(name = "renewal_date")
-  private Instant renewalDate;
-
-  @Column(name = "extended_from_id")
-  private UUID extendedFromId;
-
-  @Column(name = "cancelled_at")
-  private Instant cancelledAt;
-
-  @Column(name = "started_at", nullable = false)
-  private Instant startedAt;
+  /** When the allowance became usable; {@code null} while a checkout is still open. */
+  @Column(name = "granted_at")
+  private Instant grantedAt;
 
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
-
-  @UpdateTimestamp
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
 }

@@ -16,7 +16,8 @@ public class AdminPlanResponse {
   private UUID id;
   private String code;
   private String name;
-  private int monthlyRequestLimit;
+  private String description;
+  private int requestQuota;
   private long priceAmount;
   private String priceCurrency;
   private boolean active;

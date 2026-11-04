@@ -2,14 +2,15 @@ package com.vegalife.service.payment;
 
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.model.subscription.AiPlan;
+import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.subscription.AiPlanRepository;
+import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.email.EmailService;
 import com.vegalife.service.outbound.OutboundEmailPayload;
-import com.vegalife.service.subscription.SubscriptionService;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,9 +48,9 @@ public class PaymentWebhookService {
 
   private final PaymentGateway paymentGateway;
   private final PaymentLedgerRepository paymentLedgerRepository;
+  private final AiSubscriptionRepository subscriptionRepository;
   private final AiPlanRepository planRepository;
   private final UserRepository userRepository;
-  private final SubscriptionService subscriptionService;
   private final EmailService emailService;
 
   /**
@@ -136,19 +137,22 @@ public class PaymentWebhookService {
     ledger.setProviderReference(params.get("vnp_TransactionNo"));
     ledger.setResponseCode(params.get("vnp_ResponseCode"));
     ledger.setBankCode(params.get("vnp_BankCode"));
-
-    // Issue #111 FR-002: record which subscription this payment produced; a denied
-    // purchase (gate) leaves the row unlinked while the payment stays succeeded.
-    subscriptionService
-        .activatePlan(ledger.getUserId(), ledger.getPlanId(), paidAt)
-        .ifPresent(subscription -> ledger.setSubscriptionId(subscription.getId()));
-
     paymentLedgerRepository.save(ledger);
+
+    // The acquisition was written at checkout, before the money moved, because the
+    // notification names no plan. Stamping granted_at is the grant itself; the
+    // allowance is recomputed from granted rows, so there is no balance to credit.
+    AiSubscription acquisition =
+        subscriptionRepository
+            .findByPaymentId(ledger.getId())
+            .orElseThrow(() -> missingRow("acquisition", ledger.getId(), ledger.getTxnRef()));
+    acquisition.setGrantedAt(paidAt);
+    subscriptionRepository.save(acquisition);
 
     AiPlan plan =
         planRepository
-            .findById(ledger.getPlanId())
-            .orElseThrow(() -> missingRow("plan", ledger.getPlanId(), ledger.getTxnRef()));
+            .findById(acquisition.getPlanId())
+            .orElseThrow(() -> missingRow("plan", acquisition.getPlanId(), ledger.getTxnRef()));
     User user =
         userRepository
             .findById(ledger.getUserId())
@@ -160,7 +164,7 @@ public class PaymentWebhookService {
             plan.getName(), ledger.getAmount(), ledger.getCurrency(), paidAt, ledger.getTxnRef()));
 
     log.info(
-        "IPN: txn {} fulfilled, user {} upgraded to plan {} (amount {} {})",
+        "IPN: txn {} fulfilled, user {} granted plan {} (amount {} {})",
         ledger.getTxnRef(),
         ledger.getUserId(),
         plan.getCode(),

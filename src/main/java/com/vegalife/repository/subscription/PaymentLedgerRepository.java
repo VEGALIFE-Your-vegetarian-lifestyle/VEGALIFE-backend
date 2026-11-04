@@ -1,9 +1,7 @@
 package com.vegalife.repository.subscription;
 
-import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.model.subscription.PaymentLedger;
 import jakarta.persistence.LockModeType;
-import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -25,13 +23,7 @@ public interface PaymentLedgerRepository
 
   Page<PaymentLedger> findByUserId(UUID userId, Pageable pageable);
 
-  Optional<PaymentLedger> findFirstByUserIdAndPlanIdAndStatusAndCreatedAtAfterOrderByCreatedAtDesc(
-      UUID userId, UUID planId, PaymentLedgerStatus status, Instant createdAtAfter);
-
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select p from PaymentLedger p where p.id = :id")
   Optional<PaymentLedger> findByIdForUpdate(@Param("id") UUID id);
-
-  Optional<PaymentLedger> findFirstByUserIdAndPlanIdAndStatusOrderByPaidAtDesc(
-      UUID userId, UUID planId, PaymentLedgerStatus status);
 }

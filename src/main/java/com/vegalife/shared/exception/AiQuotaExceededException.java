@@ -1,19 +1,15 @@
 package com.vegalife.shared.exception;
 
 /**
- * Raised when the caller has spent the monthly AI allowance (BR-AI-001). Carries Retry-After
- * seconds so the handler can advertise when the current UTC-month window resets.
+ * Raised when the caller has no AI requests left (BR-AI-001).
+ *
+ * <p>There is no reset to advertise: allowances never expire, so the request is refused until the
+ * member acquires more. For that reason this exception deliberately carries no {@code Retry-After}
+ * hint — waiting does not help.
  */
 public class AiQuotaExceededException extends RuntimeException {
 
-  private final long retryAfterSeconds;
-
-  public AiQuotaExceededException(String message, long retryAfterSeconds) {
+  public AiQuotaExceededException(String message) {
     super(message);
-    this.retryAfterSeconds = retryAfterSeconds;
-  }
-
-  public long getRetryAfterSeconds() {
-    return retryAfterSeconds;
   }
 }

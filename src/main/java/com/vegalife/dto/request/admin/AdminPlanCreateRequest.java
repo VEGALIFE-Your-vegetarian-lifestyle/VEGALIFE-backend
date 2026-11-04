@@ -27,9 +27,12 @@ public class AdminPlanCreateRequest {
   @Size(max = 50, message = "Name must be at most 50 characters")
   private String name;
 
-  @NotNull(message = "monthlyRequestLimit is required")
-  @Min(value = 0, message = "monthlyRequestLimit must be >= 0")
-  private Integer monthlyRequestLimit;
+  @Size(max = 500, message = "Description must be at most 500 characters")
+  private String description;
+
+  @NotNull(message = "requestQuota is required")
+  @Min(value = 0, message = "requestQuota must be >= 0")
+  private Integer requestQuota;
 
   @NotNull(message = "priceAmount is required")
   @Min(value = 0, message = "priceAmount must be >= 0")
