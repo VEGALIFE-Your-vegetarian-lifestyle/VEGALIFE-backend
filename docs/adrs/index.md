@@ -24,3 +24,4 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [018-clean-architecture-package-dependencies.md](018-clean-architecture-package-dependencies.md) | Enforce Clean-Architecture Package Dependencies (Inner Layers Never Depend on Outer Layers) | Accepted | 2026-10-30 |
 | [019-display-name-instead-of-username.md](019-display-name-instead-of-username.md) | Replace the Unique `username` Handle With a Non-Unique `display_name` | Accepted | 2026-11-02 |
 | [020-embedding-failure-terminal-vs-retryable.md](020-embedding-failure-terminal-vs-retryable.md) | End the Outbound Retry on a Permanent Embedding Rejection, and Honour `Retry-After` | Accepted | 2026-11-02 |
+| [021-request-allowance-as-acquisition-sum.md](021-request-allowance-as-acquisition-sum.md) | Treat AI Request Entitlement as the Live Sum of Granted Acquisitions | Accepted | 2026-11-04 |

@@ -1,7 +1,6 @@
 package com.vegalife.repository.subscription;
 
 import com.vegalife.model.subscription.AiUsage;
-import java.time.Instant;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -13,34 +12,25 @@ import org.springframework.stereotype.Repository;
 public interface AiUsageRepository extends JpaRepository<AiUsage, UUID> {
 
   /**
-   * Sum request counts of all usage rows whose period overlaps the window (BR-SUBS-001): a row
-   * counts fully whenever it touches the window, which is correct only while the recorder writes
-   * non-overlapping periods.
+   * The member's lifetime consumption. Reads 0 when no request was ever counted.
+   *
+   * <p>There is at most one row per member ({@code uq_ai_usage_user}); the sum is expressed as a
+   * sum so a missing row and an empty table both answer 0 without a null check.
    */
-  @Query(
-      "SELECT COALESCE(SUM(u.requestCount), 0) FROM AiUsage u"
-          + " WHERE u.userId = :userId AND u.periodStart < :windowEnd"
-          + " AND u.periodEnd > :windowStart")
-  long sumRequestCountInWindow(
-      @Param("userId") UUID userId,
-      @Param("windowStart") Instant windowStart,
-      @Param("windowEnd") Instant windowEnd);
+  @Query("select coalesce(sum(u.requestCount), 0) from AiUsage u where u.userId = :userId")
+  long sumRequestCount(@Param("userId") UUID userId);
 
   /**
-   * Counts one successful request against the member's period (BR-AI-002): inserts the period's row
-   * or bumps it in place, so concurrent sends can never both read the same stale count. Runs inside
-   * the caller's transaction — the caller already knows the reply succeeded.
+   * Counts one successful request (BR-AI-002). Inserts the member's only row or bumps it in place,
+   * so concurrent sends can never both read the same stale count. Runs inside the caller's
+   * transaction — the caller already knows the reply succeeded.
    */
   @Modifying
   @Query(
       value =
-          "INSERT INTO ai_usage (user_id, request_count, period_start, period_end)"
-              + " VALUES (:userId, 1, :windowStart, :windowEnd)"
-              + " ON CONFLICT (user_id, period_start, period_end)"
+          "INSERT INTO ai_usage (user_id, request_count) VALUES (:userId, 1)"
+              + " ON CONFLICT (user_id)"
               + " DO UPDATE SET request_count = ai_usage.request_count + 1",
       nativeQuery = true)
-  int incrementRequestCount(
-      @Param("userId") UUID userId,
-      @Param("windowStart") Instant windowStart,
-      @Param("windowEnd") Instant windowEnd);
+  int incrementRequestCount(@Param("userId") UUID userId);
 }

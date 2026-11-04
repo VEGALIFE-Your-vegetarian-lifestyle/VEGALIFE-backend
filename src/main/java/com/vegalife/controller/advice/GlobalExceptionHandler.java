@@ -243,7 +243,6 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ApiResponse<Void>> handleAiQuotaExceeded(
       AiQuotaExceededException ex, HttpServletRequest request) {
     return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-        .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
         .body(ApiResponse.failure(ex.getMessage()));
   }
 
@@ -253,9 +252,9 @@ public class GlobalExceptionHandler {
    * missing or rejected credential is deliberately reported as 502 with a vague body — the client
    * must never learn whether the server has a key, and must never be shown one.
    *
-   * <p>This is distinct from {@link AiQuotaExceededException}'s 429, which means the member hit
-   * their own monthly allowance. Both are 429 and both carry {@code Retry-After}, but the messages
-   * differ because the remedies differ.
+   * <p>This is distinct from {@link AiQuotaExceededException}'s 429, which means the member has no
+   * requests left. Only the provider 429 carries {@code Retry-After}: the member's own limit has no
+   * reset, so advertising a wait would be a lie.
    */
   @ExceptionHandler(AiProviderException.class)
   public ResponseEntity<ApiResponse<Void>> handleAiProvider(

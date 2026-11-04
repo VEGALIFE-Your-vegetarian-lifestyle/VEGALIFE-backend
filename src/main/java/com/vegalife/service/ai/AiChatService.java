@@ -13,6 +13,7 @@ import com.vegalife.repository.ai.AiConversationRepository;
 import com.vegalife.repository.ai.AiMessageRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.service.admin.PlatformSettingsProvider;
+import com.vegalife.service.credit.RequestAllowanceService;
 import com.vegalife.shared.exception.AiProviderException;
 import com.vegalife.shared.exception.AiUnavailableException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -61,7 +62,7 @@ public class AiChatService {
   private final AiMessageRepository messageRepository;
   private final UserProfileRepository userProfileRepository;
   private final PlatformSettingsProvider platformSettingsProvider;
-  private final AiQuotaGuard quotaGuard;
+  private final RequestAllowanceService requestAllowanceService;
   private final TransactionTemplate transactionTemplate;
   private final MenuTools menuTools;
   private final ProfileMapper profileMapper;
@@ -86,7 +87,7 @@ public class AiChatService {
   public SendMessageResponse send(UUID userId, SendMessageRequest request) {
     requireAiChatEnabled();
     Optional<AiConversation> existing = resolveConversation(userId, request.getConversationId());
-    AiQuotaGuard.QuotaWindow window = quotaGuard.requireAllowance(userId);
+    long remainingBefore = requestAllowanceService.requireAllowance(userId);
 
     String reply;
     try {
@@ -116,11 +117,11 @@ public class AiChatService {
       throw empty;
     }
 
-    PersistedTurn persisted = persistTurn(userId, existing, request.getMessage(), reply, window);
+    PersistedTurn persisted = persistTurn(userId, existing, request.getMessage(), reply);
     return SendMessageResponse.builder()
         .conversationId(persisted.conversationId())
         .reply(reply)
-        .usage(toQuotaResponse(window))
+        .usage(toQuotaResponse(remainingBefore))
         .build();
   }
 
@@ -132,7 +133,7 @@ public class AiChatService {
   public SseEmitter stream(UUID userId, SendMessageRequest request) {
     requireAiChatEnabled();
     Optional<AiConversation> existing = resolveConversation(userId, request.getConversationId());
-    AiQuotaGuard.QuotaWindow window = quotaGuard.requireAllowance(userId);
+    long remainingBefore = requestAllowanceService.requireAllowance(userId);
     List<Message> context = buildContext(existing, request.getMessage());
     String systemPrompt = buildSystemPrompt(userId);
 
@@ -165,7 +166,7 @@ public class AiChatService {
                 },
                 () ->
                     completeStream(
-                        emitter, fullReply.toString(), userId, existing, request, window));
+                        emitter, fullReply.toString(), userId, existing, request, remainingBefore));
 
     emitter.onCompletion(subscription::dispose);
     emitter.onTimeout(
@@ -187,17 +188,17 @@ public class AiChatService {
       UUID userId,
       Optional<AiConversation> existing,
       SendMessageRequest request,
-      AiQuotaGuard.QuotaWindow window) {
+      long remainingBefore) {
     if (reply.isBlank()) {
       failStream(emitter, AiProviderErrorClassifier.emptyReply(CHAT_OPERATION));
       return;
     }
     try {
-      PersistedTurn persisted = persistTurn(userId, existing, request.getMessage(), reply, window);
+      PersistedTurn persisted = persistTurn(userId, existing, request.getMessage(), reply);
       Map<String, Object> done = new LinkedHashMap<>();
       done.put("conversationId", persisted.conversationId());
       done.put("reply", reply);
-      done.put("usage", toQuotaResponse(window));
+      done.put("usage", toQuotaResponse(remainingBefore));
       sendEvent(emitter, "done", done);
       emitter.complete();
     } catch (RuntimeException ex) {
@@ -405,11 +406,7 @@ public class AiChatService {
    * checked window.
    */
   private PersistedTurn persistTurn(
-      UUID userId,
-      Optional<AiConversation> existing,
-      String userText,
-      String reply,
-      AiQuotaGuard.QuotaWindow window) {
+      UUID userId, Optional<AiConversation> existing, String userText, String reply) {
 
     PersistedTurn result =
         transactionTemplate.execute(
@@ -439,7 +436,7 @@ public class AiChatService {
                       .content(reply)
                       .build());
 
-              quotaGuard.record(userId, window);
+              requestAllowanceService.record(userId);
               return new PersistedTurn(conversation.getId());
             });
 
@@ -454,13 +451,13 @@ public class AiChatService {
     return title.length() <= MAX_TITLE_LENGTH ? title : title.substring(0, MAX_TITLE_LENGTH);
   }
 
-  private AiUsageQuotaResponse toQuotaResponse(AiQuotaGuard.QuotaWindow window) {
-    return AiUsageQuotaResponse.builder()
-        .used(window.used() + 1)
-        .limit(window.limit())
-        .windowStart(window.start())
-        .windowEnd(window.end())
-        .build();
+  /**
+   * The post-send usage for the response: the member started with {@code remainingBefore}, and this
+   * successful turn consumed exactly one (BR-AI-002). Never negative, so a client that renders the
+   * number directly can never show a debt.
+   */
+  private AiUsageQuotaResponse toQuotaResponse(long remainingBefore) {
+    return AiUsageQuotaResponse.builder().remainingUsage(Math.max(remainingBefore - 1, 0)).build();
   }
 
   private void sendEvent(SseEmitter emitter, String name, Object payload) {

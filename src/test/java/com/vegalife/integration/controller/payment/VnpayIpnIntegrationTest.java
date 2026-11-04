@@ -10,7 +10,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
-import com.vegalife.enums.subscription.SubscriptionStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.infrastructure.payment.vnpay.VnpaySigner;
@@ -28,7 +27,6 @@ import com.vegalife.service.payment.VnpayProperties;
 import com.vegalife.service.token.JwtTokenService;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -136,15 +134,14 @@ class VnpayIpnIntegrationTest {
     assertThat(reloaded.getResponseCode()).isEqualTo("00");
     assertThat(reloaded.getBankCode()).isEqualTo("NCB");
 
-    // BR-PAY-007: the same notification that flips the ledger also upgrades the account.
-    AiSubscription subscription =
-        subscriptionRepository.findByUserId(testUser.getId()).orElseThrow();
-    assertThat(subscription.getPlanId()).isEqualTo(proPlan.getId());
-    assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.active);
-    // BR-PAY-008: renewal is paid_at plus one calendar month in UTC.
-    Instant expectedRenewal = reloaded.getPaidAt().atZone(ZoneOffset.UTC).plusMonths(1).toInstant();
-    assertThat(subscription.getRenewalDate())
-        .isCloseTo(expectedRenewal, within(Duration.ofSeconds(1)));
+    // BR-PAY-007: the same notification that flips the ledger also grants the allowance.
+    AiSubscription acquisition =
+        subscriptionRepository.findByPaymentId(ledger.getId()).orElseThrow();
+    assertThat(acquisition.getPlanId()).isEqualTo(proPlan.getId());
+    assertThat(acquisition.getGrantedAt()).isNotNull();
+    // The grant is stamped with the payment time; nothing expires afterwards.
+    assertThat(acquisition.getGrantedAt())
+        .isCloseTo(reloaded.getPaidAt(), within(Duration.ofSeconds(1)));
 
     // Receipt queued in the same transaction (scheduling is off, so the row survives).
     List<OutboundMessage> receipts = receipts();
@@ -174,7 +171,7 @@ class VnpayIpnIntegrationTest {
     PaymentLedger reloaded = paymentLedgerRepository.findByTxnRef(ledger.getTxnRef()).orElseThrow();
     assertThat(reloaded.getStatus()).isEqualTo(PaymentLedgerStatus.succeeded);
     assertThat(reloaded.getPaidAt()).isEqualTo(firstPaidAt);
-    assertThat(subscriptionRepository.findByUserId(testUser.getId())).isPresent();
+    assertThat(subscriptionRepository.findByPaymentId(ledger.getId())).isPresent();
     assertThat(receipts()).hasSize(1);
   }
 
@@ -191,7 +188,8 @@ class VnpayIpnIntegrationTest {
 
     PaymentLedger reloaded = paymentLedgerRepository.findByTxnRef(ledger.getTxnRef()).orElseThrow();
     assertThat(reloaded.getStatus()).isEqualTo(PaymentLedgerStatus.pending);
-    assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
+    assertThat(subscriptionRepository.findByPaymentId(ledger.getId()).orElseThrow().getGrantedAt())
+        .isNull();
     assertThat(receipts()).isEmpty();
   }
 
@@ -216,7 +214,8 @@ class VnpayIpnIntegrationTest {
 
     PaymentLedger reloaded = paymentLedgerRepository.findByTxnRef(ledger.getTxnRef()).orElseThrow();
     assertThat(reloaded.getStatus()).isEqualTo(PaymentLedgerStatus.pending);
-    assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
+    assertThat(subscriptionRepository.findByPaymentId(ledger.getId()).orElseThrow().getGrantedAt())
+        .isNull();
     assertThat(receipts()).isEmpty();
   }
 
@@ -235,7 +234,8 @@ class VnpayIpnIntegrationTest {
     PaymentLedger reloaded = paymentLedgerRepository.findByTxnRef(ledger.getTxnRef()).orElseThrow();
     assertThat(reloaded.getStatus()).isEqualTo(PaymentLedgerStatus.pending);
     assertThat(reloaded.getPaidAt()).isNull();
-    assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
+    assertThat(subscriptionRepository.findByPaymentId(ledger.getId()).orElseThrow().getGrantedAt())
+        .isNull();
     assertThat(receipts()).isEmpty();
   }
 
@@ -253,7 +253,8 @@ class VnpayIpnIntegrationTest {
     assertThat(reloaded.getResponseCode()).isEqualTo("24");
     assertThat(reloaded.getBankCode()).isEqualTo("NCB");
     assertThat(reloaded.getPaidAt()).isNull();
-    assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
+    assertThat(subscriptionRepository.findByPaymentId(ledger.getId()).orElseThrow().getGrantedAt())
+        .isNull();
     assertThat(receipts()).isEmpty();
   }
 
@@ -262,14 +263,23 @@ class VnpayIpnIntegrationTest {
         paymentLedgerRepository.save(
             PaymentLedger.builder()
                 .userId(testUser.getId())
-                .planId(proPlan.getId())
                 .amount(proPlan.getPriceAmount())
                 .currency(proPlan.getPriceCurrency())
                 .status(PaymentLedgerStatus.pending)
                 .provider("vnpay")
                 .build());
     ledger.setTxnRef(ledger.getId().toString().replace("-", ""));
-    return paymentLedgerRepository.save(ledger);
+    ledger = paymentLedgerRepository.save(ledger);
+
+    // Written by checkout, before the money moves (issue #181).
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(testUser.getId())
+            .planId(proPlan.getId())
+            .paymentId(ledger.getId())
+            .grantedAt(null)
+            .build());
+    return ledger;
   }
 
   /** Signs the same notification shape VNPay sends, using the configured (fake) test secret. */

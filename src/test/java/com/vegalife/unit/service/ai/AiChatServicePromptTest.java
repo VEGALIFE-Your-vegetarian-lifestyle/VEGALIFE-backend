@@ -20,13 +20,12 @@ import com.vegalife.repository.ai.AiMessageRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.ai.AiChatService;
-import com.vegalife.service.ai.AiQuotaGuard;
 import com.vegalife.service.ai.MenuTools;
+import com.vegalife.service.credit.RequestAllowanceService;
 import com.vegalife.service.menu.MenuQueryFilterResolver;
 import com.vegalife.service.menu.MenuService;
 import jakarta.validation.Validation;
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -56,7 +55,7 @@ class AiChatServicePromptTest {
   @Mock private AiMessageRepository messageRepository;
   @Mock private UserProfileRepository userProfileRepository;
   @Mock private PlatformSettingsProvider platformSettingsProvider;
-  @Mock private AiQuotaGuard quotaGuard;
+  @Mock private RequestAllowanceService requestAllowanceService;
   @Mock private TransactionTemplate transactionTemplate;
 
   private AiChatService aiChatService;
@@ -66,15 +65,13 @@ class AiChatServicePromptTest {
   private ChatClient.CallResponseSpec callSpec;
 
   private UUID userId;
-  private AiQuotaGuard.QuotaWindow window;
+  private long remaining;
 
   @BeforeEach
   void setUp() {
     org.mockito.Mockito.lenient().when(platformSettingsProvider.isAiChatEnabled()).thenReturn(true);
     userId = UUID.randomUUID();
-    window =
-        new AiQuotaGuard.QuotaWindow(
-            Instant.parse("2026-10-01T00:00:00Z"), Instant.parse("2026-11-01T00:00:00Z"), 20, 2L);
+    remaining = 3L;
 
     chatClient = mock(ChatClient.class);
     spec = mock(ChatClient.ChatClientRequestSpec.class);
@@ -94,7 +91,7 @@ class AiChatServicePromptTest {
             messageRepository,
             userProfileRepository,
             platformSettingsProvider,
-            quotaGuard,
+            requestAllowanceService,
             transactionTemplate,
             menuTools,
             ProfileMapper.INSTANCE);
@@ -111,7 +108,7 @@ class AiChatServicePromptTest {
     when(spec.toolContext(anyMap())).thenReturn(spec);
     when(spec.call()).thenReturn(callSpec);
     when(callSpec.content()).thenReturn("ok");
-    when(quotaGuard.requireAllowance(userId)).thenReturn(window);
+    when(requestAllowanceService.requireAllowance(userId)).thenReturn(remaining);
     when(conversationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
     when(transactionTemplate.execute(any()))
         .thenAnswer(

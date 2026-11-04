@@ -1,7 +1,10 @@
 # API Reference: GET /api/admin/payments
 
 ## Overview
-Page through every payment across all users, filterable by user, status, and date range — the admin counterpart of `GET /api/payments`, for support and dispute handling. Pure `payment_ledger` read.
+Page through every payment across all users, filterable by user, status, and
+date range — the admin counterpart of `GET /api/payments`, for support and
+dispute handling. Pure `payment_ledger` read, money-only: no plan and no
+subscription context.
 
 ## Endpoint
 ```
@@ -49,19 +52,7 @@ No request body.
         "provider": "vnpay",
         "txnRef": "VNP1728030123",
         "paidAt": "2026-10-07T09:15:42Z",
-        "createdAt": "2026-10-07T09:14:58Z",
-        "subscription": {
-          "id": "3f1d2a44-88ab-4c9e-b1a7-5c2e9d7f6a10",
-          "status": "active",
-          "startedAt": "2026-10-07T09:15:42Z",
-          "renewalDate": "2026-11-07T09:15:42Z"
-        },
-        "plan": {
-          "code": "PRO",
-          "name": "Pro",
-          "monthlyRequestLimit": 500,
-          "price": { "amount": 49000, "currency": "VND" }
-        }
+        "createdAt": "2026-10-07T09:14:58Z"
       }
     ],
     "page": 0,
@@ -79,8 +70,11 @@ Item fields are identical to `GET /api/payments` (`docs/apis/payments/get-paymen
 | Field | Type | Description |
 |-------|------|-------------|
 | data.content[].userId | string (UUID) | The paying user — present on every admin row (omitted from the member endpoint's responses) |
-| data.content[].subscription | object \| null | `{id, status, startedAt, renewalDate}` or `null` when the payment never activated one |
-| data.content[].plan | object \| null | Full plan object (`PlanSummaryResponse` shape) |
+
+The item no longer carries `plan` or a nested `subscription` block. To resolve
+which plan a payment bought, join the acquisition history
+(`GET /api/subscriptions/me/history` for that `userId`) on `paymentId`, or query
+`ai_subscription` by `payment_id`.
 
 Rows are ordered `createdAt` descending.
 
@@ -94,8 +88,9 @@ Rows are ordered `createdAt` descending.
 
 ## Business Rules
 - BR-PAY-004: The endpoint never writes — it is a pure ledger read.
+- BR-PAY-010: `payment_ledger` records money only; the plan lives on the acquisition.
 - ADR-008: No gateway interaction of any kind.
-- Feature Spec: `docs/feats/payment-history.md`
+- Feature Spec: `docs/feats/request-credits.md`
 
 ## Example
 
@@ -121,19 +116,7 @@ curl "/api/admin/payments?userId=550e8400-e29b-41d4-a716-446655440000&status=suc
         "provider": "vnpay",
         "txnRef": "VNP1728030123",
         "paidAt": "2026-10-07T09:15:42Z",
-        "createdAt": "2026-10-07T09:14:58Z",
-        "subscription": {
-          "id": "3f1d2a44-88ab-4c9e-b1a7-5c2e9d7f6a10",
-          "status": "active",
-          "startedAt": "2026-10-07T09:15:42Z",
-          "renewalDate": "2026-11-07T09:15:42Z"
-        },
-        "plan": {
-          "code": "PRO",
-          "name": "Pro",
-          "monthlyRequestLimit": 500,
-          "price": { "amount": 49000, "currency": "VND" }
-        }
+        "createdAt": "2026-10-07T09:14:58Z"
       }
     ],
     "page": 0,
@@ -147,7 +130,8 @@ curl "/api/admin/payments?userId=550e8400-e29b-41d4-a716-446655440000&status=suc
 ```
 
 ## Related
-- Feature Spec: `docs/feats/payment-history.md`
+- Feature Spec: `docs/feats/request-credits.md`
 - Member counterpart: `docs/apis/payments/get-payments.md` (`GET /api/payments`)
+- Plan context for a payment: `docs/apis/subscriptions/get-history.md` (`GET /api/subscriptions/me/history`)
 - Admin list precedent: `docs/apis/admin/get-users.md` (`GET /api/admin/users`)
 - Business Rules: `docs/brs/payments.md`

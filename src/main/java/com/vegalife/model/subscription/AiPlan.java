@@ -34,8 +34,11 @@ public class AiPlan {
   @Column(name = "name", length = 50, nullable = false)
   private String name;
 
-  @Column(name = "monthly_request_limit", nullable = false)
-  private int monthlyRequestLimit;
+  @Column(name = "description", columnDefinition = "TEXT")
+  private String description;
+
+  @Column(name = "request_quota", nullable = false)
+  private int requestQuota;
 
   @Column(name = "price_amount", nullable = false)
   private long priceAmount;

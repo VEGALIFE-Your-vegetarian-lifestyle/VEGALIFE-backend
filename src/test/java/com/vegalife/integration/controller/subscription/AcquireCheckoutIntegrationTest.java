@@ -1,4 +1,4 @@
-package com.vegalife.integration.controller.payment;
+package com.vegalife.integration.controller.subscription;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -12,9 +12,11 @@ import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.infrastructure.payment.vnpay.VnpaySigner;
 import com.vegalife.model.subscription.AiPlan;
+import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.subscription.AiPlanRepository;
+import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.payment.PaymentProperties;
@@ -39,13 +41,17 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+/**
+ * {@code POST /api/subscriptions/acquire} for the paid branch (issue #181): one request writes the
+ * ledger row and its acquisition, and returns a signed gateway redirect.
+ */
 @Testcontainers
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("integration")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Transactional
-class CheckoutIntegrationTest {
+class AcquireCheckoutIntegrationTest {
 
   @Container
   @SuppressWarnings("resource")
@@ -72,6 +78,8 @@ class CheckoutIntegrationTest {
 
   @Autowired private AiPlanRepository planRepository;
 
+  @Autowired private AiSubscriptionRepository subscriptionRepository;
+
   @Autowired private PaymentLedgerRepository paymentLedgerRepository;
 
   @Autowired private JwtTokenService jwtTokenService;
@@ -87,8 +95,8 @@ class CheckoutIntegrationTest {
   void setUp() {
     testUser =
         User.builder()
-            .displayName("checkoutuser")
-            .email("checkout@example.com")
+            .displayName("acquireuser")
+            .email("acquire@example.com")
             .passwordHash("$2a$10$test")
             .role(UserRole.USER)
             .status(UserStatus.activated)
@@ -100,10 +108,10 @@ class CheckoutIntegrationTest {
   }
 
   @Test
-  void checkout_withoutAuthentication_returns401() throws Exception {
+  void acquire_withoutAuthentication_returns401() throws Exception {
     mockMvc
         .perform(
-            post("/api/payments/checkout")
+            post("/api/subscriptions/acquire")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"planCode\":\"PRO\"}"))
         .andExpect(status().isUnauthorized())
@@ -114,20 +122,21 @@ class CheckoutIntegrationTest {
   }
 
   @Test
-  void checkout_forProPlan_returnsSignedGatewayUrlAndPendingLedger() throws Exception {
+  void acquire_forProPlan_returnsSignedGatewayUrlAndWritesBothRows() throws Exception {
     AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
 
     MvcResult result =
         mockMvc
             .perform(
-                post("/api/payments/checkout")
+                post("/api/subscriptions/acquire")
                     .header("Authorization", "Bearer " + accessToken)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{\"planCode\":\"PRO\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
-            .andExpect(jsonPath("$.message").value("Payment session created"))
             .andExpect(jsonPath("$.data.planCode").value("PRO"))
+            .andExpect(jsonPath("$.data.action").value("CHECKOUT_CREATED"))
+            .andExpect(jsonPath("$.data.remainingUsage").value(0))
             .andExpect(jsonPath("$.data.status").value("pending"))
             .andExpect(jsonPath("$.data.currency").value("VND"))
             .andExpect(jsonPath("$.data.amount").value((int) proPlan.getPriceAmount()))
@@ -160,27 +169,64 @@ class CheckoutIntegrationTest {
     assertThat(paymentId).isEqualTo(ledger.getId().toString());
     assertThat(ledger.getStatus()).isEqualTo(PaymentLedgerStatus.pending);
     assertThat(ledger.getUserId()).isEqualTo(testUser.getId());
-    assertThat(ledger.getPlanId()).isEqualTo(proPlan.getId());
     assertThat(ledger.getProvider()).isEqualTo("vnpay");
     assertThat(ledger.getAmount()).isEqualTo(proPlan.getPriceAmount());
     assertThat(ledger.getCurrency()).isEqualTo("VND");
     assertThat(paymentLedgerRepository.count()).isEqualTo(1);
+
+    // The plan moved off the ledger onto the acquisition, and it is not granted yet.
+    AiSubscription acquisition =
+        subscriptionRepository.findByPaymentId(ledger.getId()).orElseThrow();
+    assertThat(acquisition.getPlanId()).isEqualTo(proPlan.getId());
+    assertThat(acquisition.getUserId()).isEqualTo(testUser.getId());
+    assertThat(acquisition.getGrantedAt()).isNull();
   }
 
   @Test
-  void checkout_repeatedWithinTtl_reusesPendingRowAndTxnRef() throws Exception {
-    String firstTxnRef = checkoutTxnRef();
-    String secondTxnRef = checkoutTxnRef();
+  void acquire_repeatedWithinTtl_reusesPendingRowsAndTxnRef() throws Exception {
+    String firstTxnRef = acquireTxnRef();
+    String secondTxnRef = acquireTxnRef();
 
     assertThat(secondTxnRef).isEqualTo(firstTxnRef);
     assertThat(paymentLedgerRepository.count()).isEqualTo(1);
+    assertThat(subscriptionRepository.findAllByUserId(testUser.getId())).hasSize(1);
   }
 
   @Test
-  void checkout_unknownPlan_returns404WithoutLedgerRow() throws Exception {
+  void acquire_secondPurchaseOfTheSamePlan_stacksANewAcquisition() throws Exception {
+    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
+    String firstTxnRef = acquireTxnRef();
+
+    // Mark the first checkout as paid, then wait out the reuse window by failing the payment so a
+    // second acquisition is genuinely created rather than reused.
+    PaymentLedger first = paymentLedgerRepository.findByTxnRef(firstTxnRef).orElseThrow();
+    subscriptionRepository
+        .findByPaymentId(first.getId())
+        .orElseThrow()
+        .setGrantedAt(java.time.Instant.now());
+    first.setStatus(PaymentLedgerStatus.succeeded);
+    first.setPaidAt(java.time.Instant.now());
+    paymentLedgerRepository.saveAndFlush(first);
+
     mockMvc
         .perform(
-            post("/api/payments/checkout")
+            post("/api/subscriptions/acquire")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"planCode\":\"PRO\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.action").value("CHECKOUT_CREATED"))
+        // The paid acquisition is already counted: 500 requests bought, none consumed.
+        .andExpect(jsonPath("$.data.remainingUsage").value(proPlan.getRequestQuota()));
+
+    assertThat(subscriptionRepository.findAllByUserId(testUser.getId())).hasSize(2);
+  }
+
+  @Test
+  void acquire_unknownPlan_returns404WithoutAnyRow() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/subscriptions/acquire")
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"planCode\":\"NOPE\"}"))
@@ -191,11 +237,11 @@ class CheckoutIntegrationTest {
     assertThat(paymentLedgerRepository.count()).isZero();
   }
 
-  private String checkoutTxnRef() throws Exception {
+  private String acquireTxnRef() throws Exception {
     MvcResult result =
         mockMvc
             .perform(
-                post("/api/payments/checkout")
+                post("/api/subscriptions/acquire")
                     .header("Authorization", "Bearer " + accessToken)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{\"planCode\":\"PRO\"}"))

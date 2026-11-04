@@ -54,7 +54,7 @@ the specific rule message in `message` and `data: null`; see each endpoint's ref
 | `405` | HTTP method not supported on the path | `Method <verb> is not supported` |
 | `409` | Duplicate resource / data-integrity conflict | the specific message |
 | `413` | Upload exceeds the maximum size | `Uploaded file exceeds the maximum allowed size` |
-| `429` | AI quota exceeded | the specific message (with `Retry-After`) |
+| `429` | AI quota exceeded | the specific message (no `Retry-After` — the allowance does not reset) |
 | `502` | Upstream AI/filter provider failure | the specific message |
 | `503` | Payment gateway not configured/unavailable | the specific message |
 | `500` | Unexpected server error | `Internal server error` (trace logged server-side) |
