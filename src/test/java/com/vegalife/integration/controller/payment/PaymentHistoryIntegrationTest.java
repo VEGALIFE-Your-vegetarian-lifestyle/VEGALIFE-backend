@@ -6,14 +6,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
-import com.vegalife.enums.subscription.SubscriptionStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.model.subscription.AiPlan;
-import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -78,8 +74,6 @@ class PaymentHistoryIntegrationTest {
 
   @Autowired private AiSubscriptionRepository aiSubscriptionRepository;
 
-  @Autowired private AiPlanRepository aiPlanRepository;
-
   @Autowired private JwtTokenService jwtTokenService;
 
   @PersistenceContext private EntityManager entityManager;
@@ -91,7 +85,6 @@ class PaymentHistoryIntegrationTest {
   private UUID newMemberRowId;
   private UUID oldMemberRowId;
   private UUID secondRowId;
-  private UUID subscriptionId;
 
   @BeforeEach
   void setUp() {
@@ -107,26 +100,10 @@ class PaymentHistoryIntegrationTest {
     adminToken = jwtTokenService.generateAccessToken(admin);
     memberToken = jwtTokenService.generateAccessToken(member);
 
-    AiPlan pro =
-        aiPlanRepository.findByCode("PRO").orElseThrow(() -> new IllegalStateException("PRO plan"));
-
-    AiSubscription subscription =
-        aiSubscriptionRepository.save(
-            AiSubscription.builder()
-                .userId(memberId)
-                .planId(pro.getId())
-                .status(SubscriptionStatus.active)
-                .startedAt(Instant.now().minus(3, ChronoUnit.DAYS))
-                .renewalDate(Instant.now().plus(27, ChronoUnit.DAYS))
-                .build());
-    subscriptionId = subscription.getId();
-
     PaymentLedger newMemberRow =
         paymentLedgerRepository.saveAndFlush(
             PaymentLedger.builder()
                 .userId(memberId)
-                .planId(pro.getId())
-                .subscriptionId(subscriptionId)
                 .amount(49000L)
                 .currency("VND")
                 .status(PaymentLedgerStatus.succeeded)
@@ -140,7 +117,6 @@ class PaymentHistoryIntegrationTest {
         paymentLedgerRepository.saveAndFlush(
             PaymentLedger.builder()
                 .userId(memberId)
-                .planId(pro.getId())
                 .amount(49000L)
                 .currency("VND")
                 .status(PaymentLedgerStatus.succeeded)
@@ -155,7 +131,6 @@ class PaymentHistoryIntegrationTest {
         paymentLedgerRepository.saveAndFlush(
             PaymentLedger.builder()
                 .userId(secondId)
-                .planId(pro.getId())
                 .amount(49000L)
                 .currency("VND")
                 .status(PaymentLedgerStatus.pending)
@@ -202,9 +177,9 @@ class PaymentHistoryIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].id").value(newMemberRowId.toString()))
         .andExpect(jsonPath("$.data.content[1].id").value(oldMemberRowId.toString()))
         .andExpect(jsonPath("$.data.content[0].userId").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].plan.code").value("PRO"))
-        .andExpect(jsonPath("$.data.content[0].subscription.id").value(subscriptionId.toString()))
-        .andExpect(jsonPath("$.data.content[0].subscription.status").value("active"));
+        .andExpect(jsonPath("$.data.content[0].plan").doesNotExist())
+        .andExpect(jsonPath("$.data.content[0].subscription").doesNotExist())
+        .andExpect(jsonPath("$.data.content[0].txnRef").value("txn-member-new"));
   }
 
   @Test

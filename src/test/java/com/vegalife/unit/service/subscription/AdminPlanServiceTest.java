@@ -40,7 +40,7 @@ class AdminPlanServiceTest {
         AdminPlanCreateRequest.builder()
             .code("pro")
             .name("Pro")
-            .monthlyRequestLimit(100)
+            .requestQuota(100)
             .priceAmount(50000L)
             .priceCurrency("vnd")
             .active(true)
@@ -65,7 +65,7 @@ class AdminPlanServiceTest {
         AdminPlanCreateRequest.builder()
             .code("FREE")
             .name("Free")
-            .monthlyRequestLimit(10)
+            .requestQuota(10)
             .priceAmount(0L)
             .priceCurrency("VND")
             .active(true)
@@ -109,18 +109,45 @@ class AdminPlanServiceTest {
   }
 
   @Test
-  void updatePlanRejectsDeactivatingFreePlan() {
+  void updatePlanMayDeactivateTheFreePlan() {
     UUID planId = UUID.randomUUID();
     AiPlan free = AiPlan.builder().id(planId).code("FREE").active(true).build();
     when(aiPlanRepository.findById(planId)).thenReturn(Optional.of(free));
+    when(aiPlanRepository.saveAndFlush(any(AiPlan.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(adminPlanMapper.toResponse(any(AiPlan.class)))
+        .thenReturn(AdminPlanResponse.builder().build());
 
-    assertThatThrownBy(
-            () ->
-                adminPlanService.updatePlan(
-                    planId, AdminPlanUpdateRequest.builder().active(false).build()))
-        .isInstanceOf(DuplicateResourceException.class);
+    adminPlanService.updatePlan(planId, AdminPlanUpdateRequest.builder().active(false).build());
 
-    verify(aiPlanRepository, never()).saveAndFlush(any());
+    ArgumentCaptor<AiPlan> captor = ArgumentCaptor.forClass(AiPlan.class);
+    verify(aiPlanRepository).saveAndFlush(captor.capture());
+    assertThat(captor.getValue().isActive()).isFalse();
+  }
+
+  @Test
+  void createPlanStoresDescriptionAndQuota() {
+    AdminPlanCreateRequest request =
+        AdminPlanCreateRequest.builder()
+            .code("pro")
+            .name("Pro")
+            .description("  500 requests, never expire  ")
+            .requestQuota(500)
+            .priceAmount(50000L)
+            .priceCurrency("VND")
+            .active(true)
+            .sortOrder(1)
+            .build();
+    when(aiPlanRepository.findByCode("PRO")).thenReturn(Optional.empty());
+    AiPlan saved = AiPlan.builder().id(UUID.randomUUID()).code("PRO").build();
+    when(aiPlanRepository.saveAndFlush(any(AiPlan.class))).thenReturn(saved);
+    when(adminPlanMapper.toResponse(saved)).thenReturn(AdminPlanResponse.builder().build());
+
+    adminPlanService.createPlan(request);
+
+    ArgumentCaptor<AiPlan> captor = ArgumentCaptor.forClass(AiPlan.class);
+    verify(aiPlanRepository).saveAndFlush(captor.capture());
+    assertThat(captor.getValue().getDescription()).isEqualTo("500 requests, never expire");
+    assertThat(captor.getValue().getRequestQuota()).isEqualTo(500);
   }
 
   @Test
@@ -138,15 +165,17 @@ class AdminPlanServiceTest {
   }
 
   @Test
-  void deactivatePlanRejectsFreePlan() {
+  void deactivatePlanMaySoftDeleteTheFreePlan() {
     UUID planId = UUID.randomUUID();
     AiPlan free = AiPlan.builder().id(planId).code("FREE").active(true).build();
     when(aiPlanRepository.findById(planId)).thenReturn(Optional.of(free));
+    when(aiPlanRepository.saveAndFlush(any(AiPlan.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    assertThatThrownBy(() -> adminPlanService.deactivatePlan(planId))
-        .isInstanceOf(DuplicateResourceException.class);
+    adminPlanService.deactivatePlan(planId);
 
-    verify(aiPlanRepository, never()).saveAndFlush(any());
+    ArgumentCaptor<AiPlan> captor = ArgumentCaptor.forClass(AiPlan.class);
+    verify(aiPlanRepository).saveAndFlush(captor.capture());
+    assertThat(captor.getValue().isActive()).isFalse();
   }
 
   @Test
