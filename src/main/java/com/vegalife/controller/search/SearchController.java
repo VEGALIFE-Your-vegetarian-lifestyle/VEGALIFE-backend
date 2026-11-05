@@ -7,6 +7,7 @@ import com.vegalife.shared.dto.ApiResponse;
 import com.vegalife.shared.dto.PageResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -22,7 +23,7 @@ public class SearchController {
 
   @GetMapping
   public ResponseEntity<ApiResponse<PageResponse<SearchResultItem>>> search(
-      @Valid @ModelAttribute SearchRequest request) {
+      @Valid @ParameterObject @ModelAttribute SearchRequest request) {
     PageResponse<SearchResultItem> results = searchService.search(request);
     return ResponseEntity.ok(ApiResponse.success(results, "Search completed successfully"));
   }

@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -35,14 +36,14 @@ public class AdminController {
 
   @GetMapping("/users")
   public ResponseEntity<ApiResponse<PageResponse<UserListResponse>>> listUsers(
-      @Valid @ModelAttribute UserListRequest request) {
+      @Valid @ParameterObject @ModelAttribute UserListRequest request) {
     PageResponse<UserListResponse> page = adminService.listUsers(request);
     return ResponseEntity.ok(ApiResponse.success(page, "Users retrieved successfully"));
   }
 
   @GetMapping("/comments")
   public ResponseEntity<ApiResponse<PageResponse<CommentListResponse>>> listComments(
-      @Valid @ModelAttribute CommentListRequest request) {
+      @Valid @ParameterObject @ModelAttribute CommentListRequest request) {
     PageResponse<CommentListResponse> page = adminService.listComments(request);
     return ResponseEntity.ok(ApiResponse.success(page, "Comments retrieved successfully"));
   }

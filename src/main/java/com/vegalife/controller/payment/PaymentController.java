@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -43,7 +44,8 @@ public class PaymentController {
   @GetMapping
   @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<PaymentHistoryItemResponse>>> listMyPayments(
-      @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute PaymentListRequest request) {
+      @AuthenticationPrincipal UUID userId,
+      @Valid @ParameterObject @ModelAttribute PaymentListRequest request) {
     PageResponse<PaymentHistoryItemResponse> response =
         paymentHistoryService.listMyPayments(userId, request);
     return ResponseEntity.ok(

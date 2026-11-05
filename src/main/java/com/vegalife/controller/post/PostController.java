@@ -18,6 +18,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -58,7 +59,8 @@ public class PostController {
 
   @GetMapping("/{postId}/related")
   public ResponseEntity<ApiResponse<List<RelatedPostResponse>>> getRelatedPosts(
-      @PathVariable UUID postId, @Valid @ModelAttribute RelatedPostsRequest request) {
+      @PathVariable UUID postId,
+      @Valid @ParameterObject @ModelAttribute RelatedPostsRequest request) {
     List<RelatedPostResponse> related = postService.getRelatedPosts(postId, request);
     return ResponseEntity.ok(ApiResponse.success(related, "Related posts retrieved successfully"));
   }
@@ -129,14 +131,15 @@ public class PostController {
   @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listUserPosts(
-      @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute PostListRequest request) {
+      @AuthenticationPrincipal UUID userId,
+      @Valid @ParameterObject @ModelAttribute PostListRequest request) {
     PageResponse<PostListResponse> posts = postService.listUserPosts(userId, request);
     return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
   }
 
   @GetMapping("/feed")
   public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listFeed(
-      @Valid @ModelAttribute PostListRequest request) {
+      @Valid @ParameterObject @ModelAttribute PostListRequest request) {
     PageResponse<PostListResponse> posts = postService.listFeed(request);
     return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
   }

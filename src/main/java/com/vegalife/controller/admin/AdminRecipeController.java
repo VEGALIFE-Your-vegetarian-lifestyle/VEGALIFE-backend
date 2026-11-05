@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -43,7 +44,7 @@ public class AdminRecipeController {
 
   @GetMapping("/recipes")
   public ResponseEntity<ApiResponse<PageResponse<AdminRecipeListResponse>>> listRecipes(
-      @Valid @ModelAttribute RecipeListRequest request) {
+      @Valid @ParameterObject @ModelAttribute RecipeListRequest request) {
     PageResponse<AdminRecipeListResponse> page = adminRecipeService.listRecipes(request);
     return ResponseEntity.ok(ApiResponse.success(page, "Recipes retrieved successfully"));
   }
