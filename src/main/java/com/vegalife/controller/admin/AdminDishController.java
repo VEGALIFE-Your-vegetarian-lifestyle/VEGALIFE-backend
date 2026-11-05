@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -47,7 +48,7 @@ public class AdminDishController {
 
   @GetMapping
   public ResponseEntity<ApiResponse<PageResponse<AdminDishResponse>>> listDishes(
-      @Valid @ModelAttribute AdminComponentListRequest request) {
+      @Valid @ParameterObject @ModelAttribute AdminComponentListRequest request) {
     PageResponse<AdminDishResponse> page = adminDishService.listDishes(request);
     return ResponseEntity.ok(ApiResponse.success(page, "Dishes retrieved successfully"));
   }

@@ -8,6 +8,7 @@ import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,7 +28,7 @@ public class AdminDashboardController {
 
   @GetMapping
   public ResponseEntity<ApiResponse<DashboardResponse>> getDashboard(
-      @Valid @ModelAttribute DashboardRequest request) {
+      @Valid @ParameterObject @ModelAttribute DashboardRequest request) {
     DashboardResponse response = adminDashboardService.getDashboard(request);
     return ResponseEntity.ok(ApiResponse.success(response, "Dashboard retrieved successfully"));
   }

@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,14 +30,14 @@ public class LocationController {
 
   @GetMapping
   public ResponseEntity<ApiResponse<PageResponse<LocationResponse>>> listLocations(
-      @Valid @ModelAttribute LocationListRequest request) {
+      @Valid @ParameterObject @ModelAttribute LocationListRequest request) {
     PageResponse<LocationResponse> locations = locationService.listLocations(request);
     return ResponseEntity.ok(ApiResponse.success(locations, "Locations retrieved successfully"));
   }
 
   @GetMapping("/nearby")
   public ResponseEntity<ApiResponse<List<LocationResponse>>> listNearbyLocations(
-      @Valid @ModelAttribute LocationNearbyRequest request) {
+      @Valid @ParameterObject @ModelAttribute LocationNearbyRequest request) {
     List<LocationResponse> locations = locationService.listNearby(request);
     return ResponseEntity.ok(
         ApiResponse.success(locations, "Nearby locations retrieved successfully"));

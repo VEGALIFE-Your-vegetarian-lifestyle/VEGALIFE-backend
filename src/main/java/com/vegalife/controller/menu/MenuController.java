@@ -19,6 +19,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -44,7 +45,8 @@ public class MenuController {
   @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<MenuSummaryResponse>>> listMenus(
-      @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute MenuQueryRequest request) {
+      @AuthenticationPrincipal UUID userId,
+      @Valid @ParameterObject @ModelAttribute MenuQueryRequest request) {
     MenuQueryFilter filter =
         filterResolver.resolve(request.getFrom(), request.getTo(), request.getStatus());
     PageResponse<MenuSummaryResponse> menus =
@@ -64,7 +66,7 @@ public class MenuController {
   @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<List<MenuMealPlanResponse>>> getMealPlans(
       @AuthenticationPrincipal UUID userId,
-      @Valid @ModelAttribute MenuMealPlanQueryRequest request) {
+      @Valid @ParameterObject @ModelAttribute MenuMealPlanQueryRequest request) {
     MenuQueryFilter filter = filterResolver.resolveMealPlan(request.getFrom(), request.getTo());
     List<MenuMealPlanResponse> plans =
         menuService.listMealPlans(userId, filter, request.getMenuId());

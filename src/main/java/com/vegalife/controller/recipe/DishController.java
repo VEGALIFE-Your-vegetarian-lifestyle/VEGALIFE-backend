@@ -16,6 +16,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -46,7 +47,7 @@ public class DishController {
 
   @GetMapping
   public ResponseEntity<ApiResponse<PageResponse<DishResponse>>> listDishes(
-      @Valid @ModelAttribute DishListRequest request) {
+      @Valid @ParameterObject @ModelAttribute DishListRequest request) {
     PageResponse<DishResponse> dishes = dishService.listDishes(request);
     return ResponseEntity.ok(ApiResponse.success(dishes, "Dishes retrieved successfully"));
   }
@@ -85,7 +86,8 @@ public class DishController {
    */
   @GetMapping("/suggestions")
   public ResponseEntity<ApiResponse<PageResponse<DishSuggestionResponse>>> suggestDishes(
-      @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute DishSuggestionRequest request) {
+      @AuthenticationPrincipal UUID userId,
+      @Valid @ParameterObject @ModelAttribute DishSuggestionRequest request) {
     return ResponseEntity.ok(
         ApiResponse.success(
             dishSuggestionFacade.suggest(userId, request),

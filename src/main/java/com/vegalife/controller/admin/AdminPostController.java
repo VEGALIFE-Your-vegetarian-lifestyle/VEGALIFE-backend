@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -44,7 +45,7 @@ public class AdminPostController {
 
   @GetMapping("/posts")
   public ResponseEntity<ApiResponse<PageResponse<AdminPostListResponse>>> listPosts(
-      @Valid @ModelAttribute PostListRequest request) {
+      @Valid @ParameterObject @ModelAttribute PostListRequest request) {
     PageResponse<AdminPostListResponse> page = adminPostService.listPosts(request);
     return ResponseEntity.ok(ApiResponse.success(page, "Posts retrieved successfully"));
   }

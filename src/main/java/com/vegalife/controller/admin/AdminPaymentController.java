@@ -9,6 +9,7 @@ import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,7 +33,7 @@ public class AdminPaymentController {
 
   @GetMapping("/payments")
   public ResponseEntity<ApiResponse<PageResponse<PaymentHistoryItemResponse>>> listPayments(
-      @Valid @ModelAttribute AdminPaymentListRequest request) {
+      @Valid @ParameterObject @ModelAttribute AdminPaymentListRequest request) {
     PageResponse<PaymentHistoryItemResponse> page = paymentHistoryService.listPayments(request);
     return ResponseEntity.ok(ApiResponse.success(page, "Payment history retrieved successfully"));
   }

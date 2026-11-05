@@ -115,7 +115,7 @@ branch I'm on right now" → `.agents/plans/`.
 
 - **Formatting**: Spotless enforces consistent style — run `./mvnw spotless:apply` before committing.
 - **Style rules**: Checkstyle enforced — run `./mvnw checkstyle:check` to verify.
-- **Patterns**: Prefer composition over inheritance. Use constructor injection (not `@Autowired` on fields). Keep controllers thin — business logic belongs in services. Use DTOs for API boundaries, never expose entities directly.
+- **Patterns**: Prefer composition over inheritance. Use constructor injection (not `@Autowired` on fields). Keep controllers thin — business logic belongs in services. Use DTOs for API boundaries, never expose entities directly. A query DTO bound with `@ModelAttribute` must also carry `@ParameterObject`, or SpringDoc documents one synthetic parameter instead of its fields.
 - **Exceptions**: Use custom exception classes in `shared/exception/` (plain types, no framework imports); the global `@RestControllerAdvice` handler lives in `controller/advice/GlobalExceptionHandler`.
 - **Nullability**: Prefer `Optional` over null returns. Use `@NonNull` / `@Nullable` annotations where helpful.
 - **Logging**: Use SLF4J via Lombok's `@Slf4j`. Log errors at ERROR level, business warnings at WARN, debug info at DEBUG. Never log secrets, passwords, or tokens.

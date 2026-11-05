@@ -20,6 +20,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -94,7 +95,7 @@ public class SubscriptionController {
   @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<SubscriptionHistoryResponse>>> getMyHistory(
       @AuthenticationPrincipal UUID userId,
-      @Valid @ModelAttribute SubscriptionHistoryRequest request) {
+      @Valid @ParameterObject @ModelAttribute SubscriptionHistoryRequest request) {
 
     PageResponse<SubscriptionHistoryResponse> response =
         acquisitionHistoryService.getMyAcquisitions(userId, request);

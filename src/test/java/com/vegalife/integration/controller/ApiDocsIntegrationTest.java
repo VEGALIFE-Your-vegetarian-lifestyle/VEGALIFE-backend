@@ -7,17 +7,34 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.DefaultParameterNameDiscoverer;
+import org.springframework.core.MethodParameter;
+import org.springframework.core.ParameterNameDiscoverer;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -28,6 +45,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @ActiveProfiles("integration")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ApiDocsIntegrationTest {
+
+  private static final ParameterNameDiscoverer PARAMETER_NAME_DISCOVERER =
+      new DefaultParameterNameDiscoverer();
 
   @Container
   @SuppressWarnings("resource")
@@ -47,6 +67,10 @@ class ApiDocsIntegrationTest {
   }
 
   @Autowired private MockMvc mockMvc;
+
+  @Autowired
+  @Qualifier("requestMappingHandlerMapping")
+  private RequestMappingHandlerMapping requestMappingHandlerMapping;
 
   @Test
   void v3ApiDocsIsServedWithoutAuthentication() throws Exception {
@@ -156,5 +180,131 @@ class ApiDocsIntegrationTest {
     assertThat(names)
         .as("every operation tag is declared in the index")
         .containsAll(new java.util.LinkedHashSet<>(operationTags));
+  }
+
+  /**
+   * Every query parameter the controllers actually bind must be discoverable in Swagger. This walks
+   * the real handler mappings (not a hard-coded endpoint list): for each mapped operation it builds
+   * the expected query-parameter set from {@code @ModelAttribute} DTO fields and named
+   * {@code @RequestParam} arguments, then requires the served document to declare exactly that set.
+   */
+  @Test
+  void everyControllerQueryParameterAppearsInTheApiDoc() throws Exception {
+    JsonNode paths = readApiDocs().path("paths");
+    List<String> problems = new ArrayList<>();
+    int operations = 0;
+
+    for (Map.Entry<RequestMappingInfo, HandlerMethod> entry :
+        requestMappingHandlerMapping.getHandlerMethods().entrySet()) {
+      HandlerMethod handler = entry.getValue();
+      if (!handler.getBeanType().getPackageName().startsWith("com.vegalife.controller")) {
+        continue;
+      }
+
+      Set<String> expectedQueryParams = new LinkedHashSet<>();
+      for (MethodParameter parameter : handler.getMethodParameters()) {
+        if (parameter.hasParameterAnnotation(ModelAttribute.class)) {
+          expectedQueryParams.addAll(instanceFieldNames(parameter.getParameterType()));
+        }
+        RequestParam requestParam = parameter.getParameterAnnotation(RequestParam.class);
+        if (requestParam != null) {
+          expectedQueryParams.add(requestParamName(requestParam, parameter));
+        }
+      }
+
+      for (String path : entry.getKey().getPatternValues()) {
+        for (RequestMethod method : entry.getKey().getMethodsCondition().getMethods()) {
+          operations++;
+          String operationId = method + " " + path;
+          JsonNode operation = paths.path(path).path(method.name().toLowerCase(Locale.ROOT));
+          if (operation.isMissingNode()) {
+            problems.add(operationId + ": operation is missing from /v3/api-docs");
+            continue;
+          }
+
+          Set<String> documentedQueryParams = new TreeSet<>();
+          operation
+              .path("parameters")
+              .forEach(
+                  p -> {
+                    if ("query".equals(p.path("in").asText())) {
+                      documentedQueryParams.add(p.path("name").asText());
+                    }
+                  });
+
+          Set<String> missing = new TreeSet<>(expectedQueryParams);
+          missing.removeAll(documentedQueryParams);
+          if (!missing.isEmpty()) {
+            problems.add(
+                operationId
+                    + ": query parameters bound by "
+                    + handler.getMethod().getName()
+                    + "() are missing from /v3/api-docs: "
+                    + missing);
+          }
+
+          Set<String> extra = new TreeSet<>(documentedQueryParams);
+          extra.removeAll(expectedQueryParams);
+          if (!extra.isEmpty()) {
+            problems.add(
+                operationId
+                    + ": /v3/api-docs declares query parameters that "
+                    + handler.getMethod().getName()
+                    + "() does not bind: "
+                    + extra);
+          }
+        }
+      }
+    }
+
+    assertThat(operations).as("controller operations checked").isGreaterThanOrEqualTo(100);
+    assertThat(problems).as("OpenAPI query parameter mismatches").isEmpty();
+  }
+
+  private static String requestParamName(RequestParam requestParam, MethodParameter parameter) {
+    if (!requestParam.name().isEmpty()) {
+      return requestParam.name();
+    }
+    if (!requestParam.value().isEmpty()) {
+      return requestParam.value();
+    }
+    String parameterName = parameter.getParameterName();
+    if (parameterName != null) {
+      return parameterName;
+    }
+    String[] discovered = PARAMETER_NAME_DISCOVERER.getParameterNames(parameter.getMethod());
+    return discovered == null ? "" : discovered[parameter.getParameterIndex()];
+  }
+
+  private JsonNode readApiDocs() throws Exception {
+    String body =
+        mockMvc
+            .perform(get("/v3/api-docs"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return new ObjectMapper().readTree(body);
+  }
+
+  /**
+   * The bindable state of a request DTO: its declared instance fields, including inherited ones.
+   */
+  private static List<String> instanceFieldNames(Class<?> type) {
+    List<String> names = new ArrayList<>();
+    Class<?> current = type;
+    while (current != null && current != Object.class) {
+      for (Field field : current.getDeclaredFields()) {
+        int modifiers = field.getModifiers();
+        if (Modifier.isStatic(modifiers)
+            || Modifier.isTransient(modifiers)
+            || field.isSynthetic()) {
+          continue;
+        }
+        names.add(field.getName());
+      }
+      current = current.getSuperclass();
+    }
+    return names;
   }
 }

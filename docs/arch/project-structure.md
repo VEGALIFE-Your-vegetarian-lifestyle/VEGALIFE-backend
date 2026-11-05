@@ -185,6 +185,12 @@ service depends on the library, not on `infrastructure/`.
   (e.g., `controller/user/`, `service/recipe/`). Keep them shallow —
   don't nest deeper than one level within a layer.
 - **Enums live in `enums/<domain>/`, never nested in an entity or DTO.**
+- **Query DTOs carry `@ParameterObject`:** a handler parameter bound with
+  `@ModelAttribute` must also be annotated
+  `@ParameterObject`, otherwise SpringDoc documents one synthetic parameter
+  named after the argument instead of the DTO's real query fields.
+  `ApiDocsIntegrationTest` fails when a DTO field is missing from
+  `/v3/api-docs`.
 - **A package may import its own rank or lower, never higher.** Run
   `pwsh tools/rank-check.ps1` after structural changes; it must report zero upward edges.
 
