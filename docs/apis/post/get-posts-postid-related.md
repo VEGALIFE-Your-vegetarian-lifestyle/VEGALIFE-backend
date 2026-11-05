@@ -56,7 +56,7 @@ None required — public, like `GET /api/posts/{postId}` and `GET /api/posts/fee
 
 | Field | Type | Description |
 |-------|------|-------------|
-| data[].post | object | Same shape as `PostListResponse` (`GET /api/posts/{postId}`). |
+| data[].post | object | Same shape as `PostListResponse` (`GET /api/posts/{postId}`). `rejectionReason` is always `null` here — only published posts are eligible matches, and the reason is owner-scoped anyway. |
 | data[].similarityScore | decimal | Cosine similarity to the source post's embedding, in `[-1, 1]`; higher means more similar. |
 
 Results are ranked by `similarityScore` descending. An empty array (`200 OK`) is returned when the source post has no stored embedding yet (never filtered, or embedding disabled) or no published match exists — never a `404` for "no matches."

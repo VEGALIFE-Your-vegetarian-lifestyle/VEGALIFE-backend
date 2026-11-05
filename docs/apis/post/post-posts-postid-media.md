@@ -38,7 +38,7 @@ Required: a valid JWT access token in the `Authorization` header (`Bearer <token
 
 ### Success Response (200 OK)
 
-Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `status`, `flag`, `viewCount`, `publishedAt`, `createdAt`).
+Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `status`, `flag`, `rejectionReason`, `viewCount`, `publishedAt`, `createdAt`). `rejectionReason` is returned only to the post's author, so an Administrator attaching media to someone else's post gets `null`.
 
 ```json
 {
