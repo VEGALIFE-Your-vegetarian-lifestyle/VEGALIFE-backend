@@ -4,7 +4,6 @@ import com.vegalife.dto.response.admin.AdminRecipeListResponse;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Recipe;
-import com.vegalife.model.recipe.RecipeIngredient;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -21,13 +20,15 @@ public interface AdminRecipeMapper {
   @Mapping(target = "dishName", source = "dish.name")
   @Mapping(target = "dishModerationStatus", source = "dish.moderationStatus")
   @Mapping(target = "categoryIds", source = "posts")
-  @Mapping(target = "ingredients", source = "recipeIngredients")
   @Mapping(target = "userId", source = "user.id")
   @Mapping(target = "displayName", source = "user.displayName")
   @Mapping(target = "email", source = "user.email")
-  // Filled by the service from the dish's curated list: the warning is a derived value that needs a
-  // repository lookup, which a pure mapper must not do.
+  // Both are filled by the service: the warning needs a repository lookup, and per-line nutrition
+  // needs the calculator, which lives in a package this mapper may not reach (ADR-018 ranks dto
+  // below service).
   @Mapping(target = "missingRequiredIngredients", ignore = true)
+  @Mapping(target = "ingredients", ignore = true)
+  @Mapping(target = "nutritionResolved", ignore = true)
   AdminRecipeListResponse toResponse(Recipe recipe);
 
   List<AdminRecipeListResponse> toResponseList(List<Recipe> recipes);
@@ -41,20 +42,5 @@ public interface AdminRecipeMapper {
         .flatMap(post -> post.getCategories().stream())
         .map(Category::getId)
         .collect(Collectors.toSet());
-  }
-
-  List<AdminRecipeListResponse.IngredientItem> toIngredientItems(
-      List<RecipeIngredient> recipeIngredients);
-
-  default AdminRecipeListResponse.IngredientItem toIngredientItem(RecipeIngredient ri) {
-    return AdminRecipeListResponse.IngredientItem.builder()
-        .ingredientId(ri.getIngredient().getId())
-        .name(ri.getIngredient().getName())
-        .moderationStatus(ri.getIngredient().getModerationStatus().name())
-        .amount(ri.getAmount())
-        // The unit belongs to the ingredient, not the line (ADR-022): a per-line copy could only
-        // repeat it or contradict it.
-        .unit(ri.getIngredient().getUnit() == null ? null : ri.getIngredient().getUnit().name())
-        .build();
   }
 }

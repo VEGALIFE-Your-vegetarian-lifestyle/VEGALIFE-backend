@@ -18,6 +18,7 @@ import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.recipe.RecipeSpecifications;
 import com.vegalife.service.recipe.DishIngredientService;
+import com.vegalife.service.recipe.RecipeNutritionCalculator;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -276,22 +277,62 @@ public class AdminRecipeService {
   }
 
   /**
-   * Maps a recipe and attaches the advisory missing-required-ingredient warning (BR-DISH-002).
+   * Maps a recipe and attaches everything the mapper cannot supply.
    *
-   * <p>Filled here rather than in the mapper because it needs a repository lookup, and derived on
-   * every read rather than stored so a later curation change applies without a backfill.
+   * <p>Three derived parts are filled here rather than in the mapper. The missing-required warning
+   * needs a repository lookup; the per-line nutrition needs the calculator; and the {@code
+   * nutritionResolved} flag restates the persisted totals' meaning so "not computed yet" and "zero
+   * calories" cannot look alike. Both the calculator and the repository sit above {@code
+   * dto/mapper} in the package ranking (ADR-018), so the mapper must not reach either.
+   *
+   * <p>Totals are read from the persisted columns, never recomputed: the suggest-dishes filters
+   * read those same columns, so recomputing here could make the admin view disagree with what a
+   * member can filter on.
    */
   private AdminRecipeListResponse toResponse(Recipe recipe) {
     AdminRecipeListResponse response = adminRecipeMapper.toResponse(recipe);
-    List<UUID> presentIds =
-        response.getIngredients() == null
-            ? List.of()
-            : response.getIngredients().stream()
-                .map(AdminRecipeListResponse.IngredientItem::getIngredientId)
-                .toList();
+    List<AdminRecipeListResponse.IngredientItem> ingredients =
+        recipe.getRecipeIngredients().stream().map(this::toIngredientItem).toList();
+    response.setIngredients(ingredients);
+    response.setNutritionResolved(recipe.getCalories() != null);
     response.setMissingRequiredIngredients(
-        dishIngredientService.missingRequiredIngredientNames(recipe.getDish().getId(), presentIds));
+        dishIngredientService.missingRequiredIngredientNames(
+            recipe.getDish().getId(),
+            ingredients.stream()
+                .map(AdminRecipeListResponse.IngredientItem::getIngredientId)
+                .toList()));
     return response;
+  }
+
+  /**
+   * One recipe line, with the same per-line nutrition shape the member response returns.
+   *
+   * <p>Computed by the shared calculator so the admin view cannot drift from what a member sees. A
+   * line whose ingredient is uncurated reports five nulls and {@code false}, never a partial sum.
+   */
+  private AdminRecipeListResponse.IngredientItem toIngredientItem(RecipeIngredient line) {
+    Ingredient ingredient = line.getIngredient();
+    RecipeNutritionCalculator.LineNutrition nutrition =
+        RecipeNutritionCalculator.scaledLineNutrition(line.getAmount(), ingredient);
+    AdminRecipeListResponse.IngredientItem.IngredientItemBuilder builder =
+        AdminRecipeListResponse.IngredientItem.builder()
+            // The unit belongs to the ingredient, not the line (ADR-022): a per-line copy could
+            // only repeat it or contradict it.
+            .ingredientId(ingredient.getId())
+            .name(ingredient.getName())
+            .moderationStatus(ingredient.getModerationStatus().name())
+            .amount(line.getAmount())
+            .unit(ingredient.getUnit() == null ? null : ingredient.getUnit().name())
+            .nutritionResolved(nutrition != null);
+    if (nutrition != null) {
+      builder
+          .calories(nutrition.calories())
+          .proteinG(nutrition.proteinG())
+          .carbohydrateG(nutrition.carbohydrateG())
+          .fatG(nutrition.fatG())
+          .fiberG(nutrition.fiberG());
+    }
+    return builder.build();
   }
 
   private Difficulty parseDifficulty(String difficulty) {
