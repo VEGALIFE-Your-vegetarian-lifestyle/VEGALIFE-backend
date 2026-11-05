@@ -148,11 +148,12 @@ Behaviour of the recipe filters:
 | data.first | boolean | Whether this is the first page |
 | data.last | boolean | Whether this is the last page |
 
-Nutrition fields are omitted from the JSON when `null`. `null` means the recipe
-cannot be priced yet — at least one of its ingredients has no unit or no
+Nutrition fields are **present and `null`** when unknown — they are not omitted
+from the JSON, since these DTOs carry no `NON_NULL` inclusion. `null` means the
+recipe cannot be priced yet — at least one of its ingredients has no unit or no
 nutrition — and it is distinct from `0`, which is a real value (water is
-legitimately 0 kcal). Use `nutritionResolved` to tell the two apart without
-inspecting the individual fields.
+legitimately 0 kcal). Use `nutritionResolved` to tell the two apart, and branch on
+that flag rather than on field absence, which never happens here.
 
 ### Error Responses
 | Status Code | Condition | Message |

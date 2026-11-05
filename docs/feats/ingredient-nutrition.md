@@ -109,9 +109,12 @@ total(macro) = Σ (line.amount × ingredient.macro_per_unit)
 
 Two details matter:
 
-- **Round once.** Line values are not rounded, only the final totals, at scale 2
-  with `HALF_UP`. Three lines of 0.005 kcal contribute 0.015 and become 0.02, not
-  0.03.
+- **Round once for the total.** Line products are summed unrounded; only the final
+  totals are scaled to 2 with `HALF_UP`. Three lines of 0.005 kcal contribute
+  0.015 and become 0.02, not 0.03.
+- **Round each line again for display.** A read also reports each line's own
+  contribution, scaled to 2 individually, so displayed lines need not sum exactly
+  to the displayed total (BR-RECP-007). The stored total stays authoritative.
 - **All-or-nothing.** If any line is unresolved, all five totals are `null`. A
   partial sum would look authoritative while silently omitting a macro.
 
@@ -132,13 +135,20 @@ filter a plain indexed column comparison instead of a per-row aggregate.
 - `POST /api/recipes` — no nutrition in the request; `unit` is now optional and
   applies only to a brand-new ingredient.
 - `GET /api/recipes/me`, `GET /api/recipes/{recipeId}` — include the five totals
-  plus `nutritionResolved`.
+  plus `nutritionResolved`, and per-line values on each ingredient line.
+- `GET /api/ingredients` — `unit`, the five per-unit values and
+  `nutritionResolved`, so a client can interpret the amount it is about to submit.
+- `GET /api/admin/recipes` — five totals, `nutritionResolved`, and per-line values
+  on each ingredient entry.
 - `GET /api/dishes/suggestions` — `minCalories`/`maxCalories`,
   `minProtein`/`maxProtein`, `minCarbohydrate`/`maxCarbohydrate`,
   `minFat`/`maxFat`, `minFiber`/`maxFiber`.
 - `suggest_dishes` AI tool — the same ten bounds.
 - Admin ingredient endpoints — `unit`, five nutrition values, and
   `nutritionResolved` on read.
+
+The read-surface completion is specified separately in
+[nutrition-read-surfaces.md](nutrition-read-surfaces.md).
 
 ## Behaviour and edge cases
 

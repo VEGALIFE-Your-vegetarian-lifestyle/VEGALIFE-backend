@@ -10,6 +10,7 @@
 | BR-RECP-004 | Recipe Nutrition Is Derived From Ingredient Nutrition, Never Authored | Active | 2026-11-05 |
 | BR-RECP-005 | Ingredient Nutrition Is Per One Unit, and All-or-Nothing | Active | 2026-11-05 |
 | BR-RECP-006 | A Recipe Reports No Nutrition Unless Every Ingredient Is Resolved | Active | 2026-11-05 |
+| BR-RECP-007 | A Line's Nutrition Is Derived, Rounded Per Line, and Never Partial | Active | 2026-11-06 |
 
 ---
 
@@ -312,11 +313,10 @@ catalogue is fixed.
 
 - Applies to every read surface that returns recipe nutrition, including
   `GET /api/recipes/me`, `GET /api/recipes/{recipeId}`, the suggest-dishes
-  recommendations, and the recommended recipes embedded in a menu detail read and
-  in the AI menu tools.
-- Not applied to surfaces that do not return nutrition at all: the admin recipe
-  list (`GET /api/admin/recipes`) omits the five columns, and the AI
-  `suggest_dishes` tool filters on them without echoing them.
+  recommendations, the recommended recipes embedded in a menu detail read, the AI
+  menu tools, and `GET /api/admin/recipes`.
+- Not applied to surfaces that do not return nutrition at all: the AI
+  `suggest_dishes` tool filters on the columns without echoing them.
 - Applies equally to `0`: a resolved recipe whose every ingredient is 0 kcal is a
   legitimate answer and reports `nutritionResolved = true` with totals of `0.00`.
 - Not applied to a dish: a dish aggregates recipe variations and has no amounts of
@@ -329,12 +329,91 @@ catalogue is fixed.
 - `RecipeNutritionCalculator.lineNutrition` returns `null` for an ingredient
   failing `Ingredient.hasResolvedNutrition()` (unit present plus all five values).
 - `RecipeNutritionService` writes all five columns or none.
-- `RecipeService.toResponse`, `RecipeSummaryMapper` and `AdminIngredientResponse`
-  set `nutritionResolved` explicitly rather than leaving it to a mapper default.
+- `RecipeService.toResponse`, `RecipeSummaryMapper`, `AdminRecipeService.toResponse`
+  and `AdminIngredientResponse` set `nutritionResolved` explicitly rather than
+  leaving it to a mapper default.
 - API references: `docs/apis/recipes/get-recipes-me.md`,
   `docs/apis/recipes/get-recipes-recipeid.md`,
-  `docs/apis/recipes/get-dishes-suggestions.md`.
+  `docs/apis/recipes/get-dishes-suggestions.md`,
+  `docs/apis/admin/get-recipes.md`.
 
 ## Last Reviewed
 
 2026-11-05, by Vegalife backend team
+
+---
+
+# Business Rule: A Line's Nutrition Is Derived, Rounded Per Line, and Never Partial
+
+## Rule ID
+
+`BR-RECP-007`
+
+## Status
+
+Active
+
+## Statement
+
+Every response that returns a recipe ingredient line also returns that line's own
+nutrition: the line's `amount` multiplied by the ingredient's per-unit value,
+rounded `HALF_UP` to scale 2. The five values are either all present or all
+`null`, and a line carries `nutritionResolved` to say which.
+
+Line values are rounded **individually**. Recipe totals remain rounded once over
+the exact sum of unrounded lines (BR-RECP-006). The two therefore need not agree
+exactly: three lines of `0.005` kcal display as `0.01` each against a total of
+`0.02`.
+
+No client may assert that the displayed line values sum to the displayed total.
+
+## Rationale
+
+A total the reader cannot decompose is not reviewable. Before this rule a member
+saw five recipe totals and an ingredient list with no connection between them: a
+total that looked wrong could only be diagnosed by opening the admin ingredient
+screen. Per-line values make the arithmetic auditable and let the interface say
+which ingredient drives the figure.
+
+Rounding each line to the same scale as the total is a deliberate trade-off,
+recorded in ADR-022 decision 11. The alternative — unrounded per-line products of
+a `DECIMAL(12,6)` value by an arbitrary amount — would preserve the sum identity
+but push the formatting of a very long decimal onto every client. The selected
+scale keeps the wire format uniform at the cost of a discrepancy below the
+display precision of any kcal or gram figure the product shows.
+
+Totals stay authoritative: they are persisted, filtered on in SQL, and rounded
+once. They are never recomputed from the rounded per-line values.
+
+## Scope & Exceptions
+
+- Applies to `RecipeIngredientResponse` (`POST /api/recipes`,
+  `GET /api/recipes/me`, `GET /api/recipes/{recipeId}`) and to
+  `AdminRecipeListResponse.IngredientItem` (`GET /api/admin/recipes` and the
+  admin recipe detail/update/approve/reject responses).
+- Both shapes are produced by one shared helper, so they cannot diverge.
+- An unresolved ingredient line reports five `null`s and
+  `nutritionResolved = false` — never a zero, never a partial set (BR-RECP-006).
+- Not applied to the dish ingredient suggestion surfaces
+  (`DishIngredientSuggestionResponse`, `AdminDishIngredientResponse`): they return
+  a curated name list with no `amount`, so there is no line to price.
+- Not applied to a recipe total, which is rounded once rather than per line.
+
+## Enforcement
+
+- `RecipeNutritionCalculator.scaledLineNutrition` is the only implementation of
+  the per-line derivation; it returns `null` for an unresolved ingredient.
+- `RecipeService.ingredientResponseOf` and `AdminRecipeService.toIngredientItem`
+  both call it rather than multiplying locally.
+- `RecipeNutritionCalculator.totals` deliberately does **not** use the scaled
+  helper, so the total stays exact-then-rounded-once.
+- Tests pin the divergence explicitly:
+  `RecipeNutritionCalculatorTest.scaledLineNutrition_roundsEachLineIndependently`.
+- API references: `docs/apis/recipes/post-recipes.md`,
+  `docs/apis/recipes/get-recipes-me.md`,
+  `docs/apis/recipes/get-recipes-recipeid.md`,
+  `docs/apis/admin/get-recipes.md`.
+
+## Last Reviewed
+
+2026-11-06, by Vegalife backend team

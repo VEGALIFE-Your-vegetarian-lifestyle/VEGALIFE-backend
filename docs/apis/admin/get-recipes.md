@@ -56,10 +56,23 @@ No request body
           {
             "ingredientId": "c7d8e9f0-1a2b-4c3d-8e5f-6a7b8c9d0e1f",
             "name": "shiitake mushroom",
+            "moderationStatus": "APPROVED",
             "amount": 200,
-            "unit": "G"
+            "unit": "G",
+            "calories": 68.00,
+            "proteinG": 4.40,
+            "carbohydrateG": 13.60,
+            "fatG": 0.20,
+            "fiberG": 5.00,
+            "nutritionResolved": true
           }
         ],
+        "calories": 68.00,
+        "proteinG": 4.40,
+        "carbohydrateG": 13.60,
+        "fatG": 0.20,
+        "fiberG": 5.00,
+        "nutritionResolved": true,
         "createdAt": "2026-09-28T08:00:00Z",
         "updatedAt": "2026-09-28T09:00:00Z",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
@@ -97,8 +110,13 @@ No request body
 | data.content[].ingredients | array | Ingredients with amounts; empty when none |
 | data.content[].ingredients[].ingredientId | uuid | Ingredient id |
 | data.content[].ingredients[].name | string | Ingredient name |
+| data.content[].ingredients[].moderationStatus | string | Review state of the shared ingredient name: `PENDING`, `APPROVED` or `REJECTED` |
 | data.content[].ingredients[].amount | number | Amount, expressed in the ingredient's own `unit` |
 | data.content[].ingredients[].unit | string \| null | The **ingredient's** unit: `G`, `ML`, `PIECE`, or `null` when undecided. Derived, not stored per line (ADR-022) |
+| data.content[].ingredients[].calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | This line's own contribution: `amount × the ingredient's per-unit value`, rounded to 2 decimals. All five are `null` together when the ingredient is uncurated |
+| data.content[].ingredients[].nutritionResolved | boolean | `true` when this line's five values are real rather than unknown |
+| data.content[].calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | Whole-recipe totals, read from the persisted columns, never per serving. `null` means the recipe cannot be priced yet, distinct from `0` (BR-RECP-006) |
+| data.content[].nutritionResolved | boolean | `true` only when every ingredient is curated and the totals are real. This is the field to drive a curation queue from |
 | data.content[].createdAt | string | ISO-8601 creation timestamp |
 | data.content[].updatedAt | string | ISO-8601 last-update timestamp |
 | data.content[].userId | uuid | Author user id |
@@ -125,6 +143,8 @@ No request body
 - Only `ROLE_ADMIN` may call this endpoint (`SecurityConfig` `/api/admin/**`).
 - `categoryId` resolves through `post_recipe` → `post_category`; a recipe not linked to any post matches only when `categoryId` is omitted.
 - `unit` on an ingredient entry is the **shared ingredient's** unit (`G`/`ML`/`PIECE`, or `null`), not a per-recipe choice (ADR-022).
+- Totals come from the persisted `recipe` columns and are not recomputed on read, so this list cannot disagree with what the suggest-dishes nutrition filters read. A recipe whose ingredients are not all curated has five `null` totals and `nutritionResolved: false` — never a partial sum (BR-RECP-006).
+- A line's values are `amount × the ingredient's per-unit value`, rounded to 2 decimals, and are `null` together when that ingredient is uncurated. Line values are rounded individually while the total is rounded once over the exact sum, so the visible lines need not add up exactly to the visible total (BR-RECP-007).
 
 ## Example
 
@@ -158,10 +178,23 @@ curl -X GET "http://localhost:8080/api/admin/recipes?page=0&size=20&userId=550e8
           {
             "ingredientId": "c7d8e9f0-1a2b-4c3d-8e5f-6a7b8c9d0e1f",
             "name": "shiitake mushroom",
+            "moderationStatus": "APPROVED",
             "amount": 200,
-            "unit": "G"
+            "unit": "G",
+            "calories": 68.00,
+            "proteinG": 4.40,
+            "carbohydrateG": 13.60,
+            "fatG": 0.20,
+            "fiberG": 5.00,
+            "nutritionResolved": true
           }
         ],
+        "calories": 68.00,
+        "proteinG": 4.40,
+        "carbohydrateG": 13.60,
+        "fatG": 0.20,
+        "fiberG": 5.00,
+        "nutritionResolved": true,
         "createdAt": "2026-09-28T08:00:00Z",
         "updatedAt": "2026-09-28T09:00:00Z",
         "userId": "550e8400-e29b-41d4-a716-446655440000",

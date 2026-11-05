@@ -49,13 +49,25 @@ No request body
           "ingredientId": "1a2b3c4d-0001-4000-8000-000000000001",
           "name": "tofu",
           "amount": 200,
-          "unit": "G"
+          "unit": "G",
+          "calories": 288.00,
+          "proteinG": 34.38,
+          "carbohydrateG": 5.56,
+          "fatG": 17.44,
+          "fiberG": 4.60,
+          "nutritionResolved": true
         },
         {
           "ingredientId": "1a2b3c4d-0002-4000-8000-000000000002",
           "name": "soy sauce",
           "amount": 15,
-          "unit": "ML"
+          "unit": "ML",
+          "calories": 9.00,
+          "proteinG": 1.22,
+          "carbohydrateG": 0.84,
+          "fatG": 0.02,
+          "fiberG": 0.12,
+          "nutritionResolved": true
         }
       ],
       "calories": 297.00,
@@ -96,6 +108,8 @@ The response has no paging wrapper: `data` is the array itself, and an authentic
 | data[].ingredients[].name | string | Lowercased ingredient name |
 | data[].ingredients[].amount | number | Quantity |
 | data[].ingredients[].unit | string \| null | The **ingredient's** unit — `G`, `ML` or `PIECE` — derived, not stored per line. `null` when it has not been decided |
+| data[].ingredients[].calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | This line's own contribution: `amount × the ingredient's per-unit value`, rounded to 2 decimals. All five are `null` together when the ingredient is uncurated |
+| data[].ingredients[].nutritionResolved | boolean | `true` when this line's five values are real rather than unknown |
 | data[].missingRequiredIngredients | array of string | Names of the dish's `required` ingredients this recipe omits (BR-DISH-002). Advisory only — the recipe is valid either way. Empty array when nothing is missing. Derived on read, never stored. |
 | data[].calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | Computed totals for the whole recipe, never per serving. `null` means the recipe cannot be priced yet, distinct from `0` (BR-RECP-006) |
 | data[].nutritionResolved | boolean | `true` only when every ingredient is curated and the totals are real |
@@ -114,6 +128,7 @@ The response has no paging wrapper: `data` is the array itself, and an authentic
 - No filter is applied on review state: recipes whose dish name is still `PENDING`, or that are themselves unapproved, stay in the list with their state attached, so a withheld recipe is not a mystery to its author (BR-DISH-001).
 - Not paginated: there is no `page`/`size` and no total count. A member's whole recipe list is returned in one response, which is why there is no envelope.
 - Nutrition is derived from the recipe's ingredients and stored, never authored (BR-RECP-004, ADR-022). `nutritionResolved` distinguishes "all ingredients curated" from "cannot be priced yet"; a `null` total is never a `0`.
+- Each line reports its own contribution (`amount × per-unit value`, rounded to 2 decimals) so a member can see which ingredient drives the total. Line values are rounded individually while the total is rounded once over the exact sum, so the visible lines need not add up exactly to the visible total (BR-RECP-007).
 - Read-only: the endpoint never creates or modifies a recipe.
 
 ## Example
