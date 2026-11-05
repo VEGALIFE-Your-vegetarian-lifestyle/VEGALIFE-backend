@@ -37,6 +37,12 @@ public class AdminRecipeListResponse {
   /** Relevance score at submission time; {@code null} means never scored. */
   private Double score;
 
+  /**
+   * Why an admin rejected this recipe; null when no reason is recorded — never rejected, or
+   * rejected without a reason (the reason is optional, BR-ADMIN-002).
+   */
+  private String rejectionReason;
+
   private UUID dishId;
   private String dishName;
 

@@ -25,6 +25,12 @@ public class AdminPostListResponse {
   /** Content filter verdict: PENDING, PASSED, REJECTED, NEEDS_REVIEW; null when never filtered. */
   private String flag;
 
+  /**
+   * Why an admin rejected this post; null when no reason is recorded (never rejected, rejected
+   * without a reason, or withheld by the content filter rather than an admin).
+   */
+  private String rejectionReason;
+
   private Integer viewCount;
   private Instant publishedAt;
   private Instant createdAt;

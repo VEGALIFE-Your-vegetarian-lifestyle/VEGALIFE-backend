@@ -147,6 +147,7 @@ public class AdminPostService {
         .content(post.getContent())
         .status(post.getStatus().name())
         .flag(post.getFlag() == null ? null : post.getFlag().name())
+        .rejectionReason(post.getRejectionReason())
         .contentScore(post.getContentScore())
         .recipes(recipeSummaries)
         .names(nameSummaries)
