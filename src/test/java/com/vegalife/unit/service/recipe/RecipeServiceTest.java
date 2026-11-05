@@ -18,6 +18,7 @@ import static org.mockito.Mockito.when;
 import com.vegalife.dto.mapper.recipe.RecipeMapper;
 import com.vegalife.dto.request.recipe.RecipeCreateRequest;
 import com.vegalife.dto.request.recipe.RecipeIngredientItem;
+import com.vegalife.dto.response.recipe.RecipeIngredientResponse;
 import com.vegalife.dto.response.recipe.RecipeResponse;
 import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.ModerationStatus;
@@ -478,6 +479,95 @@ class RecipeServiceTest {
     assertThatThrownBy(() -> recipeService.getRecipe(userId, recipeId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Recipe not found");
+  }
+
+  @Test
+  void getRecipe_lineCarriesItsOwnContributionWhenTheIngredientIsCurated() {
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .user(user)
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .calories(new BigDecimal("288.00"))
+            .build();
+    // 200 x 1.44 kcal/g = 288.00, the same figure the stored total carries.
+    Ingredient tofu =
+        Ingredient.builder()
+            .id(ingredientId)
+            .name("tofu")
+            .unit(Unit.G)
+            .calories(new BigDecimal("1.440000"))
+            .proteinG(new BigDecimal("0.171900"))
+            .carbohydrateG(new BigDecimal("0.027800"))
+            .fatG(new BigDecimal("0.087200"))
+            .fiberG(new BigDecimal("0.023000"))
+            .build();
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.of(recipe));
+    when(recipeIngredientRepository.findByRecipeId(recipeId))
+        .thenReturn(
+            List.of(
+                RecipeIngredient.builder()
+                    .recipeId(recipeId)
+                    .ingredientId(ingredientId)
+                    .ingredient(tofu)
+                    .amount(new BigDecimal("200"))
+                    .build()));
+    when(recipeMapper.toResponse(eq(recipe), eq("tofu stir-fry"), anyList()))
+        .thenReturn(RecipeResponse.builder().id(recipeId).build());
+
+    recipeService.getRecipe(userId, recipeId);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<List<RecipeIngredientResponse>> captor = ArgumentCaptor.forClass(List.class);
+    verify(recipeMapper).toResponse(eq(recipe), eq("tofu stir-fry"), captor.capture());
+
+    RecipeIngredientResponse line = captor.getValue().get(0);
+    assertThat(line.getUnit()).isEqualTo("G");
+    assertThat(line.isNutritionResolved()).isTrue();
+    assertThat(line.getCalories()).isEqualByComparingTo("288.00");
+    assertThat(line.getProteinG()).isEqualByComparingTo("34.38");
+  }
+
+  @Test
+  void getRecipe_lineReportsNoNutritionWhenItsIngredientIsUncurated() {
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .user(user)
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .build();
+    Ingredient bare = Ingredient.builder().id(ingredientId).name("muối").build();
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.of(recipe));
+    when(recipeIngredientRepository.findByRecipeId(recipeId))
+        .thenReturn(
+            List.of(
+                RecipeIngredient.builder()
+                    .recipeId(recipeId)
+                    .ingredientId(ingredientId)
+                    .ingredient(bare)
+                    .amount(BigDecimal.TEN)
+                    .build()));
+    when(recipeMapper.toResponse(eq(recipe), eq("tofu stir-fry"), anyList()))
+        .thenReturn(RecipeResponse.builder().id(recipeId).build());
+
+    recipeService.getRecipe(userId, recipeId);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<List<RecipeIngredientResponse>> captor = ArgumentCaptor.forClass(List.class);
+    verify(recipeMapper).toResponse(eq(recipe), eq("tofu stir-fry"), captor.capture());
+
+    // Unknown is five nulls, never a zero: 10 g of an uncurated ingredient is not 0 kcal.
+    RecipeIngredientResponse line = captor.getValue().get(0);
+    assertThat(line.isNutritionResolved()).isFalse();
+    assertThat(line.getCalories()).isNull();
+    assertThat(line.getProteinG()).isNull();
+    assertThat(line.getFiberG()).isNull();
   }
 
   @Test
