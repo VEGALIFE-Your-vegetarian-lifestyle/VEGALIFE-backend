@@ -21,7 +21,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.DefaultParameterNameDiscoverer;
 import org.springframework.core.MethodParameter;
+import org.springframework.core.ParameterNameDiscoverer;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -43,6 +45,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @ActiveProfiles("integration")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ApiDocsIntegrationTest {
+
+  private static final ParameterNameDiscoverer PARAMETER_NAME_DISCOVERER =
+      new DefaultParameterNameDiscoverer();
 
   @Container
   @SuppressWarnings("resource")
@@ -178,16 +183,16 @@ class ApiDocsIntegrationTest {
   }
 
   /**
-   * Every query parameter the controllers actually bind must be discoverable in Swagger. The list
-   * and search endpoints bind their filters through {@code @ModelAttribute} DTOs, so this walks the
-   * real handler mappings and checks each mapped operation against the served document instead of
-   * hard-coding a few endpoints.
+   * Every query parameter the controllers actually bind must be discoverable in Swagger. This walks
+   * the real handler mappings (not a hard-coded endpoint list): for each mapped operation it builds
+   * the expected query-parameter set from {@code @ModelAttribute} DTO fields and named
+   * {@code @RequestParam} arguments, then requires the served document to declare exactly that set.
    */
   @Test
-  void everyQueryDtoFieldAppearsAsAQueryParameterInTheApiDoc() throws Exception {
+  void everyControllerQueryParameterAppearsInTheApiDoc() throws Exception {
     JsonNode paths = readApiDocs().path("paths");
     List<String> problems = new ArrayList<>();
-    int endpoints = 0;
+    int operations = 0;
 
     for (Map.Entry<RequestMappingInfo, HandlerMethod> entry :
         requestMappingHandlerMapping.getHandlerMethods().entrySet()) {
@@ -196,74 +201,79 @@ class ApiDocsIntegrationTest {
         continue;
       }
 
-      Set<String> explicitQueryParams = new LinkedHashSet<>();
+      Set<String> expectedQueryParams = new LinkedHashSet<>();
       for (MethodParameter parameter : handler.getMethodParameters()) {
+        if (parameter.hasParameterAnnotation(ModelAttribute.class)) {
+          expectedQueryParams.addAll(instanceFieldNames(parameter.getParameterType()));
+        }
         RequestParam requestParam = parameter.getParameterAnnotation(RequestParam.class);
         if (requestParam != null) {
-          explicitQueryParams.add(
-              requestParam.name().isEmpty() ? requestParam.value() : requestParam.name());
+          expectedQueryParams.add(requestParamName(requestParam, parameter));
         }
       }
 
-      for (MethodParameter parameter : handler.getMethodParameters()) {
-        if (!parameter.hasParameterAnnotation(ModelAttribute.class)) {
-          continue;
-        }
-        Class<?> dtoType = parameter.getParameterType();
-        List<String> fields = instanceFieldNames(dtoType);
-        Set<String> expectedQueryParams = new LinkedHashSet<>(fields);
-        expectedQueryParams.addAll(explicitQueryParams);
+      for (String path : entry.getKey().getPatternValues()) {
+        for (RequestMethod method : entry.getKey().getMethodsCondition().getMethods()) {
+          operations++;
+          String operationId = method + " " + path;
+          JsonNode operation = paths.path(path).path(method.name().toLowerCase(Locale.ROOT));
+          if (operation.isMissingNode()) {
+            problems.add(operationId + ": operation is missing from /v3/api-docs");
+            continue;
+          }
 
-        for (String path : entry.getKey().getPatternValues()) {
-          for (RequestMethod method : entry.getKey().getMethodsCondition().getMethods()) {
-            endpoints++;
-            String operationId = method + " " + path;
-            JsonNode operation = paths.path(path).path(method.name().toLowerCase(Locale.ROOT));
-            if (operation.isMissingNode()) {
-              problems.add(operationId + ": operation is missing from /v3/api-docs");
-              continue;
-            }
+          Set<String> documentedQueryParams = new TreeSet<>();
+          operation
+              .path("parameters")
+              .forEach(
+                  p -> {
+                    if ("query".equals(p.path("in").asText())) {
+                      documentedQueryParams.add(p.path("name").asText());
+                    }
+                  });
 
-            Set<String> documentedQueryParams = new TreeSet<>();
-            operation
-                .path("parameters")
-                .forEach(
-                    p -> {
-                      if ("query".equals(p.path("in").asText())) {
-                        documentedQueryParams.add(p.path("name").asText());
-                      }
-                    });
+          Set<String> missing = new TreeSet<>(expectedQueryParams);
+          missing.removeAll(documentedQueryParams);
+          if (!missing.isEmpty()) {
+            problems.add(
+                operationId
+                    + ": query parameters bound by "
+                    + handler.getMethod().getName()
+                    + "() are missing from /v3/api-docs: "
+                    + missing);
+          }
 
-            for (String field : fields) {
-              if (!documentedQueryParams.contains(field)) {
-                problems.add(
-                    operationId
-                        + ": field '"
-                        + field
-                        + "' of "
-                        + dtoType.getSimpleName()
-                        + " is not documented as a query parameter");
-              }
-            }
-            for (String documented : documentedQueryParams) {
-              if (!expectedQueryParams.contains(documented)) {
-                problems.add(
-                    operationId
-                        + ": documented query parameter '"
-                        + documented
-                        + "' is not a bindable field of "
-                        + dtoType.getSimpleName());
-              }
-            }
+          Set<String> extra = new TreeSet<>(documentedQueryParams);
+          extra.removeAll(expectedQueryParams);
+          if (!extra.isEmpty()) {
+            problems.add(
+                operationId
+                    + ": /v3/api-docs declares query parameters that "
+                    + handler.getMethod().getName()
+                    + "() does not bind: "
+                    + extra);
           }
         }
       }
     }
 
-    assertThat(endpoints)
-        .as("operations bound through @ModelAttribute request DTOs")
-        .isGreaterThanOrEqualTo(25);
+    assertThat(operations).as("controller operations checked").isGreaterThanOrEqualTo(100);
     assertThat(problems).as("OpenAPI query parameter mismatches").isEmpty();
+  }
+
+  private static String requestParamName(RequestParam requestParam, MethodParameter parameter) {
+    if (!requestParam.name().isEmpty()) {
+      return requestParam.name();
+    }
+    if (!requestParam.value().isEmpty()) {
+      return requestParam.value();
+    }
+    String parameterName = parameter.getParameterName();
+    if (parameterName != null) {
+      return parameterName;
+    }
+    String[] discovered = PARAMETER_NAME_DISCOVERER.getParameterNames(parameter.getMethod());
+    return discovered == null ? "" : discovered[parameter.getParameterIndex()];
   }
 
   private JsonNode readApiDocs() throws Exception {
