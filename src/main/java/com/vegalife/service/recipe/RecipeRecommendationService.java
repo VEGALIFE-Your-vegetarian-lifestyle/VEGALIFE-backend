@@ -6,6 +6,7 @@ import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserProfileRepository;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -181,8 +182,33 @@ public class RecipeRecommendationService {
         && !atMostDecimal(recipe.getCalories(), filter.getMaxCalories())) {
       return false;
     }
-    return filter.getMinProteinG() == null
-        || atLeast(recipe.getProteinG(), filter.getMinProteinG());
+    return withinNutritionBounds(recipe, filter);
+  }
+
+  /**
+   * Every macro bound, in one place so a newly added bound cannot be forgotten here.
+   *
+   * <p>Each comparison fails closed on a null actual value: a recipe whose nutrition is unresolved
+   * has no macro figures at all, so it can never satisfy a lower <em>or</em> an upper bound.
+   * Treating a missing value as 0 would let "at most 5 g of fat" return recipes with unknown fat.
+   */
+  private static boolean withinNutritionBounds(Recipe recipe, RecipeFilter filter) {
+    return within(recipe.getProteinG(), filter.getMinProteinG(), filter.getMaxProteinG())
+        && within(
+            recipe.getCarbohydrateG(), filter.getMinCarbohydrateG(), filter.getMaxCarbohydrateG())
+        && within(recipe.getFatG(), filter.getMinFatG(), filter.getMaxFatG())
+        && within(recipe.getFiberG(), filter.getMinFiberG(), filter.getMaxFiberG());
+  }
+
+  private static boolean within(BigDecimal actual, BigDecimal min, BigDecimal max) {
+    if (min == null && max == null) {
+      return true;
+    }
+    if (actual == null) {
+      return false;
+    }
+    return (min == null || actual.compareTo(min) >= 0)
+        && (max == null || actual.compareTo(max) <= 0);
   }
 
   /** A null actual value fails an upper bound: unknown is not known-to-be-small. */

@@ -215,8 +215,7 @@ class IngredientControllerIntegrationTest {
 
     assertThat(ingredientRepository.count()).isEqualTo(before);
     List<Ingredient> all = ingredientRepository.findAll();
-    assertThat(all).hasSize(1);
-    assertThat(all.get(0).getName()).isEqualTo("Tofu");
+    assertThat(all).filteredOn(ingredient -> ingredient.getName().equals("Tofu")).hasSize(1);
   }
 
   private void saveIngredient(String name) {

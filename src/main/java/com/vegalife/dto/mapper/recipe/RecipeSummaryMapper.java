@@ -25,6 +25,7 @@ public final class RecipeSummaryMapper {
         .carbohydrateG(recipe.getCarbohydrateG())
         .fatG(recipe.getFatG())
         .fiberG(recipe.getFiberG())
+        .nutritionResolved(recipe.getCalories() != null)
         .build();
   }
 }

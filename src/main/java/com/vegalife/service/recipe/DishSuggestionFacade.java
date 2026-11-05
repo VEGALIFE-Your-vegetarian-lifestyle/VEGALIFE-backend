@@ -72,6 +72,13 @@ public class DishSuggestionFacade {
         .minCalories(request.getMinCalories())
         .maxCalories(request.getMaxCalories())
         .minProteinG(request.getMinProtein())
+        .maxProteinG(request.getMaxProtein())
+        .minCarbohydrateG(request.getMinCarbohydrate())
+        .maxCarbohydrateG(request.getMaxCarbohydrate())
+        .minFatG(request.getMinFat())
+        .maxFatG(request.getMaxFat())
+        .minFiberG(request.getMinFiber())
+        .maxFiberG(request.getMaxFiber())
         .build();
   }
 

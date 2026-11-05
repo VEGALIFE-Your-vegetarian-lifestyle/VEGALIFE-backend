@@ -36,9 +36,20 @@ No path parameters
 | minCalories | decimal | No | Only recipes with at least this many calories (whole recipe) |
 | maxCalories | decimal | No | Only recipes with at most this many calories (whole recipe) |
 | minProtein | decimal | No | Only recipes with at least this many grams of protein (whole recipe) |
+| maxProtein | decimal | No | Only recipes with at most this many grams of protein (whole recipe) |
+| minCarbohydrate | decimal | No | Only recipes with at least this many grams of carbohydrate (whole recipe) |
+| maxCarbohydrate | decimal | No | Only recipes with at most this many grams of carbohydrate (whole recipe) |
+| minFat | decimal | No | Only recipes with at least this many grams of fat (whole recipe) |
+| maxFat | decimal | No | Only recipes with at most this many grams of fat (whole recipe) |
+| minFiber | decimal | No | Only recipes with at least this many grams of fibre (whole recipe) |
+| maxFiber | decimal | No | Only recipes with at most this many grams of fibre (whole recipe) |
 | page | integer | No | 0-based page index, default 0 |
 | size | integer | No | Dishes per page, default 20, min 1, max 50 |
 | recipesPerDish | integer | No | Recipes returned per dish, default 3, min 1, max 10 |
+
+All five macros carry both bounds. A caller building a meal plan asks for "high
+protein, low fat, at least 8 g of fibre" as readily as it asks for a calorie
+window; splitting that across two code paths would let one of them drift.
 
 ### Request Body
 No request body
@@ -50,7 +61,12 @@ Behaviour of the recipe filters:
   recommended, so a dish is never shown for a recipe that was filtered out of
   its own list.
 - Nutrition filters are strict. A recipe whose value is unknown does **not**
-  pass a bound: unknown is not the same as zero.
+  pass any bound — not a lower one and not an upper one. Unknown is not the same
+  as zero: treating a missing value as `0` would let "at most 5 g of fat" return
+  recipes with unknown fat.
+- Since nutrition is derived from ingredients
+  ([ADR-022](../../adrs/022-ingredient-level-nutrition.md)), a `null` here means
+  "the catalogue cannot price this recipe yet", not "the author left it blank".
 - `maxTotalTime` counts a missing prep or cook time as 0, so a recipe with no
   times recorded can still satisfy it. `maxPrepTime`/`maxCookTime` require the
   value to be present.
@@ -81,11 +97,12 @@ Behaviour of the recipe filters:
             "cookTimeMinutes": 40,
             "servings": 2,
             "difficulty": "EASY",
-            "calories": 420.00,
-            "proteinG": 21.50,
-            "carbohydrateG": 55.00,
-            "fatG": 9.00,
-            "fiberG": 6.00
+            "calories": 297.00,
+            "proteinG": 35.60,
+            "carbohydrateG": 6.40,
+            "fatG": 17.46,
+            "fiberG": 4.72,
+            "nutritionResolved": true
           }
         ]
       }
@@ -118,11 +135,12 @@ Behaviour of the recipe filters:
 | data.content[].recommendedRecipes[].cookTimeMinutes | integer \| null | Cook time |
 | data.content[].recommendedRecipes[].servings | integer \| null | Servings the totals below describe |
 | data.content[].recommendedRecipes[].difficulty | string \| null | `EASY`, `MEDIUM` or `HARD` |
-| data.content[].recommendedRecipes[].calories | decimal \| null | Author-entered total for the whole recipe |
+| data.content[].recommendedRecipes[].calories | decimal \| null | Computed total for the whole recipe (BR-RECP-004) |
 | data.content[].recommendedRecipes[].proteinG | decimal \| null | Total grams of protein, whole recipe |
 | data.content[].recommendedRecipes[].carbohydrateG | decimal \| null | Total grams of carbohydrate, whole recipe |
 | data.content[].recommendedRecipes[].fatG | decimal \| null | Total grams of fat, whole recipe |
 | data.content[].recommendedRecipes[].fiberG | decimal \| null | Total grams of fibre, whole recipe |
+| data.content[].recommendedRecipes[].nutritionResolved | boolean | `true` only when every ingredient in the recipe is curated and the totals are real |
 | data.page | integer | Current page index |
 | data.size | integer | Page size |
 | data.totalElements | long | Eligible dishes across all pages, after filtering |
@@ -130,8 +148,11 @@ Behaviour of the recipe filters:
 | data.first | boolean | Whether this is the first page |
 | data.last | boolean | Whether this is the last page |
 
-Nutrition fields are omitted from the JSON when `null`. `null` means the author
-did not provide the value — it is distinct from `0`.
+Nutrition fields are omitted from the JSON when `null`. `null` means the recipe
+cannot be priced yet — at least one of its ingredients has no unit or no
+nutrition — and it is distinct from `0`, which is a real value (water is
+legitimately 0 kcal). Use `nutritionResolved` to tell the two apart without
+inspecting the individual fields.
 
 ### Error Responses
 | Status Code | Condition | Message |
@@ -151,6 +172,10 @@ did not provide the value — it is distinct from `0`.
 - Only recipes with `moderation_status = APPROVED` and
   `deleted_at IS NULL` are ever recommended (ADR-016), so a pending or rejected
   recipe never appears here, even for its own author.
+- A recipe's nutrition is derived from its ingredients and stored, never
+  authored (BR-RECP-004). It is `null` unless every ingredient is curated
+  (BR-RECP-006), and a `null` fails every nutrition bound rather than passing as
+  zero.
 - Recommendations are ranked `score DESC NULLS LAST, createdAt DESC, id ASC`
   and capped at `recipesPerDish`. `score` is a relevance score of the recipe
   text, not a nutrition or popularity ranking.
@@ -161,7 +186,7 @@ did not provide the value — it is distinct from `0`.
 
 ### Request
 ```bash
-curl -X GET "http://localhost:8080/api/dishes/suggestions?cuisineType=Vietnamese&maxTotalTime=45&recipesPerDish=2" \
+curl -X GET "http://localhost:8080/api/dishes/suggestions?cuisineType=Vietnamese&maxTotalTime=45&minProtein=20&maxFat=15&recipesPerDish=2" \
   -H "Authorization: Bearer <access-token>"
 ```
 
@@ -193,7 +218,10 @@ curl -X GET "http://localhost:8080/api/dishes/suggestions?cuisineType=Vietnamese
 
 ## Related
 - Feature Spec: `docs/feats/dish-suggestions.md`
-- Business Rules: `docs/brs/mcp-tools.md` — BR-MCP-002, BR-MCP-008
+- Nutrition feature spec: `docs/feats/ingredient-nutrition.md`
+- ADR: [`docs/adrs/022-ingredient-level-nutrition.md`](../../adrs/022-ingredient-level-nutrition.md)
+- Business Rules: `docs/brs/mcp-tools.md` — BR-MCP-002, BR-MCP-008;
+  `docs/brs/recipes.md` — BR-RECP-004, BR-RECP-006
 - Companion API: `docs/apis/recipes/get-dishes.md` (plain catalogue listing)
 - AI tool: `suggest_dishes` on `service/ai/MenuTools`
 - Data model: `docs/arch/data-dictionary.md` (Dish, Recipe, RecipeIngredient)

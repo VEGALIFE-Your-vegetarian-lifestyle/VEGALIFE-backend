@@ -52,6 +52,27 @@ public class DishSuggestionRequest {
   @DecimalMin(value = "0", message = "minProtein must be >= 0")
   private BigDecimal minProtein;
 
+  @DecimalMin(value = "0", message = "maxProtein must be >= 0")
+  private BigDecimal maxProtein;
+
+  @DecimalMin(value = "0", message = "minCarbohydrate must be >= 0")
+  private BigDecimal minCarbohydrate;
+
+  @DecimalMin(value = "0", message = "maxCarbohydrate must be >= 0")
+  private BigDecimal maxCarbohydrate;
+
+  @DecimalMin(value = "0", message = "minFat must be >= 0")
+  private BigDecimal minFat;
+
+  @DecimalMin(value = "0", message = "maxFat must be >= 0")
+  private BigDecimal maxFat;
+
+  @DecimalMin(value = "0", message = "minFiber must be >= 0")
+  private BigDecimal minFiber;
+
+  @DecimalMin(value = "0", message = "maxFiber must be >= 0")
+  private BigDecimal maxFiber;
+
   @Min(value = 0, message = "page must be >= 0")
   private Integer page;
 

@@ -7,6 +7,7 @@ import com.vegalife.dto.response.recipe.RecipeIngredientResponse;
 import com.vegalife.dto.response.recipe.RecipeResponse;
 import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.recipe.Unit;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
@@ -51,6 +52,7 @@ public class RecipeService {
   private final UserRepository userRepository;
   private final RecipeMapper recipeMapper;
   private final DishIngredientService dishIngredientService;
+  private final RecipeNutritionService recipeNutritionService;
   private final TransactionTemplate transactionTemplate;
 
   /**
@@ -110,6 +112,9 @@ public class RecipeService {
         ingredients.stream().map(RecipeIngredientResponse::getIngredientId).toList();
     response.setMissingRequiredIngredients(
         dishIngredientService.missingRequiredIngredientNames(recipe.getDish().getId(), presentIds));
+    // Stated explicitly rather than derived in the mapper: "unknown nutrition" and "no nutrition
+    // field" must not look the same to a client.
+    response.setNutritionResolved(recipe.getCalories() != null);
     return response;
   }
 
@@ -131,7 +136,7 @@ public class RecipeService {
               .ingredientId(ingredient.getId())
               .name(ingredient.getName())
               .amount(line.getAmount())
-              .unit(line.getUnit())
+              .unit(unitName(ingredient.getUnit()))
               .build());
     }
     return responses;
@@ -149,7 +154,7 @@ public class RecipeService {
 
     List<Ingredient> resolvedIngredients = new ArrayList<>();
     for (NormalizedIngredient item : ingredients) {
-      resolvedIngredients.add(findOrCreateIngredient(item.name()));
+      resolvedIngredients.add(findOrCreateIngredient(item.name(), item.unit()));
     }
 
     Recipe recipe =
@@ -164,11 +169,6 @@ public class RecipeService {
                 .cookTimeMinutes(request.getCookTimeMinutes())
                 .servings(request.getServings())
                 .difficulty(parseDifficulty(request.getDifficulty()))
-                .calories(request.getCalories())
-                .proteinG(request.getProteinG())
-                .carbohydrateG(request.getCarbohydrateG())
-                .fatG(request.getFatG())
-                .fiberG(request.getFiberG())
                 .build());
     recipeRepository.flush();
 
@@ -181,16 +181,20 @@ public class RecipeService {
               .recipeId(recipe.getId())
               .ingredientId(ingredient.getId())
               .amount(item.amount())
-              .unit(item.unit())
               .build());
       ingredientResponses.add(
           RecipeIngredientResponse.builder()
               .ingredientId(ingredient.getId())
               .name(item.name())
               .amount(item.amount())
-              .unit(item.unit())
+              .unit(unitName(ingredient.getUnit()))
               .build());
     }
+
+    // Totals are derived from the lines just written, never taken from the request (ADR-022). A
+    // recipe whose ingredients are all unresolved is stored with null nutrition rather than a
+    // partial sum, and fills in later when an admin completes the ingredients.
+    recipeNutritionService.recomputeForRecipe(recipe.getId());
 
     log.info("Recipe {} created for user {}", recipe.getId(), userId);
 
@@ -224,8 +228,15 @@ public class RecipeService {
         Dish.builder().name(normalizedDishName).moderationStatus(ModerationStatus.PENDING).build());
   }
 
-  /** Same contract as {@link #findOrCreateDish}, for ingredient names. */
-  private Ingredient findOrCreateIngredient(String normalizedName) {
+  /**
+   * Same contract as {@link #findOrCreateDish}, for ingredient names.
+   *
+   * <p>{@code rawUnit} is applied <strong>only when the name is new</strong>. For an existing
+   * ingredient the row's own unit already governs every recipe that references it, so honouring the
+   * caller's text would silently re-denominate a shared ingredient and change the quantity in other
+   * people's recipes (ADR-022).
+   */
+  private Ingredient findOrCreateIngredient(String normalizedName, String rawUnit) {
     Optional<Ingredient> existing = ingredientRepository.findByNameIgnoreCase(normalizedName);
     if (existing.isPresent()) {
       Ingredient ingredient = existing.get();
@@ -238,8 +249,31 @@ public class RecipeService {
     return ingredientRepository.saveAndFlush(
         Ingredient.builder()
             .name(normalizedName)
+            .unit(parseUnit(rawUnit))
             .moderationStatus(ModerationStatus.PENDING)
             .build());
+  }
+
+  /**
+   * Maps the optional member-supplied unit onto the three-code enum.
+   *
+   * <p>Omitted stays {@code null}: a member who writes {@code "2 cà chua"} should not be forced to
+   * spell out a unit they do not think in, and an admin resolves it later. Present-but-unmappable
+   * is refused rather than dropped, because a caller who wrote {@code kg} means a different
+   * quantity than {@code g} and must not have that silently discarded.
+   */
+  private Unit parseUnit(String rawUnit) {
+    if (rawUnit == null || rawUnit.isBlank()) {
+      return null;
+    }
+    return Unit.fromInput(rawUnit)
+        .orElseThrow(
+            () -> new ValidationException("Unit must be G, ML, or PIECE: " + rawUnit.trim()));
+  }
+
+  /** The wire form of a unit; null stays null rather than becoming a literal "null". */
+  private static String unitName(Unit unit) {
+    return unit == null ? null : unit.name();
   }
 
   private static void requireNotRejected(ModerationStatus status, String kind, String name) {
@@ -260,7 +294,7 @@ public class RecipeService {
       if (!seen.add(name)) {
         throw new ValidationException("Duplicate ingredient name: " + name);
       }
-      normalized.add(new NormalizedIngredient(name, item.getAmount(), item.getUnit().trim()));
+      normalized.add(new NormalizedIngredient(name, item.getAmount(), item.getUnit()));
     }
     return normalized;
   }

@@ -70,7 +70,10 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-FILTER-009 | Posts Stuck Pending Are Unpublished After 24 Hours | Active | 2026-10-10 |
 | BR-RECP-001 | Recipe Ownership Comes from Authentication | Active | 2026-10-01 |
 | BR-RECP-002 | Ingredient and Dish Names Are Unique Case-Insensitively | Active | 2026-10-01 |
-| BR-RECP-003 | Recipe Name, Instructions, Servings, and Dish Are Required | Active | 2026-10-01 |
+| BR-RECP-003 | Recipe Name, Instructions, Servings, and Dish Are Required | Active | 2026-11-05 |
+| BR-RECP-004 | Recipe Nutrition Is Derived From Ingredient Nutrition, Never Authored | Active | 2026-11-05 |
+| BR-RECP-005 | Ingredient Nutrition Is Per One Unit, and All-or-Nothing | Active | 2026-11-05 |
+| BR-RECP-006 | A Recipe Reports No Nutrition Unless Every Ingredient Is Resolved | Active | 2026-11-05 |
 | BR-DISH-001 | Dish and Ingredient Names Require Admin Approval and Rejection Is Permanent | Active | 2026-10-23 |
 | BR-DISH-002 | Dish Ingredient Suggestions and Advisory Required Flag | Active | 2026-11-02 |
 | BR-DISH-003 | Dish Ingredient Entries Come From Approved Recipes or an Administrator, and Deletion Is Permanent for Seeding | Active | 2026-11-02 |
@@ -118,3 +121,4 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MCP-006 | Scheduling Happens Only After Explicit User Confirmation | Active | 2026-10-12 |
 | BR-MCP-007 | Tool Failures Are Model-Readable Results, Not Transport Errors | Active | 2026-10-13 |
 | BR-MCP-008 | Allergies Come from the Profile, Never from a Tool Argument | Active | 2026-10-25 |
+| BR-MCP-009 | A Browsing Tool's Filters Mirror Its Endpoint Exactly | Active | 2026-11-05 |

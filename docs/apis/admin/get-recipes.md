@@ -57,7 +57,7 @@ No request body
             "ingredientId": "c7d8e9f0-1a2b-4c3d-8e5f-6a7b8c9d0e1f",
             "name": "shiitake mushroom",
             "amount": 200,
-            "unit": "g"
+            "unit": "G"
           }
         ],
         "createdAt": "2026-09-28T08:00:00Z",
@@ -97,8 +97,8 @@ No request body
 | data.content[].ingredients | array | Ingredients with amounts; empty when none |
 | data.content[].ingredients[].ingredientId | uuid | Ingredient id |
 | data.content[].ingredients[].name | string | Ingredient name |
-| data.content[].ingredients[].amount | number | Amount in `unit` |
-| data.content[].ingredients[].unit | string | Measurement unit (e.g. `g`, `ml`, `tbsp`) |
+| data.content[].ingredients[].amount | number | Amount, expressed in the ingredient's own `unit` |
+| data.content[].ingredients[].unit | string \| null | The **ingredient's** unit: `G`, `ML`, `PIECE`, or `null` when undecided. Derived, not stored per line (ADR-022) |
 | data.content[].createdAt | string | ISO-8601 creation timestamp |
 | data.content[].updatedAt | string | ISO-8601 last-update timestamp |
 | data.content[].userId | uuid | Author user id |
@@ -124,7 +124,7 @@ No request body
 - No `status` query filter exists on this endpoint.
 - Only `ROLE_ADMIN` may call this endpoint (`SecurityConfig` `/api/admin/**`).
 - `categoryId` resolves through `post_recipe` → `post_category`; a recipe not linked to any post matches only when `categoryId` is omitted.
-- Nutrition columns on `ingredient` are never returned (issue #4 non-goal).
+- `unit` on an ingredient entry is the **shared ingredient's** unit (`G`/`ML`/`PIECE`, or `null`), not a per-recipe choice (ADR-022).
 
 ## Example
 
@@ -159,7 +159,7 @@ curl -X GET "http://localhost:8080/api/admin/recipes?page=0&size=20&userId=550e8
             "ingredientId": "c7d8e9f0-1a2b-4c3d-8e5f-6a7b8c9d0e1f",
             "name": "shiitake mushroom",
             "amount": 200,
-            "unit": "g"
+            "unit": "G"
           }
         ],
         "createdAt": "2026-09-28T08:00:00Z",

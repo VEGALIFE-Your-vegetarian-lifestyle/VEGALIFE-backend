@@ -26,6 +26,7 @@ import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -180,7 +181,8 @@ class MenuToolsTest {
 
     String result =
         menuTools.suggestDishes(
-            "pad", "Thai", "EASY", 10, 20, 30, null, null, null, null, null, null, CONTEXT);
+            "pad", "Thai", "EASY", 10, 20, 30, null, null, null, null, null, null, null, null, null,
+            null, null, null, null, CONTEXT);
 
     assertThat(result).contains("\"success\":true").contains("Dish suggestions retrieved");
     ArgumentCaptor<DishSuggestionRequest> request =
@@ -197,11 +199,54 @@ class MenuToolsTest {
   }
 
   @Test
+  void suggestDishes_forwardsEveryNutritionBound() {
+    when(dishSuggestionFacade.suggest(eq(USER), any())).thenReturn(emptySuggestionPage());
+
+    menuTools.suggestDishes(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        new BigDecimal("300"),
+        new BigDecimal("700"),
+        new BigDecimal("10"),
+        new BigDecimal("40"),
+        new BigDecimal("20"),
+        new BigDecimal("60"),
+        new BigDecimal("5"),
+        new BigDecimal("25"),
+        new BigDecimal("8"),
+        new BigDecimal("20"),
+        null,
+        null,
+        null,
+        CONTEXT);
+
+    ArgumentCaptor<DishSuggestionRequest> request =
+        ArgumentCaptor.forClass(DishSuggestionRequest.class);
+    verify(dishSuggestionFacade).suggest(eq(USER), request.capture());
+    DishSuggestionRequest sent = request.getValue();
+    assertThat(sent.getMinCalories()).isEqualByComparingTo("300");
+    assertThat(sent.getMaxCalories()).isEqualByComparingTo("700");
+    assertThat(sent.getMinProtein()).isEqualByComparingTo("10");
+    assertThat(sent.getMaxProtein()).isEqualByComparingTo("40");
+    assertThat(sent.getMinCarbohydrate()).isEqualByComparingTo("20");
+    assertThat(sent.getMaxCarbohydrate()).isEqualByComparingTo("60");
+    assertThat(sent.getMinFat()).isEqualByComparingTo("5");
+    assertThat(sent.getMaxFat()).isEqualByComparingTo("25");
+    assertThat(sent.getMinFiber()).isEqualByComparingTo("8");
+    assertThat(sent.getMaxFiber()).isEqualByComparingTo("20");
+  }
+
+  @Test
   void suggestDishes_clampsRecipesPerDishAndBlankFilters() {
     when(dishSuggestionFacade.suggest(eq(USER), any())).thenReturn(emptySuggestionPage());
 
     menuTools.suggestDishes(
-        "   ", null, null, null, null, null, null, null, null, 0, 999, 99, CONTEXT);
+        "   ", null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, 0, 999, 99, CONTEXT);
 
     ArgumentCaptor<DishSuggestionRequest> request =
         ArgumentCaptor.forClass(DishSuggestionRequest.class);
@@ -219,7 +264,8 @@ class MenuToolsTest {
     when(dishSuggestionFacade.suggest(eq(USER), any())).thenReturn(emptySuggestionPage());
 
     menuTools.suggestDishes(
-        null, null, null, null, null, null, null, null, null, null, null, null, CONTEXT);
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, CONTEXT);
 
     ArgumentCaptor<DishSuggestionRequest> request =
         ArgumentCaptor.forClass(DishSuggestionRequest.class);
@@ -233,7 +279,26 @@ class MenuToolsTest {
   void suggestDishes_refusesWhenTheCallerIsUnattributed() {
     String result =
         menuTools.suggestDishes(
-            null, null, null, null, null, null, null, null, null, null, null, null, NO_IDENTITY);
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            NO_IDENTITY);
 
     assertThat(result).isEqualTo(REFUSED_IDENTITY);
     verifyNoInteractions(dishSuggestionFacade);

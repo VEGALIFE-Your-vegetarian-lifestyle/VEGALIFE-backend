@@ -14,8 +14,9 @@ import lombok.NoArgsConstructor;
  * content, so it carries no owning user, no moderation state and no ingredient lines. The full
  * recipe stays reachable through the recipe endpoints.
  *
- * <p>Nutrition values are author-entered totals for the whole recipe, not per serving, and are
- * {@code null} when the author did not provide them — never {@code 0}.
+ * <p>Nutrition values are derived from the recipe's ingredients (ADR-022), are totals for the whole
+ * recipe rather than per serving, and are {@code null} when any ingredient is unresolved — never
+ * {@code 0}.
  */
 @Data
 @Builder
@@ -40,4 +41,7 @@ public class RecipeSummaryResponse {
   private BigDecimal carbohydrateG;
   private BigDecimal fatG;
   private BigDecimal fiberG;
+
+  /** True when the five values above are known, rather than merely absent. */
+  private boolean nutritionResolved;
 }

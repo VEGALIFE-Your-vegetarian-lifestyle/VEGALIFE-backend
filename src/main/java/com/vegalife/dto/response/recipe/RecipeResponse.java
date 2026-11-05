@@ -48,8 +48,9 @@ public class RecipeResponse {
   private List<String> missingRequiredIngredients;
 
   /**
-   * Author-entered totals for the whole recipe (issue #163), never per serving. {@code null} means
-   * the author did not provide the value — distinct from 0.
+   * Totals for the whole recipe, derived from its ingredients (ADR-022), never per serving. {@code
+   * null} when any line's ingredient has an unresolved unit or missing nutrition - never a partial
+   * sum and never 0 for "unknown".
    */
   private BigDecimal calories;
 
@@ -57,6 +58,13 @@ public class RecipeResponse {
   private BigDecimal carbohydrateG;
   private BigDecimal fatG;
   private BigDecimal fiberG;
+
+  /**
+   * Whether the five values above are known. Redundant with {@code calories != null} by
+   * construction, but stated explicitly so a client does not have to infer "no data yet" from a
+   * null it might also read as an omission.
+   */
+  private boolean nutritionResolved;
 
   private Instant createdAt;
   private Instant updatedAt;

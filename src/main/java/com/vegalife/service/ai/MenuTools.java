@@ -330,9 +330,13 @@ public class MenuTools {
               + " the result is already filtered for them — allergies are never a parameter."
               + " Results are ordered by dish name and paginated. Filters narrow BOTH which dishes"
               + " appear and which recipes are recommended, so a dish is never shown for a recipe"
-              + " that was filtered out. Nutrition values are totals for the whole recipe, not per"
-              + " serving, and may be absent; never assume a missing value is zero. The caller is"
-              + " always identified from the conversation context, never from an argument.")
+              + " that was filtered out. Nutrition filters exist for calories, protein,"
+              + " carbohydrate, fat and fiber, each with an optional minimum and maximum; a recipe"
+              + " whose nutrition is unknown is excluded by every bound rather than treated as"
+              + " zero. Nutrition values are totals for the whole recipe, not per serving, and are"
+              + " reported with nutritionResolved so an absent value is never mistaken for 0. The"
+              + " caller is always identified from the conversation context, never from an"
+              + " argument.")
   public String suggestDishes(
       @ToolParam(required = false, description = "Case-insensitive substring of the dish name.")
           String name,
@@ -364,6 +368,35 @@ public class MenuTools {
               required = false,
               description = "Only recipes with at least this many grams of protein per recipe.")
           BigDecimal minProtein,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at most this many grams of protein per recipe.")
+          BigDecimal maxProtein,
+      @ToolParam(
+              required = false,
+              description =
+                  "Only recipes with at least this many grams of carbohydrate per recipe.")
+          BigDecimal minCarbohydrate,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at most this many grams of carbohydrate per recipe.")
+          BigDecimal maxCarbohydrate,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at least this many grams of fat per recipe.")
+          BigDecimal minFat,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at most this many grams of fat per recipe.")
+          BigDecimal maxFat,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at least this many grams of fiber per recipe.")
+          BigDecimal minFiber,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at most this many grams of fiber per recipe.")
+          BigDecimal maxFiber,
       @ToolParam(required = false, description = "Zero-based page index. Omit for 0.") Integer page,
       @ToolParam(required = false, description = "Dishes per page, 1 to 50. Omit for 20.")
           Integer size,
@@ -385,6 +418,13 @@ public class MenuTools {
             .minCalories(minCalories)
             .maxCalories(maxCalories)
             .minProtein(minProtein)
+            .maxProtein(maxProtein)
+            .minCarbohydrate(minCarbohydrate)
+            .maxCarbohydrate(maxCarbohydrate)
+            .minFat(minFat)
+            .maxFat(maxFat)
+            .minFiber(minFiber)
+            .maxFiber(maxFiber)
             .page(page == null ? DEFAULT_PAGE : Math.max(0, page))
             .size(size == null ? DEFAULT_SIZE : Math.min(50, Math.max(1, size)))
             .recipesPerDish(

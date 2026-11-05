@@ -21,6 +21,7 @@ import com.vegalife.dto.request.recipe.RecipeIngredientItem;
 import com.vegalife.dto.response.recipe.RecipeResponse;
 import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.recipe.Unit;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
@@ -32,6 +33,7 @@ import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.recipe.DishIngredientService;
+import com.vegalife.service.recipe.RecipeNutritionService;
 import com.vegalife.service.recipe.RecipeService;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -69,6 +71,8 @@ class RecipeServiceTest {
 
   @Mock private DishIngredientService dishIngredientService;
 
+  @Mock private RecipeNutritionService recipeNutritionService;
+
   @Mock private TransactionTemplate transactionTemplate;
 
   @InjectMocks private RecipeService recipeService;
@@ -99,7 +103,12 @@ class RecipeServiceTest {
         .thenAnswer(invocation -> Dish.builder().id(dishId).name("tofu stir-fry").build());
     when(ingredientRepository.findByNameIgnoreCase("tofu")).thenReturn(Optional.empty());
     when(ingredientRepository.saveAndFlush(any(Ingredient.class)))
-        .thenAnswer(invocation -> Ingredient.builder().id(ingredientId).name("tofu").build());
+        .thenAnswer(
+            invocation -> {
+              Ingredient ingredient = invocation.getArgument(0);
+              ingredient.setId(ingredientId);
+              return ingredient;
+            });
     when(recipeRepository.save(any(Recipe.class)))
         .thenAnswer(
             invocation -> {
@@ -123,6 +132,8 @@ class RecipeServiceTest {
     ArgumentCaptor<Ingredient> ingredientCaptor = ArgumentCaptor.forClass(Ingredient.class);
     verify(ingredientRepository).saveAndFlush(ingredientCaptor.capture());
     assertThat(ingredientCaptor.getValue().getName()).isEqualTo("tofu");
+    // The member's unit becomes the new ingredient's unit; it is not stored per recipe line.
+    assertThat(ingredientCaptor.getValue().getUnit()).isEqualTo(Unit.G);
 
     ArgumentCaptor<Recipe> recipeCaptor = ArgumentCaptor.forClass(Recipe.class);
     verify(recipeRepository).save(recipeCaptor.capture());
@@ -141,7 +152,6 @@ class RecipeServiceTest {
     assertThat(link.getRecipeId()).isEqualTo(recipeId);
     assertThat(link.getIngredientId()).isEqualTo(ingredientId);
     assertThat(link.getAmount()).isEqualByComparingTo("150");
-    assertThat(link.getUnit()).isEqualTo("g");
   }
 
   @Test
@@ -340,7 +350,12 @@ class RecipeServiceTest {
         .thenAnswer(invocation -> Dish.builder().id(dishId).name("tofu stir-fry").build());
     when(ingredientRepository.findByNameIgnoreCase("tofu")).thenReturn(Optional.empty());
     when(ingredientRepository.saveAndFlush(any(Ingredient.class)))
-        .thenAnswer(invocation -> Ingredient.builder().id(ingredientId).name("tofu").build());
+        .thenAnswer(
+            invocation -> {
+              Ingredient ingredient = invocation.getArgument(0);
+              ingredient.setId(ingredientId);
+              return ingredient;
+            });
     when(recipeRepository.save(any(Recipe.class)))
         .thenAnswer(
             invocation -> {
@@ -394,7 +409,7 @@ class RecipeServiceTest {
             .instructions("Chop and cook")
             .servings(2)
             .build();
-    Ingredient tofu = Ingredient.builder().id(ingredientId).name("tofu").build();
+    Ingredient tofu = Ingredient.builder().id(ingredientId).name("tofu").unit(Unit.G).build();
     RecipeResponse expected = RecipeResponse.builder().id(recipeId).build();
     when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.of(recipe));
     when(recipeIngredientRepository.findByRecipeId(recipeId))
@@ -405,7 +420,6 @@ class RecipeServiceTest {
                     .ingredientId(ingredientId)
                     .ingredient(tofu)
                     .amount(new BigDecimal("150"))
-                    .unit("g")
                     .build()));
     when(recipeMapper.toResponse(eq(recipe), eq("tofu stir-fry"), anyList())).thenReturn(expected);
 

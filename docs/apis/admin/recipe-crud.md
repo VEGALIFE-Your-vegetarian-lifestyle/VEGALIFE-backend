@@ -67,7 +67,7 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
             "name": "đậu hũ",
             "moderationStatus": "APPROVED",
             "amount": 200,
-            "unit": "g"
+            "unit": "G"
           }
         ],
         "missingRequiredIngredients": [],

@@ -52,7 +52,9 @@ public interface AdminRecipeMapper {
         .name(ri.getIngredient().getName())
         .moderationStatus(ri.getIngredient().getModerationStatus().name())
         .amount(ri.getAmount())
-        .unit(ri.getUnit())
+        // The unit belongs to the ingredient, not the line (ADR-022): a per-line copy could only
+        // repeat it or contradict it.
+        .unit(ri.getIngredient().getUnit() == null ? null : ri.getIngredient().getUnit().name())
         .build();
   }
 }
