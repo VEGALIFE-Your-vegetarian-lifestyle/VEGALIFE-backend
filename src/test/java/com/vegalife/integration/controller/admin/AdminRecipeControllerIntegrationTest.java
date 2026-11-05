@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.Difficulty;
+import com.vegalife.enums.recipe.Unit;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
@@ -152,7 +153,7 @@ class AdminRecipeControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].categoryIds[0]").value(recipes.getId().toString()))
         .andExpect(jsonPath("$.data.content[0].ingredients[0].name").value("Tofu"))
         .andExpect(jsonPath("$.data.content[0].ingredients[0].amount").value(2.5))
-        .andExpect(jsonPath("$.data.content[0].ingredients[0].unit").value("g"))
+        .andExpect(jsonPath("$.data.content[0].ingredients[0].unit").value("G"))
         .andExpect(jsonPath("$.data.content[0].createdAt").exists())
         .andExpect(jsonPath("$.data.content[0].updatedAt").exists())
         .andExpect(jsonPath("$.data.content[0].userId").value(author2.getId().toString()))
@@ -426,6 +427,8 @@ class AdminRecipeControllerIntegrationTest {
               .findByNameIgnoreCase("Tofu")
               .orElseGet(
                   () -> ingredientRepository.save(Ingredient.builder().name("Tofu").build()));
+      tofu.setUnit(Unit.G);
+      entityManager.flush();
       RecipeIngredient link =
           RecipeIngredient.builder()
               .recipeId(recipe.getId())
@@ -433,7 +436,6 @@ class AdminRecipeControllerIntegrationTest {
               .recipe(recipe)
               .ingredient(tofu)
               .amount(new BigDecimal("2.500"))
-              .unit("g")
               .build();
       entityManager.persist(link);
       recipe.getRecipeIngredients().add(link);

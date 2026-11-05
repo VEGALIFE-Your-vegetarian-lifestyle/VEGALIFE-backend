@@ -14,7 +14,13 @@ import lombok.Data;
  * list.
  *
  * <p>Nutrition filters are strict: a recipe whose value is unknown is excluded, never treated as
- * passing. Unknown is not the same as zero.
+ * passing. Unknown is not the same as zero. Since ADR-022 a recipe's nutrition is resolved only
+ * when every ingredient line is, so a null here genuinely means "the catalogue cannot price this
+ * dish yet" rather than "the author left it blank".
+ *
+ * <p>All five macros carry both bounds. A caller building a meal plan asks for "high protein, low
+ * fat, at least 8 g of fibre" as readily as it asks for a calorie window, and splitting that across
+ * two code paths would let one of them drift.
  */
 @Data
 @Builder
@@ -31,7 +37,18 @@ public class RecipeFilter {
 
   private BigDecimal minCalories;
   private BigDecimal maxCalories;
+
   private BigDecimal minProteinG;
+  private BigDecimal maxProteinG;
+
+  private BigDecimal minCarbohydrateG;
+  private BigDecimal maxCarbohydrateG;
+
+  private BigDecimal minFatG;
+  private BigDecimal maxFatG;
+
+  private BigDecimal minFiberG;
+  private BigDecimal maxFiberG;
 
   /** True when no constraint is set, letting callers skip filtering entirely. */
   public boolean isEmpty() {
@@ -41,6 +58,13 @@ public class RecipeFilter {
         && maxTotalTimeMinutes == null
         && minCalories == null
         && maxCalories == null
-        && minProteinG == null;
+        && minProteinG == null
+        && maxProteinG == null
+        && minCarbohydrateG == null
+        && maxCarbohydrateG == null
+        && minFatG == null
+        && maxFatG == null
+        && minFiberG == null
+        && maxFiberG == null;
   }
 }

@@ -478,7 +478,6 @@ class ModeratePostIntegrationTest {
             .recipeId(recipe.getId())
             .ingredientId(ingredient.getId())
             .amount(new BigDecimal("100"))
-            .unit("g")
             .build());
   }
 }

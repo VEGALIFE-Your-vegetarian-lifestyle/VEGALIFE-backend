@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.recipe.Unit;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.recipe.Dish;
@@ -108,7 +109,7 @@ class RecipeControllerIntegrationTest {
           "difficulty": "EASY",
           "ingredients": [
             {"name": "  Tofu ", "amount": 150, "unit": "g"},
-            {"name": "Soy Sauce", "amount": 1.5, "unit": "tbsp"}
+            {"name": "Soy Sauce", "amount": 1.5, "unit": "ml"}
           ]
         }
         """;
@@ -150,11 +151,17 @@ class RecipeControllerIntegrationTest {
             .findFirst()
             .orElseThrow();
     assertThat(tofuLink.getAmount()).isEqualByComparingTo("150");
-    assertThat(tofuLink.getUnit()).isEqualTo("g");
+
+    // The unit lives on the ingredient now, not on the line; the member's "g" created it.
+    Ingredient tofu = ingredientRepository.findById(tofuLink.getIngredientId()).orElseThrow();
+    assertThat(tofu.getUnit()).isEqualTo(Unit.G);
+    // No nutrition was entered, so no nutrition was invented.
+    assertThat(recipe.getCalories()).isNull();
   }
 
   @Test
   void createRecipe_repeatedMixedCaseRequests_reuseSameDishAndIngredient() throws Exception {
+    long baselineIngredients = ingredientRepository.count();
     String firstJson =
         """
         {
@@ -198,7 +205,8 @@ class RecipeControllerIntegrationTest {
         .andExpect(jsonPath("$.data.ingredients[0].name").value("tofu"));
 
     assertThat(dishRepository.count()).isEqualTo(1);
-    assertThat(ingredientRepository.count()).isEqualTo(1);
+    // Delta, not an absolute: the V50 reference seed may already hold ingredients.
+    assertThat(ingredientRepository.count()).isEqualTo(baselineIngredients + 1);
     assertThat(recipeRepository.count()).isEqualTo(2);
   }
 
