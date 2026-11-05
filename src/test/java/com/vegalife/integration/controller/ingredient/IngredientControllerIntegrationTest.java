@@ -1,11 +1,13 @@
 package com.vegalife.integration.controller.ingredient;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.recipe.Unit;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.recipe.Ingredient;
@@ -13,6 +15,7 @@ import com.vegalife.model.user.User;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
+import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -82,10 +85,11 @@ class IngredientControllerIntegrationTest {
   }
 
   @Test
-  void listIngredients_withToken_returns200SortedByNameWithoutNutrition() throws Exception {
+  void listIngredients_withToken_returnsSortedPageWithUnitAndPerUnitNutrition() throws Exception {
+    saveIngredient(
+        "Avocado", Unit.PIECE, "1.600000", "0.020000", "0.085000", "0.147000", "0.067000");
     saveIngredient("Tofu");
     saveIngredient("Tomato");
-    saveIngredient("Avocado");
 
     mockMvc
         .perform(get("/api/ingredients").header("Authorization", "Bearer " + accessToken))
@@ -104,8 +108,17 @@ class IngredientControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[2].name").value("Tomato"))
         .andExpect(jsonPath("$.data.content[1].id").isNotEmpty())
         .andExpect(jsonPath("$.data.content[1].createdAt").isNotEmpty())
-        .andExpect(jsonPath("$.data.content[0].calories").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].proteinG").doesNotExist());
+        // The curated row states the unit its per-unit values are denominated in, so a client can
+        // interpret the amount it is about to submit (ADR-022 decision 10).
+        .andExpect(jsonPath("$.data.content[0].unit").value("PIECE"))
+        .andExpect(jsonPath("$.data.content[0].calories").value(1.6))
+        .andExpect(jsonPath("$.data.content[0].proteinG").value(0.02))
+        .andExpect(jsonPath("$.data.content[0].nutritionResolved").value(true))
+        // An uncurated row is unknown, not zero: the fields are present and null.
+        .andExpect(jsonPath("$.data.content[1].unit").value(nullValue()))
+        .andExpect(jsonPath("$.data.content[1].calories").value(nullValue()))
+        .andExpect(jsonPath("$.data.content[1].proteinG").value(nullValue()))
+        .andExpect(jsonPath("$.data.content[1].nutritionResolved").value(false));
   }
 
   @Test
@@ -221,6 +234,28 @@ class IngredientControllerIntegrationTest {
   private void saveIngredient(String name) {
     Ingredient ingredient =
         Ingredient.builder().name(name).moderationStatus(ModerationStatus.APPROVED).build();
+    ingredientRepository.save(ingredient);
+  }
+
+  private void saveIngredient(
+      String name,
+      Unit unit,
+      String calories,
+      String proteinG,
+      String carbohydrateG,
+      String fatG,
+      String fiberG) {
+    Ingredient ingredient =
+        Ingredient.builder()
+            .name(name)
+            .moderationStatus(ModerationStatus.APPROVED)
+            .unit(unit)
+            .calories(new BigDecimal(calories))
+            .proteinG(new BigDecimal(proteinG))
+            .carbohydrateG(new BigDecimal(carbohydrateG))
+            .fatG(new BigDecimal(fatG))
+            .fiberG(new BigDecimal(fiberG))
+            .build();
     ingredientRepository.save(ingredient);
   }
 }
