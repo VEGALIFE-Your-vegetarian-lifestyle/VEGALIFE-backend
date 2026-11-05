@@ -343,6 +343,26 @@ class CommentServiceTest {
   }
 
   @Test
+  void getComments_authorWithNoAvatarDoesNotThrow() {
+    UUID rootId = UUID.randomUUID();
+    User author = User.builder().id(userId).displayName("veganchef").build();
+    UserProfile profileWithoutAvatar = UserProfile.builder().user(author).avatarUrl(null).build();
+    Comment root =
+        Comment.builder().id(rootId).postId(postId).userId(userId).content("Root").build();
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
+        .thenReturn(Optional.of(post));
+    when(commentRepository.findByPostIdOrderByCreatedAtAsc(postId)).thenReturn(List.of(root));
+    when(userRepository.findAllById(any())).thenReturn(List.of(author));
+    when(userProfileRepository.findByUserIdIn(any())).thenReturn(List.of(profileWithoutAvatar));
+
+    PageResponse<CommentThreadResponse> response =
+        commentService.getComments(postId, CommentListRequest.builder().build());
+
+    assertThat(response.getContent()).hasSize(1);
+    assertThat(response.getContent().get(0).getAvatarUrl()).isNull();
+  }
+
+  @Test
   void getComments_deletedCommentShowsPlaceholderButKeepsReplies() {
     UUID rootId = UUID.randomUUID();
     UUID replyId = UUID.randomUUID();

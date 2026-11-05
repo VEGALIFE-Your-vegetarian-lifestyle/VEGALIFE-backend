@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -174,13 +173,16 @@ public class CommentService {
 
     Set<UUID> authorIds = new HashSet<>();
     collectAuthorIds(pageRoots, childrenByParentId, authorIds);
-    Map<UUID, String> displayNames =
-        userRepository.findAllById(authorIds).stream()
-            .collect(Collectors.toMap(User::getId, User::getDisplayName));
-    Map<UUID, String> avatarUrls =
-        userProfileRepository.findByUserIdIn(authorIds).stream()
-            .collect(
-                Collectors.toMap(profile -> profile.getUser().getId(), UserProfile::getAvatarUrl));
+    // Built by hand rather than Collectors.toMap: avatarUrl (and, defensively, displayName) are
+    // nullable and toMap's merge() rejects null values with an NPE.
+    Map<UUID, String> displayNames = new HashMap<>();
+    for (User user : userRepository.findAllById(authorIds)) {
+      displayNames.put(user.getId(), user.getDisplayName());
+    }
+    Map<UUID, String> avatarUrls = new HashMap<>();
+    for (UserProfile profile : userProfileRepository.findByUserIdIn(authorIds)) {
+      avatarUrls.put(profile.getUser().getId(), profile.getAvatarUrl());
+    }
 
     List<CommentThreadResponse> content =
         pageRoots.stream()
