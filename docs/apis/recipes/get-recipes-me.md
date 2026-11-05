@@ -37,6 +37,7 @@ No request body
       "dishName": "tofu stir-fry",
       "dishModerationStatus": "APPROVED",
       "moderationStatus": "APPROVED",
+      "rejectionReason": null,
       "name": "Spicy tofu stir-fry",
       "description": "A quick weeknight dinner.",
       "instructions": "Press the tofu. Stir-fry with vegetables and sauce.",
@@ -96,6 +97,7 @@ The response has no paging wrapper: `data` is the array itself, and an authentic
 | data[].dishName | string | Dish name after lowercasing (e.g. request `Tofu Stir-Fry` → `tofu stir-fry`) |
 | data[].dishModerationStatus | string | Review state of the linked dish name: `PENDING`, `APPROVED`, or `REJECTED` |
 | data[].moderationStatus | string | Review state of this recipe: `PENDING`, `APPROVED`, or `REJECTED` |
+| data[].rejectionReason | string or null | Why an admin rejected this recipe. `null` when no reason was recorded (never rejected, or rejected without one). |
 | data[].name | string | Recipe name as submitted |
 | data[].description | string \| null | Optional description |
 | data[].instructions | string | Cooking instructions |

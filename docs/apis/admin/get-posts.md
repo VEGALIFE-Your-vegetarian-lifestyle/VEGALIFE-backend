@@ -81,6 +81,7 @@ No request body
 | data.content[].mediaIds | uuid[] | Media ids attached to the post |
 | data.content[].status | string | created, processed, published, unpublished, or hidden |
 | data.content[].flag | string | Content-filter verdict: PENDING, PASSED, REJECTED, NEEDS_REVIEW; null when never filtered |
+| data.content[].rejectionReason | string | Why an admin rejected the post; null when no reason was recorded |
 | data.content[].viewCount | integer | View counter |
 | data.content[].publishedAt | string | ISO-8601 publish timestamp, nullable |
 | data.content[].createdAt | string | ISO-8601 creation timestamp |

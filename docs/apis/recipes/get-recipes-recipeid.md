@@ -38,6 +38,7 @@ No request body
     "dishName": "tofu stir-fry",
     "dishModerationStatus": "APPROVED",
     "moderationStatus": "PENDING",
+    "rejectionReason": null,
     "name": "Spicy tofu stir-fry",
     "description": "A quick weeknight dinner.",
     "instructions": "Press the tofu. Stir-fry with vegetables and sauce.",
@@ -82,6 +83,7 @@ No request body
 | data.dishName | string | Dish name after lowercasing (e.g. request `Tofu Stir-Fry` → `tofu stir-fry`) |
 | data.dishModerationStatus | string | Review state of the linked dish name: `PENDING`, `APPROVED`, or `REJECTED` |
 | data.moderationStatus | string | Review state of this recipe: `PENDING`, `APPROVED`, or `REJECTED` |
+| data.rejectionReason | string or null | Why an admin rejected this recipe. `null` when no reason was recorded (never rejected, or rejected without one). |
 | data.name | string | Recipe name as submitted |
 | data.description | string \| null | Optional description |
 | data.instructions | string | Cooking instructions |
@@ -112,6 +114,7 @@ No request body
 ## Business Rules
 - The lookup is `id = :recipeId AND deleted_at IS NULL AND user_id = :caller`. A recipe owned by another member is reported as 404, not 403: answering "exists but is not yours" would confirm the id (BR-RECP-001).
 - Review state never hides the recipe from its own author. `moderationStatus` and `dishModerationStatus` are returned as-is, so a `PENDING` recipe or a recipe whose dish name is still awaiting approval is readable — with the state attached — instead of looking inexplicably withheld (BR-DISH-001).
+- `rejectionReason` is readable here because every endpoint returning this shape is already scoped to the caller's own recipes, so there is no wider audience to leak it to.
 - Nutrition is derived from the recipe's ingredients and stored, never authored (BR-RECP-004, ADR-022). `nutritionResolved` distinguishes "all ingredients curated" from "cannot be priced yet"; a `null` total is never a `0` (BR-RECP-006).
 - Each line reports its own contribution (`amount × per-unit value`, rounded to 2 decimals) so a member can see which ingredient drives the total. Line values are rounded individually while the total is rounded once over the exact sum, so the visible lines need not add up exactly to the visible total (BR-RECP-007).
 - Members cannot edit recipes (`PUT`/`PATCH` are deliberately absent, BR-RECP-001); corrections go through an admin, which is why this is a read-only endpoint.
