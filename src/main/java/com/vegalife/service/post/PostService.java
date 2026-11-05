@@ -527,22 +527,24 @@ public class PostService {
    * <p>Called after mapping rather than inside it, because {@code PostListResponse} is also the
    * payload of the public single-post, feed and related endpoints. The author is the one person
    * entitled to read why their content was refused; a guest or another member must never see it.
+   *
+   * <p>Deliberately assigns on both branches instead of only the owner one: if the mapper guard
+   * ever regresses and populates the field, clearing it here keeps the leak from reaching a
+   * response rather than depending on the guard holding forever.
    */
   private void applyRejectionReason(
       List<PostListResponse> responses, List<Post> posts, UUID viewerId) {
-    if (viewerId == null) {
-      return;
-    }
     Map<UUID, String> reasons = new HashMap<>();
-    for (Post post : posts) {
-      if (post.getRejectionReason() != null) {
-        reasons.put(post.getId(), post.getRejectionReason());
+    if (viewerId != null) {
+      for (Post post : posts) {
+        if (post.getRejectionReason() != null) {
+          reasons.put(post.getId(), post.getRejectionReason());
+        }
       }
     }
     for (PostListResponse response : responses) {
-      if (viewerId.equals(response.getUserId())) {
-        response.setRejectionReason(reasons.get(response.getId()));
-      }
+      boolean callerIsAuthor = viewerId != null && viewerId.equals(response.getUserId());
+      response.setRejectionReason(callerIsAuthor ? reasons.get(response.getId()) : null);
     }
   }
 

@@ -406,6 +406,131 @@ class PostServiceTest {
         .build();
   }
 
+  @Test
+  void getPost_authorSeesTheirOwnRejectionReason() {
+    UUID postId = UUID.randomUUID();
+    Post rejected = ownedPost(postId, PostStatus.unpublished);
+    rejected.setRejectionReason("promotes a competing platform");
+    when(postRepository.findDetailById(postId)).thenReturn(Optional.of(rejected));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(rejected, Set.of()))
+        .thenReturn(PostListResponse.builder().id(postId).userId(userId).build());
+
+    PostListResponse response = postService.getPost(userId, postId);
+
+    assertThat(response.getRejectionReason()).isEqualTo("promotes a competing platform");
+  }
+
+  @Test
+  void getPost_guestDoesNotSeeTheRejectionReason() {
+    UUID postId = UUID.randomUUID();
+    Post rejected = ownedPost(postId, PostStatus.unpublished);
+    rejected.setRejectionReason("promotes a competing platform");
+    when(postRepository.findDetailById(postId)).thenReturn(Optional.of(rejected));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(rejected, Set.of()))
+        .thenReturn(PostListResponse.builder().id(postId).userId(userId).build());
+
+    PostListResponse response = postService.getPost(null, postId);
+
+    // This endpoint is permitAll, so the author's reason must not travel with the payload.
+    assertThat(response.getRejectionReason()).isNull();
+  }
+
+  @Test
+  void getPost_anotherMemberDoesNotSeeTheRejectionReason() {
+    UUID postId = UUID.randomUUID();
+    Post rejected = ownedPost(postId, PostStatus.unpublished);
+    rejected.setRejectionReason("promotes a competing platform");
+    when(postRepository.findDetailById(postId)).thenReturn(Optional.of(rejected));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(rejected, Set.of()))
+        .thenReturn(PostListResponse.builder().id(postId).userId(userId).build());
+
+    PostListResponse response = postService.getPost(UUID.randomUUID(), postId);
+
+    assertThat(response.getRejectionReason()).isNull();
+  }
+
+  @Test
+  void listUserPosts_includesTheRejectionReasonForOneOwnRejectedPost() {
+    Post rejected = ownedPost(UUID.randomUUID(), PostStatus.unpublished);
+    rejected.setRejectionReason("off-topic for the platform");
+    Post published = ownedPost(UUID.randomUUID(), PostStatus.published);
+    Page<Post> page = new PageImpl<>(List.of(rejected, published), PageRequest.of(0, 20), 2);
+    when(postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
+            userId, PageRequest.of(0, 20)))
+        .thenReturn(page);
+    when(postMapper.toListResponse(rejected))
+        .thenReturn(PostListResponse.builder().id(rejected.getId()).userId(userId).build());
+    when(postMapper.toListResponse(published))
+        .thenReturn(PostListResponse.builder().id(published.getId()).userId(userId).build());
+
+    PageResponse<PostListResponse> result =
+        postService.listUserPosts(userId, PostListRequest.builder().build());
+
+    assertThat(result.getContent().get(0).getRejectionReason())
+        .isEqualTo("off-topic for the platform");
+    assertThat(result.getContent().get(1).getRejectionReason()).isNull();
+  }
+
+  @Test
+  void listPostsOfUser_ownerSeesTheirOwnRejectionReason() {
+    UUID ownerId = UUID.randomUUID();
+    Post rejected = ownedPost(UUID.randomUUID(), PostStatus.unpublished);
+    rejected.setRejectionReason("off-topic for the platform");
+    Page<Post> page = new PageImpl<>(List.of(rejected), PageRequest.of(0, 20), 1);
+    when(userRepository.findById(ownerId)).thenReturn(Optional.of(user));
+    when(postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
+            ownerId, PageRequest.of(0, 20)))
+        .thenReturn(page);
+    when(postMapper.toListResponse(rejected))
+        .thenReturn(PostListResponse.builder().id(rejected.getId()).userId(ownerId).build());
+
+    PageResponse<PostListResponse> result =
+        postService.listPostsOfUser(ownerId, false, ownerId, PostListRequest.builder().build());
+
+    assertThat(result.getContent().get(0).getRejectionReason())
+        .isEqualTo("off-topic for the platform");
+  }
+
+  @Test
+  void listPostsOfUser_adminBrowsingDoesNotSeeTheReason() {
+    UUID ownerId = UUID.randomUUID();
+    Post rejected = ownedPost(UUID.randomUUID(), PostStatus.unpublished);
+    rejected.setRejectionReason("off-topic for the platform");
+    Page<Post> page = new PageImpl<>(List.of(rejected), PageRequest.of(0, 20), 1);
+    when(userRepository.findById(ownerId)).thenReturn(Optional.of(user));
+    when(postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
+            ownerId, PageRequest.of(0, 20)))
+        .thenReturn(page);
+    when(postMapper.toListResponse(rejected))
+        .thenReturn(PostListResponse.builder().id(rejected.getId()).userId(ownerId).build());
+
+    PageResponse<PostListResponse> result =
+        postService.listPostsOfUser(
+            UUID.randomUUID(), true, ownerId, PostListRequest.builder().build());
+
+    // An administrator browsing a profile is not the author; the admin surfaces carry the reason.
+    assertThat(result.getContent().get(0).getRejectionReason()).isNull();
+  }
+
+  @Test
+  void listFeed_neverCarriesARejectionReason() {
+    Post post = ownedPost(UUID.randomUUID(), PostStatus.published);
+    post.setRejectionReason("left over from an earlier refusal");
+    Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 20), 1);
+    when(postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
+            PostStatus.published, PageRequest.of(0, 20)))
+        .thenReturn(page);
+    when(postMapper.toListResponse(post))
+        .thenReturn(PostListResponse.builder().id(post.getId()).userId(userId).build());
+
+    PageResponse<PostListResponse> result = postService.listFeed(PostListRequest.builder().build());
+
+    assertThat(result.getContent().get(0).getRejectionReason()).isNull();
+  }
+
   private void assertContentFilterQueued(Post expected) {
     verify(outboundMessageRepository)
         .save(

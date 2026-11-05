@@ -448,8 +448,28 @@ class AdminRecipeServiceTest {
 
     // An admin acting on the name itself may withdraw an earlier approval; nothing is deleted.
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
+    assertThat(recipe.getRejectionReason()).isEqualTo("instructions are off-topic");
     assertThat(recipe.getDeletedAt()).isNull();
     assertThat(lastLog().getAction()).isEqualTo("REJECT_COMPONENT");
+  }
+
+  @Test
+  void rejectThenApproveRecipe_clearsTheStoredRejectionReason() {
+    UUID adminId = UUID.randomUUID();
+    recipe.setModerationStatus(ModerationStatus.APPROVED);
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
+        .thenReturn(Optional.of(recipe));
+    when(recipeRepository.saveAndFlush(recipe)).thenReturn(recipe);
+    when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
+
+    adminRecipeService.rejectRecipe(adminId, recipe.getId(), "instructions are off-topic");
+    assertThat(recipe.getRejectionReason()).isEqualTo("instructions are off-topic");
+
+    adminRecipeService.approveRecipe(adminId, recipe.getId(), "rewritten");
+
+    // Current state, not history: the reason must not survive a reversal. Both decisions stay in
+    // moderation_log.
+    assertThat(recipe.getRejectionReason()).isNull();
   }
 
   @Test

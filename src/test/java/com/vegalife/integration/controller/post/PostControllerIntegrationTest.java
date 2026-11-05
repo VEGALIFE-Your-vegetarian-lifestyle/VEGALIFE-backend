@@ -1135,6 +1135,72 @@ class PostControllerIntegrationTest {
     mockMvc.perform(get("/api/posts/feed").param("size", "0")).andExpect(status().isBadRequest());
   }
 
+  @Test
+  void getPost_authorSeesTheirOwnRejectionReason() throws Exception {
+    Post rejected = createRejectedPost(user, "My rejected post", "promotes a competing platform");
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", rejected.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.rejectionReason").value("promotes a competing platform"));
+  }
+
+  @Test
+  void getPost_guestDoesNotSeeTheRejectionReason() throws Exception {
+    Post rejected = createRejectedPost(user, "My rejected post", "promotes a competing platform");
+
+    mockMvc
+        .perform(get("/api/posts/{postId}", rejected.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.id").value(rejected.getId().toString()))
+        // The mapper must not populate this; only the owner may read it.
+        .andExpect(jsonPath("$.data.rejectionReason").doesNotExist());
+  }
+
+  @Test
+  void getPost_anotherMemberDoesNotSeeTheRejectionReason() throws Exception {
+    Post rejected = createRejectedPost(user, "My rejected post", "promotes a competing platform");
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", rejected.getId())
+                .header(
+                    "Authorization", "Bearer " + jwtTokenService.generateAccessToken(otherUser)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.rejectionReason").doesNotExist());
+  }
+
+  @Test
+  void listUserPosts_includesTheReasonForTheAuthorsOwnRejectedPost() throws Exception {
+    createRejectedPost(user, "My rejected post", "off-topic for the platform");
+
+    mockMvc
+        .perform(get("/api/posts").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.data.content[0].rejectionReason").value("off-topic for the platform"));
+  }
+
+  @Test
+  void listFeed_neverExposesARejectionReason() throws Exception {
+    Post post = createPublished(user, "Withheld post", Instant.now());
+    post.setRejectionReason("off-topic for the platform");
+    postRepository.save(post);
+
+    mockMvc
+        .perform(get("/api/posts/feed"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content[0].rejectionReason").doesNotExist());
+  }
+
+  private Post createRejectedPost(User owner, String title, String rejectionReason) {
+    Post post = createPost(owner, title, PostStatus.unpublished, null);
+    post.setRejectionReason(rejectionReason);
+    return postRepository.save(post);
+  }
+
   private User createUser(String displayName, String email) {
     return createUser(displayName, email, UserRole.USER);
   }
