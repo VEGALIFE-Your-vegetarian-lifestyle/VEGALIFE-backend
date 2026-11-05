@@ -93,6 +93,16 @@ public class Recipe {
   private ModerationStatus moderationStatus = ModerationStatus.PENDING;
 
   /**
+   * The admin-supplied reason for the most recent rejection, cleared when an admin approves the
+   * recipe again. Current state, not history — {@code moderation_log} keeps the audit trail.
+   *
+   * <p>Nullable because the reason is optional and because every row rejected before the column
+   * existed has its reason recorded nowhere but the log.
+   */
+  @Column(name = "rejection_reason", columnDefinition = "TEXT")
+  private String rejectionReason;
+
+  /**
    * Author-entered nutrition for the <em>whole</em> recipe, not per serving (issue #163). Null
    * means "not provided" — deliberately distinct from 0, and never coerced. Per-serving values are
    * derived from {@link #servings} by whoever needs them.

@@ -22,6 +22,7 @@ public interface PostMapper {
   @Mapping(target = "flag", ignore = true)
   @Mapping(target = "viewCount", ignore = true)
   @Mapping(target = "publishedAt", ignore = true)
+  @Mapping(target = "rejectionReason", ignore = true)
   @Mapping(target = "createdAt", ignore = true)
   @Mapping(target = "updatedAt", ignore = true)
   @Mapping(target = "deletedAt", ignore = true)
@@ -32,6 +33,11 @@ public interface PostMapper {
    * is owned by {@code Recipe.posts}), and a freshly created or edited post never has recipes
    * attached through these endpoints (that's done separately via {@code POST
    * /api/posts/{postId}/recipes}).
+   *
+   * <p>{@code rejectionReason} is never mapped here. This response type is shared with public
+   * endpoints ({@code GET /api/posts/{postId}}, {@code /feed}, {@code /related}), so populating it
+   * in the mapper would publish admin wording to everyone. {@code PostService} sets it explicitly,
+   * and only when the caller authored the post.
    */
   @Mapping(target = "categoryIds", source = "categories")
   @Mapping(target = "mediaIds", source = "media")
@@ -39,6 +45,7 @@ public interface PostMapper {
   @Mapping(target = "userId", source = "user.id")
   @Mapping(target = "displayName", source = "user.displayName")
   @Mapping(target = "avatarUrl", ignore = true)
+  @Mapping(target = "rejectionReason", ignore = true)
   PostListResponse toListResponse(Post post);
 
   @Mapping(target = "categoryIds", source = "post.categories")
@@ -47,6 +54,7 @@ public interface PostMapper {
   @Mapping(target = "userId", source = "post.user.id")
   @Mapping(target = "displayName", source = "post.user.displayName")
   @Mapping(target = "avatarUrl", ignore = true)
+  @Mapping(target = "rejectionReason", ignore = true)
   PostListResponse toListResponse(Post post, Set<UUID> recipeIds);
 
   default Set<UUID> categoryIds(Set<Category> categories) {
