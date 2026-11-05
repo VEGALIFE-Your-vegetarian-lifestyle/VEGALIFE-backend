@@ -49,6 +49,7 @@ No request body
         "servings": 4,
         "difficulty": "MEDIUM",
         "status": "ACTIVE",
+        "rejectionReason": null,
         "dishId": "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
         "dishName": "Pho",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
@@ -104,6 +105,7 @@ No request body
 | data.content[].servings | integer | Number of servings |
 | data.content[].difficulty | string | `EASY`, `MEDIUM`, `HARD`, or null |
 | data.content[].status | string | Derived from `deletedAt`: `ACTIVE` or `DELETED` (no stored column, not filterable) |
+| data.content[].rejectionReason | string \| null | Why an admin rejected this recipe; `null` when no reason was recorded. Cleared when the recipe is approved again (current state — the audit trail is `moderation_log`) |
 | data.content[].dishId | uuid | Parent dish id |
 | data.content[].dishName | string | Parent dish name, nullable |
 | data.content[].categoryIds | uuid[] | Category ids via the recipe's linked posts; empty when not linked |
@@ -171,6 +173,7 @@ curl -X GET "http://localhost:8080/api/admin/recipes?page=0&size=20&userId=550e8
         "servings": 4,
         "difficulty": "MEDIUM",
         "status": "ACTIVE",
+        "rejectionReason": null,
         "dishId": "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
         "dishName": "Pho",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],

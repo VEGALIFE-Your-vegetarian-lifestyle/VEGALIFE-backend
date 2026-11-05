@@ -147,6 +147,7 @@ public class AdminPostService {
         .content(post.getContent())
         .status(post.getStatus().name())
         .flag(post.getFlag() == null ? null : post.getFlag().name())
+        .rejectionReason(post.getRejectionReason())
         .contentScore(post.getContentScore())
         .recipes(recipeSummaries)
         .names(nameSummaries)
@@ -180,6 +181,9 @@ public class AdminPostService {
 
     post.setStatus(PostStatus.published);
     post.setPublishedAt(post.getPublishedAt() == null ? Instant.now() : post.getPublishedAt());
+    // Current state, not history: once approved again, a stale reason would describe a decision
+    // that no longer holds. The audit trail stays in moderation_log.
+    post.setRejectionReason(null);
     postRepository.saveAndFlush(post);
 
     approveComponents(postId, adminId, reason);
@@ -214,6 +218,7 @@ public class AdminPostService {
 
     post.setStatus(PostStatus.unpublished);
     post.setPublishedAt(null);
+    post.setRejectionReason(reason);
     postRepository.saveAndFlush(post);
 
     rejectPendingComponents(postId, adminId, reason);
@@ -297,6 +302,10 @@ public class AdminPostService {
       if (rejectIfPending(
           recipe.getModerationStatus(), "RECIPE", recipe.getId(), adminId, reason)) {
         recipe.setModerationStatus(ModerationStatus.REJECTED);
+        // The reason is recorded on the recipe as well as the post, mirroring what the
+        // REJECT_COMPONENT log row already does: the recipe's author reads its own rejection from
+        // its own row, and the decision that refused it is the same decision.
+        recipe.setRejectionReason(reason);
         recipeRepository.save(recipe);
       }
     }

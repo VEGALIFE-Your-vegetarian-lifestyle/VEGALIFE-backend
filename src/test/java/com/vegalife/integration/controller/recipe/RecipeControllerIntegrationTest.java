@@ -2,10 +2,12 @@ package com.vegalife.integration.controller.recipe;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.enums.recipe.Unit;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
@@ -80,9 +82,11 @@ class RecipeControllerIntegrationTest {
 
   private String accessToken;
 
+  private User testUser;
+
   @BeforeEach
   void setUp() {
-    User testUser =
+    User user =
         User.builder()
             .displayName("recipeuser")
             .email("recipe@example.com")
@@ -91,7 +95,7 @@ class RecipeControllerIntegrationTest {
             .status(UserStatus.activated)
             .emailVerified(true)
             .build();
-    testUser = userRepository.save(testUser);
+    testUser = userRepository.save(user);
     accessToken = jwtTokenService.generateAccessToken(testUser);
   }
 
@@ -349,6 +353,44 @@ class RecipeControllerIntegrationTest {
     mockMvc
         .perform(post("/api/recipes").contentType(MediaType.APPLICATION_JSON).content(requestJson))
         .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void getRecipe_returnsTheRejectionReasonToItsOwner() throws Exception {
+    Recipe recipe = createRejectedRecipe("Rainbow Bowl", "instructions are off-topic");
+
+    mockMvc
+        .perform(
+            get("/api/recipes/{recipeId}", recipe.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.moderationStatus").value("REJECTED"))
+        .andExpect(jsonPath("$.data.rejectionReason").value("instructions are off-topic"));
+  }
+
+  @Test
+  void listMyRecipes_includesTheRejectionReason() throws Exception {
+    createRejectedRecipe("Rainbow Bowl", "instructions are off-topic");
+
+    mockMvc
+        .perform(get("/api/recipes/me").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data[0].rejectionReason").value("instructions are off-topic"));
+  }
+
+  private Recipe createRejectedRecipe(String name, String rejectionReason) {
+    Dish dish = dishRepository.save(Dish.builder().name("tofu stir-fry " + name).build());
+    Recipe recipe =
+        Recipe.builder()
+            .user(testUser)
+            .dish(dish)
+            .name(name)
+            .instructions("Cook it")
+            .servings(2)
+            .moderationStatus(ModerationStatus.REJECTED)
+            .rejectionReason(rejectionReason)
+            .build();
+    return recipeRepository.save(recipe);
   }
 
   private java.util.UUID ingredientIdOf(String normalizedName) {

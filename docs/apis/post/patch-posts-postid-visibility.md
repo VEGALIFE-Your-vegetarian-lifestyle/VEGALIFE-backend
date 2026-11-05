@@ -36,7 +36,7 @@ Required: a valid JWT access token with the `ADMIN` role. Enforced in `SecurityC
 
 ### Success Response (200 OK)
 
-Returns the post as `PostListResponse` with the new `status`.
+Returns the post as `PostListResponse` with the new `status`. Because the caller is an Administrator rather than the post's author, `rejectionReason` is `null` here — the admin post surfaces carry it instead.
 
 ```json
 {

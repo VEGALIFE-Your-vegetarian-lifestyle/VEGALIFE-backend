@@ -52,8 +52,12 @@ public class PostController {
   }
 
   @GetMapping("/{postId}")
-  public ResponseEntity<ApiResponse<PostListResponse>> getPost(@PathVariable UUID postId) {
-    PostListResponse post = postService.getPost(postId);
+  public ResponseEntity<ApiResponse<PostListResponse>> getPost(
+      Authentication authentication, @PathVariable UUID postId) {
+    // The author is shown why their post was rejected; a guest gets the same payload without it.
+    UUID viewerId =
+        authentication != null && authentication.getPrincipal() instanceof UUID id ? id : null;
+    PostListResponse post = postService.getPost(viewerId, postId);
     return ResponseEntity.ok(ApiResponse.success(post, "Post retrieved successfully"));
   }
 

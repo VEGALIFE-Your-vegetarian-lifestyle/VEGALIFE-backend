@@ -57,6 +57,7 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
         "status": "ACTIVE",
         "moderationStatus": "PENDING",
         "score": 0.6104,
+        "rejectionReason": null,
         "dishId": "6c2d3e4f-5a6b-7c8d-9e0f-1a2b3c4d5e6f",
         "dishName": "phở chay",
         "dishModerationStatus": "PENDING",
@@ -93,6 +94,7 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
 | `status` | `ACTIVE` or `DELETED`, derived from `deletedAt`. |
 | `moderationStatus` | Review state. A recipe can be `ACTIVE` and still `PENDING`. |
 | `score` | Relevance score at submission time. `null` = never scored. |
+| `rejectionReason` | Why an admin rejected this recipe. Cleared on approval. `null` = no reason recorded. |
 | `dishModerationStatus`, `ingredients[].moderationStatus` | The shared names' own states. |
 | `missingRequiredIngredients` | Names of the dish's `required` ingredients this recipe omits (BR-DISH-002). Advisory: it never changes `moderationStatus` and never blocks approve/reject. Empty array when nothing is missing. |
 
@@ -155,6 +157,11 @@ Rejection does **not** cascade to the recipe's dish or ingredient names, includi
 still `PENDING` — approval publishes names, rejection never unpublishes them. A name
 approved on its own merits, possibly by an earlier post, must not be knocked out by one
 bad recipe.
+
+The supplied `reason` is stored in the recipe's `rejection_reason`, which the recipe's
+author reads back on `GET /api/recipes/me` and `GET /api/recipes/{recipeId}`. Approving the
+recipe again clears it: the column holds the current state, not a history, and the sequence
+of decisions stays in `moderation_log`.
 
 ## Business Rules
 

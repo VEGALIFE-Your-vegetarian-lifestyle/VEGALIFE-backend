@@ -40,6 +40,19 @@ public class PostListResponse {
   /** Content filter verdict: PENDING, PASSED, REJECTED, NEEDS_REVIEW; null when never filtered. */
   private String flag;
 
+  /**
+   * Why an admin rejected this post, or null if no admin rejection reason is recorded.
+   *
+   * <p><strong>Owner-scoped.</strong> Populated only when the caller authored the post — this DTO
+   * is also the payload of public endpoints, so {@code PostMapper} never sets it and {@code
+   * PostService} fills it in for the author alone.
+   *
+   * <p>Null is ambiguous on purpose: it means "no reason recorded", which covers never-rejected,
+   * rejected without a reason (the reason is optional, BR-ADMIN-002), and withheld by the content
+   * filter rather than an admin. See {@link #flag} for that last case.
+   */
+  private String rejectionReason;
+
   private Integer viewCount;
   private Instant publishedAt;
   private Instant createdAt;

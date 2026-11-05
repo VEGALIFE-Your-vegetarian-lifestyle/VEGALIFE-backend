@@ -50,7 +50,7 @@ Required: a valid JWT access token in the `Authorization` header (`Bearer <token
 
 ### Success Response (200 OK)
 
-Returns the updated post using `PostListResponse` (`id`, `userId`, `displayName`, `avatarUrl`, `title`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `status`, `flag`, `viewCount`, `publishedAt`, `createdAt`). `flag` is the content filter state: `null` (never filtered), `PENDING`, `PASSED`, `REJECTED`, or `NEEDS_REVIEW`. `recipeIds` is always empty here — this endpoint never changes recipe attachments; use `POST /api/posts/{postId}/recipes` for that (issue #137).
+Returns the updated post using `PostListResponse` (`id`, `userId`, `displayName`, `avatarUrl`, `title`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `status`, `flag`, `rejectionReason`, `viewCount`, `publishedAt`, `createdAt`). `flag` is the content filter state: `null` (never filtered), `PENDING`, `PASSED`, `REJECTED`, or `NEEDS_REVIEW`. `rejectionReason` is returned only to the post's author — an Administrator editing someone else's post gets `null`. `recipeIds` is always empty here — this endpoint never changes recipe attachments; use `POST /api/posts/{postId}/recipes` for that (issue #137).
 
 ### Error Responses
 

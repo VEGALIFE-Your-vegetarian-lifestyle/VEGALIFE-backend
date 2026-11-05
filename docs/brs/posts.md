@@ -700,13 +700,19 @@ Applies to post and comment moderation. Category creation, edit, and retirement 
 (the decision recorded in `create-category-api.md`, `edit-category-api.md`, `delete-category-api.md`).
 `reason` is optional today; a required-reason contract would be a separate validation change.
 
+The log is the audit trail, not the current state. A rejection reason is also stored on the
+rejected row itself (`post.rejection_reason`, `recipe.rejection_reason`, migration `V51`) so the
+author can be told why, and that column is cleared when the row is approved again. The two are
+complementary: the column answers "why is this rejected right now", the log preserves every
+decision in order, including reasons that were later superseded.
+
 ## Enforcement
 
 - Table: `moderation_log` (migration `V18`); `V32` adds the nullable `reason` column.
 - Service: every writer builds a `ModerationLog` through `ModerationLogRepository` in the same
   transaction as the change (`PostService`, `AdminPostService`).
 - API references: `docs/apis/post/patch-posts-postid.md`, `docs/apis/post/delete-posts-postid.md`,
-  `docs/apis/post/patch-posts-postid-visibility.md`, `docs/apis/admin/post-posts-postid-moderate.md`.
+  `docs/apis/post/patch-posts-postid-visibility.md`, `docs/apis/admin/post-posts-postid-approve.md`.
 
 ## Last Reviewed
 

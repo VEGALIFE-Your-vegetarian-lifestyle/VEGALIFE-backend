@@ -56,6 +56,7 @@ Same envelope and item shape as `GET /api/posts` (`PageResponse<PostListResponse
 
 - Drafts, hidden, unpublished, and processed posts are visible only to the creator and Administrators (BR-CONTENT-003).
 - Soft-deleted posts are never returned.
+- `rejectionReason` is populated only for the post's author. An Administrator browsing another member's profile sees the payload without it — the admin post surfaces carry the reason instead.
 - No migration is needed.
 
 ## Example

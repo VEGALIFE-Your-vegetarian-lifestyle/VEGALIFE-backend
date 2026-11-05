@@ -86,6 +86,7 @@ The client must not send `userId`, `status`, `flag`, `viewCount`, `type`, `video
 | data.featuredImageUrl | string or null | Featured image URL, if supplied. |
 | data.status | string | Initial status is `created`. With `publish: true` the post still starts as `created` and is only set to `published` after filtering returns `PASSED` (BR-POST-004). |
 | data.flag | string or null | Content filter state: `null` (never filtered — the default for drafts), `PENDING`, `PASSED`, `REJECTED`, or `NEEDS_REVIEW` (BR-FILTER-007). |
+| data.rejectionReason | string or null | Always `null` here: a freshly created post has never been reviewed by an admin. Included because this endpoint returns the same `PostListResponse` shape. |
 | data.viewCount | integer | Starts at `0`. |
 | data.publishedAt | string or null | `null` until the post is published. |
 | data.createdAt | string | Creation timestamp in ISO-8601 format. |

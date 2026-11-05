@@ -88,6 +88,7 @@ No request body.
 | data.content[].recipeIds | array of UUID | Always empty on this list endpoint and on create/edit — recipes are only resolved on `GET /api/posts/{postId}` and the two attach endpoints, to avoid a query per row on a paginated list (issue #137). |
 | data.content[].status | string | Post status: `created`, `processed`, `published`, `unpublished`, or `hidden`. A post the content filter did not pass is `unpublished` (BR-POST-010, BR-FILTER-008). |
 | data.content[].flag | string or null | Content filter state: `null` (never filtered — drafts are not queued), `PENDING`, `PASSED`, `REJECTED`, or `NEEDS_REVIEW` (BR-FILTER-007). |
+| data.content[].rejectionReason | string or null | Why an admin rejected this post. Always populated on this endpoint — these are the caller's own posts. `null` when no reason was recorded. |
 | data.content[].viewCount | integer | Number of recorded views. |
 | data.content[].publishedAt | string | ISO-8601 publication timestamp. |
 | data.content[].createdAt | string | ISO-8601 creation timestamp. |

@@ -187,6 +187,9 @@ public class AdminRecipeService {
     }
 
     recipe.setModerationStatus(ModerationStatus.APPROVED);
+    // Current state, not history: a reason left over from an earlier rejection would describe a
+    // decision that no longer holds. The audit trail stays in moderation_log.
+    recipe.setRejectionReason(null);
     Recipe saved = recipeRepository.saveAndFlush(recipe);
     logDecision(adminId, "APPROVE_COMPONENT", saved.getId(), reason);
     log.info("Admin {} approved recipe {}", adminId, saved.getId());
@@ -263,6 +266,7 @@ public class AdminRecipeService {
     }
 
     recipe.setModerationStatus(ModerationStatus.REJECTED);
+    recipe.setRejectionReason(reason);
     Recipe saved = recipeRepository.saveAndFlush(recipe);
     logDecision(adminId, "REJECT_COMPONENT", saved.getId(), reason);
     log.info("Admin {} rejected recipe {}", adminId, saved.getId());

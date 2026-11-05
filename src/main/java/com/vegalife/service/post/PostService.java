@@ -116,7 +116,7 @@ public class PostService {
         markForAdminReview(saved);
       }
     }
-    return toResponse(saved);
+    return toResponse(saved, userId);
   }
 
   /**
@@ -160,7 +160,7 @@ public class PostService {
       }
     }
     recordModerationIfAdminOverride(actorId, isAdmin, saved, "EDIT_POST");
-    return toResponse(saved);
+    return toResponse(saved, actorId);
   }
 
   /**
@@ -191,7 +191,7 @@ public class PostService {
     boolean currentlyHidden = post.getStatus() == PostStatus.hidden;
     if (hidden == currentlyHidden) {
       if (hidden) {
-        return toResponse(post);
+        return toResponse(post, adminId);
       }
       throw new ValidationException("Post is not hidden");
     }
@@ -210,21 +210,24 @@ public class PostService {
             .targetType("POST")
             .targetId(saved.getId())
             .build());
-    return toResponse(saved);
+    return toResponse(saved, adminId);
   }
 
   /**
    * BR-POST-011: a single post is returned for any status; only soft-deleted posts are excluded.
    * Ownership is never checked — another user's post is returned and the caller's own draft is
    * returned too.
+   *
+   * <p>{@code viewerId} is only used to decide whether the admin rejection reason is included: the
+   * author sees why their post was refused, everyone else gets the same payload without it.
    */
   @Transactional(readOnly = true)
-  public PostListResponse getPost(UUID postId) {
+  public PostListResponse getPost(UUID viewerId, UUID postId) {
     Post post =
         postRepository
             .findDetailById(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-    return toResponse(post, attachedRecipeIds(postId));
+    return toResponse(post, attachedRecipeIds(postId), viewerId);
   }
 
   /**
@@ -288,7 +291,7 @@ public class PostService {
     Post post = findManageablePost(actorId, isAdmin, postId);
     post.setMedia(resolveMedia(mediaIds));
     Post saved = postRepository.saveAndFlush(post);
-    return toResponse(saved, attachedRecipeIds(postId));
+    return toResponse(saved, attachedRecipeIds(postId), actorId);
   }
 
   /**
@@ -317,7 +320,7 @@ public class PostService {
     recipeRepository.saveAll(currentlyAttached);
     recipeRepository.saveAll(requested);
 
-    return toResponse(post, recipeIds);
+    return toResponse(post, recipeIds, actorId);
   }
 
   /** Owner sees own posts; an Administrator sees every non-deleted post. */
@@ -437,7 +440,8 @@ public class PostService {
     Page<Post> posts =
         postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(userId, pageable);
 
-    return toPage(posts);
+    // Always the caller's own posts, so the reason is theirs to read.
+    return toPage(posts, userId);
   }
 
   /**
@@ -453,14 +457,17 @@ public class PostService {
         .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
     Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
+    boolean callerIsOwner = ownerId.equals(viewerId);
     Page<Post> posts =
-        isAdmin || ownerId.equals(viewerId)
+        isAdmin || callerIsOwner
             ? postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(ownerId, pageable)
             : postRepository
                 .findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
                     ownerId, PostStatus.published, pageable);
 
-    return toPage(posts);
+    // Only the owner gets the reason: an Administrator browsing this endpoint is not the author,
+    // and reads the same reason from the admin surfaces instead.
+    return toPage(posts, callerIsOwner ? viewerId : null);
   }
 
   /** BR-POST-010: the public feed serves every published, non-deleted post, newest first. */
@@ -471,30 +478,38 @@ public class PostService {
         postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
             PostStatus.published, pageable);
 
-    return toPage(posts);
+    // Public feed: no caller, so no reason. Published posts are not rejected ones anyway.
+    return toPage(posts, null);
   }
 
   /**
    * Maps one post and fills in the author avatar, which {@code PostMapper} cannot reach: the avatar
    * lives on {@code UserProfile}, not on {@code User}.
+   *
+   * <p>The admin rejection reason is included only when {@code viewerId} is the author's own id, or
+   * omitted when it is null (a guest). It is deliberately not left to the mapper: this payload is
+   * shared with public endpoints, so a value populated at mapping time would leak.
    */
-  private PostListResponse toResponse(Post post) {
+  private PostListResponse toResponse(Post post, UUID viewerId) {
     PostListResponse response = postMapper.toListResponse(post);
     applyAuthorAvatars(List.of(response));
+    applyRejectionReason(List.of(response), List.of(post), viewerId);
     return response;
   }
 
-  private PostListResponse toResponse(Post post, Set<UUID> recipeIds) {
+  private PostListResponse toResponse(Post post, Set<UUID> recipeIds, UUID viewerId) {
     PostListResponse response = postMapper.toListResponse(post, recipeIds);
     applyAuthorAvatars(List.of(response));
+    applyRejectionReason(List.of(response), List.of(post), viewerId);
     return response;
   }
 
   /** Page variant: one avatar query for the whole page, never one per post. */
-  private PageResponse<PostListResponse> toPage(Page<Post> posts) {
+  private PageResponse<PostListResponse> toPage(Page<Post> posts, UUID viewerId) {
     List<PostListResponse> content =
         posts.getContent().stream().map(postMapper::toListResponse).toList();
     applyAuthorAvatars(content);
+    applyRejectionReason(content, posts.getContent(), viewerId);
     return PageResponse.<PostListResponse>builder()
         .content(content)
         .page(posts.getNumber())
@@ -504,6 +519,33 @@ public class PostService {
         .first(posts.isFirst())
         .last(posts.isLast())
         .build();
+  }
+
+  /**
+   * Reveals each post's admin rejection reason, but only on rows the caller authored.
+   *
+   * <p>Called after mapping rather than inside it, because {@code PostListResponse} is also the
+   * payload of the public single-post, feed and related endpoints. The author is the one person
+   * entitled to read why their content was refused; a guest or another member must never see it.
+   *
+   * <p>Deliberately assigns on both branches instead of only the owner one: if the mapper guard
+   * ever regresses and populates the field, clearing it here keeps the leak from reaching a
+   * response rather than depending on the guard holding forever.
+   */
+  private void applyRejectionReason(
+      List<PostListResponse> responses, List<Post> posts, UUID viewerId) {
+    Map<UUID, String> reasons = new HashMap<>();
+    if (viewerId != null) {
+      for (Post post : posts) {
+        if (post.getRejectionReason() != null) {
+          reasons.put(post.getId(), post.getRejectionReason());
+        }
+      }
+    }
+    for (PostListResponse response : responses) {
+      boolean callerIsAuthor = viewerId != null && viewerId.equals(response.getUserId());
+      response.setRejectionReason(callerIsAuthor ? reasons.get(response.getId()) : null);
+    }
   }
 
   /**

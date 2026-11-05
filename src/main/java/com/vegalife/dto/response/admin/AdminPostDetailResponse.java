@@ -30,6 +30,12 @@ public class AdminPostDetailResponse {
   private String flag;
 
   /**
+   * Why an admin rejected this post; null when no reason is recorded (never rejected, rejected
+   * without a reason, or withheld by the content filter rather than an admin).
+   */
+  private String rejectionReason;
+
+  /**
    * Score of the post's own text against the content centroid pair; {@code null} when never scored
    * (a provider failure, not a low score).
    */

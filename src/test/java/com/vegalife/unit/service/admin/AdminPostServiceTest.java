@@ -371,7 +371,10 @@ class AdminPostServiceTest {
 
     assertThat(post.getStatus()).isEqualTo(PostStatus.unpublished);
     assertThat(post.getPublishedAt()).isNull();
+    assertThat(post.getRejectionReason()).isEqualTo("not vegan");
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
+    // The recipe's author reads this from the recipe's own row, and it was the same decision.
+    assertThat(recipe.getRejectionReason()).isEqualTo("not vegan");
     assertThat(dish.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
     assertThat(ingredient.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
 
@@ -379,6 +382,61 @@ class AdminPostServiceTest {
     assertThat(entry.getAction()).isEqualTo("REJECT_POST");
     assertThat(entry.getReason()).isEqualTo("not vegan");
     verify(recipeRepository, never()).delete(any(Recipe.class));
+  }
+
+  @Test
+  void rejectThenApprove_clearsTheStoredRejectionReason() {
+    UUID adminId = UUID.randomUUID();
+    post.setStatus(PostStatus.published);
+    post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId())).thenReturn(List.of());
+
+    adminPostService.rejectPost(adminId, post.getId(), "not vegan");
+    assertThat(post.getRejectionReason()).isEqualTo("not vegan");
+
+    adminPostService.approvePost(adminId, post.getId(), "looks fine after edit");
+
+    // Current state, not history: a reason left in place would describe a decision that no longer
+    // holds. The audit trail keeps both decisions in moderation_log.
+    assertThat(post.getRejectionReason()).isNull();
+  }
+
+  @Test
+  void rejectPost_withoutReason_storesNull() {
+    UUID adminId = UUID.randomUUID();
+    post.setStatus(PostStatus.published);
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId())).thenReturn(List.of());
+
+    adminPostService.rejectPost(adminId, post.getId(), null);
+
+    assertThat(post.getStatus()).isEqualTo(PostStatus.unpublished);
+    assertThat(post.getRejectionReason()).isNull();
+  }
+
+  @Test
+  void approvePost_leavesAnApprovedComponentUntouched() {
+    UUID adminId = UUID.randomUUID();
+    post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
+    Recipe alreadyApproved =
+        Recipe.builder()
+            .id(UUID.randomUUID())
+            .name("món đã duyệt")
+            .moderationStatus(ModerationStatus.APPROVED)
+            .rejectionReason("stale reason from an earlier refusal")
+            .build();
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
+        .thenReturn(List.of(alreadyApproved));
+    when(recipeIngredientRepository.findByRecipeId(alreadyApproved.getId())).thenReturn(List.of());
+
+    adminPostService.approvePost(adminId, post.getId(), null);
+
+    // Not rewritten: an already-APPROVED name gets no work and no log entry (approveIfPending).
+    assertThat(alreadyApproved.getRejectionReason())
+        .isEqualTo("stale reason from an earlier refusal");
+    verify(recipeRepository, never()).save(any(Recipe.class));
   }
 
   @Test

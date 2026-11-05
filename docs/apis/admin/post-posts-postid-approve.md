@@ -36,6 +36,7 @@ roles receive `403 Forbidden`.
     "content": "…",
     "status": "unpublished",
     "flag": "NEEDS_REVIEW",
+    "rejectionReason": "Mentions an ingredient that is not food",
     "contentScore": 0.8123,
     "publishedAt": null,
     "createdAt": "2026-10-23T08:00:00Z",
@@ -71,6 +72,7 @@ roles receive `403 Forbidden`.
 | Field | Type | Description |
 |---|---|---|
 | contentScore | number \| null | Relevance score for `title + content`. `null` = never scored. |
+| rejectionReason | string \| null | Why an admin rejected this post. Cleared when the post is approved. `null` = no reason recorded. |
 | components[].type | string | `RECIPE`, `DISH` or `INGREDIENT`. |
 | components[].moderationStatus | string | `PENDING`, `APPROVED` or `REJECTED`. |
 | components[].score | number \| null | The recipe's score for `RECIPE`; `null` for dish and ingredient, which are not scored. |
@@ -117,7 +119,9 @@ the post references. They are not stored.
 ### Behaviour
 
 - Sets `status = unpublished`, clears `publishedAt`.
-- Sets referenced rows that are still `PENDING` to `REJECTED`.
+- Stores the supplied `reason` in `rejection_reason` (null when the body omits it).
+- Sets referenced rows that are still `PENDING` to `REJECTED`, and records the
+  same `reason` on each of those recipe rows.
 - Leaves already-`APPROVED` rows untouched — a shared name does not become bad
   because one post reused it.
 - Deletes nothing.
@@ -140,6 +144,9 @@ the post references. They are not stored.
   ones (BR-DISH-001).
 - Neither endpoint changes `flag`: an approval does not rewrite the filter's
   verdict, and a rejection is a visibility decision, not a re-scoring.
+- `rejection_reason` is current state, not history: rejection stores the reason
+  and approval clears it. The full sequence of decisions stays in
+  `moderation_log`, which this change does not alter.
 
 ## Related
 
