@@ -292,7 +292,7 @@ class PostServiceTest {
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
     when(postMapper.toListResponse(existing, Set.of())).thenReturn(expectedResponse);
 
-    PostListResponse response = postService.getPost(postId);
+    PostListResponse response = postService.getPost(null, postId);
 
     assertThat(response).isSameAs(expectedResponse);
   }
@@ -306,7 +306,7 @@ class PostServiceTest {
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
     when(postMapper.toListResponse(draft, Set.of())).thenReturn(expectedResponse);
 
-    PostListResponse response = postService.getPost(postId);
+    PostListResponse response = postService.getPost(null, postId);
 
     assertThat(response).isSameAs(expectedResponse);
   }
@@ -316,7 +316,7 @@ class PostServiceTest {
     UUID postId = UUID.randomUUID();
     when(postRepository.findDetailById(postId)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> postService.getPost(postId))
+    assertThatThrownBy(() -> postService.getPost(null, postId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
   }
@@ -387,7 +387,7 @@ class PostServiceTest {
         .thenReturn(
             PostListResponse.builder().id(postId).userId(userId).displayName("postowner").build());
 
-    PostListResponse response = postService.getPost(postId);
+    PostListResponse response = postService.getPost(null, postId);
 
     assertThat(response.getUserId()).isEqualTo(userId);
     assertThat(response.getDisplayName()).isEqualTo("postowner");

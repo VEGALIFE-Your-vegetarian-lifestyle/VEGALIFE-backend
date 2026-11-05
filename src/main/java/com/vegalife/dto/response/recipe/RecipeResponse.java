@@ -29,6 +29,15 @@ public class RecipeResponse {
   /** This recipe's own review state, for the same reason. */
   private String moderationStatus;
 
+  /**
+   * Why an admin rejected this recipe; null when no reason is recorded — never rejected, or
+   * rejected without a reason (the reason is optional, BR-ADMIN-002).
+   *
+   * <p>Safe to expose here: every endpoint returning this type is scoped to the caller's own
+   * recipes, so there is no other audience to leak it to.
+   */
+  private String rejectionReason;
+
   private String name;
   private String description;
   private String instructions;
