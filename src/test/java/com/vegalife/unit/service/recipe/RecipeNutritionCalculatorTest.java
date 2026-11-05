@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.vegalife.enums.recipe.Unit;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.service.recipe.RecipeNutritionCalculator;
+import com.vegalife.service.recipe.RecipeNutritionCalculator.LineNutrition;
 import com.vegalife.service.recipe.RecipeNutritionCalculator.NutritionTotals;
 import com.vegalife.service.recipe.RecipeNutritionCalculator.ResolvedLine;
 import java.math.BigDecimal;
@@ -93,6 +94,62 @@ class RecipeNutritionCalculatorTest {
             RecipeNutritionCalculator.totals(
                 List.of(new ResolvedLine(BigDecimal.TEN, noNutrition))))
         .isNull();
+  }
+
+  @Test
+  void scaledLineNutrition_returnsTheProductRoundedToOutputScale() {
+    Ingredient tofu = resolved("0.0144", "0.0017", "0.0003", "0.0009", "0.0002");
+
+    LineNutrition line = RecipeNutritionCalculator.scaledLineNutrition(new BigDecimal("200"), tofu);
+
+    assertThat(line).isNotNull();
+    assertThat(line.calories()).isEqualByComparingTo("2.88");
+    assertThat(line.proteinG()).isEqualByComparingTo("0.34");
+    assertThat(line.calories().scale()).isEqualTo(2);
+  }
+
+  @Test
+  void scaledLineNutrition_roundsEachLineIndependently() {
+    // 0.005 per line: rounded per line this is 0.01 each, while the total of the same three lines
+    // is
+    // 0.02. The two disagree by design (ADR-022 decision 11) and this test pins that.
+    Ingredient tiny = resolved("0.00005", "0", "0", "0", "0");
+    BigDecimal hundred = new BigDecimal("100");
+
+    List<LineNutrition> lines =
+        List.of(
+            RecipeNutritionCalculator.scaledLineNutrition(hundred, tiny),
+            RecipeNutritionCalculator.scaledLineNutrition(hundred, tiny),
+            RecipeNutritionCalculator.scaledLineNutrition(hundred, tiny));
+
+    assertThat(lines).allSatisfy(line -> assertThat(line.calories()).isEqualByComparingTo("0.01"));
+    assertThat(
+            RecipeNutritionCalculator.totals(
+                    List.of(
+                        new ResolvedLine(hundred, tiny),
+                        new ResolvedLine(hundred, tiny),
+                        new ResolvedLine(hundred, tiny)))
+                .calories())
+        .isEqualByComparingTo("0.02");
+  }
+
+  @Test
+  void scaledLineNutrition_isNullWhenTheIngredientIsUnresolved() {
+    Ingredient noNutrition =
+        Ingredient.builder().id(java.util.UUID.randomUUID()).name("muối").unit(Unit.G).build();
+
+    assertThat(RecipeNutritionCalculator.scaledLineNutrition(BigDecimal.TEN, noNutrition)).isNull();
+  }
+
+  @Test
+  void scaledLineNutrition_zeroIsResolvedNotMissing() {
+    Ingredient water = resolved("0", "0", "0", "0", "0");
+
+    LineNutrition line =
+        RecipeNutritionCalculator.scaledLineNutrition(new BigDecimal("250"), water);
+
+    assertThat(line).isNotNull();
+    assertThat(line.calories()).isEqualByComparingTo("0.00");
   }
 
   private static Ingredient resolved(

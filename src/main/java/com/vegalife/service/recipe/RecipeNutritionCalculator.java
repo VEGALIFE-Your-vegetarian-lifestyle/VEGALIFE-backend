@@ -89,6 +89,37 @@ public final class RecipeNutritionCalculator {
     return value.setScale(OUTPUT_SCALE, RoundingMode.HALF_UP);
   }
 
+  /**
+   * The nutrition of one line, rounded for output.
+   *
+   * <p>Exists because a recipe read now reports each line's contribution as well as the totals, and
+   * the two shapes are built in different layers ({@code RecipeService} and {@code
+   * AdminRecipeService}). Both must round the same way, so the rounding lives here rather than
+   * being re-expressed at each call site.
+   *
+   * <p><strong>Rounded per line, unlike {@link #totals}.</strong> A client needs a number it can
+   * render, and the unrounded product of a {@code DECIMAL(12,6)} value by an arbitrary amount can
+   * carry far more digits than any label shows. The consequence is deliberate and documented:
+   * rounded line values need not sum exactly to the rounded total (ADR-022, decision 11). Do not
+   * "fix" that by rounding the total from these values - the stored total is authoritative.
+   *
+   * @param amount the quantity in the ingredient's own unit
+   * @param ingredient the resolved ingredient, unit and nutrition included
+   * @return per-line nutrition at output scale, or {@code null} when the ingredient is incomplete
+   */
+  public static LineNutrition scaledLineNutrition(BigDecimal amount, Ingredient ingredient) {
+    LineNutrition line = lineNutrition(amount, ingredient);
+    if (line == null) {
+      return null;
+    }
+    return new LineNutrition(
+        scale(line.calories()),
+        scale(line.proteinG()),
+        scale(line.carbohydrateG()),
+        scale(line.fatG()),
+        scale(line.fiberG()));
+  }
+
   /** One recipe line: the quantity and the ingredient it resolves to. */
   public record ResolvedLine(BigDecimal amount, Ingredient ingredient) {}
 
