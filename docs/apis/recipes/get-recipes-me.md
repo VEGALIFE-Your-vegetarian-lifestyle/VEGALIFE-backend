@@ -49,20 +49,21 @@ No request body
           "ingredientId": "1a2b3c4d-0001-4000-8000-000000000001",
           "name": "tofu",
           "amount": 200,
-          "unit": "g"
+          "unit": "G"
         },
         {
           "ingredientId": "1a2b3c4d-0002-4000-8000-000000000002",
           "name": "soy sauce",
-          "amount": 2,
-          "unit": "tbsp"
+          "amount": 15,
+          "unit": "ML"
         }
       ],
-      "calories": 320,
-      "proteinG": 22.5,
-      "carbohydrateG": 14,
-      "fatG": 18,
-      "fiberG": 3.5,
+      "calories": 297.00,
+      "proteinG": 35.60,
+      "carbohydrateG": 6.40,
+      "fatG": 17.46,
+      "fiberG": 4.72,
+      "nutritionResolved": true,
       "createdAt": "2026-10-01T10:00:00Z",
       "updatedAt": "2026-10-01T10:00:00Z"
     }
@@ -94,9 +95,10 @@ The response has no paging wrapper: `data` is the array itself, and an authentic
 | data[].ingredients[].ingredientId | uuid | Shared ingredient row |
 | data[].ingredients[].name | string | Lowercased ingredient name |
 | data[].ingredients[].amount | number | Quantity |
-| data[].ingredients[].unit | string | Unit of measure (e.g. `g`, `tbsp`) |
+| data[].ingredients[].unit | string \| null | The **ingredient's** unit — `G`, `ML` or `PIECE` — derived, not stored per line. `null` when it has not been decided |
 | data[].missingRequiredIngredients | array of string | Names of the dish's `required` ingredients this recipe omits (BR-DISH-002). Advisory only — the recipe is valid either way. Empty array when nothing is missing. Derived on read, never stored. |
-| data[].calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | Author-entered totals for the whole recipe, never per serving; `null` means not provided (distinct from `0`) |
+| data[].calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | Computed totals for the whole recipe, never per serving. `null` means the recipe cannot be priced yet, distinct from `0` (BR-RECP-006) |
+| data[].nutritionResolved | boolean | `true` only when every ingredient is curated and the totals are real |
 | data[].createdAt / data[].updatedAt | string | ISO-8601 instants |
 
 ### Error Responses
@@ -111,6 +113,7 @@ The response has no paging wrapper: `data` is the array itself, and an authentic
 - Ordering is `created_at` descending — newest recipe first (repository method `findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc`).
 - No filter is applied on review state: recipes whose dish name is still `PENDING`, or that are themselves unapproved, stay in the list with their state attached, so a withheld recipe is not a mystery to its author (BR-DISH-001).
 - Not paginated: there is no `page`/`size` and no total count. A member's whole recipe list is returned in one response, which is why there is no envelope.
+- Nutrition is derived from the recipe's ingredients and stored, never authored (BR-RECP-004, ADR-022). `nutritionResolved` distinguishes "all ingredients curated" from "cannot be priced yet"; a `null` total is never a `0`.
 - Read-only: the endpoint never creates or modifies a recipe.
 
 ## Example
@@ -146,7 +149,7 @@ curl -X GET "http://localhost:8080/api/recipes/me" \
           "ingredientId": "1a2b3c4d-0001-4000-8000-000000000001",
           "name": "tofu",
           "amount": 200,
-          "unit": "g"
+          "unit": "G"
         }
       ],
       "calories": null,
@@ -154,6 +157,7 @@ curl -X GET "http://localhost:8080/api/recipes/me" \
       "carbohydrateG": null,
       "fatG": null,
       "fiberG": null,
+      "nutritionResolved": false,
       "createdAt": "2026-10-01T10:00:00Z",
       "updatedAt": "2026-10-01T10:00:00Z"
     }
@@ -165,5 +169,6 @@ curl -X GET "http://localhost:8080/api/recipes/me" \
 - Create counterpart: `docs/apis/recipes/post-recipes.md`
 - Read one: `docs/apis/recipes/get-recipes-recipeid.md`
 - Admin list across users: `docs/apis/admin/get-recipes.md`
-- Business rules: `docs/brs/recipes.md` (BR-RECP-001, BR-DISH-001)
-- Feature spec: `docs/feats/create-recipe-api.md`
+- Business rules: `docs/brs/recipes.md` (BR-RECP-001, BR-RECP-004, BR-RECP-006, BR-DISH-001)
+- Feature spec: `docs/feats/ingredient-nutrition.md`
+- ADR: [`docs/adrs/022-ingredient-level-nutrition.md`](../../adrs/022-ingredient-level-nutrition.md)

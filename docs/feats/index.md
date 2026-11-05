@@ -60,3 +60,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `post-author-in-response.md`        | Post Responses Carry Their Author's Identity | Implemented | 2026-11-02 |
 | `dish-ingredient-suggestions.md`    | Dish Ingredient Suggestions and Advisory Required Flag | Implemented | 2026-11-02 |
 | `request-credits.md`                | Request Credits — One Acquire Endpoint, Acquisition History, `remainingUsage` | Approved | 2026-11-04 |
+| `ingredient-nutrition.md`           | Ingredient-Level Recipe Nutrition         | Implemented | 2026-11-05 |

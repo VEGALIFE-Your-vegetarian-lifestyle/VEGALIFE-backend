@@ -50,14 +50,15 @@ No request body
         "ingredientId": "1a2b3c4d-0001-4000-8000-000000000001",
         "name": "tofu",
         "amount": 200,
-        "unit": "g"
+        "unit": "G"
       }
     ],
-    "calories": 320,
-    "proteinG": 22.5,
-    "carbohydrateG": 14,
-    "fatG": 18,
-    "fiberG": 3.5,
+    "calories": 288.00,
+    "proteinG": 34.38,
+    "carbohydrateG": 5.56,
+    "fatG": 17.44,
+    "fiberG": 4.60,
+    "nutritionResolved": true,
     "createdAt": "2026-10-01T10:00:00Z",
     "updatedAt": "2026-10-01T10:00:00Z"
   }
@@ -82,13 +83,14 @@ No request body
 | data.cookTimeMinutes | integer \| null | Cooking time, if supplied |
 | data.servings | integer | Number of servings |
 | data.difficulty | string \| null | `EASY`, `MEDIUM`, `HARD`, or `null` |
-| data.ingredients | array | One entry per ingredient link, with the resolved `ingredientId` and the lowercased `name` |
+| data.ingredients[] | array | One entry per ingredient link, with the resolved `ingredientId` and the lowercased `name` |
 | data.ingredients[].ingredientId | uuid | Shared ingredient row |
 | data.ingredients[].name | string | Lowercased ingredient name |
 | data.ingredients[].amount | number | Quantity |
-| data.ingredients[].unit | string | Unit of measure (e.g. `g`, `tbsp`) |
+| data.ingredients[].unit | string \| null | The **ingredient's** unit — `G`, `ML` or `PIECE` — derived, not stored per line. `null` when it has not been decided |
 | data.missingRequiredIngredients | array of string | Names of the dish's `required` ingredients this recipe omits (BR-DISH-002). Advisory only — the recipe is valid either way. Empty array when nothing is missing. Derived on read, never stored. |
-| data.calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | Author-entered totals for the whole recipe, never per serving; `null` means not provided (distinct from `0`) |
+| data.calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | Computed totals for the whole recipe, never per serving. `null` means the recipe cannot be priced yet, distinct from `0` (BR-RECP-006) |
+| data.nutritionResolved | boolean | `true` only when every ingredient is curated and the totals are real |
 | data.createdAt / data.updatedAt | string | ISO-8601 instants |
 
 ### Error Responses
@@ -102,6 +104,7 @@ No request body
 ## Business Rules
 - The lookup is `id = :recipeId AND deleted_at IS NULL AND user_id = :caller`. A recipe owned by another member is reported as 404, not 403: answering "exists but is not yours" would confirm the id (BR-RECP-001).
 - Review state never hides the recipe from its own author. `moderationStatus` and `dishModerationStatus` are returned as-is, so a `PENDING` recipe or a recipe whose dish name is still awaiting approval is readable — with the state attached — instead of looking inexplicably withheld (BR-DISH-001).
+- Nutrition is derived from the recipe's ingredients and stored, never authored (BR-RECP-004, ADR-022). `nutritionResolved` distinguishes "all ingredients curated" from "cannot be priced yet"; a `null` total is never a `0` (BR-RECP-006).
 - Members cannot edit recipes (`PUT`/`PATCH` are deliberately absent, BR-RECP-001); corrections go through an admin, which is why this is a read-only endpoint.
 - This is the owner's read surface only. Cross-user recipe lists live on `GET /api/recipes/me` (own), `GET /api/admin/recipes` (Admin), and the post surfaces that embed recipes.
 
@@ -138,6 +141,7 @@ curl -X GET "http://localhost:8080/api/recipes/550e8400-e29b-41d4-a716-446655440
     "carbohydrateG": null,
     "fatG": null,
     "fiberG": null,
+    "nutritionResolved": false,
     "createdAt": "2026-10-01T10:00:00Z",
     "updatedAt": "2026-10-01T10:00:00Z"
   }
@@ -157,5 +161,6 @@ curl -X GET "http://localhost:8080/api/recipes/550e8400-e29b-41d4-a716-446655440
 - List own recipes: `docs/apis/recipes/get-recipes-me.md`
 - Create counterpart: `docs/apis/recipes/post-recipes.md`
 - Admin counterpart: `docs/apis/admin/recipe-crud.md`
-- Business rules: `docs/brs/recipes.md` (BR-RECP-001, BR-DISH-001)
-- Feature spec: `docs/feats/create-recipe-api.md`
+- Business rules: `docs/brs/recipes.md` (BR-RECP-001, BR-RECP-004, BR-RECP-006, BR-DISH-001)
+- Feature spec: `docs/feats/ingredient-nutrition.md`
+- ADR: [`docs/adrs/022-ingredient-level-nutrition.md`](../../adrs/022-ingredient-level-nutrition.md)

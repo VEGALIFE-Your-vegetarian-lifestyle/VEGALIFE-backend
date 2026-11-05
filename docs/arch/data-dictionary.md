@@ -237,18 +237,41 @@ _Description: Master list of vegan food materials/ingredients available in the s
 |------------|-----------|-----|------------|-------------|
 | id | UUID | PK | No | Unique identifier for ingredient |
 | name | VARCHAR(100) | - | No | Ingredient name (e.g., Tofu, Mushroom, Spinach) |
+| unit | VARCHAR(10) | - | Yes | Measurement unit: `G`, `ML` or `PIECE`. `NULL` = not yet decided |
+| calories | DECIMAL(12,6) | - | Yes | kcal per **one** `unit` |
+| protein_g | DECIMAL(12,6) | - | Yes | Protein (g) per one `unit` |
+| carbohydrate_g | DECIMAL(12,6) | - | Yes | Carbohydrate (g) per one `unit` |
+| fat_g | DECIMAL(12,6) | - | Yes | Fat (g) per one `unit` |
+| fiber_g | DECIMAL(12,6) | - | Yes | Fibre (g) per one `unit` |
+| moderation_status | VARCHAR(20) | - | No | Review state: `PENDING`, `APPROVED`, `REJECTED` (ADR-016) |
 | created_at | TIMESTAMPTZ | - | No | Timestamp of creation |
 | updated_at | TIMESTAMPTZ | - | No | Timestamp of last update |
+| deleted_at | TIMESTAMPTZ | - | Yes | Soft delete timestamp |
 
-_Nutrition is not stored here. Before V43 the table carried per-100 g columns
-that had no recorded basis and could not be turned into a dish figure; they
-were dropped and the concept moved to `recipe` as author-entered totals._
+_Nutrition is stored **here**, on the ingredient, denominated per one unit of that
+ingredient's own `unit` — not per 100 g and not per serving (V49, ADR-022). V42 had
+put nutrition on `recipe` as author-entered input; it is now a derived output of the
+lines. Values are `DECIMAL(12,6)` because a per-gram figure such as cooked rice's
+0.0130 g protein/g loses a fifth of its value at two decimals._
+
+_There is deliberately no piece-weight column. A `PIECE` row's values are the
+estimate for one piece, entered as that estimate; the mass assumption is already
+folded into the number, so a second field would be unread and could silently
+disagree with it._
+
+**Constraints:**
+- `chk_ingredient_unit`: `unit IN ('G','ML','PIECE')` — a `NULL` unit satisfies a `CHECK` by SQL's three-valued logic, so "undecided" is allowed
+- `chk_ingredient_nutrition_complete`: all five nutrition values, or all null
+- `chk_ingredient_nutrition_non_negative`: no negative values
+
+**Indexes:**
+- `idx_ingredient_missing_nutrition` ON (name) WHERE `calories IS NULL AND deleted_at IS NULL` (curation queue)
 
 ---
 
 ## Table 12: Recipe
 
-_Description: Manages vegan recipes, preparation steps, and calorie values._
+_Description: Manages vegan recipes, preparation steps, and their derived nutrition totals._
 
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
@@ -262,18 +285,27 @@ _Description: Manages vegan recipes, preparation steps, and calorie values._
 | cook_time_minutes | INT | - | Yes | Estimated cooking duration in minutes |
 | servings | INT | - | No | Number of servings |
 | difficulty | VARCHAR(20) | - | Yes | Difficulty: EASY, MEDIUM, HARD |
-| calories | DECIMAL(10,2) | - | Yes | Author-entered calories for the **whole** recipe |
-| protein_g | DECIMAL(10,2) | - | Yes | Author-entered protein (g) for the whole recipe |
-| carbohydrate_g | DECIMAL(10,2) | - | Yes | Author-entered carbohydrate (g) for the whole recipe |
-| fat_g | DECIMAL(10,2) | - | Yes | Author-entered fat (g) for the whole recipe |
-| fiber_g | DECIMAL(10,2) | - | Yes | Author-entered fibre (g) for the whole recipe |
+| calories | DECIMAL(10,2) | - | Yes | Derived kcal for the **whole** recipe |
+| protein_g | DECIMAL(10,2) | - | Yes | Derived protein (g) for the whole recipe |
+| carbohydrate_g | DECIMAL(10,2) | - | Yes | Derived carbohydrate (g) for the whole recipe |
+| fat_g | DECIMAL(10,2) | - | Yes | Derived fat (g) for the whole recipe |
+| fiber_g | DECIMAL(10,2) | - | Yes | Derived fibre (g) for the whole recipe |
 | created_at | TIMESTAMPTZ | - | No | Timestamp when the recipe is created |
 | updated_at | TIMESTAMPTZ | - | No | Timestamp when the recipe is updated |
-
-_Nutrition columns (V42) are totals for the whole recipe, not per serving, and
-are nullable on purpose: `NULL` means the author did not provide the value and
-is never coerced to `0`. Per-serving values are derived from `servings`._
 | deleted_at | TIMESTAMPTZ | - | Yes | Soft delete timestamp |
+
+_Nutrition columns are **outputs, never inputs** (V49, ADR-022, BR-RECP-004).
+Each is `Σ(line.amount × ingredient.macro_per_unit)` over the recipe's lines,
+rounded once at the total to 2 dp with `HALF_UP`. No API accepts them from a
+client; the only writer is `RecipeNutritionService`, which recomputes and
+persists inside the same transaction whenever a recipe's lines or one of its
+ingredients' unit/nutrition change._
+
+_All five are `NULL` together and only when at least one ingredient is
+unresolved — no unit, or not all five values (BR-RECP-006). `NULL` means "cannot
+be priced yet" and is never coerced to `0`; a resolved recipe whose every
+ingredient is 0 kcal reports `0.00`. Totals are for the whole recipe, not per
+serving (V42 convention); per-serving values are derived from `servings`._
 
 **Constraints:**
 - `chk_difficulty`: difficulty IN ('EASY','MEDIUM','HARD')
@@ -295,8 +327,13 @@ _Description: Junction table connecting recipes with required ingredients (M:N r
 |------------|-----------|-----|------------|-------------|
 | recipe_id | UUID | PK, FK | No | References Recipe(id) |
 | ingredient_id | UUID | PK, FK | No | References Ingredient(id) |
-| amount | DECIMAL(10,3) | - | No | Required quantity for this recipe |
-| unit | VARCHAR(30) | - | No | Measurement unit (e.g., g, ml, tsp, tbsp, cup) |
+| amount | DECIMAL(10,3) | - | No | Quantity, **in the ingredient's own `unit`** |
+
+_There is no `unit` column (V49, ADR-022). The amount's meaning comes from the
+referenced ingredient, so one ingredient cannot be measured two ways across two
+recipes: `200` on a `G` ingredient is 200 g and on an `ML` ingredient is 200 ml.
+The trade-off is that changing an ingredient's unit silently reinterprets every
+stored amount — see ADR-022's consequences._
 
 **Constraints:**
 - FK: recipe_id REFERENCES recipe(id) ON DELETE CASCADE

@@ -53,6 +53,9 @@ menus by hand.
   `GET /api/dishes/suggestions`. This non-goal still holds for everything else
   — ingredient search, recipe lookup by name, shop discovery — and BR-MCP-002
   now records the six-tool surface. See `docs/feats/dish-suggestions.md`.
+  **Amended 2026-11-05:** `suggest_dishes` carries both bounds for all five
+  macros, mirroring the endpoint exactly; no calorie-only shortcut. See
+  `docs/adrs/022-ingredient-level-nutrition.md`.
 - No public tool exposure, no OAuth/authorization server, no agent framework.
 - No change to AI quota mechanics (BR-AI-001/002 unchanged).
 - No frontend work; the chat UI already posts to the same endpoints.

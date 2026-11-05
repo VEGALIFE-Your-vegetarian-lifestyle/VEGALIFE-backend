@@ -11,7 +11,10 @@ the model to reuse ids "the member has given or that appear in menus you have
 already read". A member asking for suggestions got an invented id or a refusal.
 There was also no way to answer "what can I actually cook with my allergy?" —
 recipe nutrition lived on the *ingredient*, which has no recorded basis (per
-100 g? per serving?) and so could never be turned into a dish figure.
+100 g? per serving?) and so could never be turned into a dish figure. (That gap
+was closed later by [ADR-022](../adrs/022-ingredient-level-nutrition.md), which
+put the basis in the row: one unit per ingredient, nutrition denominated per that
+unit, and the recipe total derived from the lines.)
 
 ## Goals
 
@@ -22,8 +25,9 @@ recipe nutrition lived on the *ingredient*, which has no recorded basis (per
 - Expose real dish ids so `create_menu` no longer needs invented ones.
 - Attach recommended recipes to meal-plan reads, so a plan can be read aloud
   with something concrete behind each meal.
-- Move nutrition to where it can be meaningful: author-entered totals on the
-  recipe.
+- Move nutrition to where it can be meaningful: totals on the recipe, derived from
+  its ingredients (amended by
+  [ADR-022](../adrs/022-ingredient-level-nutrition.md) — originally author-entered).
 
 ## Non-goals
 
@@ -34,8 +38,10 @@ recipe nutrition lived on the *ingredient*, which has no recorded basis (per
   already-saved menus.
 - **No allergy rejection on `create_menu` / `update_menu`.** The menu write path
   validates structure only, unchanged.
-- No nutrition derivation from ingredients, no macro targets, no numeric mapping
-  of `healthGoal`. Nutrition is returned as data and judged by the AI.
+- No macro targets and no numeric mapping of `healthGoal`. Nutrition is returned
+  as data and judged by the AI. (Nutrition *derivation* from ingredients is
+  [ADR-022](../adrs/022-ingredient-level-nutrition.md)'s job, not this feature's —
+  it supplies the numbers, this feature only filters on them.)
 - No changes to `MealResponse` (the write path). Only `MealDetailResponse`
   gains recommendations.
 
@@ -47,8 +53,10 @@ recipe nutrition lived on the *ingredient*, which has no recorded basis (per
   approved recipe passing the caller's allergy check and filters, paginated,
   ordered by dish name.
 - FR-002: query parameters `name`, `cuisineType`, `difficulty`, `maxPrepTime`,
-  `maxCookTime`, `maxTotalTime`, `minCalories`, `maxCalories`, `minProtein`,
-  `page`, `size`, `recipesPerDish`.
+  `maxCookTime`, `maxTotalTime`, and both bounds for each of the five macros —
+  `minCalories`/`maxCalories`, `minProtein`/`maxProtein`,
+  `minCarbohydrate`/`maxCarbohydrate`, `minFat`/`maxFat`, `minFiber`/`maxFiber` —
+  plus `page`, `size`, `recipesPerDish`.
 - FR-003: an AI tool `suggest_dishes` exposes the same parameters, so the model
   can browse from free-text conversation.
 - FR-004: `recommendedRecipes` (up to `recipesPerDish`, default 3) is attached
@@ -58,9 +66,12 @@ recipe nutrition lived on the *ingredient*, which has no recorded basis (per
 - FR-006: recipes are ranked `score DESC NULLS LAST, createdAt DESC, id ASC`.
 - FR-007: allergies are read from the caller's profile on every call; no
   parameter supplies them.
-- FR-008: `recipe` carries author-entered total nutrition (`calories`,
-  `protein_g`, `carbohydrate_g`, `fat_g`, `fiber_g`), all nullable.
-- FR-009: recipe nutrition is accepted on `POST /api/recipes`.
+- FR-008: `recipe` carries total nutrition (`calories`, `protein_g`,
+  `carbohydrate_g`, `fat_g`, `fiber_g`), all nullable, derived from the recipe's
+  ingredients (BR-RECP-004). All five are null together when any ingredient is
+  unresolved (BR-RECP-006).
+- FR-009: recipe nutrition is **not** accepted on `POST /api/recipes`; a recipe
+  total is always computed (BR-RECP-004).
 
 ### Non-functional Requirements
 
@@ -102,7 +113,7 @@ author's version, which is worse for a member looking for something to eat.
 |---|---|
 | Nutrition is a recipe total, not per serving | The author knows the amounts; `recipe.servings` lets per-serving be derived without storing a second number |
 | Nutrition columns are nullable, never defaulted to 0 | `0` means "no calories"; `null` means "not provided". ADR-016 uses the same convention for `score` |
-| `ingredient` nutrition columns dropped | No recorded per-100 g basis made them unusable for a dish figure; irreversible, explicitly approved |
+| `ingredient` nutrition columns dropped (V43) | No recorded per-100 g basis made them unusable for a dish figure; irreversible, explicitly approved. **Superseded 2026-11-05:** V49 restored nutrition on `ingredient` with an explicit per-one-unit basis, and V50 seeded 50 USDA-derived rows — see [ADR-022](../adrs/022-ingredient-level-nutrition.md) |
 | Menu reads allergy-filter `recommendedRecipes` but never drop a meal | A saved menu is the member's plan. Removing a meal they saved would be destructive; an empty list is honest |
 | No allergen flag on menus | There is no per-meal allergy state, and recomputing on read is enough |
 | `recommendedRecipes` only on `MealDetailResponse` | The write path returns what was written, not derived suggestions |
@@ -115,6 +126,11 @@ author's version, which is worse for a member looking for something to eat.
   columns to `recipe`, each `CHECK (>= 0)`.
 - `V43__drop_ingredient_nutrition.sql` — drops the same five columns from
   `ingredient`. Destructive and irreversible.
+- **Superseded 2026-11-05:** `V49__ingredient_unit_and_nutrition.sql` restores
+  the five nutrition columns on `ingredient` (now `DECIMAL(12,6)`, per one unit,
+  plus `unit`) and makes the `recipe` columns derived outputs;
+  `V50__seed_ingredient_nutrition.sql` seeds 50 USDA-derived ingredients. See
+  [ADR-022](../adrs/022-ingredient-level-nutrition.md).
 
 ## Verification
 

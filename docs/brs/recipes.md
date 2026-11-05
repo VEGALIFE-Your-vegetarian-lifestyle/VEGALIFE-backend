@@ -6,7 +6,10 @@
 |---------|-------|--------|---------------|
 | BR-RECP-001 | Recipe Ownership Comes from Authentication | Active | 2026-10-01 |
 | BR-RECP-002 | Ingredient and Dish Names Are Unique Case-Insensitively | Active | 2026-10-01 |
-| BR-RECP-003 | Recipe Name, Instructions, Servings, and Dish Are Required | Active | 2026-10-01 |
+| BR-RECP-003 | Recipe Name, Instructions, Servings, and Dish Are Required | Active | 2026-11-05 |
+| BR-RECP-004 | Recipe Nutrition Is Derived From Ingredient Nutrition, Never Authored | Active | 2026-11-05 |
+| BR-RECP-005 | Ingredient Nutrition Is Per One Unit, and All-or-Nothing | Active | 2026-11-05 |
+| BR-RECP-006 | A Recipe Reports No Nutrition Unless Every Ingredient Is Resolved | Active | 2026-11-05 |
 
 ---
 
@@ -92,22 +95,246 @@ Active
 
 ## Statement
 
-A recipe must have a non-blank `name`, non-blank `instructions`, `servings` of at least 1, a non-blank `dishName` (the recipe always belongs to a dish), and at least one ingredient entry with a name, a positive amount, and a unit. A request missing any of these is rejected with `400 Bad Request` and no recipe is persisted.
+A recipe must have a non-blank `name`, non-blank `instructions`, `servings` of at
+least 1, a non-blank `dishName` (the recipe always belongs to a dish), and at
+least one ingredient entry with a name and a positive amount. A request missing
+any of these is rejected with `400 Bad Request` and no recipe is persisted.
+
+A line's `unit` is **not** required. It is accepted only for an ingredient name
+that does not exist yet, where it becomes that ingredient's own unit
+(BR-RECP-005). For an existing ingredient the submitted unit is ignored.
 
 ## Rationale
 
-Every column backing these fields in the schema is `NOT NULL` (`recipe.name`, `recipe.instructions`, `recipe.servings`, `recipe.dish_id`), and a recipe without ingredients has no culinary value and cannot be linked meaningfully to nutrition or meal-plan features. Rejecting at the API boundary keeps partial rows from ever reaching the database.
+Every column backing these fields in the schema is `NOT NULL` (`recipe.name`,
+`recipe.instructions`, `recipe.servings`, `recipe.dish_id`), and a recipe without
+ingredients has no culinary value and cannot be linked meaningfully to nutrition
+or meal-plan features. Rejecting at the API boundary keeps partial rows from ever
+reaching the database.
+
+`unit` moved out of this rule when it moved off the recipe line: a member writing
+`"2 cà chua"` is describing a real recipe, and forcing them to name a unit they do
+not think in would either block valid input or manufacture a value.
 
 ## Scope & Exceptions
 
-Applies to `POST /api/recipes`. Optional fields (`description`, `prepTimeMinutes`, `cookTimeMinutes`, `difficulty`) may be omitted; when supplied, `difficulty` must be one of `EASY`, `MEDIUM`, `HARD` and times must be non-negative.
+Applies to `POST /api/recipes`. Optional fields (`description`,
+`prepTimeMinutes`, `cookTimeMinutes`, `difficulty`) may be omitted; when supplied,
+`difficulty` must be one of `EASY`, `MEDIUM`, `HARD` and times must be
+non-negative.
+
+`amount` is `@NotNull` and `@Positive` with up to 3 decimals, which means
+"as much as needed" (`vừa đủ`) cannot be expressed. Salt-to-taste must carry a
+number or be omitted.
 
 ## Enforcement
 
-- DTO: Bean Validation constraints on `RecipeCreateRequest` and its nested ingredient request.
+- DTO: Bean Validation constraints on `RecipeCreateRequest` and its nested
+  ingredient request (`RecipeIngredientItem`).
 - Controller: invalid payloads are handled by the existing `GlobalExceptionHandler` → `400 Validation failed`.
 - API reference: `docs/apis/recipes/post-recipes.md`.
 
 ## Last Reviewed
 
-2026-10-01, by Vegalife backend team
+2026-11-05, by Vegalife backend team
+
+---
+
+# Business Rule: Recipe Nutrition Is Derived From Ingredient Nutrition, Never Authored
+
+## Rule ID
+
+`BR-RECP-004`
+
+## Status
+
+Active
+
+## Statement
+
+A recipe's `calories`, `proteinG`, `carbohydrateG`, `fatG` and `fiberG` are
+computed from its ingredient lines and stored, never taken from a request. No API
+accepts a recipe nutrition value from a client, and no code path assigns one
+except the recompute service.
+
+```
+total(macro) = Σ (line.amount × ingredient.macro_per_unit)
+```
+
+Totals are rounded once, at the end, to 2 decimal places with `HALF_UP`. Line
+values are not rounded.
+
+## Rationale
+
+An authored total is unfalsifiable: nothing connects it to the ingredients
+listed, so two recipes with identical ingredients can carry different figures and
+no query can say which is wrong. Deriving it makes the number traceable to the
+rows that produced it, comparable across recipes, and correctable by fixing the
+ingredient rather than by editing every recipe.
+
+Rounding once at the end matters because rounding per line accumulates error:
+three lines of 0.005 kcal are 0.015 in total and become 0.02, but rounded
+individually they become 0.03.
+
+## Scope & Exceptions
+
+- Applies to every path that creates or changes a recipe's ingredient lines, and
+  to every path that changes an ingredient's unit or nutrition.
+- Persisted rather than computed on read, so the suggest-dishes nutrition filters
+  remain an indexed column comparison. The recompute-on-write step is what keeps
+  the stored value honest.
+- There is deliberately no per-serving figure. Totals describe the whole recipe
+  (V42 convention); clients divide by `servings`.
+
+## Enforcement
+
+- `RecipeNutritionCalculator` — the pure arithmetic, unit-tested with no Spring
+  or database.
+- `RecipeNutritionService.recomputeForRecipe` / `recomputeForIngredient` —
+  persists the result inside the caller's transaction.
+- `RecipeService.createRecipe` recomputes after writing the lines;
+  `AdminIngredientService` recomputes after any unit or nutrition change.
+- `RecipeCreateRequest` carries no nutrition field, so an offered value is
+  ignored rather than stored.
+- ADR: `docs/adrs/022-ingredient-level-nutrition.md`.
+
+## Last Reviewed
+
+2026-11-05, by Vegalife backend team
+
+---
+
+# Business Rule: Ingredient Nutrition Is Per One Unit, and All-or-Nothing
+
+## Rule ID
+
+`BR-RECP-005`
+
+## Status
+
+Active
+
+## Statement
+
+Every ingredient has exactly one measurement unit — `G`, `ML` or `PIECE` — and its
+five nutrition values are denominated **per one of that unit**, never per 100 g
+and never per some other unit.
+
+An ingredient is *resolved* only when its unit is non-null **and** all five values
+are present. A partially filled ingredient cannot be stored: an admin request that
+would leave some values set and others null is rejected with `400`.
+
+`null` means "not provided" and is never coerced to `0`.
+
+## Rationale
+
+A value with no basis is unreadable: 365 kcal means nothing until you know whether
+it is per gram, per 100 g or per serving. Putting the basis in the same row
+removes the question. Restricting each ingredient to one of three units means a
+recipe total is a sum with no conversion anywhere — and therefore no conversion
+to get wrong. Spoons, cups and bunches would each require a density or portion
+table to reach a gram, since they cannot be converted without knowing the specific
+food.
+
+All-or-nothing prevents a half-answer from being published as a whole one: a
+recipe total built from three of five macros looks complete and is not.
+
+`null` stays distinct from `0` because water is legitimately 0 kcal with 0 g of
+everything. Treating missing as zero would make every uncurated ingredient look
+like water.
+
+## Scope & Exceptions
+
+- `PIECE` is the honest exception: a piece has no constant size, so its per-piece
+  value is a curation decision rather than a measurement. That estimate is stored
+  as the per-one-unit value; there is no separate piece-weight column.
+- Changing an ingredient's unit is allowed **silently** — no guard, no
+  confirmation. Stored amounts are bare numbers, so `200 g` of rice reinterpreted
+  as `200 ml` of rice changes the recipe's meaning with no error. Every affected
+  recipe is recomputed and the change is logged at WARN with the affected count.
+- Recording nutrition without a unit is refused: a per-unit figure with no unit is
+  a number with no meaning.
+- Legacy free-text units with no honest mapping (`bó`, `vừa đủ`, typos) are left
+  `null` by the migration rather than guessed.
+
+## Enforcement
+
+- Database: `chk_ingredient_unit` (`IN ('G','ML','PIECE')` or null) and
+  `chk_ingredient_nutrition_complete` (five values or none) in
+  `V49__ingredient_unit_and_nutrition.sql`; `DECIMAL(12,6)` precision so
+  per-gram figures such as 0.0130 g protein/g survive.
+- `AdminIngredientService.requireCompleteNutrition` and
+  `requireUnitForNutrition` reject a half-answer after merging with the stored
+  row, so a single value can still be corrected on a complete row.
+- `Unit.fromInput` normalises spelling variants and refuses genuinely different
+  units (`kg`, `tbsp`, `cup`).
+- ADR: `docs/adrs/022-ingredient-level-nutrition.md`.
+
+## Last Reviewed
+
+2026-11-05, by Vegalife backend team
+
+---
+
+# Business Rule: A Recipe Reports No Nutrition Unless Every Ingredient Is Resolved
+
+## Rule ID
+
+`BR-RECP-006`
+
+## Status
+
+Active
+
+## Statement
+
+A recipe has nutrition only when **every** one of its ingredient lines references
+a resolved ingredient. If any line's ingredient is unresolved, or the recipe has
+no lines, all five recipe nutrition columns are `null` and the response reports
+`nutritionResolved = false`.
+
+A partial sum is never returned.
+
+## Rationale
+
+A sum over the ingredients the system happens to know about is not a total, but it
+reads like one. A recipe listing rice, tofu and an uncurated vegetable would
+advertise the calories of rice and tofu alone, and the reader has no way to see
+that the largest contribution is missing. Refusing to answer is the honest
+response, and `nutritionResolved` makes the refusal explicit rather than
+indistinguishable from an empty field.
+
+The consequence is accepted: nutrition filters treat `null` as failing, so a
+partly curated recipe is invisible to `minCalories` and friends until the
+catalogue is fixed.
+
+## Scope & Exceptions
+
+- Applies to every read surface that returns recipe nutrition, including
+  `GET /api/recipes/me`, `GET /api/recipes/{recipeId}`, the suggest-dishes
+  recommendations, and the recommended recipes embedded in a menu detail read and
+  in the AI menu tools.
+- Not applied to surfaces that do not return nutrition at all: the admin recipe
+  list (`GET /api/admin/recipes`) omits the five columns, and the AI
+  `suggest_dishes` tool filters on them without echoing them.
+- Applies equally to `0`: a resolved recipe whose every ingredient is 0 kcal is a
+  legitimate answer and reports `nutritionResolved = true` with totals of `0.00`.
+- Not applied to a dish: a dish aggregates recipe variations and has no amounts of
+  its own, so it carries no nutrition.
+
+## Enforcement
+
+- `RecipeNutritionCalculator.totals` returns `null` if any line is unresolved or
+  the line list is empty.
+- `RecipeNutritionCalculator.lineNutrition` returns `null` for an ingredient
+  failing `Ingredient.hasResolvedNutrition()` (unit present plus all five values).
+- `RecipeNutritionService` writes all five columns or none.
+- `RecipeService.toResponse`, `RecipeSummaryMapper` and `AdminIngredientResponse`
+  set `nutritionResolved` explicitly rather than leaving it to a mapper default.
+- API references: `docs/apis/recipes/get-recipes-me.md`,
+  `docs/apis/recipes/get-recipes-recipeid.md`,
+  `docs/apis/recipes/get-dishes-suggestions.md`.
+
+## Last Reviewed
+
+2026-11-05, by Vegalife backend team

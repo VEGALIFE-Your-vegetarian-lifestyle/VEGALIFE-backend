@@ -9,11 +9,18 @@ Backend team; tracked as GitHub issue #84 (Feature, Sprint 2, Epic: Content & Re
 ## Summary
 Allow an authenticated user to create a recipe — a dish plus its ingredients and cooking instructions — via `POST /api/recipes`, resolving dish and ingredient names to shared rows case-insensitively so "Tofu" and "tofu" are the same ingredient.
 
+> **Amended by [ADR-022](../adrs/022-ingredient-level-nutrition.md).** The
+> per-line `unit` was removed from `recipe_ingredient`; the amount is expressed in
+> the ingredient's own `G`/`ML`/`PIECE` unit, and the request `unit` is optional and
+> honoured only when the recipe introduces a brand-new ingredient. Recipe nutrition
+> is now derived from the ingredients rather than authored — see the
+> [ingredient-level nutrition spec](ingredient-nutrition.md).
+
 ## Problem / motivation
 Posts need to link to recipes (`post_recipe` junction, data dictionary Table 7), but nothing lets a user create a recipe yet: the `recipe`, `dish`, `ingredient`, and `recipe_ingredient` tables exist (migrations `V5`/`V6`) but have no entities, no repository, and no API — the tables stay empty. Without a create endpoint there is nothing for the future post↔recipe linking feature to link to.
 
 ## Goals
-- Authenticated user creates a recipe with `dishName`, ingredient entries (`name`, `amount`, `unit`), `name`, `instructions`, and `servings`.
+- Authenticated user creates a recipe with `dishName`, ingredient entries (`name`, `amount`, and optionally `unit`), `name`, `instructions`, and `servings`.
 - Ingredient and dish names are trimmed, normalized to lowercase, and resolved to existing shared rows — no duplicate row ever differs only by case.
 - The saved recipe has `dish_id` set, `recipe_ingredient` rows persisted, and `user_id` taken from the JWT.
 - The returned recipe `id` is referenceable by the future post↔recipe linking endpoint.
@@ -29,13 +36,13 @@ Posts need to link to recipes (`post_recipe` junction, data dictionary Table 7),
 
 ### Functional Requirements
 - FR-001: `POST /api/recipes` requires a valid JWT; the owner comes from the token. Client-supplied `userId`, `createdAt`, `updatedAt`, and `deletedAt` are ignored.
-- FR-002: Required fields — `name`, `instructions`, `servings`, `dishName`, and a non-empty `ingredients` list; each ingredient entry requires `name`, `amount`, and `unit`.
+- FR-002: Required fields — `name`, `instructions`, `servings`, `dishName`, and a non-empty `ingredients` list; each ingredient entry requires `name` and `amount`. `unit` is optional and, when supplied, is honoured only for a brand-new ingredient (BR-RECP-003, BR-RECP-005).
 - FR-003: Optional fields — `description`, `prepTimeMinutes`, `cookTimeMinutes`, `difficulty` (`EASY` | `MEDIUM` | `HARD`).
 - FR-004: On success, respond `201 Created` with the recipe DTO: generated `id`, resolved `dishId`, normalized (lowercase) names, linked ingredients, and timestamps.
 - FR-005: Each ingredient name is trimmed and lowercased; the recipe links to the existing `ingredient` row whose `lower(name)` matches, or a new row is inserted with the lowercased name.
 - FR-006: The dish name is trimmed and lowercased; the recipe links to the existing non-deleted `dish` row whose `lower(name)` matches, or a new row is inserted. `dish_id` is never null.
-- FR-007: `recipe_ingredient` rows are persisted with `amount` and `unit` for every ingredient entry.
-- FR-008: Missing/blank required fields, an empty or oversized `ingredients` list (more than 50 entries), `servings < 1`, `amount <= 0`, negative prep/cook time, unknown `difficulty`, or a string longer than its column allows (`name`/`dishName` ≤ 255, ingredient `name` ≤ 100, `unit` ≤ 30) → `400 Bad Request`, and no recipe is created.
+- FR-007: `recipe_ingredient` rows are persisted with `amount` for every ingredient entry. There is no per-line `unit` column (V49): the amount is expressed in the referenced ingredient's own unit (ADR-022).
+- FR-008: Missing/blank required fields, an empty or oversized `ingredients` list (more than 50 entries), `servings < 1`, `amount <= 0`, negative prep/cook time, unknown `difficulty`, a string longer than its column allows (`name`/`dishName` ≤ 255, ingredient `name` ≤ 100, `unit` ≤ 30), or a `unit` naming a different measurement (`kg`, `tbsp`, `cup`) for a new ingredient → `400 Bad Request`, and no recipe is created.
 - FR-009: Two ingredient entries in one request that collide case-insensitively → `400 Bad Request` (the `recipe_ingredient` primary key is `(recipe_id, ingredient_id)`, so the link would be ambiguous).
 - FR-010: Missing, invalid, or expired JWT → `401 Unauthorized`.
 
@@ -75,7 +82,7 @@ New code lives in `model/recipe/` + `repository/recipe/` (entities `Recipe`, `Di
 **As an** authenticated user, **I want to** create a recipe with a dish and ingredients, **so that** my cooking content can later be linked to posts and reused by others.
 
 - [ ] Given an authenticated user, when they submit valid recipe data (name, instructions, servings, dishName required; description, prep/cook time, difficulty optional), then `201 Created` with a recipe DTO owned by that user.
-- [ ] Given a recipe with ingredients, when it is created, then `recipe_ingredient` rows with amount and unit are persisted.
+- [ ] Given a recipe with ingredients, when it is created, then `recipe_ingredient` rows with amount are persisted, and the recipe's nutrition totals are derived from those rows (BR-RECP-004).
 - [ ] Given an ingredient name in any casing (e.g. "Tofu"), when the recipe is saved, then the name is normalized to lowercase and the recipe links to the existing `ingredient` row whose lowercase name matches — no duplicate row differing only by case is ever created.
 - [ ] Given an ingredient name that does not exist yet (e.g. "tofu"), when the recipe is saved, then a new `ingredient` row is created with the lowercased name and linked.
 - [ ] Same rules for dish: the dish name is normalized to lowercase and the recipe reuses the existing non-deleted `dish` row with that lowercase name, or creates one if none exists (`dish_id` is never null).

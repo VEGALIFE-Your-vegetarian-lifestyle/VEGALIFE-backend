@@ -21,6 +21,7 @@ describe is now the backend's own `@Tool` methods, not an MCP server.
 | BR-MCP-006 | Scheduling happens only after explicit user confirmation | Active | 2026-10-12 |
 | BR-MCP-007 | Tool failures are model-readable results, not transport errors | Active | 2026-10-12 |
 | BR-MCP-008 | Allergies come from the profile, never from a tool argument | Active | 2026-10-25 |
+| BR-MCP-009 | A browsing tool's filters mirror its endpoint exactly | Active | 2026-11-05 |
 
 ### BR-MCP-001 — Tool calls act as the authenticated caller
 Every menu tool call executes as the member whose authentication produced the
@@ -68,6 +69,34 @@ mirrors `GET /api/dishes/suggestions`.
   named. `suggest_dishes` closes that gap with a read-only, allergy-filtered
   browse that mirrors an existing member-facing endpoint. See
   `docs/feats/dish-suggestions.md`.
+
+### BR-MCP-009 — A browsing tool's filters mirror its endpoint exactly
+`suggest_dishes` exposes every recipe filter that `GET /api/dishes/suggestions`
+accepts, and no subset of it: `name`, `cuisineType`, `difficulty`, `maxPrepTime`,
+`maxCookTime`, `maxTotalTime`, and both bounds for each of the five macros —
+`minCalories`/`maxCalories`, `minProtein`/`maxProtein`,
+`minCarbohydrate`/`maxCarbohydrate`, `minFat`/`maxFat`, `minFiber`/`maxFiber`.
+
+The tool deliberately has **no** calorie-only shortcut. A tool that mirrored the
+endpoint for dish discovery but offered a narrower nutrition surface would let
+the same question ("high protein, low fat, at least 8 g of fibre") get a
+different answer depending on whether the member typed it into REST or into chat.
+The remedy for a filter the model should not use is a prompt, not a missing
+argument.
+
+Two consequences are inherited from the endpoint and are not tool-layer choices:
+
+- The values are whole-recipe totals **derived** from ingredients, never
+  author-edited (BR-RECP-004).
+- A recipe whose totals are unresolved fails **every** bound, lower and upper
+  alike — unknown is not zero (BR-RECP-006). The tool must not offer an
+  "include unknown" escape hatch.
+
+- Enforcement: the `@ToolParam` set on `suggestDishes`; asserted by
+  `MenuToolsTest.suggestDishes_forwardsEveryNutritionBound`
+- Related: `docs/feats/dish-suggestions.md`,
+  `docs/adrs/022-ingredient-level-nutrition.md`, BR-RECP-004, BR-RECP-006
+- Added: 2026-11-05
 
 ### BR-MCP-008 — Allergies come from the profile, never from a tool argument
 No tool and no endpoint accepts an allergen, allergy, or `exclude` parameter.

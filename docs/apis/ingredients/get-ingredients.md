@@ -72,7 +72,10 @@ No request body
 | data.first | boolean | Whether this is the first page |
 | data.last | boolean | Whether this is the last page |
 
-Nutrition columns (`calories`, `protein_g`, `carbohydrate_g`, `fat_g`, `fiber_g`) are intentionally not returned.
+Nutrition columns (`calories`, `protein_g`, `carbohydrate_g`, `fat_g`, `fiber_g`)
+and the ingredient's `unit` are intentionally not returned — this is an autocomplete
+suggestion source, not a nutrition label. They are admin-only surface; see
+[Admin dish and ingredient CRUD](../admin/dish-and-ingredient-crud.md#ingredient-nutrition-unit-and-per-unit-values).
 
 ### Error Responses
 | Status Code | Condition | Message |
