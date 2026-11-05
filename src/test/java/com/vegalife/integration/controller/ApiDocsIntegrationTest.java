@@ -7,17 +7,32 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.MethodParameter;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -47,6 +62,10 @@ class ApiDocsIntegrationTest {
   }
 
   @Autowired private MockMvc mockMvc;
+
+  @Autowired
+  @Qualifier("requestMappingHandlerMapping")
+  private RequestMappingHandlerMapping requestMappingHandlerMapping;
 
   @Test
   void v3ApiDocsIsServedWithoutAuthentication() throws Exception {
@@ -156,5 +175,126 @@ class ApiDocsIntegrationTest {
     assertThat(names)
         .as("every operation tag is declared in the index")
         .containsAll(new java.util.LinkedHashSet<>(operationTags));
+  }
+
+  /**
+   * Every query parameter the controllers actually bind must be discoverable in Swagger. The list
+   * and search endpoints bind their filters through {@code @ModelAttribute} DTOs, so this walks the
+   * real handler mappings and checks each mapped operation against the served document instead of
+   * hard-coding a few endpoints.
+   */
+  @Test
+  void everyQueryDtoFieldAppearsAsAQueryParameterInTheApiDoc() throws Exception {
+    JsonNode paths = readApiDocs().path("paths");
+    List<String> problems = new ArrayList<>();
+    int endpoints = 0;
+
+    for (Map.Entry<RequestMappingInfo, HandlerMethod> entry :
+        requestMappingHandlerMapping.getHandlerMethods().entrySet()) {
+      HandlerMethod handler = entry.getValue();
+      if (!handler.getBeanType().getPackageName().startsWith("com.vegalife.controller")) {
+        continue;
+      }
+
+      Set<String> explicitQueryParams = new LinkedHashSet<>();
+      for (MethodParameter parameter : handler.getMethodParameters()) {
+        RequestParam requestParam = parameter.getParameterAnnotation(RequestParam.class);
+        if (requestParam != null) {
+          explicitQueryParams.add(
+              requestParam.name().isEmpty() ? requestParam.value() : requestParam.name());
+        }
+      }
+
+      for (MethodParameter parameter : handler.getMethodParameters()) {
+        if (!parameter.hasParameterAnnotation(ModelAttribute.class)) {
+          continue;
+        }
+        Class<?> dtoType = parameter.getParameterType();
+        List<String> fields = instanceFieldNames(dtoType);
+        Set<String> expectedQueryParams = new LinkedHashSet<>(fields);
+        expectedQueryParams.addAll(explicitQueryParams);
+
+        for (String path : entry.getKey().getPatternValues()) {
+          for (RequestMethod method : entry.getKey().getMethodsCondition().getMethods()) {
+            endpoints++;
+            String operationId = method + " " + path;
+            JsonNode operation = paths.path(path).path(method.name().toLowerCase(Locale.ROOT));
+            if (operation.isMissingNode()) {
+              problems.add(operationId + ": operation is missing from /v3/api-docs");
+              continue;
+            }
+
+            Set<String> documentedQueryParams = new TreeSet<>();
+            operation
+                .path("parameters")
+                .forEach(
+                    p -> {
+                      if ("query".equals(p.path("in").asText())) {
+                        documentedQueryParams.add(p.path("name").asText());
+                      }
+                    });
+
+            for (String field : fields) {
+              if (!documentedQueryParams.contains(field)) {
+                problems.add(
+                    operationId
+                        + ": field '"
+                        + field
+                        + "' of "
+                        + dtoType.getSimpleName()
+                        + " is not documented as a query parameter");
+              }
+            }
+            for (String documented : documentedQueryParams) {
+              if (!expectedQueryParams.contains(documented)) {
+                problems.add(
+                    operationId
+                        + ": documented query parameter '"
+                        + documented
+                        + "' is not a bindable field of "
+                        + dtoType.getSimpleName());
+              }
+            }
+          }
+        }
+      }
+    }
+
+    assertThat(endpoints)
+        .as("operations bound through @ModelAttribute request DTOs")
+        .isGreaterThanOrEqualTo(25);
+    assertThat(problems).as("OpenAPI query parameter mismatches").isEmpty();
+  }
+
+  private JsonNode readApiDocs() throws Exception {
+    String body =
+        mockMvc
+            .perform(get("/v3/api-docs"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return new ObjectMapper().readTree(body);
+  }
+
+  /**
+   * The bindable state of a request DTO: its declared instance fields, including inherited ones.
+   */
+  private static List<String> instanceFieldNames(Class<?> type) {
+    List<String> names = new ArrayList<>();
+    Class<?> current = type;
+    while (current != null && current != Object.class) {
+      for (Field field : current.getDeclaredFields()) {
+        int modifiers = field.getModifiers();
+        if (Modifier.isStatic(modifiers)
+            || Modifier.isTransient(modifiers)
+            || field.isSynthetic()) {
+          continue;
+        }
+        names.add(field.getName());
+      }
+      current = current.getSuperclass();
+    }
+    return names;
   }
 }
