@@ -91,8 +91,30 @@ with no unit and the recipe is uncomputable until an admin resolves it.
     "servings": 2,
     "difficulty": "EASY",
     "ingredients": [
-      { "ingredientId": "1a2b3c4d-0001-4000-8000-000000000001", "name": "tofu", "amount": 200, "unit": "G" },
-      { "ingredientId": "1a2b3c4d-0002-4000-8000-000000000002", "name": "soy sauce", "amount": 15, "unit": "ML" }
+      {
+        "ingredientId": "1a2b3c4d-0001-4000-8000-000000000001",
+        "name": "tofu",
+        "amount": 200,
+        "unit": "G",
+        "calories": 288.00,
+        "proteinG": 34.38,
+        "carbohydrateG": 5.56,
+        "fatG": 17.44,
+        "fiberG": 4.60,
+        "nutritionResolved": true
+      },
+      {
+        "ingredientId": "1a2b3c4d-0002-4000-8000-000000000002",
+        "name": "soy sauce",
+        "amount": 15,
+        "unit": "ML",
+        "calories": 9.00,
+        "proteinG": 1.22,
+        "carbohydrateG": 0.84,
+        "fatG": 0.02,
+        "fiberG": 0.12,
+        "nutritionResolved": true
+      }
     ],
     "calories": 297.00,
     "proteinG": 35.60,
@@ -123,6 +145,8 @@ with no unit and the recipe is uncomputable until an admin resolves it.
 | data.difficulty | string or null | `EASY`, `MEDIUM`, `HARD`, or `null`. |
 | data.ingredients | array | One entry per ingredient link, with the resolved `ingredientId` and the lowercased `name`. |
 | data.ingredients[].unit | string or null | The **ingredient's** unit: `G`, `ML`, `PIECE`, or `null`. Derived, not stored per line. |
+| data.ingredients[].calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | This line's own contribution: `amount × the ingredient's per-unit value`, rounded to 2 decimals. All five are `null` together when the ingredient is uncurated. |
+| data.ingredients[].nutritionResolved | boolean | `true` when this line's five values are real rather than unknown. |
 | data.calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | Computed totals for the whole recipe, never per serving. `null` when the recipe cannot be priced yet. |
 | data.nutritionResolved | boolean | `true` only when every ingredient is curated and the totals above are real. `false` with all five totals `null` means "unknown", not "zero". |
 | data.missingRequiredIngredients | array of string | Names of the dish's `required` ingredients this recipe omits (BR-DISH-002). Advisory: the recipe was created regardless. Empty array when nothing is missing. |
@@ -145,6 +169,7 @@ with no unit and the recipe is uncomputable until an admin resolves it.
 - Nutrition is **never** taken from the request. It is computed from the finished ingredient lines and persisted on the recipe in the same transaction (BR-RECP-004, ADR-022).
 - A new ingredient is created `PENDING` with the supplied unit, or with no unit when omitted. An existing ingredient keeps its own unit and is not modified by this request (BR-RECP-005).
 - A recipe is created successfully even when its ingredients are uncurated; its nutrition columns stay `null` and `nutritionResolved` is `false` rather than reporting a partial sum (BR-RECP-006).
+- Each line reports its own contribution as `amount × per-unit value`, rounded to 2 decimals; an uncurated line reports five `null`s with `nutritionResolved` `false`. Line values are rounded individually while the recipe totals are rounded once over the exact sum, so the visible lines need not sum exactly to the visible total (BR-RECP-007).
 - New recipes are persisted with `user_id` from the token and `dish_id` resolved; soft-delete timestamps start as `null`.
 
 ## Example

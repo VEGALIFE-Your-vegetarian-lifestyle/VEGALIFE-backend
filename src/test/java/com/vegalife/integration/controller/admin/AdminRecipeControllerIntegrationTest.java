@@ -154,6 +154,13 @@ class AdminRecipeControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].ingredients[0].name").value("Tofu"))
         .andExpect(jsonPath("$.data.content[0].ingredients[0].amount").value(2.5))
         .andExpect(jsonPath("$.data.content[0].ingredients[0].unit").value("G"))
+        // Per-line contribution: 2.5 x 1.44 = 3.60, matching the persisted total.
+        .andExpect(jsonPath("$.data.content[0].ingredients[0].calories").value(3.6))
+        .andExpect(jsonPath("$.data.content[0].ingredients[0].proteinG").value(0.43))
+        .andExpect(jsonPath("$.data.content[0].ingredients[0].nutritionResolved").value(true))
+        .andExpect(jsonPath("$.data.content[0].calories").value(3.6))
+        .andExpect(jsonPath("$.data.content[0].proteinG").value(0.43))
+        .andExpect(jsonPath("$.data.content[0].nutritionResolved").value(true))
         .andExpect(jsonPath("$.data.content[0].createdAt").exists())
         .andExpect(jsonPath("$.data.content[0].updatedAt").exists())
         .andExpect(jsonPath("$.data.content[0].userId").value(author2.getId().toString()))
@@ -427,7 +434,13 @@ class AdminRecipeControllerIntegrationTest {
               .findByNameIgnoreCase("Tofu")
               .orElseGet(
                   () -> ingredientRepository.save(Ingredient.builder().name("Tofu").build()));
+      // Curated so the response has a resolvable line: 2.5 x these values are the totals set below.
       tofu.setUnit(Unit.G);
+      tofu.setCalories(new BigDecimal("1.440000"));
+      tofu.setProteinG(new BigDecimal("0.171900"));
+      tofu.setCarbohydrateG(new BigDecimal("0.027800"));
+      tofu.setFatG(new BigDecimal("0.087200"));
+      tofu.setFiberG(new BigDecimal("0.023000"));
       entityManager.flush();
       RecipeIngredient link =
           RecipeIngredient.builder()
@@ -439,6 +452,12 @@ class AdminRecipeControllerIntegrationTest {
               .build();
       entityManager.persist(link);
       recipe.getRecipeIngredients().add(link);
+      // The persisted totals ADR-022 would have computed; the read path must not recompute them.
+      recipe.setCalories(new BigDecimal("3.60"));
+      recipe.setProteinG(new BigDecimal("0.43"));
+      recipe.setCarbohydrateG(new BigDecimal("0.07"));
+      recipe.setFatG(new BigDecimal("0.22"));
+      recipe.setFiberG(new BigDecimal("0.06"));
       entityManager.flush();
     }
     return recipe;

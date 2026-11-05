@@ -142,6 +142,32 @@ for `PIECE`, multiply by USDA's measured `foodPortion.gramWeight` and divide by
 100. Existing rows win — the seed never overwrites an ingredient a member
 already created, because that row's unit may have been resolved differently.
 
+**10. A unit is read-contract data, not admin-only metadata.** Anything that
+returns a quantity to a member must also return the unit that quantity is in,
+because after decision 6 the number alone is meaningless. That makes `unit`
+part of `IngredientResponse` (the create-recipe autocomplete) and of every recipe
+line. Withholding it is not conservative: a client that cannot see the unit
+cannot describe the amount, and the resulting recipe is silently wrong rather
+than refused.
+
+The same argument does not extend to the dish ingredient suggestion surfaces
+(`DishIngredientSuggestionResponse`, `AdminDishIngredientResponse`). Those return
+a curated *name list* with no `amount`, so there is no quantity for a unit to
+govern. Adding one there would imply an amount that does not exist.
+
+**11. Line nutrition is exposed per line, rounded independently.** A recipe read
+returns each line's contribution alongside the totals. Each line is rounded
+`HALF_UP` at scale 2; the total stays rounded once over the exact sum (decision 4
+and the calculator's contract). The two therefore need not add up exactly: three
+lines of `0.005` kcal display as `0.03` against a total of `0.02`.
+
+The alternative — leaving per-line values unrounded — would keep the identity
+exact but push a `DECIMAL(12,6)`-derived product, which can carry many more
+digits than that, onto every client to format. Rounding to the same scale as the
+total is the smaller surface, and the discrepancy is below the display precision
+of any kcal or gram figure the product shows. The cost is that no client may
+assert "these lines sum to this total".
+
 ## Consequences
 
 **Positive:**
@@ -243,6 +269,7 @@ schema.
 ## References
 
 - Feature: [Ingredient-Level Recipe Nutrition](../feats/ingredient-nutrition.md)
+- Feature: [Nutrition on Read Surfaces](../feats/nutrition-read-surfaces.md)
 - Business rules: [Recipes](../brs/recipes.md) (BR-RECP-004, BR-RECP-005,
   BR-RECP-006 added)
 - API: [POST /api/recipes](../apis/recipes/post-recipes.md),

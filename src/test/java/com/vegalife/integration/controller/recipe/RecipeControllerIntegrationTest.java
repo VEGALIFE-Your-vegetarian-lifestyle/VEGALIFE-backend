@@ -1,6 +1,7 @@
 package com.vegalife.integration.controller.recipe;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -131,7 +132,14 @@ class RecipeControllerIntegrationTest {
         .andExpect(jsonPath("$.data.dishId").isNotEmpty())
         .andExpect(jsonPath("$.data.ingredients.length()").value(2))
         .andExpect(jsonPath("$.data.ingredients[0].name").value("tofu"))
-        .andExpect(jsonPath("$.data.ingredients[1].name").value("soy sauce"));
+        .andExpect(jsonPath("$.data.ingredients[1].name").value("soy sauce"))
+        // Freshly typed names are created uncurated, so the line reports unknown nutrition and the
+        // recipe reports no total at all — never a partial or zero sum (BR-RECP-005/006).
+        .andExpect(jsonPath("$.data.ingredients[0].unit").value("G"))
+        .andExpect(jsonPath("$.data.ingredients[0].calories").value(nullValue()))
+        .andExpect(jsonPath("$.data.ingredients[0].nutritionResolved").value(false))
+        .andExpect(jsonPath("$.data.calories").value(nullValue()))
+        .andExpect(jsonPath("$.data.nutritionResolved").value(false));
 
     Dish dish =
         dishRepository.findByNameIgnoreCaseAndDeletedAtIsNull("tofu stir-fry").orElseThrow();

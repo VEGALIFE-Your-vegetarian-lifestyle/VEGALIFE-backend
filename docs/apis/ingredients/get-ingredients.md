@@ -39,11 +39,25 @@ No request body
       {
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "name": "tofu",
+        "unit": "G",
+        "calories": 0.740000,
+        "proteinG": 0.080000,
+        "carbohydrateG": 0.019000,
+        "fatG": 0.048000,
+        "fiberG": 0.003000,
+        "nutritionResolved": true,
         "createdAt": "2026-10-01T09:00:00Z"
       },
       {
         "id": "6f9619ff-8b86-d011-b42d-00c04fc964ff",
         "name": "tomato",
+        "unit": null,
+        "calories": null,
+        "proteinG": null,
+        "carbohydrateG": null,
+        "fatG": null,
+        "fiberG": null,
+        "nutritionResolved": false,
         "createdAt": "2026-10-01T09:05:00Z"
       }
     ],
@@ -64,6 +78,13 @@ No request body
 | data.content | array | Ingredients on this page, sorted per `sort` (default `name` ascending) |
 | data.content[].id | uuid | Ingredient id — the same id `POST /api/recipes` find-or-create resolves to |
 | data.content[].name | string | Ingredient name as stored (recipe creation normalizes to lowercase) |
+| data.content[].unit | string \| null | `G`, `ML` or `PIECE`; `null` while the row's unit is undecided |
+| data.content[].calories | number \| null | kcal per **one** `unit` |
+| data.content[].proteinG | number \| null | grams of protein per one `unit` |
+| data.content[].carbohydrateG | number \| null | grams of carbohydrate per one `unit` |
+| data.content[].fatG | number \| null | grams of fat per one `unit` |
+| data.content[].fiberG | number \| null | grams of fibre per one `unit` |
+| data.content[].nutritionResolved | boolean | `true` only when `unit` and all five values are present |
 | data.content[].createdAt | string | ISO-8601 instant |
 | data.page | integer | Current page index |
 | data.size | integer | Page size |
@@ -72,10 +93,22 @@ No request body
 | data.first | boolean | Whether this is the first page |
 | data.last | boolean | Whether this is the last page |
 
-Nutrition columns (`calories`, `protein_g`, `carbohydrate_g`, `fat_g`, `fiber_g`)
-and the ingredient's `unit` are intentionally not returned — this is an autocomplete
-suggestion source, not a nutrition label. They are admin-only surface; see
-[Admin dish and ingredient CRUD](../admin/dish-and-ingredient-crud.md#ingredient-nutrition-unit-and-per-unit-values).
+**`unit` is required to interpret a recipe amount.** `POST /api/recipes` ignores a
+unit supplied for an ingredient that already exists and reads the `amount` in the
+stored row's unit (see [POST /api/recipes](../recipes/post-recipes.md)). Without
+this field a client cannot know what its amount will mean: `{"name":"tomato",
+"amount":2,"unit":"quả"}` against a row curated as `G` silently creates 2 g of
+tomato, not two tomatoes. Read `unit` here and render the amount in it.
+
+The five nutrition values describe **one** unit, exactly as stored — they are not a
+label for a finished dish and not a whole-recipe total. Multiply by the amount being
+submitted to preview a line, or read the derived totals from the recipe responses
+instead.
+
+`null` means "not curated yet" and is never `0`: water is legitimately 0 kcal. All
+five are `null` together whenever `nutritionResolved` is `false` — the API never
+reports a partial set. These fields are always present in the JSON; they are not
+omitted when null.
 
 ### Error Responses
 | Status Code | Condition | Message |
@@ -111,6 +144,13 @@ curl -X GET "http://localhost:8080/api/ingredients?name=tof&page=0&size=20" \
       {
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "name": "tofu",
+        "unit": "G",
+        "calories": 0.740000,
+        "proteinG": 0.080000,
+        "carbohydrateG": 0.019000,
+        "fatG": 0.048000,
+        "fiberG": 0.003000,
+        "nutritionResolved": true,
         "createdAt": "2026-10-01T09:00:00Z"
       }
     ],
@@ -126,5 +166,6 @@ curl -X GET "http://localhost:8080/api/ingredients?name=tof&page=0&size=20" \
 
 ## Related
 - Feature Spec: `docs/feats/list-ingredients-api.md`
+- Exposure rationale: `docs/feats/nutrition-read-surfaces.md`, ADR-022 decisions 10–11
 - Consumer: `docs/apis/recipes/post-recipes.md` (ingredient names → find-or-create)
 - Paging contract: `docs/apis/post/get-categories.md` (`GET /api/categories`, same `PageResponse` shape)

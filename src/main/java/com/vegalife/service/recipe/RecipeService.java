@@ -105,6 +105,38 @@ public class RecipeService {
    * of any one recipe and changes without touching it (BR-DISH-002). The warning never blocks a
    * write, so attaching it here — after the recipe is already saved — is the whole enforcement.
    */
+  /**
+   * Builds one recipe line for a response.
+   *
+   * <p>Shared by the read path and the create path so the two cannot disagree about how a line's
+   * nutrition is derived. The display name is passed in because the two paths legitimately differ:
+   * a read echoes the stored row's name, while the create response echoes what the caller typed.
+   *
+   * <p>Derived here rather than in the mapper because {@code dto/mapper} ranks below {@code
+   * service} (ADR-018) and may not reach the calculator.
+   */
+  private RecipeIngredientResponse ingredientResponseOf(
+      BigDecimal amount, String name, Ingredient ingredient) {
+    RecipeNutritionCalculator.LineNutrition nutrition =
+        RecipeNutritionCalculator.scaledLineNutrition(amount, ingredient);
+    RecipeIngredientResponse.RecipeIngredientResponseBuilder builder =
+        RecipeIngredientResponse.builder()
+            .ingredientId(ingredient.getId())
+            .name(name)
+            .amount(amount)
+            .unit(unitName(ingredient.getUnit()))
+            .nutritionResolved(nutrition != null);
+    if (nutrition != null) {
+      builder
+          .calories(nutrition.calories())
+          .proteinG(nutrition.proteinG())
+          .carbohydrateG(nutrition.carbohydrateG())
+          .fatG(nutrition.fatG())
+          .fiberG(nutrition.fiberG());
+    }
+    return builder.build();
+  }
+
   private RecipeResponse toResponse(
       Recipe recipe, String dishName, List<RecipeIngredientResponse> ingredients) {
     RecipeResponse response = recipeMapper.toResponse(recipe, dishName, ingredients);
@@ -131,13 +163,7 @@ public class RecipeService {
       if (ingredient == null) {
         continue;
       }
-      responses.add(
-          RecipeIngredientResponse.builder()
-              .ingredientId(ingredient.getId())
-              .name(ingredient.getName())
-              .amount(line.getAmount())
-              .unit(unitName(ingredient.getUnit()))
-              .build());
+      responses.add(ingredientResponseOf(line.getAmount(), ingredient.getName(), ingredient));
     }
     return responses;
   }
@@ -182,13 +208,7 @@ public class RecipeService {
               .ingredientId(ingredient.getId())
               .amount(item.amount())
               .build());
-      ingredientResponses.add(
-          RecipeIngredientResponse.builder()
-              .ingredientId(ingredient.getId())
-              .name(item.name())
-              .amount(item.amount())
-              .unit(unitName(ingredient.getUnit()))
-              .build());
+      ingredientResponses.add(ingredientResponseOf(item.amount(), item.name(), ingredient));
     }
 
     // Totals are derived from the lines just written, never taken from the request (ADR-022). A

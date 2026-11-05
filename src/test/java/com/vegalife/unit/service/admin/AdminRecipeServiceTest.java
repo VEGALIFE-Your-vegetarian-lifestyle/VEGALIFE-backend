@@ -15,6 +15,7 @@ import com.vegalife.dto.request.admin.RecipeListRequest;
 import com.vegalife.dto.response.admin.AdminRecipeListResponse;
 import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.recipe.Unit;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.admin.ModerationLog;
@@ -33,6 +34,7 @@ import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -238,6 +240,76 @@ class AdminRecipeServiceTest {
     when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
 
     assertThat(adminRecipeService.getRecipe(recipe.getId())).isEqualTo(recipeResponse);
+  }
+
+  @Test
+  void getRecipe_populatesPerLineNutritionAndTheResolvedFlag() {
+    Ingredient tofu =
+        Ingredient.builder()
+            .id(UUID.randomUUID())
+            .name("tofu")
+            .unit(Unit.G)
+            .moderationStatus(ModerationStatus.APPROVED)
+            .calories(new BigDecimal("1.440000"))
+            .proteinG(new BigDecimal("0.171900"))
+            .carbohydrateG(new BigDecimal("0.027800"))
+            .fatG(new BigDecimal("0.087200"))
+            .fiberG(new BigDecimal("0.023000"))
+            .build();
+    recipe.setCalories(new BigDecimal("288.00"));
+    recipe.setProteinG(new BigDecimal("34.38"));
+    recipe.setRecipeIngredients(
+        List.of(
+            RecipeIngredient.builder()
+                .recipeId(recipe.getId())
+                .ingredientId(tofu.getId())
+                .ingredient(tofu)
+                .amount(new BigDecimal("200"))
+                .build()));
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
+        .thenReturn(Optional.of(recipe));
+    when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
+
+    AdminRecipeListResponse result = adminRecipeService.getRecipe(recipe.getId());
+
+    assertThat(result.isNutritionResolved()).isTrue();
+    AdminRecipeListResponse.IngredientItem line = result.getIngredients().get(0);
+    assertThat(line.getUnit()).isEqualTo("G");
+    assertThat(line.isNutritionResolved()).isTrue();
+    // 200 x 1.44 = 288.00: the same figure the persisted recipe total carries.
+    assertThat(line.getCalories()).isEqualByComparingTo("288.00");
+    assertThat(line.getProteinG()).isEqualByComparingTo("34.38");
+  }
+
+  @Test
+  void getRecipe_uncuratedIngredientReportsNoLineOrTotalNutrition() {
+    Ingredient bare =
+        Ingredient.builder()
+            .id(UUID.randomUUID())
+            .name("muối")
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    recipe.setRecipeIngredients(
+        List.of(
+            RecipeIngredient.builder()
+                .recipeId(recipe.getId())
+                .ingredientId(bare.getId())
+                .ingredient(bare)
+                .amount(BigDecimal.TEN)
+                .build()));
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
+        .thenReturn(Optional.of(recipe));
+    when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
+
+    AdminRecipeListResponse result = adminRecipeService.getRecipe(recipe.getId());
+
+    // The consuming admin queue needs "not computed yet" to be visible, not inferred from a null
+    // total that could also read as zero.
+    assertThat(result.isNutritionResolved()).isFalse();
+    AdminRecipeListResponse.IngredientItem line = result.getIngredients().get(0);
+    assertThat(line.isNutritionResolved()).isFalse();
+    assertThat(line.getCalories()).isNull();
+    assertThat(line.getUnit()).isNull();
   }
 
   @Test

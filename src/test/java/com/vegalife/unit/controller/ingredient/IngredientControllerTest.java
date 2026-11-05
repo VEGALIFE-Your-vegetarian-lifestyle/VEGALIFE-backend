@@ -60,12 +60,26 @@ class IngredientControllerTest {
   }
 
   @Test
-  void ingredientResponseDeclaresOnlyIdNameAndCreatedAt() {
+  void ingredientResponseCarriesEveryNutritionReadField() {
     List<String> fields =
         java.util.Arrays.stream(IngredientResponse.class.getDeclaredFields())
             .map(java.lang.reflect.Field::getName)
             .toList();
 
-    assertThat(fields).containsExactlyInAnyOrder("id", "name", "createdAt");
+    // Deliberately not "exactly these three fields": this shape is expected to grow. What must not
+    // regress is that the unit and per-unit values are present, because POST /api/recipes ignores a
+    // unit supplied for an existing ingredient (ADR-022 decision 10).
+    assertThat(fields)
+        .containsExactlyInAnyOrder(
+            "id",
+            "name",
+            "unit",
+            "calories",
+            "proteinG",
+            "carbohydrateG",
+            "fatG",
+            "fiberG",
+            "nutritionResolved",
+            "createdAt");
   }
 }
