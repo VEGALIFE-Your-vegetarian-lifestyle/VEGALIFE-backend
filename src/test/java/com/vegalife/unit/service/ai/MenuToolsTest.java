@@ -339,8 +339,8 @@ class MenuToolsTest {
 
   @Test
   void createMenu_rejectsAMalformedDishId() {
-    List<MenuTools.Day> days =
-        List.of(new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", "nope", 2))));
+    MenuTools.Days days =
+        days(new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", "nope", 2))));
 
     String result = menuTools.createMenu("2026-10-19", days, "summary", CONTEXT);
 
@@ -354,9 +354,8 @@ class MenuToolsTest {
    */
   @Test
   void createMenu_runsTheBeanValidationTheRestControllerApplies() {
-    List<MenuTools.Day> days =
-        List.of(
-            new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", DISH_ID.toString(), null))));
+    MenuTools.Days days =
+        days(new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", DISH_ID.toString(), null))));
 
     String result = menuTools.createMenu("2026-10-19", days, "summary", CONTEXT);
 
@@ -438,6 +437,82 @@ class MenuToolsTest {
     assertThat(text).doesNotStartWith("\"").startsWith("{").contains("\"success\":true");
   }
 
+  /**
+   * Issue #190: a provider that emits {@code days} as a string instead of an array must not kill
+   * the chat turn. Before the fix this threw {@code ToolExecutionException} out of the tool
+   * callback (surfacing to the member as a 502); the week must instead bind and reach the service.
+   */
+  @Test
+  void createMenu_acceptsTheWeekHandedOverAsALooseJsonString() {
+    when(menuService.createMenu(eq(USER), any()))
+        .thenReturn(MenuDetailResponse.builder().id(MENU_ID).status("drafted").build());
+
+    // Single-quoted keys/values: what a weaker OpenAI-compatible model actually sends.
+    String arguments =
+        "{\"startDate\":\"2026-10-19\",\"notes\":\"summary\",\"days\":\"[{date:'2026-10-19',"
+            + "meals:[{mealType:'BREAKFAST',dishId:'"
+            + DISH_ID
+            + "',servings:2}]}]\"}";
+
+    String result = toolNamed("create_menu").call(arguments, CONTEXT);
+
+    assertThat(result).contains("\"success\":true").contains("Menu created successfully");
+    ArgumentCaptor<CreateMenuRequest> sent = ArgumentCaptor.forClass(CreateMenuRequest.class);
+    verify(menuService).createMenu(eq(USER), sent.capture());
+    assertThat(sent.getValue().getDays()).hasSize(1);
+    assertThat(sent.getValue().getDays().get(0).getDate()).isEqualTo(LocalDate.parse("2026-10-19"));
+    assertThat(sent.getValue().getDays().get(0).getMeals().get(0).getDishId()).isEqualTo(DISH_ID);
+  }
+
+  /** Same tolerance for the array wrapped in its own object, another common model emission. */
+  @Test
+  void createMenu_acceptsTheWeekWrappedInADaysObject() {
+    when(menuService.createMenu(eq(USER), any()))
+        .thenReturn(MenuDetailResponse.builder().id(MENU_ID).status("drafted").build());
+
+    String arguments =
+        "{\"startDate\":\"2026-10-19\",\"notes\":\"summary\",\"days\":{\"days\":[{\"date\":\"2026-10-19\","
+            + "\"meals\":[{\"mealType\":\"BREAKFAST\",\"dishId\":\""
+            + DISH_ID
+            + "\",\"servings\":2}]}]}}";
+
+    String result = toolNamed("create_menu").call(arguments, CONTEXT);
+
+    assertThat(result).contains("\"success\":true");
+    verify(menuService).createMenu(eq(USER), any());
+  }
+
+  /**
+   * The tolerance must not change the contract the model reads: {@code days} stays a JSON array of
+   * day objects, so a prompt that already produces the right shape keeps working unchanged.
+   */
+  @Test
+  void createMenu_advertisesDaysAsAnArrayOfObjects() {
+    String schema = toolNamed("create_menu").getToolDefinition().inputSchema();
+
+    assertThat(schema)
+        .contains("\"days\"")
+        .contains("\"type\" : \"array\"")
+        .contains("\"date\"")
+        .contains("\"meals\"")
+        .contains("\"additionalProperties\" : false");
+  }
+
+  /**
+   * A value that is not a week at all must degrade to the backend's own readable rule, not a bind
+   * failure — the model still gets a sentence it can act on.
+   */
+  @Test
+  void createMenu_reportsUnreadableDaysAsTheBackendRule() {
+    String arguments =
+        "{\"startDate\":\"2026-10-19\",\"notes\":\"summary\",\"days\":\"a nice week of meals\"}";
+
+    String result = toolNamed("create_menu").call(arguments, CONTEXT);
+
+    assertThat(result).isEqualTo("error: days must contain exactly the 7 dates of the week");
+    verifyNoInteractions(menuService);
+  }
+
   private ToolCallback toolNamed(String name) {
     return Arrays.stream(
             MethodToolCallbackProvider.builder().toolObjects(menuTools).build().getToolCallbacks())
@@ -446,9 +521,16 @@ class MenuToolsTest {
         .orElseThrow(() -> new AssertionError("no tool named " + name));
   }
 
-  private static List<MenuTools.Day> breakfastDay() {
-    return List.of(
-        new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", DISH_ID.toString(), 2))));
+  private static MenuTools.Days breakfastDay() {
+    MenuTools.Days days = new MenuTools.Days();
+    days.add(new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", DISH_ID.toString(), 2))));
+    return days;
+  }
+
+  private static MenuTools.Days days(MenuTools.Day... entries) {
+    MenuTools.Days days = new MenuTools.Days();
+    days.addAll(List.of(entries));
+    return days;
   }
 
   private static MenuTools.Meal meal(String mealType, String dishId, Integer servings) {

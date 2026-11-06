@@ -19,7 +19,7 @@ describe is now the backend's own `@Tool` methods, not an MCP server.
 | BR-MCP-004 | Credentials are never model-visible or logged | Active | 2026-10-12 |
 | BR-MCP-005 | Chat edits only the caller's current-week draft | Active | 2026-10-12 |
 | BR-MCP-006 | Scheduling happens only after explicit user confirmation | Active | 2026-10-12 |
-| BR-MCP-007 | Tool failures are model-readable results, not transport errors | Active | 2026-10-12 |
+| BR-MCP-007 | Tool failures are model-readable results, not transport errors | Active | 2026-11-06 |
 | BR-MCP-008 | Allergies come from the profile, never from a tool argument | Active | 2026-10-25 |
 | BR-MCP-009 | A browsing tool's filters mirror its endpoint exactly | Active | 2026-11-05 |
 
@@ -196,11 +196,28 @@ JSON object; failure is bare `error: ...` text (or, for the BR-MCP-005
 pre-check, `update refused: ...`) — never an exception escaping to the caller
 and never a transport failure, since there is no transport to fail.
 
+This covers failures that happen **before** the tool method runs, not just
+inside it. Spring AI binds a tool call's arguments first, and its default
+`DefaultToolExecutionExceptionProcessor` rethrows whenever the failure's cause
+is not a `RuntimeException` — which is every Jackson binding failure, since
+`MismatchedInputException` extends `IOException`. A malformed structured
+argument therefore escaped the tool layer entirely and the member received a
+502 (issue #190). A binding failure is a tool failure like any other: it is
+relayed to the model as text so the assistant can retry within the same turn.
+
 - Enforcement: `MenuTools` catches service and validation exceptions and
   converts them to result text; `RawTextToolResultConverter` emits the
-  envelope unescaped so a `String` return is not double-encoded
-- Related: ADR-013, `docs/apis/error-responses.md`
+  envelope unescaped so a `String` return is not double-encoded;
+  `ToolArgumentFailureProcessor` (registered by `ToolCallingConfig`) returns a
+  readable line for any `ToolExecutionException`, including a binding failure,
+  instead of rethrowing
+- Related: ADR-013, `docs/apis/error-responses.md`, `docs/apis/mcp/post-mcp.md`
 - Added: 2026-10-12
 - Amended: 2026-10-13 — the backend-call error mapping went with the removed
   HTTP hop; the catch-and-format behavior it implemented is now in `MenuTools`
   itself.
+- Amended: 2026-11-06 — scope extended to argument-binding failures, which
+  Spring AI raises before the tool method is entered and which the framework's
+  default processor rethrows unconditionally (issue #190). `create_menu` also
+  now accepts a stringified or wrapped `days` value, so a mis-serialized week
+  usually succeeds instead of needing the retry.

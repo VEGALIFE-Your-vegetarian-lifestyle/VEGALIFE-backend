@@ -1,7 +1,13 @@
 package com.vegalife.service.ai;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.vegalife.dto.request.menu.CreateMenuRequest;
 import com.vegalife.dto.request.menu.MealRequest;
 import com.vegalife.dto.request.menu.MenuDayRequest;
@@ -15,6 +21,7 @@ import com.vegalife.shared.dto.ApiResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -189,7 +196,7 @@ public class MenuTools {
               description =
                   "Exactly 7 day objects: {date: YYYY-MM-DD, meals: [{mealType, dishId,"
                       + " servings}]}.")
-          List<Day> days,
+          Days days,
       @ToolParam(
               required = true,
               description =
@@ -245,7 +252,7 @@ public class MenuTools {
               description =
                   "The complete new week: exactly 7 day objects {date, meals[]}; meals are"
                       + " replaced wholesale.")
-          List<Day> days,
+          Days days,
       @ToolParam(
               required = true,
               description =
@@ -318,6 +325,80 @@ public class MenuTools {
 
   /** One meal slot of a day; mealType is BREAKFAST, LUNCH or DINNER (the service validates). */
   public record Meal(String mealType, String dishId, Integer servings) {}
+
+  /**
+   * The seven-day week the model passes to {@code create_menu} and {@code update_menu} (issue
+   * #190).
+   *
+   * <p>It is a {@link List} of {@link Day} so the tool schema the model reads is unchanged — still
+   * {@code "type": "array"} of the same day objects — but it accepts the shapes providers actually
+   * emit for a structured parameter: a real array, a JSON string holding the array, a loosely
+   * quoted string (single quotes, unquoted field names, trailing commas), or the array wrapped in a
+   * {@code {"days": [...]}} object. Spring AI binds arguments by re-serializing whatever the model
+   * sent and handing it to Jackson, so without this tolerance a weaker model's stringified week
+   * failed binding before {@link #createMenu} was ever entered.
+   *
+   * <p>Validation is unaffected: {@link #toDayRequests} still maps this onto the service DTOs and
+   * the backend still enforces every BR-MENU-005 rule. Tolerance is about shape, not content.
+   */
+  @JsonDeserialize(using = Days.Deserializer.class)
+  public static class Days extends ArrayList<Day> {
+
+    /** Reads the shapes listed on {@link Days}; anything unrecognized binds as an empty week. */
+    static final class Deserializer extends JsonDeserializer<Days> {
+
+      /** Only used to read text the provider did not quote correctly; never used for output. */
+      private static final ObjectMapper LENIENT =
+          new ObjectMapper()
+              .configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true)
+              .configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true)
+              .configure(JsonParser.Feature.ALLOW_TRAILING_COMMA, true);
+
+      @Override
+      public Days deserialize(JsonParser parser, DeserializationContext context)
+          throws IOException {
+        Days days = new Days();
+        JsonNode node = unwrap(parser.readValueAsTree());
+        if (node == null || !node.isArray()) {
+          return days;
+        }
+        JavaType dayList = LENIENT.getTypeFactory().constructCollectionType(List.class, Day.class);
+        days.addAll(LENIENT.convertValue(node, dayList));
+        return days;
+      }
+
+      /**
+       * Reduces a wrapper or a stringified week to the array itself. Returns null when the value is
+       * not (and does not contain) an array, so the caller yields an empty week and the backend
+       * reports the readable "days must contain exactly the 7 dates" rule instead of a bind
+       * failure.
+       */
+      private static JsonNode unwrap(JsonNode node) {
+        for (int depth = 0; node != null && depth < 3; depth++) {
+          if (node.isArray()) {
+            return node;
+          }
+          if (node.isTextual()) {
+            node = readLenient(node.asText());
+          } else if (node.isObject() && node.size() == 1 && node.has("days")) {
+            node = node.get("days");
+          } else {
+            return null;
+          }
+        }
+        return node != null && node.isArray() ? node : null;
+      }
+
+      /** Parses a stringified value; null when it is not JSON at all (e.g. free prose). */
+      private static JsonNode readLenient(String text) {
+        try {
+          return LENIENT.readTree(text);
+        } catch (JsonProcessingException e) {
+          return null;
+        }
+      }
+    }
+  }
 
   @Tool(
       name = "suggest_dishes",
