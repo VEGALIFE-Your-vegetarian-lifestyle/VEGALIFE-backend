@@ -93,7 +93,7 @@ array, not a page object.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | startDate | date `YYYY-MM-DD` | Yes | First day of the week (a Monday by convention). `endDate` is derived as `+6`. |
-| days | array | Yes | Exactly 7 day objects, each `{date, meals[]}`; meal = `{mealType, dishId, servings}` with `mealType` ∈ `BREAKFAST`/`LUNCH`/`DINNER`, `servings ≥ 1`. |
+| days | array | Yes | Exactly 7 day objects, each `{date, meals[]}`; meal = `{mealType, dishId, servings}` with `mealType` ∈ `BREAKFAST`/`LUNCH`/`DINNER`, `servings ≥ 1`. See "Accepted `days` shapes" below. |
 | notes | string | Yes | A short summary of the week and why these meals were chosen (its theme and the member's relevant restrictions honored, e.g. `High-protein week, peanut-free, built around your saved dishes`). The model must always supply one; the REST contract keeps `notes` optional for HTTP callers. |
 
 Calls `MenuService.createMenu`. Always creates `drafted` (BR-MENU-005); all
@@ -101,6 +101,25 @@ structural validation (7 dates, ≤1 meal per type per day, ≥5 distinct dishes
 no dish >3 times, dishes exist) is the backend's. Response: full menu detail
 with the new `id`. Dietary preferences are not a menu field — they live on the
 member's profile and are already part of the assistant's context.
+
+#### Accepted `days` shapes
+
+The model-visible schema declares `days` as a JSON **array** of day objects, and
+that is what a well-behaved provider emits. Providers that mis-serialize a
+structured parameter are also tolerated, because a rejected shape costs the
+member a whole turn (issue #190):
+
+| Shape | Example | Handled by |
+|-------|---------|------------|
+| array | `"days": [{"date": "...", "meals": [...]}]` | the schema |
+| JSON string | `"days": "[{\"date\": \"...\", \"meals\": [...]}]"` | `MenuTools.Days` deserializer |
+| loosely quoted string | `"days": "[{date: '2026-10-19', meals: [...]}]"` | `MenuTools.Days` deserializer (single quotes, unquoted names, trailing commas) |
+| wrapped object | `"days": {"days": [ ... ]}` | `MenuTools.Days` deserializer |
+
+Anything else binds as an empty week, so the member still gets the readable
+`error: days must contain exactly the 7 dates of the week` from the backend
+rather than a transport failure. Tolerance covers **shape only** — every menu
+rule (BR-MENU-005) is still enforced on the contents.
 
 ### `update_menu` — edit the caller's current-week draft
 
@@ -163,15 +182,18 @@ BR-MCP-005 pre-check refusal is prefixed `update refused: `.
 | `error: Menu not found` | Unknown `menuId` or another user's menu | backend (404-equivalent) |
 | `error: Cannot transition a drafted menu to completed` | Illegal status transition | backend (409-equivalent) |
 | `error: Another scheduled menu already overlaps this week` | Scheduling conflict | backend (V30 GiST, ADR-010) |
+| `error: tool '<name>' could not read its arguments: <cause> (call it again with arguments matching its schema)` | The model's arguments did not match the tool schema at all (binding failed before the tool ran) | `ToolArgumentFailureProcessor` (BR-MCP-007) |
 | `update refused: the target must be the caller's own current-week menu with status drafted` | Tool-layer pre-check failed | BR-MCP-005 |
 
 There is no transport failure mode: the tool cannot be unreachable, and there
-is no credential to expire in the middle of a call.
+is no credential to expire in the middle of a call. A binding failure is also
+not a transport failure — it is the readable line above, so the assistant can
+retry the call with a corrected shape inside the same turn (issue #190).
 
 ## Business Rules
 
 - BR-MCP-001 — tool calls act as the authenticated caller
-- BR-MCP-002 — exactly five tools are exposed
+- BR-MCP-002 — exactly six tools are exposed
 - BR-MCP-003 — tool calls consume no AI quota
 - BR-MCP-004 — credentials are never model-visible or logged
 - BR-MCP-005 — chat edits only the caller's current-week draft

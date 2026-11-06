@@ -120,6 +120,6 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MCP-004 | Credentials Are Never Model-Visible or Logged | Active | 2026-10-13 |
 | BR-MCP-005 | Chat Edits Only the Caller's Current-Week Draft | Active | 2026-10-13 |
 | BR-MCP-006 | Scheduling Happens Only After Explicit User Confirmation | Active | 2026-10-12 |
-| BR-MCP-007 | Tool Failures Are Model-Readable Results, Not Transport Errors | Active | 2026-10-13 |
+| BR-MCP-007 | Tool Failures Are Model-Readable Results, Not Transport Errors | Active | 2026-11-06 |
 | BR-MCP-008 | Allergies Come from the Profile, Never from a Tool Argument | Active | 2026-10-25 |
 | BR-MCP-009 | A Browsing Tool's Filters Mirror Its Endpoint Exactly | Active | 2026-11-05 |
