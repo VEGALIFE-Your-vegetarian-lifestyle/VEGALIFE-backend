@@ -29,6 +29,7 @@ postman/globals/
 
 # Local build/verification scratch output
 build_output.log
+build_output_*.log
 run_compile.log
 run-build.cmd
 
