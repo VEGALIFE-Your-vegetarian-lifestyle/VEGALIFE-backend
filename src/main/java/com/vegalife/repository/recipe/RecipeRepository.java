@@ -19,6 +19,14 @@ public interface RecipeRepository
 
   List<Recipe> findByIdInAndDeletedAtIsNull(Collection<UUID> ids);
 
+  /**
+   * Recipes eligible to be attached to a post (issue #137): existing, not soft-deleted, and already
+   * approved. A {@link ModerationStatus#PENDING} or {@link ModerationStatus#REJECTED} recipe is
+   * invisible to the public, so linking one to a post would publish an unreviewed body.
+   */
+  List<Recipe> findByIdInAndDeletedAtIsNullAndModerationStatus(
+      Collection<UUID> ids, ModerationStatus moderationStatus);
+
   /** Recipes currently attached to a post, read from the owning side ({@code Recipe.posts}). */
   List<Recipe> findByPosts_IdAndDeletedAtIsNull(UUID postId);
 
