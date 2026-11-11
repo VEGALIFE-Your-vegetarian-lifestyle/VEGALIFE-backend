@@ -62,3 +62,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `request-credits.md`                | Request Credits — One Acquire Endpoint, Acquisition History, `remainingUsage` | Approved | 2026-11-04 |
 | `ingredient-nutrition.md`           | Ingredient-Level Recipe Nutrition         | Implemented | 2026-11-05 |
 | `nutrition-read-surfaces.md`        | Nutrition on Read Surfaces                | Implemented | 2026-11-06 |
+| `saved-items.md`                    | Saved Posts and Recipes                   | In progress | 2026-11-12 |
