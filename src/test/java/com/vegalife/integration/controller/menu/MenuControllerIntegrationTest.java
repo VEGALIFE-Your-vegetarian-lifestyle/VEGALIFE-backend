@@ -2,6 +2,7 @@ package com.vegalife.integration.controller.menu;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -1121,7 +1122,7 @@ class MenuControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Menu deleted successfully"))
-        .andExpect(jsonPath("$.data").doesNotExist());
+        .andExpect(jsonPath("$.data").value(nullValue()));
 
     // The row survives with deleted_at set: deletion is soft, not a row delete.
     Menu stored = menuRepository.findById(menu.getId()).orElseThrow();
