@@ -2,6 +2,8 @@ package com.vegalife.integration.controller.menu;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -1106,6 +1108,122 @@ class MenuControllerIntegrationTest {
             post("/api/menus/{menuId}/status", UUID.randomUUID())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(statusJson("scheduled")))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void deleteMenu_softDeletesAndAnswers200WithAnEmptyPayload() throws Exception {
+    Menu menu = createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.drafted);
+
+    mockMvc
+        .perform(
+            delete("/api/menus/{menuId}", menu.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Menu deleted successfully"))
+        .andExpect(jsonPath("$.data").value(nullValue()));
+
+    // The row survives with deleted_at set: deletion is soft, not a row delete.
+    Menu stored = menuRepository.findById(menu.getId()).orElseThrow();
+    assertThat(stored.getDeletedAt()).isNotNull();
+  }
+
+  @Test
+  void deleteMenu_removesItFromTheListAndTheDetailRead() throws Exception {
+    Menu menu = createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.scheduled);
+
+    mockMvc
+        .perform(
+            delete("/api/menus/{menuId}", menu.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(
+            get("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("from", "2026-10-01")
+                .param("to", "2026-10-31"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(0));
+
+    mockMvc
+        .perform(
+            get("/api/menus/details")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("menuId", menu.getId().toString()))
+        .andExpect(status().isNotFound());
+  }
+
+  /** A deleted scheduled week must stop occupying its window for the overlap pre-check. */
+  @Test
+  void deleteMenu_freesTheWeekForANewSchedule() throws Exception {
+    Menu menu = createMenu(user, MONDAY, MenuStatus.scheduled);
+
+    mockMvc
+        .perform(
+            delete("/api/menus/{menuId}", menu.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk());
+
+    Menu replacement = createMenu(user, MONDAY, MenuStatus.drafted);
+    mockMvc
+        .perform(
+            post("/api/menus/{menuId}/status", replacement.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(statusJson("scheduled")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("scheduled"));
+  }
+
+  @Test
+  void deleteMenu_isNotFoundForForeignUnknownAndAlreadyDeletedIds() throws Exception {
+    Menu foreign = createMenu(otherUser, LocalDate.of(2026, 10, 5), MenuStatus.drafted);
+    mockMvc
+        .perform(
+            delete("/api/menus/{menuId}", foreign.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Menu not found"));
+
+    mockMvc
+        .perform(
+            delete("/api/menus/{menuId}", UUID.randomUUID())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound());
+
+    Menu own = createMenu(user, LocalDate.of(2026, 10, 5), MenuStatus.drafted);
+    mockMvc
+        .perform(
+            delete("/api/menus/{menuId}", own.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk());
+    mockMvc
+        .perform(
+            delete("/api/menus/{menuId}", own.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void deleteMenu_anyStatusIsDeletable() throws Exception {
+    for (MenuStatus status : MenuStatus.values()) {
+      Menu menu = createMenu(user, LocalDate.of(2026, 10, 5), status);
+
+      mockMvc
+          .perform(
+              delete("/api/menus/{menuId}", menu.getId())
+                  .header("Authorization", "Bearer " + accessToken))
+          .andExpect(status().isOk());
+    }
+  }
+
+  @Test
+  void deleteMenu_withoutJwtReturns401() throws Exception {
+    mockMvc
+        .perform(delete("/api/menus/{menuId}", UUID.randomUUID()))
         .andExpect(status().isUnauthorized());
   }
 

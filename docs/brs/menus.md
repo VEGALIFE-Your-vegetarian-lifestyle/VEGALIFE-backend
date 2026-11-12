@@ -1,7 +1,7 @@
 # Business Rules: Menus
 
 Business rules for the weekly menu domain. These constrain the menu read
-paths and the create/update paths, plus the status transitions of
+paths and the create/update/delete paths, plus the status transitions of
 `POST /api/menus/{menuId}/status`.
 
 ---
@@ -62,7 +62,8 @@ begins still belongs to that range.
 ## Scope & Exceptions
 Applies to the `from`/`to` range on both menu reads (`GET /api/menus` and
 `GET /api/menus/details`). With neither bound supplied the window is
-unbounded on that side, so every own menu is a candidate.
+unbounded on that side, so every own menu is a candidate. Soft-deleted menus
+are never candidates (BR-MENU-008).
 
 ## Enforcement
 - `MenuRepository` intersection query with each bound applied only when
@@ -94,13 +95,16 @@ ambiguous.
 
 ## Scope & Exceptions
 Applies to `scheduled` rows only. A `completed` or `cancelled` row may overlap
-anything, and drafts are unrestricted.
+anything, and drafts are unrestricted. A soft-deleted row never occupies its
+window, whatever its status was when deleted (BR-MENU-008).
 
 ## Enforcement
 - Database: `menu` exclusion constraint `uq_menu_scheduled_no_overlap`
   (`EXCLUDE USING gist (user_id WITH =, daterange(start_date, end_date, '[]')
-  WITH &&) WHERE (status = 'scheduled')`) added in
-  `V30__menu_servings_preferences_and_scheduled_guard.sql`.
+  WITH &&) WHERE (status = 'scheduled' AND deleted_at IS NULL)`) added in
+  `V30__menu_servings_preferences_and_scheduled_guard.sql` and narrowed by
+  `V53__menu_soft_delete.sql` so soft-deleted rows stop occupying their week
+  (BR-MENU-008).
 - Written here; the write-time app-level guard runs on the status path:
   scheduling a menu (`POST /api/menus/{menuId}/status`) pre-checks for an
   overlapping scheduled menu (BR-MENU-007). The create path (#17) only ever
@@ -276,14 +280,88 @@ raw persistence error.
 Applies to the status-transition path only. The window is never changed by
 a transition, so overlap can only be introduced by scheduling. V30's
 exclusion constraint remains the database backstop under races; the
-service pre-check is the caller-facing guard.
+service pre-check is the caller-facing guard. A soft-deleted menu cannot be
+transitioned at all — the lookup filters it out, so every target is a 404
+(BR-MENU-008).
 
 ## Enforcement
-- `MenuService.changeStatus` loads the menu by id **and** owner, validates
-  the transition against the table, runs the overlap pre-check when
-  scheduling, and persists the new status in one transaction.
+- `MenuService.changeStatus` loads the menu by id **and** owner (excluding
+  soft-deleted rows), validates the transition against the table, runs the
+  overlap pre-check when scheduling, and persists the new status in one
+  transaction.
 - API: 404 for a foreign/absent id, 409 for an illegal transition or a
   scheduled overlap, 400 for a target outside the vocabulary.
 
 ## Last Reviewed
 2026-10-12, by zuyzz (backend)
+
+---
+
+# Business Rule: Menus Are Soft-Deleted by Their Owner, in Any Status
+
+## Rule ID
+`BR-MENU-008`
+
+## Status
+Active
+
+## Statement
+`DELETE /api/menus/{menuId}` soft-deletes a menu: `deleted_at` is set and
+the row, together with its `menu_detail` days, is kept. The caller must own
+the menu (BR-MENU-001); a foreign, absent, or already-deleted id returns 404
+— never 403, and a repeat delete is a 404 rather than a silent success.
+Every status is deletable, including `scheduled` and `completed`.
+
+A deleted menu is treated as absent everywhere:
+
+- it is never returned by `GET /api/menus` or `GET /api/menus/details`;
+- `PATCH /api/menus/{menuId}` and `POST /api/menus/{menuId}/status` answer
+  404 for it;
+- it no longer occupies its `[start_date, end_date]` window for BR-MENU-003,
+  so the same week may be scheduled again.
+
+Deletion is **not** cancel. Cancelling (BR-MENU-007) keeps the plan visible
+in a terminal state; deleting removes it from every read. Cancel is a status
+change and is refused for a no-op; delete is a removal and is refused only
+when the menu is already gone.
+
+## Rationale
+Members need to remove a plan they no longer want — a mistaken draft, an
+abandoned week, or a superseded schedule — without the platform destroying
+the record of what was planned. Cancelling was the only available option and
+it is semantically different: it keeps the plan in the member's history and
+intentionally leaves it visible. Soft deletion separates "I no longer want
+this" from "this week is cancelled".
+
+Keeping the rows rather than hard-deleting preserves plan history while
+keeping the member-facing surface clean. The `scheduled` case is the one that
+would otherwise be broken: the V30 exclusion constraint is declared on
+`status = 'scheduled'` only, so a deleted row would keep blocking that week
+forever unless the constraint ignores deleted rows.
+
+## Scope & Exceptions
+Applies to the delete path only. There is no admin or bulk delete in scope,
+and no restore endpoint — a deleted menu stays deleted. Deletion does not
+cascade to the days: they are retained with the row.
+
+Not exposed as an AI tool: the chat surface stays at the six documented
+tools (BR-MCP-002), so an assistant can read, create, update, and schedule
+menus but cannot delete one.
+
+## Enforcement
+- Database: `menu.deleted_at` and an index on
+  `(user_id, deleted_at)`; the `uq_menu_scheduled_no_overlap` exclusion
+  constraint is narrowed to `WHERE (status = 'scheduled' AND deleted_at IS
+  NULL)` in `V53__menu_soft_delete.sql`.
+- `MenuService.deleteMenu` loads the menu by id **and** owner with
+  `deleted_at IS NULL`, stamps `deletedAt`, and persists in one transaction.
+- Read paths filter deleted rows: `MenuSpecifications` always excludes them,
+  and every owner lookup uses `findByIdAndUserIdAndDeletedAtIsNull`.
+- The scheduling pre-check
+  (`existsByUserIdAndStatusAndIdNotAndDeletedAtIsNull...`) ignores deleted
+  menus.
+- API: 404 `Menu not found` for a foreign/absent/already-deleted id; 200 with
+  `data: null` on success.
+
+## Last Reviewed
+2026-11-12, by zuyzz (backend)

@@ -51,14 +51,15 @@ class MenuServiceStatusTest {
   @Test
   void schedulingADraftRunsTheOverlapPreCheckAndPersistsTheStatus() {
     Menu draft = menu(MenuStatus.drafted);
-    when(menuRepository.findByIdAndUserId(MENU_ID, USER)).thenReturn(Optional.of(draft));
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
+        .thenReturn(Optional.of(draft));
     when(menuRepository.save(any(Menu.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(menuDetailRepository.findByMenuIdOrderByDateAscMealTypeAsc(MENU_ID)).thenReturn(List.of());
 
     MenuDetailResponse response = menuService.changeStatus(USER, MENU_ID, "scheduled");
 
     verify(menuRepository)
-        .existsByUserIdAndStatusAndIdNotAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+        .existsByUserIdAndStatusAndIdNotAndDeletedAtIsNullAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
             USER, MenuStatus.scheduled, MENU_ID, MONDAY, MONDAY.plusDays(6));
     ArgumentCaptor<Menu> menuCaptor = ArgumentCaptor.forClass(Menu.class);
     verify(menuRepository).save(menuCaptor.capture());
@@ -68,10 +69,10 @@ class MenuServiceStatusTest {
 
   @Test
   void schedulingIsRefusedWhenAnotherScheduledMenuOverlaps() {
-    when(menuRepository.findByIdAndUserId(MENU_ID, USER))
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
         .thenReturn(Optional.of(menu(MenuStatus.drafted)));
     when(menuRepository
-            .existsByUserIdAndStatusAndIdNotAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            .existsByUserIdAndStatusAndIdNotAndDeletedAtIsNullAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
                 any(), any(), any(), any(), any()))
         .thenReturn(true);
 
@@ -85,7 +86,7 @@ class MenuServiceStatusTest {
 
   @Test
   void cancellingAndCompletingRunNoOverlapCheck() {
-    when(menuRepository.findByIdAndUserId(MENU_ID, USER))
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
         .thenReturn(Optional.of(menu(MenuStatus.scheduled)));
     when(menuRepository.save(any(Menu.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(menuDetailRepository.findByMenuIdOrderByDateAscMealTypeAsc(MENU_ID)).thenReturn(List.of());
@@ -94,14 +95,14 @@ class MenuServiceStatusTest {
 
     verifyNoInteractions(menuValidator);
     verify(menuRepository, never())
-        .existsByUserIdAndStatusAndIdNotAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+        .existsByUserIdAndStatusAndIdNotAndDeletedAtIsNullAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
             any(), any(), any(), any(), any());
     assertThat(response.getStatus()).isEqualTo("completed");
   }
 
   @Test
   void cancellingADraftIsLegal() {
-    when(menuRepository.findByIdAndUserId(MENU_ID, USER))
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
         .thenReturn(Optional.of(menu(MenuStatus.drafted)));
     when(menuRepository.save(any(Menu.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(menuDetailRepository.findByMenuIdOrderByDateAscMealTypeAsc(MENU_ID)).thenReturn(List.of());
@@ -117,7 +118,8 @@ class MenuServiceStatusTest {
         if (isLegal(from, target)) {
           continue;
         }
-        when(menuRepository.findByIdAndUserId(MENU_ID, USER)).thenReturn(Optional.of(menu(from)));
+        when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
+            .thenReturn(Optional.of(menu(from)));
 
         assertThatThrownBy(() -> menuService.changeStatus(USER, MENU_ID, target))
             .isInstanceOf(InvalidMenuTransitionException.class)
@@ -142,7 +144,8 @@ class MenuServiceStatusTest {
 
   @Test
   void foreignOrUnknownIdIsNotFound() {
-    when(menuRepository.findByIdAndUserId(MENU_ID, USER)).thenReturn(Optional.empty());
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
+        .thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> menuService.changeStatus(USER, MENU_ID, "cancelled"))
         .isInstanceOf(ResourceNotFoundException.class)

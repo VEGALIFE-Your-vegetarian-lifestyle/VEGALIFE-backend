@@ -115,6 +115,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MENU-005 | New Menus Are Drafts and Must Cover a Valid, Varied Week | Active | 2026-10-12 |
 | BR-MENU-006 | Menus Are Editable Only While Drafted or Scheduled | Active | 2026-10-12 |
 | BR-MENU-007 | Menu Status Changes Are Explicit, Legal Transitions | Active | 2026-10-12 |
+| BR-MENU-008 | Menus Are Soft-Deleted by Their Owner, in Any Status | Active | 2026-11-12 |
 | BR-MCP-001 | Tool Calls Act as the Authenticated Caller | Active | 2026-10-13 |
 | BR-MCP-002 | Exactly Six Tools Are Exposed | Active | 2026-10-25 |
 | BR-MCP-003 | Tool Calls Consume No AI Quota | Active | 2026-10-12 |

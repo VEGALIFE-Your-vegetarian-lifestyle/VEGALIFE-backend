@@ -63,6 +63,9 @@ mirrors `GET /api/dishes/suggestions`.
   `docs/feats/meal-plan-detail-query.md`)
 - Amended: 2026-10-13 — the registry moved from the `mcp-server` module to
   `MenuTools`; the count and the names are unchanged.
+- Amended: 2026-11-12 — `DELETE /api/menus/{menuId}` (BR-MENU-008) was added
+  to the REST surface and deliberately *not* to this one: deletion stays
+  unavailable to the assistant, and the count remains six.
 - Amended: 2026-10-25 — count raised from five to six with `suggest_dishes`
   (issue #163). The original rule treated "no dish discovery" as a non-goal;
   the AI could previously only plan meals from dish ids the member had already
