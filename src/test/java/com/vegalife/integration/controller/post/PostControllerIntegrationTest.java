@@ -15,6 +15,7 @@ import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
@@ -392,7 +393,7 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  void attachRecipes_unknownRecipeIdReturns400AndWritesNothing() throws Exception {
+  void attachRecipes_unknownRecipeIdReturns404AndWritesNothing() throws Exception {
     Post ownedPost = createPost(user, "My post", PostStatus.created, null);
 
     mockMvc
@@ -401,7 +402,40 @@ class PostControllerIntegrationTest {
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"recipeIds\": [\"" + UUID.randomUUID() + "\"]}"))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isNotFound());
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(jsonPath("$.data.recipeIds").isEmpty());
+  }
+
+  @Test
+  void attachRecipes_pendingRecipeReturns404AndWritesNothing() throws Exception {
+    Post ownedPost = createPost(user, "My post", PostStatus.created, null);
+    Dish dish =
+        dishRepository.save(Dish.builder().name("Pending bowl " + UUID.randomUUID()).build());
+    Recipe pending =
+        recipeRepository.save(
+            Recipe.builder()
+                .dish(dish)
+                .user(user)
+                .name("Unreviewed bowl")
+                .instructions("Cook it.")
+                .servings(2)
+                .moderationStatus(ModerationStatus.PENDING)
+                .build());
+
+    mockMvc
+        .perform(
+            post("/api/posts/{postId}/recipes", ownedPost.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"recipeIds\": [\"" + pending.getId() + "\"]}"))
+        .andExpect(status().isNotFound())
+        .andExpect(
+            jsonPath("$.message").value("One or more recipes are not found or are not approved"));
 
     mockMvc
         .perform(
@@ -1241,6 +1275,11 @@ class PostControllerIntegrationTest {
         Media.builder().mediaUrl("https://example.com/video.mp4").status(status).build());
   }
 
+  /**
+   * An {@code APPROVED} recipe, because only an approved one may be attached to a post
+   * (BR-POST-013). They are created directly through the repository rather than through {@code POST
+   * /api/recipes}, which would leave them {@code PENDING} and so unusable here.
+   */
   private Recipe createRecipe(User owner) {
     Dish dish = dishRepository.save(Dish.builder().name("Tofu bowl " + UUID.randomUUID()).build());
     return recipeRepository.save(
@@ -1250,6 +1289,7 @@ class PostControllerIntegrationTest {
             .name("Vegan tofu bowl")
             .instructions("Cook rice, add tofu.")
             .servings(2)
+            .moderationStatus(ModerationStatus.APPROVED)
             .build());
   }
 }

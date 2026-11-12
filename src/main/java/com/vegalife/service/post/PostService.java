@@ -14,6 +14,7 @@ import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Category;
@@ -598,14 +599,28 @@ public class PostService {
     return new HashSet<>(found);
   }
 
-  /** Only recipes that exist and are not soft-deleted may be attached (issue #137). */
+  /**
+   * Only recipes that exist, are not soft-deleted, and are already {@link
+   * ModerationStatus#APPROVED} may be attached (issue #137).
+   *
+   * <p>A {@code PENDING} recipe is invisible to the public, so attaching it would expose an
+   * unreviewed body through a published post; a {@code REJECTED} one is refused outright (ADR-016).
+   * Every requested id is checked, including ids that are already attached, so a post can never
+   * keep an unapproved recipe simply by never touching it.
+   *
+   * <p>An ineligible id is reported as not found rather than as a bad request: whether the recipe
+   * exists but awaits review, or does not exist at all, is not the caller's business to
+   * distinguish, and the caller has no way to prove otherwise.
+   */
   private List<Recipe> resolveRecipes(Set<UUID> ids) {
     if (ids == null || ids.isEmpty()) {
       return List.of();
     }
-    List<Recipe> found = recipeRepository.findByIdInAndDeletedAtIsNull(ids);
+    List<Recipe> found =
+        recipeRepository.findByIdInAndDeletedAtIsNullAndModerationStatus(
+            ids, ModerationStatus.APPROVED);
     if (found.size() != ids.size()) {
-      throw new ValidationException("One or more recipes do not exist or are deleted");
+      throw new ResourceNotFoundException("One or more recipes are not found or are not approved");
     }
     return found;
   }

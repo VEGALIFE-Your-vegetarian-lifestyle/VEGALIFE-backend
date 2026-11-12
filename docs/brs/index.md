@@ -46,6 +46,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
 | BR-POST-011 | Single Post Detail Excludes Only Deleted Posts, Not Ownership | Active | 2026-10-10 |
 | BR-POST-012 | Only Administrators Publish or Unpublish a Post as a Moderation Action | Active | 2026-10-10 |
+| BR-POST-013 | Only Approved Recipes May Be Attached to a Post | Active | 2026-11-12 |
 | BR-ADMIN-002 | Every Administrator Content-Moderation Action Is Logged | Active | 2026-10-10 |
 | BR-COMMENT-001 | Comment Creation Requires Authentication; Reading Is Public | Active | 2026-10-11 |
 | BR-COMMENT-002 | Only the Owner May Edit a Comment | Active | 2026-10-11 |

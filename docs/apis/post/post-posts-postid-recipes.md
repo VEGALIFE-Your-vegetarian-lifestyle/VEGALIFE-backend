@@ -32,7 +32,7 @@ Required: a valid JWT access token in the `Authorization` header (`Bearer <token
 
 | Field | Type | Description |
 |-------|------|--------------|
-| recipeIds | array of UUID | Required (the field itself, not each id — may be empty). Replaces the post's whole recipe set. Every id must reference an existing, non-deleted recipe. An empty array detaches every attached recipe. |
+| recipeIds | array of UUID | Required (the field itself, not each id — may be empty). Replaces the post's whole recipe set. Every id must reference an existing, non-deleted recipe whose `moderationStatus` is `APPROVED`. An empty array detaches every attached recipe. |
 
 ## Responses
 
@@ -60,14 +60,17 @@ Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, 
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | `recipeIds` missing, or any id does not exist or is soft-deleted | `Validation failed` or `One or more recipes do not exist or are deleted` |
+| 400 | `recipeIds` missing | `Validation failed` |
 | 401 | JWT is missing, invalid, expired, or the account is inactive | `Unauthorized` |
 | 404 | Post does not exist or is soft-deleted; for non-admins, also when it belongs to another user | `Post not found` |
+| 404 | Any recipe id does not exist, is soft-deleted, or is not `APPROVED` | `One or more recipes are not found or are not approved` |
 | 500 | Unexpected server error | `Internal server error` |
 
 ## Business Rules
 
 - Only the owner or an Administrator can attach recipes to a post, reusing the ownership rule from `PATCH /api/posts/{postId}` (`BR-POST-006`); a non-admin gets `404` for another user's post, same as edit.
+- Only an `APPROVED` recipe can be attached (`BR-POST-013`). A `PENDING` or `REJECTED` recipe is refused with `404`, because a post must never become the way an unreviewed or refused recipe body reaches the public. This applies to Administrators too — approval happens in the moderation queue, not by attaching.
+- Every requested id is validated, including ids already attached: a post that somehow holds a non-approved recipe cannot keep it by re-sending the same set. The recipe must be detached (or approved) first.
 - Replace-the-full-set semantics: re-calling with the same set is idempotent, and a smaller set detaches the rest. Nothing is written if validation fails for any id in the request.
 - Attaching recipes never changes the post's `status`, publication state (`publishedAt`), or triggers content filtering (`flag` is untouched) — this is a pure association change.
 - `post_recipe` is owned by `Recipe.posts`, not `Post`; the service mutates the recipe side (`recipe.getPosts()`) to keep the association consistent, but this is an implementation detail invisible to the API contract.

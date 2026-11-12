@@ -19,6 +19,7 @@ import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
@@ -1098,7 +1099,9 @@ class PostServiceTest {
         Recipe.builder().id(droppedId).posts(new java.util.HashSet<>(Set.of(existing))).build();
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
-    when(recipeRepository.findByIdInAndDeletedAtIsNull(Set.of(keptId))).thenReturn(List.of(kept));
+    when(recipeRepository.findByIdInAndDeletedAtIsNullAndModerationStatus(
+            Set.of(keptId), ModerationStatus.APPROVED))
+        .thenReturn(List.of(kept));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId))
         .thenReturn(List.of(kept, dropped));
     when(postMapper.toListResponse(existing, Set.of(keptId)))
@@ -1139,10 +1142,32 @@ class PostServiceTest {
     UUID recipeId = UUID.randomUUID();
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
-    when(recipeRepository.findByIdInAndDeletedAtIsNull(Set.of(recipeId))).thenReturn(List.of());
+    when(recipeRepository.findByIdInAndDeletedAtIsNullAndModerationStatus(
+            Set.of(recipeId), ModerationStatus.APPROVED))
+        .thenReturn(List.of());
 
     assertThatThrownBy(() -> postService.attachRecipes(userId, false, postId, Set.of(recipeId)))
-        .isInstanceOf(ValidationException.class);
+        .isInstanceOf(ResourceNotFoundException.class);
+
+    verify(recipeRepository, never()).saveAll(org.mockito.ArgumentMatchers.anyList());
+  }
+
+  @Test
+  void attachRecipes_rejectsRecipeThatIsNotApproved() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, PostStatus.created);
+    UUID recipeId = UUID.randomUUID();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    // The recipe exists and is not deleted, but moderation has not approved it yet, so the
+    // approved-only lookup returns nothing for it.
+    when(recipeRepository.findByIdInAndDeletedAtIsNullAndModerationStatus(
+            Set.of(recipeId), ModerationStatus.APPROVED))
+        .thenReturn(List.of());
+
+    assertThatThrownBy(() -> postService.attachRecipes(userId, false, postId, Set.of(recipeId)))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("One or more recipes are not found or are not approved");
 
     verify(recipeRepository, never()).saveAll(org.mockito.ArgumentMatchers.anyList());
   }

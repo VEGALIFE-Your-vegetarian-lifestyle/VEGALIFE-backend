@@ -719,3 +719,61 @@ decision in order, including reasons that were later superseded.
 2026-10-10, by Vegalife backend team
 
 ---
+
+# Business Rule: Only Approved Recipes May Be Attached to a Post
+
+## Rule ID
+
+`BR-POST-013`
+
+## Status
+
+Active
+
+## Statement
+
+A post may reference a recipe only when that recipe's `moderationStatus` is `APPROVED` and the recipe
+is not soft-deleted. A `PENDING` or `REJECTED` recipe id in `POST /api/posts/{postId}/recipes` is
+refused with `404` and the message `One or more recipes are not found or are not approved`; nothing is
+written, so the request is all-or-nothing.
+
+The rule covers every id in the request, including ids already attached, and applies to
+Administrators exactly as it does to the post's owner. Approving a recipe is an act of the moderation
+queue (`POST /api/admin/recipes/{recipeId}/approve` or the post-approval cascade), never a side effect
+of attaching it.
+
+## Rationale
+
+A recipe body is moderated as a unit, and `PENDING` recipes are invisible in every public listing. If
+a post could carry one, publishing the post would be a way to show an unreviewed dish, ingredients,
+and instructions to everyone — bypassing the queue the recipe was placed in (ADR-016) and giving the
+content filter a component it cannot vouch for. Rejecting with `404` rather than `400` also keeps the
+endpoint from acting as an oracle for "this recipe id exists but is unreviewed", matching how a
+missing or another user's post is reported.
+
+Validating already-attached ids, not just newly added ones, closes the re-send loophole: a post that
+somehow holds a now-unapproved recipe cannot keep it by echoing the same set back, and a recipe that
+loses approval is detached on the next edit rather than staying live.
+
+## Scope & Exceptions
+
+Applies to `POST /api/posts/{postId}/recipes` and is not re-checked at publish time — the attach call
+is the only write, so refusing there is the enforcement. Not covered: reading a post whose recipe was
+approved at attach time and later demoted (the association is untouched by moderation), and the
+approval cascade in `AdminPostService`, which approves components of a post already attached under
+this rule.
+
+## Enforcement
+
+- Repository: `RecipeRepository.findByIdInAndDeletedAtIsNullAndModerationStatus` is the single
+  approved-only lookup used by the attach path.
+- Service: `PostService.resolveRecipes()` compares the returned count against the requested count and
+  throws `ResourceNotFoundException`, which the global handler maps to `404`.
+- Tests: `PostServiceTest.attachRecipes_rejectsRecipeThatIsNotApproved`,
+  `attachRecipes_rejectsUnknownOrDeletedRecipe`.
+- API reference: `docs/apis/post/post-posts-postid-recipes.md`.
+
+## Last Reviewed
+
+2026-11-12, by Vegalife backend team
+
