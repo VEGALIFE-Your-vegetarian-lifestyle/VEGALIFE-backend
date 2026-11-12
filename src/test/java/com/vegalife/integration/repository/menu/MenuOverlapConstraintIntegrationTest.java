@@ -164,6 +164,34 @@ class MenuOverlapConstraintIntegrationTest {
     assertThat(overlapsScheduled(otherUser, draftInOtherUsersWeek)).isTrue();
   }
 
+  /**
+   * BR-MENU-008: a soft-deleted scheduled row must not keep occupying its week. Without the V53
+   * constraint predicate the second insert below would be rejected by the exclusion constraint.
+   */
+  @Test
+  void deletedScheduledWeekStopsOccupyingItsWindow() {
+    Menu deleted = scheduled(user, LocalDate.of(2026, 10, 5));
+    deleted.setDeletedAt(java.time.Instant.now());
+    menuRepository.saveAndFlush(deleted);
+
+    // Same window, still live: the constraint must see only this row.
+    Menu replacement = menuRepository.saveAndFlush(scheduled(user, LocalDate.of(2026, 10, 5)));
+
+    assertThat(replacement.getId()).isNotNull();
+    // And the deleted row is invisible to the overlap pre-check.
+    assertThat(overlapsScheduled(user, replacement)).isFalse();
+  }
+
+  /** The overlapping-live-row case still fails, proving the rebuild kept the guard working. */
+  @Test
+  void twoLiveScheduledWeeksStillOverlap() {
+    menuRepository.saveAndFlush(scheduled(user, LocalDate.of(2026, 10, 5)));
+
+    assertThatThrownBy(
+            () -> menuRepository.saveAndFlush(scheduled(user, LocalDate.of(2026, 10, 5))))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
   private boolean overlapsScheduled(User owner, Menu candidate) {
     return menuRepository
         .existsByUserIdAndStatusAndIdNotAndDeletedAtIsNullAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
