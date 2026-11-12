@@ -172,7 +172,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void createComment_unpublishedPostReturns404() throws Exception {
-    Post post = savePost(otherUser, PostStatus.created);
+    Post post = savePost(otherUser, PostStatus.drafted);
 
     mockMvc
         .perform(
@@ -569,7 +569,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void listComments_unpublishedPostReturns404() throws Exception {
-    Post post = savePost(otherUser, PostStatus.created);
+    Post post = savePost(otherUser, PostStatus.drafted);
 
     mockMvc
         .perform(get("/api/posts/{postId}/comments", post.getId()))

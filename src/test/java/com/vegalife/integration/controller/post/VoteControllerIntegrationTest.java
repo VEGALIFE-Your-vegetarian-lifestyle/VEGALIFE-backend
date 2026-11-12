@@ -155,7 +155,7 @@ class VoteControllerIntegrationTest {
 
   @Test
   void castVote_unpublishedPostReturns404() throws Exception {
-    Post post = savePost(otherUser, PostStatus.created);
+    Post post = savePost(otherUser, PostStatus.drafted);
 
     mockMvc
         .perform(

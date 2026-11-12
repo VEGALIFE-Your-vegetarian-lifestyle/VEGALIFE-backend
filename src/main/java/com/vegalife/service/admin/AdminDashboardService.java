@@ -7,7 +7,7 @@ import com.vegalife.dto.response.admin.DashboardModerationQueueMetrics;
 import com.vegalife.dto.response.admin.DashboardRangeResponse;
 import com.vegalife.dto.response.admin.DashboardResponse;
 import com.vegalife.dto.response.admin.DashboardUserMetrics;
-import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
@@ -93,7 +93,8 @@ public class AdminDashboardService {
 
   private DashboardModerationQueueMetrics moderationQueueMetrics() {
     return DashboardModerationQueueMetrics.builder()
-        .pendingPosts(postRepository.countByFlagAndDeletedAtIsNull(PostFlag.NEEDS_REVIEW))
+        .pendingPosts(
+            postRepository.countByStatusAndFlagIsNotNullAndDeletedAtIsNull(PostStatus.processing))
         .pendingRecipes(
             recipeRepository.countByModerationStatusAndDeletedAtIsNull(ModerationStatus.PENDING))
         .reportedComments(commentRepository.countByReportCountGreaterThanAndDeletedAtIsNull(0))

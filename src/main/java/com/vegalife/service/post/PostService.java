@@ -99,16 +99,12 @@ public class PostService {
     // BR-CONTENT-003 / FR-007: a post never becomes visible directly. With publish=true and the
     // filter enabled (the default) it is queued for content filtering (BR-FILTER-005) and the
     // filter callback publishes it once it passes; without it the post stays a private draft that
-    // is never filtered. The queued outbound row's creation time is the enqueue clock
-    // (BR-FILTER-009). Only when the content_filter_enabled platform setting is false (deliberate
-    // outage mode) does a published post skip the filter and land directly in the admin review
-    // queue
-    // (flag=NEEDS_REVIEW, status=unpublished) with no embedding call.
-    post.setStatus(PostStatus.created);
+    // is never filtered. A submitted post is `processing` from the moment it is queued, so
+    // "waiting for a verdict" lives on the lifecycle axis, not in `flag` (ADR-023). Only when the
+    // content_filter_enabled platform setting is false (deliberate outage mode) does a submitted
+    // post skip the filter and land directly in the admin review queue with flag=FILTER_SKIPPED.
+    post.setStatus(request.isPublish() ? PostStatus.processing : PostStatus.drafted);
     boolean filterEnabled = platformSettingsProvider.isContentFilterEnabled();
-    if (request.isPublish()) {
-      post.setFlag(filterEnabled ? PostFlag.PENDING : PostFlag.NEEDS_REVIEW);
-    }
 
     Post saved = postRepository.saveAndFlush(post);
     if (request.isPublish()) {
@@ -147,11 +143,17 @@ public class PostService {
     }
 
     boolean willEnqueue = shouldEnqueueFilter(post, request.getPublish(), contentChanged);
-    applyPublishState(post, request.getPublish(), isAdmin, willEnqueue);
-    boolean filterEnabled = platformSettingsProvider.isContentFilterEnabled();
+    applyPublishState(post, request.getPublish(), willEnqueue);
     if (willEnqueue) {
-      post.setFlag(filterEnabled ? PostFlag.PENDING : PostFlag.NEEDS_REVIEW);
+      // A new revision invalidates the previous verdict: the post is re-checked from scratch and
+      // carries no blocker until the new run says otherwise (ADR-023). It is also out of view for
+      // the duration, so nobody reads content that is mid-review.
+      post.setStatus(PostStatus.processing);
+      post.setFlag(null);
+      post.setFlagDetail(null);
     }
+
+    boolean filterEnabled = platformSettingsProvider.isContentFilterEnabled();
 
     Post saved = postRepository.saveAndFlush(post);
     if (willEnqueue) {
@@ -176,43 +178,6 @@ public class PostService {
     post.setDeletedAt(Instant.now());
     Post saved = postRepository.saveAndFlush(post);
     recordModerationIfAdminOverride(actorId, isAdmin, saved, "DELETE_POST");
-  }
-
-  /**
-   * BR-ADMIN-002: an Administrator may hide any post from the platform and lift the hide. Hiding
-   * removes the publication timestamp; lifting returns the post to a private draft so it must be
-   * published again under BR-CONTENT-003. Both actions are always recorded in the moderation log.
-   */
-  @Transactional
-  public PostListResponse updateVisibility(UUID adminId, UUID postId, boolean hidden) {
-    Post post =
-        postRepository
-            .findByIdAndDeletedAtIsNull(postId)
-            .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-
-    boolean currentlyHidden = post.getStatus() == PostStatus.hidden;
-    if (hidden == currentlyHidden) {
-      if (hidden) {
-        return toResponse(post, adminId);
-      }
-      throw new ValidationException("Post is not hidden");
-    }
-
-    if (hidden) {
-      post.setStatus(PostStatus.hidden);
-      post.setPublishedAt(null);
-    } else {
-      post.setStatus(PostStatus.created);
-    }
-    Post saved = postRepository.saveAndFlush(post);
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action(hidden ? "HIDE_POST" : "UNHIDE_POST")
-            .targetType("POST")
-            .targetId(saved.getId())
-            .build());
-    return toResponse(saved, adminId);
   }
 
   /**
@@ -381,48 +346,51 @@ public class PostService {
 
   /**
    * BR-CONTENT-003: a post may be published only when it has at least one active category;
-   * unpublishing returns it to a private draft (also when it was {@code unpublished}, so a
-   * withdrawn rejected post never re-queues implicitly). A post that is (or becomes, via a content
-   * re-queue) published is re-checked so an edit cannot leave it without a category. Nothing is
-   * ever flipped to {@code published} here — that happens only when the content filter passes
-   * (FR-007 / Phase 9).
+   * withdrawing returns it to a private draft from any state it can be in — including {@code
+   * processing}, so a post nobody has decided on yet can still be taken back. Nothing is ever
+   * flipped to {@code published} here; that happens only when the content filter passes or an admin
+   * approves (FR-007, ADR-023).
    *
-   * @param willRequeue whether this update also re-queues the post for content filtering, so an
-   *     unpublished post being re-checked is validated as if it were published
+   * @param willRequeue whether this update also re-queues the post for content filtering, so a
+   *     not-yet-published post being re-checked is validated as if it were published
    */
-  private void applyPublishState(Post post, Boolean publish, boolean isAdmin, boolean willRequeue) {
+  private void applyPublishState(Post post, Boolean publish, boolean willRequeue) {
     boolean published = post.getStatus() == PostStatus.published;
-    boolean unpublished = post.getStatus() == PostStatus.unpublished;
     boolean willBePublished = publish != null ? publish : (published || willRequeue);
-    if (willBePublished) {
-      if (post.getCategories().isEmpty()) {
-        throw new ValidationException(CATEGORY_REQUIRED_TO_PUBLISH);
-      }
+    if (willBePublished && post.getCategories().isEmpty()) {
+      throw new ValidationException(CATEGORY_REQUIRED_TO_PUBLISH);
     }
     if (publish == null) {
       return;
     }
-    if (post.getStatus() == PostStatus.hidden && !isAdmin) {
-      throw new ValidationException("A hidden post can only be changed by an administrator");
-    }
-    if (!publish && (published || unpublished)) {
-      post.setStatus(PostStatus.created);
+    if (!publish && post.getStatus() != PostStatus.drafted) {
+      post.setStatus(PostStatus.drafted);
       post.setPublishedAt(null);
+      // A withdrawn post is not being held for anyone: the invariant forbids a flag outside
+      // `processing`, and the author's withdrawal outranks a stale verdict (ADR-023).
+      post.setFlag(null);
+      post.setFlagDetail(null);
     }
   }
 
   /**
    * BR-FILTER-005: an explicit {@code publish: true} always queues (and re-queues) for content
-   * filtering; a content change re-queues a post that is still meant to be visible — status {@code
-   * published} or {@code unpublished} (a post the filter did not pass). A withdrawn post (draft)
-   * never re-queues implicitly.
+   * filtering; a content change re-queues a post that is still meant to be visible — {@code
+   * published}, {@code unpublished} (an admin refusal the author is appealing by editing), or a
+   * {@code processing} post that is being held. A post that is merely in flight is not queued
+   * again: the pending run reads the body at delivery time, so it already sees the edit. A
+   * withdrawn post (draft) never re-queues implicitly.
    */
   private boolean shouldEnqueueFilter(Post post, Boolean publish, boolean contentChanged) {
     if (publish != null) {
       return publish;
     }
-    return contentChanged
-        && (post.getStatus() == PostStatus.published || post.getStatus() == PostStatus.unpublished);
+    if (!contentChanged) {
+      return false;
+    }
+    return post.getStatus() == PostStatus.published
+        || post.getStatus() == PostStatus.unpublished
+        || (post.getStatus() == PostStatus.processing && post.getFlag() != null);
   }
 
   /** FR-003: only a title or content change counts as a content change. */
@@ -434,17 +402,19 @@ public class PostService {
   }
 
   /**
-   * Filter bypass ({@code content_filter_enabled} platform setting off): route a post that would
-   * have been queued for content filtering straight to the admin review queue instead — {@code
-   * flag=NEEDS_REVIEW}, {@code status=unpublished}, no publication timestamp and no outbound row.
-   * An admin then acts on it through the moderation endpoint.
+   * Filter bypass ({@code content_filter_enabled} platform setting off): hold a post that would
+   * have been queued for content filtering at {@code processing} with {@code flag=FILTER_SKIPPED},
+   * instead of sending it to the provider — no publication timestamp and no outbound row. An admin
+   * resolves it through the moderation endpoint. {@code FILTER_SKIPPED} rather than {@code
+   * FILTER_FAILED}: the filter never formed an opinion (ADR-023).
    */
   private void markForAdminReview(Post post) {
-    post.setFlag(PostFlag.NEEDS_REVIEW);
-    post.setStatus(PostStatus.unpublished);
+    post.setStatus(PostStatus.processing);
+    post.setFlag(PostFlag.FILTER_SKIPPED);
+    post.setFlagDetail("FILTER_DISABLED");
     post.setPublishedAt(null);
     postRepository.saveAndFlush(post);
-    log.info("Filter disabled: forwarded post {} to admin review queue", post.getId());
+    log.info("Filter disabled: post {} is held for admin review", post.getId());
   }
 
   /**

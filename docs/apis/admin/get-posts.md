@@ -22,8 +22,8 @@ None.
 | page | integer | No | 0-based page index, default 0 |
 | size | integer | No | Page size, default 20, max 100 |
 | sort | string | No | Format `property,direction`. Default `createdAt,desc`. Property must be one of: `createdAt`, `publishedAt`, `updatedAt`, `viewCount`, `title` |
-| status | string | No | One of: `created`, `processed`, `published`, `unpublished`, `hidden` |
-| flag | string | No | Content-filter verdict: `PENDING`, `PASSED`, `REJECTED`, `NEEDS_REVIEW`, or `all`. Defaults to `NEEDS_REVIEW` when omitted; `all` disables the flag filter (issue #5) |
+| status | string | No | One of: `drafted`, `processing`, `published`, `unpublished`. The review queue is `processing` |
+| flag | string | No | Blocker of a held post: `FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`, or `all`. Defaults to `all` when omitted, so nothing is silently hidden; matches exactly |
 | userId | uuid | No | Only posts authored by this user |
 | categoryId | uuid | No | Only posts belonging to this category |
 | createdFrom | string | No | ISO-8601 datetime lower bound (inclusive) on `createdAt`, e.g. `2026-01-01T00:00:00Z` |
@@ -49,7 +49,7 @@ No request body
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "mediaIds": [],
         "status": "published",
-        "flag": "PASSED",
+        "flag": null,
         "viewCount": 42,
         "publishedAt": "2026-09-28T08:15:00Z",
         "createdAt": "2026-09-28T08:00:00Z",
@@ -79,8 +79,9 @@ No request body
 | data.content[].featuredImageUrl | string | Featured image URL, nullable |
 | data.content[].categoryIds | uuid[] | Category ids the post belongs to |
 | data.content[].mediaIds | uuid[] | Media ids attached to the post |
-| data.content[].status | string | created, processed, published, unpublished, or hidden |
-| data.content[].flag | string | Content-filter verdict: PENDING, PASSED, REJECTED, NEEDS_REVIEW; null when never filtered |
+| data.content[].status | string | drafted, processing, published, or unpublished |
+| data.content[].flag | string | Blocker of a held post: FILTER_FAILED, SIMILAR_CONTENT, or FILTER_SKIPPED; null when the post is not being held (including every published post) |
+| data.content[].flagDetail | string | Machine-readable detail behind the blocker (failing score, `SIMILAR_CONTENT_POST_<postId>`, `FILTER_DISABLED`, `FILTER_SWEPT`); null with no blocker |
 | data.content[].rejectionReason | string | Why an admin rejected the post; null when no reason was recorded |
 | data.content[].viewCount | integer | View counter |
 | data.content[].publishedAt | string | ISO-8601 publish timestamp, nullable |
@@ -107,14 +108,15 @@ No request body
 - Soft-deleted posts (`deletedAt != null`) are excluded (issue #1 / FR-006).
 - Only `ROLE_ADMIN` may call this endpoint (`@PreAuthorize("hasRole('ADMIN')")` on `AdminPostController`; ADR-009 — there is no `/api/admin/**` path rule).
 - Unlike `GET /api/posts` and `GET /api/users/{userId}/posts`, no status restriction is applied: every status is listable (issue #1 / FR-002).
-- `status` and `flag` are independent filters and combine with AND; `flag` matches the content-filter verdict exactly (BR-FILTER-008).
-- When no `flag` parameter is supplied, the list defaults to `flag = NEEDS_REVIEW` so an admin lands on posts awaiting a decision (issue #5). Pass `flag=all` to list every flag (including posts never filtered).
+- `status` and `flag` are independent filters and combine with AND; `flag` matches the blocker exactly (BR-FILTER-008).
+- When no `flag` parameter is supplied the list defaults to `flag=all`, so no blocker is silently hidden (issue #5). The review queue is `status=processing`, which lists every post awaiting a decision regardless of blocker.
+- A post is `processing` while a decision is outstanding; `flag` says why it has not been published (`FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`) and is `null` while the filter run is still in flight (ADR-023).
 
 ## Example
 
 ### Request
 ```bash
-curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&flag=REJECTED&categoryId=1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed&sort=createdAt,desc" \
+curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&status=processing&flag=SIMILAR_CONTENT&categoryId=1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed&sort=createdAt,desc" \
   -H "Authorization: Bearer <admin_access_token>"
 ```
 
@@ -132,10 +134,11 @@ curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&flag=REJECTED&
         "featuredImageUrl": "https://cdn.example.com/posts/pho.jpg",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "mediaIds": [],
-        "status": "unpublished",
-        "flag": "REJECTED",
+        "status": "processing",
+        "flag": "SIMILAR_CONTENT",
+        "flagDetail": "SIMILAR_CONTENT_POST_9a1f0d2c-3b4e-4c5d-8e6f-7a8b9c0d1e2f",
         "viewCount": 42,
-        "publishedAt": "2026-09-28T08:15:00Z",
+        "publishedAt": null,
         "createdAt": "2026-09-28T08:00:00Z",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
         "displayName": "jane",

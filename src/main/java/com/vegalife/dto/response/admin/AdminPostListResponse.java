@@ -22,8 +22,18 @@ public class AdminPostListResponse {
   private Set<UUID> mediaIds;
   private String status;
 
-  /** Content filter verdict: PENDING, PASSED, REJECTED, NEEDS_REVIEW; null when never filtered. */
+  /**
+   * Why the post is being held for review: {@code FILTER_FAILED}, {@code SIMILAR_CONTENT} or {@code
+   * FILTER_SKIPPED}; null when the post is not held (ADR-023).
+   */
   private String flag;
+
+  /**
+   * Detail for {@link #flag}: for {@code SIMILAR_CONTENT} the matched post as {@code
+   * SIMILAR_CONTENT_POST_<postId>}; for {@code FILTER_SKIPPED} a short cause code; for {@code
+   * FILTER_FAILED} the band score.
+   */
+  private String flagDetail;
 
   /**
    * Why an admin rejected this post; null when no reason is recorded (never rejected, rejected

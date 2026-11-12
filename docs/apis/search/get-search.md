@@ -91,7 +91,7 @@ None. Any caller, including guests, may search.
 
 ## Business Rules
 
-- Only published, non-deleted posts are searchable — drafts, unpublished, hidden, and moderated-out posts never surface (same visibility floor as the public feed, BR-POST-010). Recipes and restaurants are searchable whenever not soft-deleted; neither has a publish state of its own.
+- Only published, non-deleted posts are searchable — drafts, posts awaiting a decision (`processing`), and rejected (`unpublished`) posts never surface (same visibility floor as the public feed, BR-POST-010). Recipes and restaurants are searchable whenever not soft-deleted; neither has a publish state of its own.
 - Matching is a case-insensitive substring match (`ILIKE`), not semantic/full-text search: post/video match on `title` or `content`; recipe matches on `name`, `description`, or `instructions`; restaurant matches on `name`, `description`, or the name of an attached, approved, non-deleted dish (issue #196). A dish is never itself returned as a search result — only the restaurant it's attached to.
 - "Relevance" is a two-tier rank: a title/name match outranks a body-only, instructions-only, description-only, or dish-only match; within the same tier, newest first. There is no term-frequency or semantic scoring. A restaurant matched through more than one of {name, description, a dish} appears exactly once, at its best (lowest) rank.
 - `type=post` and `type=video` both query the same underlying post rows; `type=video` keeps only posts with at least one `video/*` media, `type=post` keeps the rest.

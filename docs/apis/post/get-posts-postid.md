@@ -2,7 +2,7 @@
 
 ## Overview
 
-Return a single post by id, using the same response shape as the post list endpoints. Visibility depends only on the post not being soft-deleted, never on status or ownership — a draft, `unpublished`, or `hidden` post is returned to any caller just like a published one.
+Return a single post by id, using the same response shape as the post list endpoints. Visibility depends only on the post not being soft-deleted, never on status or ownership — a `drafted`, `processing`, or `unpublished` post is returned to any caller just like a published one.
 
 ## Endpoint
 
@@ -50,7 +50,8 @@ No request body.
     "mediaIds": [],
     "recipeIds": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
     "status": "published",
-    "flag": "PASSED",
+    "flag": null,
+    "flagDetail": null,
     "rejectionReason": null,
     "viewCount": 12,
     "publishedAt": "2026-09-26T10:00:00Z",

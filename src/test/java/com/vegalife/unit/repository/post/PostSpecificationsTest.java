@@ -26,6 +26,13 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.context.ActiveProfiles;
 
+/**
+ * Filter-composition tests for the admin post list (issue #5).
+ *
+ * <p>The fixtures respect the ADR-023 invariant: a post carries a flag only while it is {@code
+ * processing}. Published, drafted and admin-rejected posts have no blocker, which is why the flag
+ * filters can never be combined with those statuses to select anything.
+ */
 @DataJpaTest
 @ActiveProfiles("test")
 class PostSpecificationsTest {
@@ -43,9 +50,10 @@ class PostSpecificationsTest {
   private Category vegan;
   private Category quick;
   private Post alicePublished;
+  private Post aliceHeld;
   private Post aliceUnpublished;
   private Post aliceDeleted;
-  private Post bobCreated;
+  private Post bobDrafted;
 
   @BeforeEach
   void seed() {
@@ -56,36 +64,28 @@ class PostSpecificationsTest {
 
     alicePublished =
         createPost(
-            alice,
-            "Alice published",
-            PostStatus.published,
-            PostFlag.PASSED,
-            null,
-            Set.of(vegan, quick));
-    aliceUnpublished =
+            alice, "Alice published", PostStatus.published, null, null, Set.of(vegan, quick));
+    aliceHeld =
         createPost(
             alice,
-            "Alice unpublished",
-            PostStatus.unpublished,
-            PostFlag.REJECTED,
+            "Alice held",
+            PostStatus.processing,
+            PostFlag.FILTER_FAILED,
             null,
             Set.of(quick));
+    aliceUnpublished =
+        createPost(alice, "Alice unpublished", PostStatus.unpublished, null, null, Set.of(quick));
     aliceDeleted =
         createPost(
-            alice,
-            "Alice deleted",
-            PostStatus.published,
-            PostFlag.PASSED,
-            Instant.now(),
-            Set.of(vegan));
-    bobCreated =
-        createPost(bob, "Bob created", PostStatus.created, PostFlag.PENDING, null, Set.of());
+            alice, "Alice deleted", PostStatus.published, null, Instant.now(), Set.of(vegan));
+    bobDrafted = createPost(bob, "Bob drafted", PostStatus.drafted, null, null, Set.of());
 
     entityManager.flush();
     setCreatedAt(alicePublished, CREATED_MARCH);
+    setCreatedAt(aliceHeld, CREATED_JUNE);
     setCreatedAt(aliceUnpublished, CREATED_JUNE);
     setCreatedAt(aliceDeleted, CREATED_MARCH);
-    setCreatedAt(bobCreated, CREATED_SEPTEMBER);
+    setCreatedAt(bobDrafted, CREATED_SEPTEMBER);
     entityManager.flush();
     entityManager.clear();
   }
@@ -96,8 +96,9 @@ class PostSpecificationsTest {
 
     assertThat(result.getContent())
         .extracting(Post::getTitle)
-        .containsExactlyInAnyOrder("Alice published", "Alice unpublished", "Bob created");
-    assertThat(result.getTotalElements()).isEqualTo(3);
+        .containsExactlyInAnyOrder(
+            "Alice published", "Alice held", "Alice unpublished", "Bob drafted");
+    assertThat(result.getTotalElements()).isEqualTo(4);
   }
 
   @Test
@@ -109,22 +110,32 @@ class PostSpecificationsTest {
   }
 
   @Test
-  void allWithFilters_byFlag_returnsOnlyThatFlag() {
-    Page<Post> result = findAll(null, PostFlag.REJECTED, null, null, null, null);
+  void allWithFilters_byProcessing_returnsTheReviewQueue() {
+    Page<Post> result = findAll(PostStatus.processing, null, null, null, null, null);
 
-    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice unpublished");
+    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice held");
+    assertThat(result.getTotalElements()).isOne();
+  }
+
+  @Test
+  void allWithFilters_byFlag_returnsOnlyThatFlag() {
+    Page<Post> result = findAll(null, PostFlag.FILTER_FAILED, null, null, null, null);
+
+    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice held");
     assertThat(result.getTotalElements()).isOne();
   }
 
   @Test
   void allWithFilters_byStatusAndFlag_appliesBothPredicates() {
-    Page<Post> result = findAll(PostStatus.unpublished, PostFlag.REJECTED, null, null, null, null);
+    Page<Post> result =
+        findAll(PostStatus.processing, PostFlag.FILTER_FAILED, null, null, null, null);
 
-    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice unpublished");
+    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice held");
     assertThat(result.getTotalElements()).isOne();
 
+    // The invariant makes a blocker on an admin-rejected post impossible, so this is empty.
     Page<Post> contradictory =
-        findAll(PostStatus.unpublished, PostFlag.PASSED, null, null, null, null);
+        findAll(PostStatus.unpublished, PostFlag.FILTER_FAILED, null, null, null, null);
     assertThat(contradictory.getContent()).isEmpty();
   }
 
@@ -132,7 +143,7 @@ class PostSpecificationsTest {
   void allWithFilters_byUserId_returnsOnlyThatAuthorsPosts() {
     Page<Post> result = findAll(null, null, bob.getId(), null, null, null);
 
-    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Bob created");
+    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Bob drafted");
     assertThat(result.getTotalElements()).isOne();
   }
 
@@ -142,8 +153,8 @@ class PostSpecificationsTest {
 
     assertThat(result.getContent())
         .extracting(Post::getTitle)
-        .containsExactlyInAnyOrder("Alice published", "Alice unpublished");
-    assertThat(result.getTotalElements()).isEqualTo(2);
+        .containsExactlyInAnyOrder("Alice published", "Alice held", "Alice unpublished");
+    assertThat(result.getTotalElements()).isEqualTo(3);
   }
 
   @Test
@@ -162,8 +173,8 @@ class PostSpecificationsTest {
 
     assertThat(result.getContent())
         .extracting(Post::getTitle)
-        .containsExactlyInAnyOrder("Alice published", "Alice unpublished");
-    assertThat(result.getTotalElements()).isEqualTo(2);
+        .containsExactlyInAnyOrder("Alice published", "Alice held", "Alice unpublished");
+    assertThat(result.getTotalElements()).isEqualTo(3);
   }
 
   @Test
@@ -173,20 +184,15 @@ class PostSpecificationsTest {
 
     assertThat(result.getContent())
         .extracting(Post::getTitle)
-        .containsExactlyInAnyOrder("Alice unpublished", "Bob created");
-    assertThat(result.getTotalElements()).isEqualTo(2);
+        .containsExactlyInAnyOrder("Alice held", "Alice unpublished", "Bob drafted");
+    assertThat(result.getTotalElements()).isEqualTo(3);
   }
 
   @Test
   void allWithFilters_withCombinedFilters_appliesEveryPredicate() {
     Page<Post> result =
         findAll(
-            PostStatus.published,
-            PostFlag.PASSED,
-            alice.getId(),
-            vegan.getId(),
-            CREATED_MARCH,
-            CREATED_JUNE);
+            PostStatus.published, null, alice.getId(), vegan.getId(), CREATED_MARCH, CREATED_JUNE);
 
     assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice published");
     assertThat(result.getTotalElements()).isOne();
@@ -194,7 +200,7 @@ class PostSpecificationsTest {
 
   @Test
   void allWithFilters_withFilterMatchingNothing_returnsEmptyPage() {
-    Page<Post> result = findAll(PostStatus.hidden, null, null, null, null, null);
+    Page<Post> result = findAll(null, PostFlag.FILTER_SKIPPED, null, null, null, null);
 
     assertThat(result.getContent()).isEmpty();
     assertThat(result.getTotalElements()).isZero();

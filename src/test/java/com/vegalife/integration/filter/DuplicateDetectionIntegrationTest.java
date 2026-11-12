@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
@@ -18,6 +17,7 @@ import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.filter.ContentFilterOutboundAdapter;
 import com.vegalife.service.filter.ContentFilterPayload;
 import com.vegalife.service.filter.ContentFilterService;
+import com.vegalife.service.filter.FilterOutcome;
 import com.vegalife.service.filter.FilterVerdict;
 import java.util.List;
 import java.util.UUID;
@@ -38,7 +38,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * End-to-end duplicate detection against a real Postgres with pgvector: the vector written at
  * filter time is found again by the nearest-neighbour query, and a post similar enough to an
- * existing one is flagged rather than published.
+ * existing one is held with {@code SIMILAR_CONTENT} rather than published (ADR-023).
  *
  * <p>The topic verdict and the embedding are both stubbed with fixed unit vectors. That makes the
  * similarity exact and independent of a live embedding provider, so the assertions test the
@@ -111,8 +111,9 @@ class DuplicateDetectionIntegrationTest {
   }
 
   @Test
-  void aPostNearlyIdenticalToAPublishedOneIsFlaggedNotPublished() throws Exception {
-    Post original = published("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
+  void aPostNearlyIdenticalToAPublishedOneIsHeldNotPublished() throws Exception {
+    Post original = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
+    // This delivery publishes the original and stores its vector, making it the comparison target.
     deliver(original, axis(0));
 
     Post copy = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội!");
@@ -120,7 +121,8 @@ class DuplicateDetectionIntegrationTest {
     // similarity to the original is well above the 0.8 threshold.
     deliver(copy, nearly(axis(0), 0.1));
 
-    assertThat(state(copy)).isEqualTo("unpublished/DUPLICATE");
+    assertThat(state(copy)).isEqualTo("processing/SIMILAR_CONTENT");
+    assertThat(flagDetail(copy)).isEqualTo("SIMILAR_CONTENT_POST_" + original.getId());
     assertThat(
             jdbcTemplate.queryForObject(
                 "SELECT published_at FROM post WHERE id = ?",
@@ -131,39 +133,47 @@ class DuplicateDetectionIntegrationTest {
 
   @Test
   void anUnrelatedPostStillPublishes() throws Exception {
-    Post original = published("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
+    Post original = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
     deliver(original, axis(0));
 
     Post unrelated = queued("Bún riêu", "Món bún riêu chay miền Nam.");
     // Orthogonal to the original: similarity exactly 0.0, so "unrelated" needs no tuned constant.
     deliver(unrelated, axis(1));
 
-    assertThat(state(unrelated)).isEqualTo("published/PASSED");
+    assertThat(state(unrelated)).isEqualTo("published/no-flag");
   }
 
   @Test
   void thePublishedPostStoresItsVector() throws Exception {
-    Post original = published("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
+    Post original = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
     deliver(original, axis(0));
 
     assertThat(storedRows(original)).isEqualTo(1L);
   }
 
   @Test
-  void aFlaggedDuplicateDoesNotBecomeAComparisonTarget() throws Exception {
-    Post original = published("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
+  void aHeldDuplicateStoresItsVectorButIsNotAComparisonTarget() throws Exception {
+    Post original = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
     deliver(original, axis(0));
 
     Post copy = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội!");
     deliver(copy, nearly(axis(0), 0.1));
 
-    // Unpublished posts are never targets; storing one would let it start flagging other content.
-    assertThat(storedRows(copy)).isZero();
+    // The vector is stored: if an admin approves this post it must be able to act as a target.
+    assertThat(storedRows(copy)).isEqualTo(1L);
+
+    // But while it is held it is invisible to the comparison query, so the next copy is matched
+    // against the published original instead of against this one.
+    Post secondCopy = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội!!");
+    deliver(secondCopy, nearly(axis(0), 0.1));
+
+    assertThat(state(secondCopy)).isEqualTo("processing/SIMILAR_CONTENT");
+    assertThat(flagDetail(secondCopy)).isEqualTo("SIMILAR_CONTENT_POST_" + original.getId());
   }
 
   @Test
   void aVectorFromADifferentModelIsNotCompared() throws Exception {
-    Post original = published("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
+    Post original = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
     deliver(original, axis(0));
 
     // Simulate a row written before a provider change: identical space here, different model name.
@@ -174,7 +184,7 @@ class DuplicateDetectionIntegrationTest {
     deliver(copy, nearly(axis(0), 0.1));
 
     // Identical direction, but incomparable models, so the copy publishes rather than flagging.
-    assertThat(state(copy)).isEqualTo("published/PASSED");
+    assertThat(state(copy)).isEqualTo("published/no-flag");
   }
 
   @Test
@@ -187,25 +197,28 @@ class DuplicateDetectionIntegrationTest {
     Post incoming = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội!");
     deliver(incoming, nearly(axis(0), 0.1));
 
-    assertThat(state(incoming)).isEqualTo("published/PASSED");
+    assertThat(state(incoming)).isEqualTo("published/no-flag");
   }
 
   @Test
   void rePublishingTheSamePostUpsertsRatherThanDuplicating() throws Exception {
-    Post post = published("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
+    Post post = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
     deliver(post, axis(0));
+
+    // A re-check takes the post back to processing, so the second delivery is applied again.
+    jdbcTemplate.update("UPDATE post SET status = 'processing' WHERE id = ?", post.getId());
     deliver(post, axis(0));
 
     // A second row would fail on the primary key rather than pass; this pins the upsert path.
     assertThat(storedRows(post)).isEqualTo(1L);
   }
 
-  /** Runs the adapter with a stubbed PASSED verdict and the given vector. */
+  /** Runs the adapter with a stubbed PASS verdict and the given vector. */
   private void deliver(Post post, float[] embedding) throws Exception {
     when(contentFilterService.filter(any()))
         .thenReturn(
             new ContentFilterService.FilterResult(
-                new FilterVerdict(PostFlag.PASSED, 0.9, List.of()), embedding));
+                new FilterVerdict(FilterOutcome.PASS, 0.9, List.of()), embedding));
     OutboundMessage message =
         OutboundMessage.builder()
             .id(UUID.randomUUID())
@@ -219,12 +232,12 @@ class DuplicateDetectionIntegrationTest {
         "SELECT count(*) FROM post_embedding WHERE post_id = ?", Long.class, post.getId());
   }
 
-  private Post published(String title, String content) {
-    Post post = queued(title, content);
-    post.setStatus(PostStatus.published);
-    return postRepository.saveAndFlush(post);
+  private String flagDetail(Post post) {
+    return jdbcTemplate.queryForObject(
+        "SELECT flag_detail FROM post WHERE id = ?", String.class, post.getId());
   }
 
+  /** A submitted post waiting for its verdict: {@code processing} with no blocker yet. */
   private Post queued(String title, String content) {
     return postRepository.saveAndFlush(
         Post.builder()
@@ -233,8 +246,7 @@ class DuplicateDetectionIntegrationTest {
             .content(content)
             .rawContent(OBJECT_MAPPER.createObjectNode().put("type", "doc"))
             .viewCount(0)
-            .status(PostStatus.created)
-            .flag(PostFlag.PENDING)
+            .status(PostStatus.processing)
             .build());
   }
 

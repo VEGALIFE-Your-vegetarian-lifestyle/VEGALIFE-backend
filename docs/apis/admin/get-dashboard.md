@@ -62,7 +62,7 @@ No request body.
 | data.content.totalPosts/newPosts, totalRecipes/newRecipes, totalComments/newComments | integer | Lifetime totals and in-range creates for each content type (non-deleted). |
 | data.engagement.votesInRange | integer | Votes cast within the range. |
 | data.engagement.commentsInRange | integer | Same as `content.newComments`, surfaced under engagement too. |
-| data.moderationQueue.pendingPosts | integer | Posts flagged `NEEDS_REVIEW`, not yet moderated (current snapshot, not range-limited). |
+| data.moderationQueue.pendingPosts | integer | Posts currently held for review — `status = processing` with a blocker flag (`FILTER_FAILED`, `SIMILAR_CONTENT` or `FILTER_SKIPPED`). Current snapshot, not range-limited. |
 | data.moderationQueue.pendingRecipes | integer | Recipes with `moderationStatus = PENDING` (current snapshot). |
 | data.moderationQueue.reportedComments | integer | Comments with `reportCount > 0`, not deleted (current snapshot). |
 

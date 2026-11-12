@@ -26,3 +26,4 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [020-embedding-failure-terminal-vs-retryable.md](020-embedding-failure-terminal-vs-retryable.md) | End the Outbound Retry on a Permanent Embedding Rejection, and Honour `Retry-After` | Accepted | 2026-11-02 |
 | [021-request-allowance-as-acquisition-sum.md](021-request-allowance-as-acquisition-sum.md) | Treat AI Request Entitlement as the Live Sum of Granted Acquisitions | Accepted | 2026-11-04 |
 | [022-ingredient-level-nutrition.md](022-ingredient-level-nutrition.md) | Derive Recipe Nutrition From Ingredient Nutrition Measured Per One Unit | Accepted | 2026-11-05 |
+| [023-post-processing-status-and-flag-blocker.md](023-post-processing-status-and-flag-blocker.md) | Model Post Moderation as Four Statuses Plus One Held-State Blocker, Drop Admin Hide | Accepted | 2026-11-13 |

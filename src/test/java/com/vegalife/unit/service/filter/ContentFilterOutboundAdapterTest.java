@@ -1,6 +1,7 @@
 package com.vegalife.unit.service.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -40,6 +41,7 @@ import com.vegalife.service.filter.ContentFilterService;
 import com.vegalife.service.filter.ContentFilterService.FilterResult;
 import com.vegalife.service.filter.DuplicateDetector;
 import com.vegalife.service.filter.EmbeddingComponentScorer;
+import com.vegalife.service.filter.FilterOutcome;
 import com.vegalife.service.filter.FilterVerdict;
 import com.vegalife.shared.exception.EmbeddingClientException;
 import com.vegalife.shared.exception.RetryableDeliveryException;
@@ -57,15 +59,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.InvalidDataAccessResourceUsageException;
 
 /**
- * Verdict-matrix tests for the CONTENT_FILTER queue adapter: PASSED publishes unconditionally
- * (every queued message came from a publish request or a content change on a published/unpublished
- * post, BR-FILTER-005), REJECTED/NEEDS_REVIEW flag and move to {@code unpublished}, and the verdict
- * persists only in {@code post.flag} / {@code post.status}. Failures propagate so the queue
- * retries.
+ * Verdict-matrix tests for the CONTENT_FILTER queue adapter.
  *
- * <p>Duplicate detection (ADR-015) adds two obligations these tests pin: a flagged duplicate is
- * never published, and the candidate's vector is never stored when the post does not publish —
- * storing it would make an unpublished post a comparison target for everyone else.
+ * <p>Under ADR-023 the adapter writes two things and nothing else: {@code status} and, while the
+ * post is held, {@code flag} + {@code flag_detail}. A {@code PASS} publishes and clears the flag; a
+ * {@code FAIL} or {@code UNCERTAIN} holds the post at {@code processing} with {@code
+ * FILTER_FAILED}; a near-duplicate holds it with {@code SIMILAR_CONTENT} and the matched post id in
+ * {@code flag_detail}. The filter never unpublishes — only an admin does.
+ *
+ * <p>Two more obligations these tests pin: a verdict is discarded unless the post is still {@code
+ * processing} and not deleted (otherwise a withdrawn post would be republished), and the vector is
+ * stored for <em>every</em> outcome, because a held post an admin later publishes must be able to
+ * act as a comparison target.
  */
 @ExtendWith(MockitoExtension.class)
 class ContentFilterOutboundAdapterTest {
@@ -118,74 +123,72 @@ class ContentFilterOutboundAdapterTest {
   }
 
   @Test
-  void passedPublishesDraftPost() throws Exception {
-    Post post = passing(PostStatus.created, 0.91);
+  void passPublishesThePostAndClearsTheFlag() throws Exception {
+    Post post = passing(0.91);
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    assertEquals(PostFlag.PASSED, post.getFlag());
     assertEquals(PostStatus.published, post.getStatus());
+    assertNull(post.getFlag());
+    assertNull(post.getFlagDetail());
     assertNotNull(post.getPublishedAt());
     verify(postRepository).save(post);
   }
 
   @Test
-  void passedKeepsExistingPublishedAt() throws Exception {
-    Post post = post(PostStatus.published);
+  void passKeepsTheOriginalPublicationTime() throws Exception {
+    Post post = post(PostStatus.processing);
     post.setPublishedAt(Instant.parse("2026-01-01T00:00:00Z"));
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(PostFlag.PASSED, 0.8, List.of()));
+    stubFilter(new FilterVerdict(FilterOutcome.PASS, 0.8, List.of()));
+    when(duplicateDetector.findDuplicate(any(), eq(post.getId()))).thenReturn(Optional.empty());
+    when(activeEmbeddingModel.name()).thenReturn(MODEL);
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    assertEquals(PostFlag.PASSED, post.getFlag());
     assertEquals(PostStatus.published, post.getStatus());
+    assertNull(post.getFlag());
     assertEquals(Instant.parse("2026-01-01T00:00:00Z"), post.getPublishedAt());
   }
 
   @Test
-  void passedOnUnpublishedPostRepublishesIt() throws Exception {
-    Post post = passing(PostStatus.unpublished, 0.77);
-
-    adapter.deliver(message(new ContentFilterPayload(post.getId())));
-
-    assertEquals(PostFlag.PASSED, post.getFlag());
-    assertEquals(PostStatus.published, post.getStatus());
-    assertNotNull(post.getPublishedAt());
-  }
-
-  @Test
-  void rejectedMovesPublishedPostToUnpublished() throws Exception {
-    Post post = post(PostStatus.published);
+  void aRefusalHoldsThePostAtProcessingInsteadOfUnpublishingIt() throws Exception {
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(PostFlag.REJECTED, 0.2, List.of("RELEVANCE_LOW: 0.200")));
+    stubFilter(new FilterVerdict(FilterOutcome.FAIL, 0.2, List.of("RELEVANCE_LOW: 0.200")));
+    when(activeEmbeddingModel.name()).thenReturn(MODEL);
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    assertEquals(PostFlag.REJECTED, post.getFlag());
-    assertEquals(PostStatus.unpublished, post.getStatus());
+    // Only an admin may unpublish (ADR-023). The filter's refusal is a blocker, not a decision.
+    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
+    assertTrue(post.getFlagDetail().contains("score=0.200"));
+    assertNull(post.getPublishedAt());
     verify(postRepository).save(post);
   }
 
   @Test
-  void needsReviewMovesToUnpublished() throws Exception {
-    Post post = post(PostStatus.created);
+  void anUncertainVerdictHoldsThePostWithTheSameBlocker() throws Exception {
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(PostFlag.NEEDS_REVIEW, 0.58, List.of("RELEVANCE_REVIEW: 0.580")));
+    stubFilter(
+        new FilterVerdict(FilterOutcome.UNCERTAIN, 0.58, List.of("RELEVANCE_REVIEW: 0.580")));
+    when(activeEmbeddingModel.name()).thenReturn(MODEL);
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    assertEquals(PostFlag.NEEDS_REVIEW, post.getFlag());
-    assertEquals(PostStatus.unpublished, post.getStatus());
+    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
     verify(postRepository).save(post);
   }
 
   @Test
-  void passingPostStoresItsVectorForFutureComparisons() throws Exception {
-    Post post = passing(PostStatus.created, 0.9);
+  void passStoresTheVectorForFutureComparisons() throws Exception {
+    Post post = passing(0.9);
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
@@ -193,10 +196,10 @@ class ContentFilterOutboundAdapterTest {
   }
 
   @Test
-  void nearDuplicateIsFlaggedAndNeverPublished() throws Exception {
-    Post post = post(PostStatus.created);
+  void nearDuplicateIsHeldAndRecordsTheMatchedPost() throws Exception {
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(PostFlag.PASSED, 0.95, List.of()));
+    stubFilter(new FilterVerdict(FilterOutcome.PASS, 0.95, List.of()));
     UUID originalId = UUID.randomUUID();
     when(duplicateDetector.findDuplicate(any(), eq(post.getId())))
         .thenReturn(Optional.of(new NearestMatch(originalId, 0.93)));
@@ -204,45 +207,49 @@ class ContentFilterOutboundAdapterTest {
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    // The topic verdict was PASSED; the duplicate verdict overrides it.
-    assertEquals(PostFlag.DUPLICATE, post.getFlag());
-    assertEquals(PostStatus.unpublished, post.getStatus());
-    assertEquals(null, post.getPublishedAt());
+    // The topic verdict was a pass; the duplicate verdict overrides it and parks the post.
+    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostFlag.SIMILAR_CONTENT, post.getFlag());
+    // The matched post cannot be recovered later, so it is persisted for the admin to open.
+    assertEquals("SIMILAR_CONTENT_POST_" + originalId, post.getFlagDetail());
+    assertNull(post.getPublishedAt());
   }
 
   @Test
-  void nearDuplicateDoesNotStoreItsVector() throws Exception {
-    Post post = post(PostStatus.created);
+  void aNearDuplicateStillStoresItsVector() throws Exception {
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(PostFlag.PASSED, 0.95, List.of()));
+    stubFilter(new FilterVerdict(FilterOutcome.PASS, 0.95, List.of()));
     when(duplicateDetector.findDuplicate(any(), eq(post.getId())))
         .thenReturn(Optional.of(new NearestMatch(UUID.randomUUID(), 0.93)));
+    when(activeEmbeddingModel.name()).thenReturn(MODEL);
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    // Only published posts are comparison targets, so an unpublished duplicate must not become
-    // one — otherwise a flagged post could start flagging unrelated content later.
-    verify(postEmbeddingRepository, never()).upsert(any(), any(), anyString());
+    // The comparison query only reads published posts, so storing a held post's vector is safe -
+    // and necessary: an admin may publish this very post after reviewing the duplicate.
+    verify(postEmbeddingRepository).upsert(eq(post.getId()), eq(EMBEDDING), eq(MODEL));
   }
 
   @Test
-  void rejectedPostDoesNotStoreItsVector() throws Exception {
-    Post post = post(PostStatus.created);
+  void aRefusedPostStillStoresItsVector() throws Exception {
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(PostFlag.REJECTED, 0.1, List.of("RELEVANCE_LOW: 0.100")));
+    stubFilter(new FilterVerdict(FilterOutcome.FAIL, 0.1, List.of("RELEVANCE_LOW: 0.100")));
+    when(activeEmbeddingModel.name()).thenReturn(MODEL);
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    verify(postEmbeddingRepository, never()).upsert(any(), any(), anyString());
+    verify(postEmbeddingRepository).upsert(eq(post.getId()), eq(EMBEDDING), eq(MODEL));
   }
 
   @Test
   void duplicateCheckRunsBeforeTheVectorIsStored() throws Exception {
-    Post post = post(PostStatus.created);
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(PostFlag.PASSED, 0.9, List.of()));
+    stubFilter(new FilterVerdict(FilterOutcome.PASS, 0.9, List.of()));
     when(duplicateDetector.findDuplicate(any(), eq(post.getId()))).thenReturn(Optional.empty());
     when(activeEmbeddingModel.name()).thenReturn(MODEL);
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -258,9 +265,9 @@ class ContentFilterOutboundAdapterTest {
 
   @Test
   void aFailedVectorStoreStillPublishesThePost() throws Exception {
-    Post post = post(PostStatus.created);
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(PostFlag.PASSED, 0.9, List.of()));
+    stubFilter(new FilterVerdict(FilterOutcome.PASS, 0.9, List.of()));
     when(duplicateDetector.findDuplicate(any(), eq(post.getId()))).thenReturn(Optional.empty());
     when(activeEmbeddingModel.name()).thenReturn(MODEL);
     // The realistic cause: the pgvector extension is missing on the target database, so the table
@@ -274,9 +281,53 @@ class ContentFilterOutboundAdapterTest {
 
     // Storing the vector powers future detection; it is not what publishes this post. Blocking the
     // publish would let one misconfigured database stop the whole platform's posts.
-    assertEquals(PostFlag.PASSED, post.getFlag());
     assertEquals(PostStatus.published, post.getStatus());
+    assertNull(post.getFlag());
     verify(postRepository).save(post);
+  }
+
+  // --- The verdict only applies to a post that is still waiting for it (ADR-023) ---
+
+  @Test
+  void passIsDiscardedWhenTheAuthorWithdrewWhileTheMessageWasInFlight() throws Exception {
+    Post post = post(PostStatus.drafted);
+    when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+
+    adapter.deliver(message(new ContentFilterPayload(post.getId())));
+
+    // The author took the post down; a late pass must not put it back in the feed.
+    assertEquals(PostStatus.drafted, post.getStatus());
+    assertNull(post.getFlag());
+    verify(contentFilterService, never()).filter(any());
+    verify(postRepository, never()).save(any(Post.class));
+  }
+
+  @Test
+  void refusalIsDiscardedWhenThePostWasAlreadyDecided() throws Exception {
+    Post post = post(PostStatus.published);
+    when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+
+    adapter.deliver(message(new ContentFilterPayload(post.getId())));
+
+    // An in-flight refusal must not re-open a post that has already been published.
+    assertEquals(PostStatus.published, post.getStatus());
+    assertNull(post.getFlag());
+    verify(contentFilterService, never()).filter(any());
+    verify(postRepository, never()).save(any(Post.class));
+  }
+
+  @Test
+  void verdictIsDiscardedForADeletedPost() throws Exception {
+    Post post = post(PostStatus.processing);
+    post.setDeletedAt(Instant.now());
+    when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+
+    adapter.deliver(message(new ContentFilterPayload(post.getId())));
+
+    assertEquals(PostStatus.processing, post.getStatus());
+    assertNull(post.getFlag());
+    verify(contentFilterService, never()).filter(any());
+    verify(postRepository, never()).save(any(Post.class));
   }
 
   @Test
@@ -293,7 +344,7 @@ class ContentFilterOutboundAdapterTest {
 
   @Test
   void filterFailurePropagatesWithoutSaving() throws Exception {
-    Post post = post(PostStatus.created);
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
     when(contentFilterService.filter(TITLE + "\n" + CONTENT))
         .thenThrow(new IllegalStateException("embedding unavailable"));
@@ -321,8 +372,8 @@ class ContentFilterOutboundAdapterTest {
   // --- Component-level verification (ADR-016): the recipe body is a second, independent score ---
 
   @Test
-  void recipeThatNeedsReviewQueuesAnOtherwisePassingPost() throws Exception {
-    Post post = passing(PostStatus.created, 0.88);
+  void recipeThatNeedsReviewHoldsAnOtherwisePassingPost() throws Exception {
+    Post post = passing(0.88);
     Recipe recipe = recipe();
     approvedComponents(recipe);
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
@@ -336,17 +387,17 @@ class ContentFilterOutboundAdapterTest {
 
     // The post's own prose passed. It is withheld because its recipe did not — that is the whole
     // point of scoring the recipe at all.
-    assertEquals(PostFlag.NEEDS_REVIEW, post.getFlag());
-    assertEquals(PostStatus.unpublished, post.getStatus());
+    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
     assertEquals(0.88, post.getContentScore());
     assertEquals(0.31, recipe.getScore());
   }
 
   @Test
   void contentRejectionOutranksARecipeThatNeedsReview() throws Exception {
-    Post post = post(PostStatus.created);
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(PostFlag.REJECTED, 0.12, List.of("OFF_TOPIC")));
+    stubFilter(new FilterVerdict(FilterOutcome.FAIL, 0.12, List.of("OFF_TOPIC")));
     Recipe recipe = recipe();
     approvedComponents(recipe);
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
@@ -359,14 +410,15 @@ class ContentFilterOutboundAdapterTest {
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    // A recipe no worse than a rejection must not soften it: REJECTED is the harder verdict and
-    // stays, so the post is never shown to an admin as merely "reviewable".
-    assertEquals(PostFlag.REJECTED, post.getFlag());
+    // A recipe no worse than a rejection must not soften it: the refusal keeps its own score line
+    // in flag_detail instead of being replaced by an "uncertain" reading.
+    assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
+    assertTrue(post.getFlagDetail().contains("score=0.120"));
   }
 
   @Test
   void recipeThatPassesDoesNotAffectTheVerdict() throws Exception {
-    Post post = passing(PostStatus.created, 0.90);
+    Post post = passing(0.90);
     Recipe recipe = recipe();
     approvedComponents(recipe);
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
@@ -377,21 +429,21 @@ class ContentFilterOutboundAdapterTest {
         .thenReturn(
             new ComponentScorer.ComponentResult(
                 ComponentScorer.Component.RECIPE,
-                PostFlag.PASSED,
+                false,
                 Optional.of(0.84),
                 Optional.of(EMBEDDING)));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    assertEquals(PostFlag.PASSED, post.getFlag());
     assertEquals(PostStatus.published, post.getStatus());
+    assertNull(post.getFlag());
     assertEquals(0.90, post.getContentScore());
     assertEquals(0.84, recipe.getScore());
   }
 
   @Test
-  void unscorableRecipeQueuesThePostWithoutFailingThePublish() throws Exception {
-    Post post = passing(PostStatus.created, 0.91);
+  void unscorableRecipeHoldsThePost() throws Exception {
+    Post post = passing(0.91);
     Recipe recipe = recipe();
     approvedComponents(recipe);
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
@@ -403,9 +455,10 @@ class ContentFilterOutboundAdapterTest {
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    // The member's publish succeeds and the post lands in the admin queue. The score column stays
-    // null, which is how "never scored" is distinguished from "scored badly".
-    assertEquals(PostFlag.NEEDS_REVIEW, post.getFlag());
+    // The post is held for review. The score column stays null, which is how "never scored" is
+    // distinguished from "scored badly".
+    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
     assertNull(recipe.getScore());
     verify(postRepository).save(post);
   }
@@ -413,8 +466,8 @@ class ContentFilterOutboundAdapterTest {
   // --- Dish and ingredient approval (BR-DISH-001): state, not score, decides ---
 
   @Test
-  void pendingDishNameQueuesAnOtherwisePassingPost() throws Exception {
-    Post post = passing(PostStatus.created, 0.92);
+  void pendingDishNameHoldsAnOtherwisePassingPost() throws Exception {
+    Post post = passing(0.92);
     Recipe recipe = recipe();
     recipe.setDish(Dish.builder().id(UUID.randomUUID()).name("bún chả nấm").build());
     lenient().when(recipeIngredientRepository.findByRecipeId(recipe.getId())).thenReturn(List.of());
@@ -426,7 +479,7 @@ class ContentFilterOutboundAdapterTest {
         .thenReturn(
             new ComponentScorer.ComponentResult(
                 ComponentScorer.Component.RECIPE,
-                PostFlag.PASSED,
+                false,
                 Optional.of(0.88),
                 Optional.of(EMBEDDING)));
 
@@ -434,13 +487,13 @@ class ContentFilterOutboundAdapterTest {
 
     // The text passed on every scored component. The post still waits, because it introduces a
     // name no admin has approved: that is the guarantee a score cannot provide.
-    assertEquals(PostFlag.NEEDS_REVIEW, post.getFlag());
-    assertEquals(PostStatus.unpublished, post.getStatus());
+    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
   }
 
   @Test
-  void pendingIngredientNameQueuesAnOtherwisePassingPost() throws Exception {
-    Post post = passing(PostStatus.created, 0.93);
+  void pendingIngredientNameHoldsAnOtherwisePassingPost() throws Exception {
+    Post post = passing(0.93);
     Recipe recipe = recipe();
     recipe.setDish(approvedDish("Phở chay"));
     Ingredient pending =
@@ -465,20 +518,21 @@ class ContentFilterOutboundAdapterTest {
         .thenReturn(
             new ComponentScorer.ComponentResult(
                 ComponentScorer.Component.RECIPE,
-                PostFlag.PASSED,
+                false,
                 Optional.of(0.90),
                 Optional.of(EMBEDDING)));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    assertEquals(PostFlag.NEEDS_REVIEW, post.getFlag());
+    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
   }
 
   @Test
   void rejectingContentStillWinsOverAPendingName() throws Exception {
-    Post post = post(PostStatus.created);
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(PostFlag.REJECTED, 0.11, List.of("OFF_TOPIC")));
+    stubFilter(new FilterVerdict(FilterOutcome.FAIL, 0.11, List.of("OFF_TOPIC")));
     Recipe recipe = recipe();
     recipe.setDish(Dish.builder().id(UUID.randomUUID()).name("món lạ").build());
     lenient().when(recipeIngredientRepository.findByRecipeId(recipe.getId())).thenReturn(List.of());
@@ -490,24 +544,24 @@ class ContentFilterOutboundAdapterTest {
         .thenReturn(
             new ComponentScorer.ComponentResult(
                 ComponentScorer.Component.RECIPE,
-                PostFlag.PASSED,
+                false,
                 Optional.of(0.80),
                 Optional.of(EMBEDDING)));
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    assertEquals(PostFlag.REJECTED, post.getFlag());
+    assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
   }
 
   /**
    * ADR-020, the case that caused the outage: the provider rejected the credential permanently, so
-   * retrying the message 116 times could only waste ten hours. The post must leave {@code PENDING}
-   * now and the reason must be readable afterwards.
+   * retrying the message 116 times could only waste ten hours. The post must leave the in-flight
+   * state now and the reason must be readable afterwards.
    */
   @Test
   void permanentEmbeddingRejectionQueuesThePostForReviewInsteadOfRetrying() throws Exception {
-    Post post = post(PostStatus.created);
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
     when(contentFilterService.filter(TITLE + "\n" + CONTENT))
@@ -524,8 +578,11 @@ class ContentFilterOutboundAdapterTest {
     // No exception: the message's purpose is discharged by the review queue, not by a retry.
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    assertEquals(PostFlag.NEEDS_REVIEW, post.getFlag());
-    assertEquals(PostStatus.unpublished, post.getStatus());
+    // The filter never formed an opinion, so this is FILTER_SKIPPED, not FILTER_FAILED.
+    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostFlag.FILTER_SKIPPED, post.getFlag());
+    assertTrue(post.getFlagDetail().startsWith("FILTER_UNAVAILABLE"));
+    assertTrue(post.getFlagDetail().length() <= 64);
     verify(postRepository).save(post);
 
     ArgumentCaptor<ModerationLog> log = ArgumentCaptor.forClass(ModerationLog.class);
@@ -542,7 +599,7 @@ class ContentFilterOutboundAdapterTest {
   /** A quota is transient: the post must stay untouched and the provider's hint must survive. */
   @Test
   void transientEmbeddingFailureIsRethrownRetryableWithTheProviderHint() throws Exception {
-    Post post = post(PostStatus.created);
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
     when(contentFilterService.filter(TITLE + "\n" + CONTENT))
         .thenThrow(
@@ -560,23 +617,26 @@ class ContentFilterOutboundAdapterTest {
             () -> adapter.deliver(message(new ContentFilterPayload(post.getId()))));
 
     assertEquals(Duration.ofSeconds(40), thrown.getRetryAfter());
-    assertEquals(PostFlag.PENDING, post.getFlag());
+    // Still in flight: processing with no blocker.
+    assertEquals(PostStatus.processing, post.getStatus());
+    assertNull(post.getFlag());
     verify(postRepository, never()).save(any(Post.class));
     verify(moderationLogRepository, never()).save(any(ModerationLog.class));
   }
 
   /** A message abandoned before delivery still owes the post a terminal state. */
   @Test
-  void abandonedMessageSettlesAPendingPost() throws Exception {
-    Post post = post(PostStatus.created);
+  void abandonedMessageSettlesAProcessingPost() throws Exception {
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
     adapter.onDeliveryAbandoned(
         message(new ContentFilterPayload(post.getId())), new IllegalStateException("unavailable"));
 
-    assertEquals(PostFlag.NEEDS_REVIEW, post.getFlag());
-    assertEquals(PostStatus.unpublished, post.getStatus());
+    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostFlag.FILTER_SKIPPED, post.getFlag());
+    assertTrue(post.getFlagDetail().startsWith("FILTER_UNAVAILABLE"));
     ArgumentCaptor<ModerationLog> log = ArgumentCaptor.forClass(ModerationLog.class);
     verify(moderationLogRepository).save(log.capture());
     assertEquals("FILTER_UNAVAILABLE", log.getValue().getAction());
@@ -584,17 +644,33 @@ class ContentFilterOutboundAdapterTest {
 
   /** Never let an abandonment overwrite a verdict that already ran. */
   @Test
-  void abandonedMessageNeverOverwritesAnExistingVerdict() throws Exception {
-    Post post = post(PostStatus.unpublished);
-    post.setFlag(PostFlag.REJECTED);
+  void abandonedMessageNeverOverwritesAnExistingBlocker() throws Exception {
+    Post post = post(PostStatus.processing);
+    post.setFlag(PostFlag.FILTER_FAILED);
+    post.setFlagDetail("score=0.100");
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
 
     adapter.onDeliveryAbandoned(
         message(new ContentFilterPayload(post.getId())), new IllegalStateException("unavailable"));
 
-    assertEquals(PostFlag.REJECTED, post.getFlag());
+    assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
+    assertEquals("score=0.100", post.getFlagDetail());
     verify(postRepository, never()).save(any(Post.class));
     verify(moderationLogRepository, never()).save(any(ModerationLog.class));
+  }
+
+  /** Never let an abandonment resurrect a post the author already took down. */
+  @Test
+  void abandonedMessageIgnoresAPostThatIsNoLongerProcessing() throws Exception {
+    Post post = post(PostStatus.drafted);
+    when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+
+    adapter.onDeliveryAbandoned(
+        message(new ContentFilterPayload(post.getId())), new IllegalStateException("unavailable"));
+
+    assertEquals(PostStatus.drafted, post.getStatus());
+    assertNull(post.getFlag());
+    verify(postRepository, never()).save(any(Post.class));
   }
 
   /** An unreadable payload has no post to settle; the hook must not throw into the drainer. */
@@ -608,10 +684,33 @@ class ContentFilterOutboundAdapterTest {
     verify(postRepository, never()).findById(any());
   }
 
+  @Test
+  void flagDetailIsTruncatedToTheColumnWidth() throws Exception {
+    Post post = post(PostStatus.processing);
+    when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
+    when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
+    // A long provider code must not overflow the VARCHAR(64) column.
+    when(contentFilterService.filter(TITLE + "\n" + CONTENT))
+        .thenThrow(
+            new EmbeddingClientException(
+                "rejected",
+                EmbeddingClientException.Reason.INVALID_REQUEST,
+                400,
+                "A_VERY_LONG_PROVIDER_ERROR_CODE_THAT_WOULD_NOT_FIT_IN_THE_COLUMN_AT_ALL",
+                null,
+                null));
+
+    adapter.deliver(message(new ContentFilterPayload(post.getId())));
+
+    assertNotNull(post.getFlagDetail());
+    assertEquals(64, post.getFlagDetail().length());
+    assertFalse(post.getFlagDetail().isEmpty());
+  }
+
   private static ComponentScorer.ComponentResult needsReview(
       ComponentScorer.Component component, double score) {
     return new ComponentScorer.ComponentResult(
-        component, PostFlag.NEEDS_REVIEW, Optional.of(score), Optional.of(EMBEDDING));
+        component, true, Optional.of(score), Optional.of(EMBEDDING));
   }
 
   private static Recipe recipe() {
@@ -643,10 +742,10 @@ class ContentFilterOutboundAdapterTest {
   }
 
   /** Sets up a post that passes the topic filter and is not a duplicate of anything. */
-  private Post passing(PostStatus status, double score) throws JsonProcessingException {
-    Post post = post(status);
+  private Post passing(double score) throws JsonProcessingException {
+    Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(PostFlag.PASSED, score, List.of()));
+    stubFilter(new FilterVerdict(FilterOutcome.PASS, score, List.of()));
     when(duplicateDetector.findDuplicate(any(), eq(post.getId()))).thenReturn(Optional.empty());
     when(activeEmbeddingModel.name()).thenReturn(MODEL);
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -665,13 +764,13 @@ class ContentFilterOutboundAdapterTest {
         .build();
   }
 
+  /** A submitted post waiting for a verdict: {@code processing} with no blocker yet. */
   private static Post post(PostStatus status) {
     return Post.builder()
         .id(UUID.randomUUID())
         .title(TITLE)
         .content(CONTENT)
         .status(status)
-        .flag(PostFlag.PENDING)
         .viewCount(0)
         .build();
   }

@@ -80,7 +80,7 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `post/post-posts-postid-media.md` | `POST /api/posts/{postId}/media` | Replace a post's whole attached-media set (owner or Admin) |
 | `post/post-posts-postid-recipes.md` | `POST /api/posts/{postId}/recipes` | Replace a post's whole attached-recipe set (owner or Admin) |
 | `post/get-posts-postid-related.md` | `GET /api/posts/{postId}/related` | Semantically similar published posts by embedding cosine similarity, ranked, excludes source (public) |
-| `post/patch-posts-postid-visibility.md` | `PATCH /api/posts/{postId}/visibility` | Hide or unhide a post (Admin) |
+| `post/patch-posts-postid-visibility.md` | `PATCH /api/posts/{postId}/visibility` | **Removed** — retained only as a record; hide/unhide dropped in ADR-023 |
 | `post/put-posts-postid-votes.md` | `PUT /api/posts/{postId}/votes` | Cast, switch, or remove a vote on a post (authenticated) |
 | `post/get-posts-postid-votes.md` | `GET /api/posts/{postId}/votes` | Read a post's vote counts and the caller's own vote if identified (public) |
 | `profile/put-profile.md` | `PUT /api/profile` | Update user profile |

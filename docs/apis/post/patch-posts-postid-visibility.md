@@ -1,82 +1,44 @@
-# API Reference: PATCH /api/posts/{postId}/visibility
+# API Reference: PATCH /api/posts/{postId}/visibility — REMOVED
 
-## Overview
+## Status
 
-Administrator moderation: hide a post from the platform or lift the hide (BR-ADMIN-002).
+**Removed** by [ADR-023](../../adrs/023-post-processing-status-and-flag-blocker.md). This page is
+retained only as a record of the endpoint that existed before the post moderation model was reduced
+to `status` + `flag`.
 
-## Endpoint
+## What it did
 
 ```text
 PATCH /api/posts/{postId}/visibility
+Body: { "hidden": true | false }
 ```
 
-## Authentication
+An Administrator could hide a post (`status = hidden`, `publishedAt` cleared) or lift the hide
+(back to `created`), logging `HIDE_POST` / `UNHIDE_POST` in `moderation_log`.
 
-Required: a valid JWT access token with the `ADMIN` role. Enforced in `SecurityConfig`; other roles receive `403 Forbidden`.
+## Why it was removed
 
-## Request
+`hidden` was a second, parallel way to take content out of public view, overlapping with
+`unpublished` and with the author's own withdrawal. Keeping both meant every reader had to know two
+rules for "not visible", and the owner of a hidden post could not withdraw or re-submit it. The
+model now has exactly one negative terminal state, and only two ways to reach it:
 
-### Path Parameters
+- an Administrator rejects the post → `status = unpublished` (`POST /api/admin/posts/{postId}/reject`);
+- the author withdraws it → `status = drafted` (`PATCH /api/posts/{postId}` with `"publish": false`).
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| postId | UUID | Yes | ID of the post to hide or unhide. |
+The route no longer exists: a request to it is answered `404 Not Found`.
 
-### Request Body
+## Replacement
 
-```json
-{ "hidden": true }
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| hidden | boolean | Yes | `true` hides the post; `false` lifts the hide. |
-
-## Responses
-
-### Success Response (200 OK)
-
-Returns the post as `PostListResponse` with the new `status`. Because the caller is an Administrator rather than the post's author, `rejectionReason` is `null` here — the admin post surfaces carry it instead.
-
-```json
-{
-  "success": true,
-  "message": "Post hidden successfully",
-  "data": { "id": "550e8400-e29b-41d4-a716-446655440000", "status": "hidden", "publishedAt": null }
-}
-```
-
-The message is `Post is visible again` when `hidden` is `false`.
-
-### Error Responses
-
-| Status Code | Condition | Message |
-|-------------|-----------|---------|
-| 400 | `hidden` missing; `hidden: false` on a post that is not hidden | `Validation failed` / `Post is not hidden` |
-| 401 | JWT is missing, invalid, expired, or the account is inactive | `Unauthorized` |
-| 403 | Caller is not an Administrator | `Forbidden` |
-| 404 | Post does not exist or is soft-deleted | `Post not found` |
-| 500 | Unexpected server error | `Internal server error` |
-
-## Business Rules
-
-- Hiding sets status `hidden` and clears `publishedAt`. Hiding an already hidden post is a no-op (`200`, no log entry).
-- Lifting the hide returns the post to `created` (private draft); the owner must publish it again under BR-CONTENT-003.
-- While hidden, the owner cannot change the post's publish state (`PATCH /api/posts/{postId}` with `publish`); only an Administrator can.
-- Every hide and unhide is recorded in `moderation_log` as `HIDE_POST` / `UNHIDE_POST`, including on the administrator's own posts.
-
-## Example
-
-```bash
-curl -X PATCH http://localhost:8080/api/posts/550e8400-e29b-41d4-a716-446655440000/visibility \
-  -H "Authorization: Bearer <admin-access-token>" \
-  -H "Content-Type: application/json" \
-  -d '{"hidden":true}'
-```
+| Instead of | Use |
+|------------|-----|
+| Hide a post | `POST /api/admin/posts/{postId}/reject` → `unpublished` |
+| Lift a hide | `POST /api/admin/posts/{postId}/approve` → `published`, or the author edits and resubmits |
+| Author withdraws | `PATCH /api/posts/{postId}` with `{ "publish": false }` → `drafted` |
 
 ## Related
 
-- Feature spec: `docs/feats/hide-user-post.md`
-- Business rules: `docs/brs/posts.md`
+- Decision: `docs/adrs/023-post-processing-status-and-flag-blocker.md`
+- Business rules: `docs/brs/posts.md` (BR-POST-009 is retired, BR-POST-012 covers approve/reject)
 - Edit a post: `docs/apis/post/patch-posts-postid.md`
-- Shared error/response contract: `docs/apis/error-responses.md`
+- Approve/reject: `docs/apis/admin/post-posts-postid-approve.md`

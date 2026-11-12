@@ -2,7 +2,6 @@ package com.vegalife.unit.repository.recipe;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.user.UserRole;
@@ -203,7 +202,6 @@ class RecipeSpecificationsTest {
             .content("Post content")
             .rawContent(com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
             .status(PostStatus.published)
-            .flag(PostFlag.PENDING)
             .viewCount(0)
             .categories(categories)
             .build();

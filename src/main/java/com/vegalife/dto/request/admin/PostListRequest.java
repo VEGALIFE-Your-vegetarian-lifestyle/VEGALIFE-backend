@@ -27,13 +27,13 @@ public class PostListRequest {
   private String sort;
 
   @Pattern(
-      regexp = "^(created|processed|published|unpublished|hidden)$",
-      message = "Status must be one of: created, processed, published, unpublished, hidden")
+      regexp = "^(drafted|processing|published|unpublished)$",
+      message = "Status must be one of: drafted, processing, published, unpublished")
   private String status;
 
   @Pattern(
-      regexp = "^(all|PENDING|PASSED|REJECTED|NEEDS_REVIEW)?$",
-      message = "Flag must be one of: all, PENDING, PASSED, REJECTED, NEEDS_REVIEW")
+      regexp = "^(all|FILTER_FAILED|SIMILAR_CONTENT|FILTER_SKIPPED)?$",
+      message = "Flag must be one of: all, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED")
   private String flag;
 
   private UUID userId;
@@ -59,10 +59,11 @@ public class PostListRequest {
   }
 
   /**
-   * Issue #5: an admin opening the list without a flag lands on the posts awaiting review. The
-   * literal {@code all} disables the flag filter entirely.
+   * No flag filter by default: a held post can be blocked for any of the three reasons, so
+   * preselecting one would silently hide the others. The review queue itself is {@code
+   * status=processing} (ADR-023).
    */
   public String getFlag() {
-    return flag == null || flag.isBlank() ? "NEEDS_REVIEW" : flag;
+    return flag == null || flag.isBlank() ? "all" : flag;
   }
 }

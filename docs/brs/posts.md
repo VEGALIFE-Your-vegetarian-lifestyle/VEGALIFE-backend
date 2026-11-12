@@ -7,20 +7,20 @@
 | BR-POST-001 | Post Ownership Comes from Authentication | Active | 2026-09-26 |
 | BR-POST-002 | Users List Only Their Non-Deleted Posts | Active | 2026-09-26 |
 | BR-POST-003 | User Post Lists Use Bounded Newest-First Pagination | Active | 2026-09-26 |
-| BR-POST-004 | New Posts Start in the Created State | Active | 2026-09-30 |
+| BR-POST-004 | New Posts Start as Drafts, and Submitting Parks Them in Processing | Active | 2026-11-13 |
 | BR-POST-005 | Post Title and Content Are Required | Active | 2026-09-26 |
 | BR-POST-006 | Users Edit Only Their Own Non-Deleted Posts | Active | 2026-09-27 |
-| BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-09-30 |
+| BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-11-13 |
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
-| BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
-| BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
+| BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Retired (ADR-023) | 2026-11-13 |
+| BR-POST-010 | Only Published Posts Are Public | Active | 2026-11-13 |
 | BR-POST-011 | Single Post Detail Excludes Only Deleted Posts, Not Ownership | Active | 2026-10-10 |
-| BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-09-30 |
-| BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-09-30 |
-| BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-09-30 |
-| BR-FILTER-007 | A Passed Filter Publishes the Post | Active | 2026-09-30 |
-| BR-FILTER-008 | A Rejected or Uncertain Filter Unpublishes the Post | Active | 2026-10-10 |
-| BR-FILTER-009 | Posts Stuck Pending Are Unpublished After 24 Hours | Active | 2026-10-10 |
+| BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-11-13 |
+| BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-11-13 |
+| BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-11-13 |
+| BR-FILTER-007 | A Passed Filter Publishes the Post | Active | 2026-11-13 |
+| BR-FILTER-008 | A Failed or Uncertain Filter Holds the Post for an Admin | Active | 2026-11-13 |
+| BR-FILTER-009 | Posts Stuck in Flight Are Marked Filter-Skipped After 24 Hours | Active | 2026-11-13 |
 
 ---
 
@@ -131,7 +131,7 @@ Applies to the authenticated user's post-list endpoint. Clients cannot request a
 
 ---
 
-# Business Rule: New Posts Start in the Created State
+# Business Rule: New Posts Start as Drafts, and Submitting Parks Them in Processing
 
 ## Rule ID
 
@@ -143,25 +143,39 @@ Active
 
 ## Statement
 
-When a user creates a post, the system sets its view count to `0`. The post starts as a private draft (`created`) unless the client asks to publish (`publish: true`), which is accepted only when the post has at least one active category (BR-CONTENT-004). Publishing is then gated by content filtering: the post is saved as `created` with `flag = PENDING` and a `CONTENT_FILTER` message enqueued (BR-FILTER-005, BR-FILTER-006), and it becomes `published` with `publishedAt` set only once filtering returns `PASSED` (BR-FILTER-007). Status and view count cannot otherwise be set by the client.
+When a user creates a post, the system sets its view count to `0`. The post starts as a private
+draft (`drafted`, no `flag`) unless the client asks to submit it (`publish: true`), which is accepted
+only when the post has at least one active category (BR-CONTENT-004). Submitting does not publish:
+the post is saved as `processing` with no `flag` and a `CONTENT_FILTER` message is enqueued
+(BR-FILTER-005, BR-FILTER-006). It becomes `published` only when the filter passes (BR-FILTER-007) or
+an Administrator approves it (BR-POST-012). `status`, `flag`, and view count cannot be set by the
+client.
 
 ## Rationale
 
-System-controlled initial values keep post lifecycle state consistent and leave publication decisions to later processing.
+System-controlled initial values keep the post lifecycle consistent. Separating "submitted" from
+"published" makes it possible to say, for every post, whether a decision is still outstanding —
+which a single draft/published pair cannot express.
 
 ## Scope & Exceptions
 
-Applies to `POST /api/posts`. The `flag` value is the filter state and is distinct from `status` (BR-FILTER-004); a draft (`publish: false`) keeps `flag` NULL and is never filtered (BR-FILTER-005).
+Applies to `POST /api/posts`. The status vocabulary is `drafted`, `processing`, `published`,
+`unpublished`, and a `flag` may exist only while the post is `processing` (ADR-023). A draft
+(`publish: false`) keeps `flag` NULL and is never filtered (BR-FILTER-005).
 
 ## Enforcement
 
-- Service: `PostService.createPost()` sets status and view count, records publish intent, and enqueues the filter message in the caller's transaction; `publishedAt` is assigned only when the filter verdict `PASSED` is applied.
+- Service: `PostService.createPost()` sets status, view count, and blocker; it enqueues the filter
+  message in the caller's transaction, and `publishedAt` is assigned only when the filter or an
+  admin decision publishes the post.
+- Database: `V56__post_processing_status_and_flag_blocker.sql` rewrites the old status/flag values
+  and adds `CHECK (flag IS NULL OR status = 'processing')`.
 - Request DTO: `PostCreateRequest` does not expose lifecycle fields.
 - API reference: `docs/apis/post/post-posts.md`.
 
 ## Last Reviewed
 
-2026-09-30, by Vegalife backend team
+2026-11-13, by Vegalife backend team
 
 ---
 
@@ -249,7 +263,7 @@ Active
 
 ## Statement
 
-Post edits require `content` and `rawContent` on every request, and accept a non-empty subset of `title`, `featuredImageUrl`, `categoryIds`, and `publish` on top of them. Only supplied, non-null values among the optional fields are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters; `content` must not be blank and `rawContent` must be a JSON object. `categoryIds` replaces the category set and may only reference active categories (BR-CONTENT-004). `publish: true` requests publication and re-queues the post for content filtering (BR-FILTER-005): the post only becomes `published` once the filter returns `PASSED` (BR-FILTER-007). `publish: false` withdraws the post to a private draft immediately — a withdrawn `unpublished` post returns to `created` but keeps its `flag` value — and never triggers filtering. A title or plain-content change to a post whose status is `published` or `unpublished` re-queues it for filtering (BR-FILTER-005); a `rawContent`-only change does not re-queue, since filtering only reads plain `content`. A post that is or becomes published must keep at least one category (BR-CONTENT-003). Only an Administrator may change the state of a `hidden` post. Ownership and view count are not editable.
+Post edits require `content` and `rawContent` on every request, and accept a non-empty subset of `title`, `featuredImageUrl`, `categoryIds`, and `publish` on top of them. Only supplied, non-null values among the optional fields are applied; omitted and null values leave existing data unchanged. A supplied title must be non-blank and no longer than 255 characters; `content` must not be blank and `rawContent` must be a JSON object. `categoryIds` replaces the category set and may only reference active categories (BR-CONTENT-004). `publish: true` submits the post for a filter re-check (BR-FILTER-005): it moves to `processing` with no blocker and only becomes `published` once the filter passes (BR-FILTER-007) or an admin approves it (BR-POST-012). `publish: false` withdraws the post immediately from any state except `drafted` (where it is a no-op): `status = drafted`, `publishedAt`, `flag`, and `flagDetail` are cleared, and no filter is queued. A title or plain-content change to a `published`, `unpublished`, or held (`processing` + blocker) post re-queues it for filtering; a post merely in flight is not queued again; a `rawContent`-only change never re-queues, since filtering only reads plain `content`. A post that is or becomes published must keep at least one category (BR-CONTENT-003). Ownership and view count are not editable.
 
 ## Rationale
 
@@ -305,7 +319,7 @@ Applies to `DELETE /api/posts/{postId}`. Restoring deleted posts is not supporte
 
 ---
 
-# Business Rule: Only Administrators Hide Posts, and It Is Logged
+# Business Rule: Only Administrators Hide Posts, and It Is Logged — RETIRED
 
 ## Rule ID
 
@@ -313,29 +327,41 @@ Applies to `DELETE /api/posts/{postId}`. Restoring deleted posts is not supporte
 
 ## Status
 
-Active
+Retired by [ADR-023](../adrs/023-post-processing-status-and-flag-blocker.md) on 2026-11-13.
 
 ## Statement
 
-Only an Administrator may hide a post or lift a hide (BR-ADMIN-002, BR-ADMIN-004). Hiding sets status `hidden` and clears the publication timestamp; lifting returns the post to a private draft. While a post is hidden, only an Administrator may change its publish state. Every hide and unhide is recorded in `moderation_log`.
+*(Historical.)* Only an Administrator could hide a post or lift a hide. Hiding set
+`status = hidden` and cleared the publication timestamp; lifting returned the post to a private
+draft. While a post was hidden, only an Administrator could change its publish state. Every hide and
+unhide was recorded in `moderation_log`.
 
-## Rationale
+## Why it was retired
 
-Moderation is an administrator power; recording each action keeps decisions reviewable, and returning to draft forces the normal publish checks before content becomes public again.
+`hidden` was a second, parallel "not visible" state alongside `unpublished`, and it could only be
+entered and left by an admin. That made the owner unable to withdraw or resubmit their own post, and
+forced every reader to know two overlapping rules. The model now has one negative terminal state —
+`unpublished`, reached only by an admin rejection (BR-POST-012) — and one unlist action owned by the
+author: `PATCH /api/posts/{postId}` with `"publish": false`, returning the post to `drafted`.
 
-## Scope & Exceptions
-
-Applies to `PATCH /api/posts/{postId}/visibility`. Owners withdraw their own posts with `publish: false`.
+The `PATCH /api/posts/{postId}/visibility` route was removed outright rather than deprecated; a
+request to it answers `404 Not Found`. A request to change an `unpublished` post's state by its owner
+is refused with `404` (it is reported as not manageable), and only an admin decision or a passing
+filter changes it.
 
 ## Enforcement
 
-- Security: `PostController.updateVisibility()` is annotated `@PreAuthorize("hasRole('ADMIN')")` (ADR-009); the route is no longer granted `ROLE_ADMIN` by a `SecurityConfig` path rule.
-- Service: `PostService.updateVisibility()` changes status and writes the log; `applyPublishState()` blocks non-admins on hidden posts.
-- API reference: `docs/apis/post/patch-posts-postid-visibility.md`.
+- Migration `V56__post_processing_status_and_flag_blocker.sql` rewrites every `hidden` row: one that
+  had passed the filter (`flag = PASSED`) is restored to `published` (its `published_at` recovered
+  from `updated_at`); one with no `flag` (a draft an admin hid) returns to `drafted`; every other
+  hidden post was held by the filter and becomes `processing` so a human decides it.
+- `PostController` no longer declares the visibility operation and `PostVisibilityRequest` was
+  deleted.
+- Regression test: `PostControllerIntegrationTest.updateVisibilityEndpoint_noLongerExists`.
 
 ## Last Reviewed
 
-2026-09-29, by Vegalife backend team
+2026-11-13, by Vegalife backend team
 
 ---
 
@@ -351,7 +377,7 @@ Active
 
 ## Statement
 
-When a member's posts are listed, guests and other members see only `published`, non-deleted posts. Drafts and other non-public states (`created`, `processed`, `unpublished`, `hidden`) are visible only to the post's creator and Administrators (BR-CONTENT-003). A post the content filter did not pass is `unpublished` with a `REJECTED`/`NEEDS_REVIEW` flag, so it is not public.
+When a member's posts are listed, guests and other members see only `published`, non-deleted posts. Drafts and other non-public states (`drafted`, `processing`, `unpublished`) are visible only to the post's creator and Administrators (BR-CONTENT-003). A post is not public while a decision is outstanding (`processing`, with or without a `flag`) or after an admin rejection (`unpublished`).
 
 ## Rationale
 
@@ -385,7 +411,7 @@ Active
 
 ## Statement
 
-When a caller — guest or authenticated — requests a single post by id, the post is returned whenever `deleted_at` is null, regardless of its status. Neither status nor ownership is checked: another user's post is returned, and the caller's own draft, `unpublished`, or `hidden` post is returned too. Only a missing or soft-deleted post returns `404 Post not found`. The endpoint is public (no authentication required).
+When a caller — guest or authenticated — requests a single post by id, the post is returned whenever `deleted_at` is null, regardless of its status. Neither status nor ownership is checked: another user's post is returned, and the caller's own draft, `processing`, or `unpublished` post is returned too. Only a missing or soft-deleted post returns `404 Post not found`. The endpoint is public (no authentication required).
 
 ## Rationale
 
@@ -422,7 +448,7 @@ Active
 
 ## Statement
 
-The content is embedded and mean-centered — the text embedding and both centroids have the seed-corpus mean subtracted first (raw e5 embeddings are anisotropic, so an uncentered margin score collapses into a ~0.46–0.54 band no threshold can reach) — and compared by cosine similarity with two precomputed centroids, one built from on-topic seed texts and one from off-topic seed texts, both Vietnamese and English. The relevance score is the normalized margin between the two centered similarities, `score = (cos(text - mean, onTopic - mean) - cos(text - mean, offTopic - mean) + 1) / 2`, clamped to `[0, 1]`. The score maps to exactly one verdict: `score >= accept-threshold` is `PASSED`; `score < reject-threshold` is `REJECTED`; anything between the two is `NEEDS_REVIEW`. The two thresholds are read live, per scoring call, from the `content_filter_accept_threshold` / `content_filter_reject_threshold` platform settings (issue #13 follow-up), falling back to the compiled `app.filter.accept-threshold` / `app.filter.reject-threshold` defaults on a missing, invalid, or contradictory (`reject >= accept`) stored pair — never a startup or request failure. The compiled defaults are recalibrated whenever the embedding model changes; the current values (`0.70` / `0.45`) are calibrated for `gemini-embedding-001` at 768 dimensions from the measured centered seed distribution (highest off-topic `0.3491`, lowest on-topic `0.7553`). The derivation and the selected values are recorded in [Filter Calibration: gemini-embedding-001](../feats/filter-calibration-gemini.md); thresholds derived for a previous model (e5: `0.65` / `0.43`) must not be carried across. The filter state is stored in `post.flag`, which is separate from `post.status`; `flag` is NULL only when the post has never been filtered.
+The content is embedded and mean-centered — the text embedding and both centroids have the seed-corpus mean subtracted first (raw e5 embeddings are anisotropic, so an uncentered margin score collapses into a ~0.46–0.54 band no threshold can reach) — and compared by cosine similarity with two precomputed centroids, one built from on-topic seed texts and one from off-topic seed texts, both Vietnamese and English. The relevance score is the normalized margin between the two centered similarities, `score = (cos(text - mean, onTopic - mean) - cos(text - mean, offTopic - mean) + 1) / 2`, clamped to `[0, 1]`. The score maps to exactly one band: `score >= accept-threshold` is a pass; `score < reject-threshold` is a refusal; anything between the two is uncertain. The two thresholds are read live, per scoring call, from the `content_filter_accept_threshold` / `content_filter_reject_threshold` platform settings (issue #13 follow-up), falling back to the compiled `app.filter.accept-threshold` / `app.filter.reject-threshold` defaults on a missing, invalid, or contradictory (`reject >= accept`) stored pair — never a startup or request failure. The compiled defaults are recalibrated whenever the embedding model changes; the current values (`0.70` / `0.45`) are calibrated for `gemini-embedding-001` at 768 dimensions from the measured centered seed distribution (highest off-topic `0.3491`, lowest on-topic `0.7553`). The derivation and the selected values are recorded in [Filter Calibration: gemini-embedding-001](../feats/filter-calibration-gemini.md); thresholds derived for a previous model (e5: `0.65` / `0.43`) must not be carried across. The band is an internal observation (`FilterOutcome`: `PASS` / `FAIL` / `UNCERTAIN`), deliberately not a persisted value; what a post stores is a *blocker* in `post.flag` — `FILTER_FAILED`, `SIMILAR_CONTENT`, or `FILTER_SKIPPED` — and only while the post is `processing` (ADR-023).
 
 ## Rationale
 
@@ -430,13 +456,13 @@ A three-band outcome separates confident failures from content that is merely am
 
 ## Scope & Exceptions
 
-Applies to every filter run. There is no `NOT_FILTERED` value: NULL means never filtered (drafts and pre-existing rows), and every run ends in one of the three verdicts. The centroid model and regeneration procedure are recorded in `docs/adrs/007-post-content-filtering.md`.
+Applies to every filter run. There is no `NOT_FILTERED` value: a post carries no blocker when it is not being held (draft, or in flight), and every run ends in exactly one band. The centroid model and regeneration procedure are recorded in `docs/adrs/007-post-content-filtering.md`.
 
 ## Enforcement
 
-- `EmbeddingRelevanceScorer` reads both thresholds from `PlatformSettingsProvider` (falling back to `app.filter.*`) on every `score()` call and returns the band; `ContentFilterService` turns it into the verdict and reasons.
-- `post.flag VARCHAR(16)` is constrained to `PENDING`/`PASSED`/`REJECTED`/`NEEDS_REVIEW` or NULL (migration V19).
-- Unit tests cover both bands and the review band at the exact threshold boundaries; a fixture-based regression test replays captured embeddings through the configured thresholds, and `CentroidRegenerationTest` refreshes those fixtures whenever the centroids are regenerated.
+- `EmbeddingRelevanceScorer` reads both thresholds from `PlatformSettingsProvider` (falling back to `app.filter.*`) on every `score()` call and returns the band; `ContentFilterService` turns it into a `FilterVerdict` carrying a `FilterOutcome`.
+- `post.flag VARCHAR(32)` is constrained to `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` or NULL, and `CHECK (flag IS NULL OR status = 'processing')` keeps the two columns from disagreeing (migration V56).
+- Unit tests cover all three bands at the exact threshold boundaries; a fixture-based regression test replays captured embeddings through the configured thresholds, and `CentroidRegenerationTest` refreshes those fixtures whenever the centroids are regenerated.
 
 ## Last Reviewed
 
@@ -458,9 +484,9 @@ Active
 
 ## Statement
 
-A post is filtered only when it is submitted for publication or when already-visible content changes. An explicit `publish: true` on create or edit always queues a filter run. Without an explicit `publish` field, a title or plain-`content` change on a post whose status is `published` or `unpublished` (a post the filter did not pass) re-queues it for filtering; a `rawContent`-only change does not, since filtering never reads `rawContent`. A draft — created or edited without `publish: true`, `flag` NULL — is never filtered, and unpublishing with `publish: false` never triggers a filter run.
+A post is filtered only when it is submitted for publication or when already-visible content changes. An explicit `publish: true` on create or edit always queues a filter run and moves the post to `processing` with no blocker. Without an explicit `publish` field, a title or plain-`content` change on a post that is `published`, `unpublished` (an admin refusal the author is appealing), or `processing` **with** a blocker re-queues it for filtering; a `rawContent`-only change does not, since filtering never reads `rawContent`. A post merely in flight (`processing`, no blocker) is not queued again — the pending run reads the body at delivery time, so it already sees the edit. A draft — `drafted`, no blocker — is never filtered, and withdrawing with `publish: false` never triggers a filter run.
 
-When the `content_filter_enabled` platform setting is false (a deliberate outage/bypass mode), BR-FILTER-004/006/007 are bypassed for new filter triggers: a post that would have been queued is instead routed straight to the admin review queue (`flag = NEEDS_REVIEW`, `status = unpublished`, no outbound row, no embedding call). This only stops *new* filtering; a post already `flag = PENDING` from before the setting was disabled is still swept to `NEEDS_REVIEW` by the stale-pending sweep (BR-FILTER-009) once its queue row goes stale, so disabling the filter never leaves a post pending forever.
+When the `content_filter_enabled` platform setting is false (a deliberate outage/bypass mode), BR-FILTER-004/006/007 are bypassed for new filter triggers: a post that would have been queued is instead held at `processing` with `flag = FILTER_SKIPPED` and `flagDetail = FILTER_DISABLED` — no outbound row, no embedding call — so an admin can decide it. `FILTER_SKIPPED` rather than `FILTER_FAILED` because the filter never formed an opinion. This only stops *new* filtering; a post already in flight from before the setting was disabled is still settled by the stale-message sweep (BR-FILTER-009), so disabling the filter never leaves a post in flight forever.
 
 ## Rationale
 
@@ -472,8 +498,8 @@ Applies to `POST /api/posts` and `PATCH /api/posts/{postId}`. Ownership and cate
 
 ## Enforcement
 
-- Service: `PostService.createPost()` / `updatePost()` decide whether to enqueue from an explicit `publish: true` or from the content dirty check on a `published`/`unpublished` post, and enqueue in the caller's transaction. The enqueue-vs-bypass choice reads `PlatformSettingsProvider.isContentFilterEnabled()` (issue #13 follow-up), falling back to `app.filter.enabled` on a missing/invalid stored value.
-- `PendingFilterSweepJob` sweeps any post still `flag = PENDING` whose queue row is stale, regardless of the current `content_filter_enabled` value — it does not check the setting, so it covers both "message lost" and "filter was disabled mid-flight".
+- Service: `PostService.createPost()` / `updatePost()` decide whether to enqueue from an explicit `publish: true` or from the content dirty check on a `published`/`unpublished`/held post, and enqueue in the caller's transaction. The enqueue-vs-bypass choice reads `PlatformSettingsProvider.isContentFilterEnabled()` (issue #13 follow-up), falling back to `app.filter.enabled` on a missing/invalid stored value.
+- `PendingFilterSweepJob` sweeps any `processing` post with no blocker whose queue row is stale, regardless of the current `content_filter_enabled` value — it does not check the setting, so it covers both "message lost" and "filter was disabled mid-flight".
 - API references: `docs/apis/post/post-posts.md`, `docs/apis/post/patch-posts-postid.md`.
 
 ## Last Reviewed
@@ -494,7 +520,7 @@ Active
 
 ## Statement
 
-Filtering never runs inside the HTTP request. Enqueueing writes an `outbound_message` row with channel `CONTENT_FILTER` in the same transaction that saves the post, sets `post.flag = PENDING`, and returns; a scheduled drainer later claims the message and runs the filter. The message row's `created_at` is the enqueue clock the sweep reasons about (BR-FILTER-009). There is no synchronous or real-time filtering path, and a failed filter run is retried by the queue's existing retry/deferred handling rather than failing the user's request.
+Filtering never runs inside the HTTP request. Enqueueing writes an `outbound_message` row with channel `CONTENT_FILTER` in the same transaction that saves the post, moves the post to `processing` with no blocker, and returns; a scheduled drainer later claims the message and runs the filter. The message row's `created_at` is the enqueue clock the sweep reasons about (BR-FILTER-009). There is no synchronous or real-time filtering path, and a failed filter run is retried by the queue's existing retry/deferred handling rather than failing the user's request.
 
 ## Rationale
 
@@ -502,7 +528,7 @@ The embedding call is an external network dependency with unbounded latency; kee
 
 ## Scope & Exceptions
 
-Applies to every filter trigger (BR-FILTER-005). The queue is the ADR-005 PostgreSQL outbox with a new `CONTENT_FILTER` channel — no new broker. A message that exhausts retries or is lost is covered by the 24-hour sweep (BR-FILTER-009), so `PENDING` is never permanent.
+Applies to every filter trigger (BR-FILTER-005). The queue is the ADR-005 PostgreSQL outbox with a new `CONTENT_FILTER` channel — no new broker. A message that exhausts retries or is lost is covered by the 24-hour sweep (BR-FILTER-009), so a post is never left in flight forever.
 
 ## Enforcement
 
@@ -530,28 +556,29 @@ Active
 
 ## Statement
 
-When a filter run ends with `PASSED`, the post's `flag` becomes `PASSED`, its status becomes `published`, and `publishedAt` is set if it was null. Every queued run was enqueued by an explicit publish request or by a content change on a `published`/`unpublished` post (BR-FILTER-005), so a `PASSED` verdict publishes the post unconditionally — the verdict, not the client's request, drives publication.
+When a filter run ends in a pass, the post's status becomes `published`, its `flag` and `flagDetail` are cleared, and `publishedAt` is set if it was null (a re-check keeps the original publication time). Every queued run was enqueued by an explicit submit request or by a content change on a post that was meant to be visible (BR-FILTER-005), so a pass publishes the post — the verdict, not the client's request, drives publication. The verdict is applied only while the post is still `processing` and not soft-deleted: a pass arriving after the author withdrew the post is discarded rather than resurrecting it.
 
 ## Rationale
 
-Passing the filter is the gate that makes publication legitimate; the transition is driven by the verdict, not by the client's request, so the API response and the public visibility can never disagree about a filtered post.
+Passing the filter is the gate that makes publication legitimate; the transition is driven by the verdict, not by the client's request, so the API response and the public visibility can never disagree about a filtered post. Discarding a stale pass keeps the author's withdrawal stronger than a late machine decision.
 
 ## Scope & Exceptions
 
-Applies to every `PASSED` verdict, whether it comes from a create, an edit, or a re-run of an `unpublished` post (a passing edit returns an `unpublished` post to `published`). Administrative hide/unhide (BR-POST-009) is unaffected.
+Applies to every pass, whether it comes from a create, an edit, or a re-check of a held post. A pass does not rewrite `rejectionReason` (only an admin approve clears it). Compare BR-POST-012 for the admin decision.
 
 ## Enforcement
 
-- `ContentFilterOutboundAdapter` applies the verdict: sets `flag`, moves `status` to `published`, and stamps `publishedAt` when it is null.
+- `ContentFilterOutboundAdapter` guards on `status = processing` and `deletedAt` before scoring, then sets `status = published` and clears `flag`/`flagDetail`, stamping `publishedAt` only when it is null.
+- Unit tests: `ContentFilterOutboundAdapterTest.passPublishesThePostAndClearsTheFlag`, `passIsDiscardedWhenTheAuthorWithdrewWhileTheMessageWasInFlight`.
 - API references: `docs/apis/post/post-posts.md`, `docs/apis/post/patch-posts-postid.md`.
 
 ## Last Reviewed
 
-2026-10-10, by Vegalife backend team
+2026-11-13, by Vegalife backend team
 
 ---
 
-# Business Rule: A Rejected or Uncertain Filter Unpublishes the Post
+# Business Rule: A Failed or Uncertain Filter Holds the Post for an Admin
 
 ## Rule ID
 
@@ -563,30 +590,46 @@ Active
 
 ## Statement
 
-When a filter run ends with `REJECTED` or `NEEDS_REVIEW`, the post's `flag` is set to that value and its status becomes `unpublished`, which is not publicly visible (BR-POST-010). The verdict is carried only by `flag`; `status` carries visibility. A `REJECTED` run logs a WARN carrying the out-of-band score; a `NEEDS_REVIEW` run logs a WARN recording that the score fell between the two thresholds. `NEEDS_REVIEW` is a data state only this sprint — no admin endpoint changes it. There is no `prev_status` column: the previous status is not tracked.
+When a filter run refuses or is uncertain, or when it finds the content too similar to a published
+post, the post stays `processing` and receives a blocker in `flag`: `FILTER_FAILED` for a refusal or
+an uncertain score (with the score in `flagDetail`), or `SIMILAR_CONTENT` for a near-duplicate (with
+`SIMILAR_CONTENT_POST_<postId>` naming the post it matched). The filter never unpublishes: only an
+Administrator may set `unpublished`, through `POST /api/admin/posts/{postId}/reject` (BR-POST-012).
+A refusal or uncertainty logs a WARN carrying the out-of-band score.
 
 ## Rationale
 
-Failing content must not stay public, but it must not be destroyed either — `unpublished` keeps the post intact for its owner and for later review, and distinguishing rejection from uncertainty in `flag` tells a future reviewer how much scrutiny to apply.
+A machine refusing content is evidence for a human, not a verdict that destroys the author's work:
+holding the post at `processing` keeps it intact for review, keeps it off the feed, and lets an admin
+either publish it or reject it with a stated reason. Splitting "the filter said no" from "an admin
+said no" means the two can never be confused later, and the author is never told an admin rejected
+something no human ever saw.
 
 ## Scope & Exceptions
 
-Applies to every `REJECTED` / `NEEDS_REVIEW` verdict and to the stale-pending sweep (BR-FILTER-009), which produces `NEEDS_REVIEW`. The owner can edit the post again; a passing edit returns it to `published` (BR-FILTER-007).
+Applies to every non-pass verdict and to the stale-message sweep (BR-FILTER-009), which writes
+`FILTER_SKIPPED`. The owner can edit the post again; an edit re-queues it (BR-FILTER-005) and clears
+the blocker, or the owner can withdraw it to `drafted` (BR-POST-007). A duplicate's matched post id
+cannot be recovered later, which is why it is persisted in `flagDetail`.
 
 ## Enforcement
 
-- `ContentFilterOutboundAdapter` sets flag and status and writes the WARN log.
-- `post.status` no longer accepts `flagged` from migration V31 on; a non-`PASSED` verdict maps to `unpublished` (ADR-011).
+- `ContentFilterOutboundAdapter` applies a non-pass verdict as `status = processing` plus
+  `flag`/`flagDetail`; it never writes `unpublished`.
+- Database: `CHECK (flag IS NULL OR status = 'processing')` and `flag IN ('FILTER_FAILED',
+  'SIMILAR_CONTENT', 'FILTER_SKIPPED')` (migration V56).
+- API: `flag`/`flagDetail` are exposed on the admin post list and detail, and the review queue is
+  `GET /api/admin/posts?status=processing`.
 
 ## Last Reviewed
 
-2026-10-10, by Vegalife backend team
+2026-11-13, by Vegalife backend team
 
 ---
 
 ---
 
-# Business Rule: Posts Stuck Pending Are Unpublished After 24 Hours
+# Business Rule: Posts Stuck in Flight Are Marked Filter-Skipped After 24 Hours
 
 ## Rule ID
 
@@ -598,28 +641,42 @@ Active
 
 ## Statement
 
-A scheduled job finds every `CONTENT_FILTER` recipient whose newest outbound message is older than `app.filter.sweep-max-age` (default 24 hours) and, for each such post still at `flag = PENDING`, sets `flag = NEEDS_REVIEW`, `status = unpublished`, logging at ERROR. Posts with a fresh outbound message or a NULL `flag` are never touched.
+A scheduled job finds every `CONTENT_FILTER` recipient whose newest outbound message is older than
+`app.filter.sweep-max-age` (default 24 hours) and, for each such post still at `processing` with no
+blocker, sets `flag = FILTER_SKIPPED` and `flagDetail = FILTER_SWEPT`, logging at ERROR. The post
+stays `processing`, so it is now visible in the admin review queue instead of waiting invisibly. A
+post that is not `processing`, already carries a blocker, or has a fresh outbound message is never
+touched.
 
 ## Rationale
 
-The outbox retries and then defers, but a message can still be lost (deleted row, exhausted retries, prolonged provider outage). Without a bound, such a post would stay `PENDING` forever — invisible to its owner and to any reviewer.
+The outbox retries and then defers, but a message can still be lost (deleted row, exhausted retries,
+prolonged provider outage). Without a bound, such a post would stay in flight forever — invisible to
+its owner and to any reviewer. `FILTER_SKIPPED` says exactly what happened: no verdict was reached.
 
 ## Scope & Exceptions
 
-Applies only to posts still at `PENDING`; it never re-runs a completed verdict and never touches drafts (NULL flag). 24 hours is the default and is configuration, not a constant. The outbox row is the enqueue clock: it is written in the same transaction as `flag = PENDING`, and terminal rows are deleted only by the 7-day retention job, so every lost message is always sweepable.
+Applies only to posts `processing` with no blocker; it never re-runs a completed verdict and never
+touches drafts. 24 hours is the default and is configuration, not a constant. The outbox row is the
+enqueue clock: it is written in the same transaction as the move to `processing`, and terminal rows
+are deleted only by the 7-day retention job, so every lost message is always sweepable.
 
 ## Enforcement
 
-- `PendingFilterSweepJob` (scheduled, `OutboundRetentionJob` pattern) queries recipients of `CONTENT_FILTER` whose latest message is older than the max age, then performs the transition.
-- Unit tests cover: stale recipient with `PENDING` post swept, fresh recipient untouched, non-`PENDING` post untouched.
+- `PendingFilterSweepJob` (scheduled, `OutboundRetentionJob` pattern) queries recipients of
+  `CONTENT_FILTER` whose latest message is older than the max age, then performs the transition.
+- Repository: `PostRepository.countByStatusAndFlagIsNotNullAndDeletedAtIsNull(processing)` backs the
+  dashboard's "held posts" metric, which counts blockers rather than a single flag value.
+- Unit tests cover: stale recipient settled as `FILTER_SKIPPED`, fresh recipient untouched, a post
+  with an existing blocker untouched, a non-`processing` post untouched.
 
 ## Last Reviewed
 
-2026-10-10, by Vegalife backend team
+2026-11-13, by Vegalife backend team
 
 ---
 
-# Business Rule: Only Administrators Publish or Unpublish a Post as a Moderation Action
+# Business Rule: Only Administrators Approve or Reject a Submitted Post
 
 ## Rule ID
 
@@ -631,41 +688,51 @@ Active
 
 ## Statement
 
-Only an Administrator may moderate a post's publish state directly, through
-`POST /api/admin/posts/{postId}/moderate` with action `PUBLISH` or `UNPUBLISH`. `PUBLISH` sets
-`status = published` and stamps `publishedAt`; it requires the post to have at least one category
-(BR-CONTENT-003). `UNPUBLISH` sets `status = unpublished` and clears `publishedAt`. Neither action
-changes `flag`: the content-filter verdict is a record of what the filter decided and stays as
-written (ADR-011). A `hidden` post is moderated through the visibility endpoint (BR-POST-009), not
-these verbs, and a request whose target status already holds is a no-op that writes no log entry.
-Every real change is recorded in `moderation_log` (BR-ADMIN-002).
+Only an Administrator may decide a post that is waiting for review, through
+`POST /api/admin/posts/{postId}/approve` or `POST /api/admin/posts/{postId}/reject`. A post is
+decidable in `processing` and `unpublished`; a `drafted` post has not been submitted and is refused
+with `400`.
+
+`approve` sets `status = published`, stamps `publishedAt` when it is null, clears `flag`,
+`flagDetail`, and `rejectionReason`, and requires the post to have at least one category
+(BR-CONTENT-003). It also approves every `PENDING` component (recipe, dish, ingredient) of the post
+and never resurrects a `REJECTED` component (BR-DISH-001).
+
+`reject` sets `status = unpublished`, clears `publishedAt`, clears `flag`/`flagDetail` (the rejection
+is terminal, so nothing is left to hold), stores the reason in `rejectionReason` for the author, and
+rejects every still-`PENDING` component.
+
+Every real decision is recorded in `moderation_log` as `APPROVE_POST` / `REJECT_POST` with the
+optional reason (BR-ADMIN-002).
 
 ## Rationale
 
-The filter can withhold a post the admin judges acceptable, and an admin may need to take a live
-post down as a moderation decision distinct from hiding it. Both are administrator powers, so
-recording them keeps decisions reviewable; leaving `flag` untouched keeps the two axes of ADR-011
-independent, so "why is this not public" is still answerable from the verdict.
+Approving and rejecting are the two things a human reviewer actually decides; a generic
+"moderate with PUBLISH/UNPUBLISH" verb cannot express "the filter was wrong, publish it" and it left
+the blocker dangling on a published row. Clearing the blocker on both terminals keeps ADR-023's
+invariant — a blocker describes a post that is being held — true by construction. Refusing `drafted`
+prevents an admin from publishing a post its own author never submitted.
 
 ## Scope & Exceptions
 
-Applies to `POST /api/admin/posts/{postId}/moderate`. It does not cover editing content (BR-POST-006),
-hiding (BR-POST-009), or deletion (BR-POST-008), each of which has its own rule and log action. The
-admin post list's default `flag = NEEDS_REVIEW` filter (issue #5) is a query default, not a rule about
-which posts exist.
+Applies to `POST /api/admin/posts/{postId}/approve` and `/reject`. It does not cover editing content
+(BR-POST-006) or deletion (BR-POST-008). The author's own unlist action is `publish: false`
+(BR-POST-007), not rejection. The admin post list's default `flag = all` filter is a query default
+chosen so no blocker is silently hidden, not a rule about which posts exist.
 
 ## Enforcement
 
 - Security: `AdminPostController` carries `@PreAuthorize("hasRole('ADMIN')")` (ADR-009); no
   `SecurityConfig` path rule grants `/api/admin/**`.
-- Service: `AdminPostService.moderatePost()` loads a non-deleted post, rejects `hidden` and a
-  categoryless publish, no-ops on an already-target status, sets `status`/`publishedAt`, and writes
-  the log row with the reason.
-- API reference: `docs/apis/admin/post-posts-postid-moderate.md`.
+- Service: `AdminPostService.approvePost()` / `rejectPost()` load a non-deleted post, refuse
+  `drafted`, validate categories on approve, clear `flag`/`flagDetail`, cascade to components, and
+  write the log row.
+- Database: `CHECK (flag IS NULL OR status = 'processing')` makes a lingering blocker impossible.
+- API reference: `docs/apis/admin/post-posts-postid-approve.md`.
 
 ## Last Reviewed
 
-2026-10-10, by Vegalife backend team
+2026-11-13, by Vegalife backend team
 
 ---
 
@@ -682,11 +749,11 @@ Active
 ## Statement
 
 Every administrator action that changes another user's content — editing (`EDIT_POST`), deleting
-(`DELETE_POST`), hiding or lifting a hide (`HIDE_POST` / `UNHIDE_POST`), and moderating a post's
-publish state (`PUBLISH_POST` / `UNPUBLISH_POST`) — is written to `moderation_log` with the acting
-administrator (`actor_id`), the action, the target (`target_type`, `target_id`), the time
-(`created_at`), and — for the moderation verbs — an optional reason. A no-op that changes nothing is
-never logged. The log is append-only; entries are never edited or deleted by application code.
+(`DELETE_POST`), approving (`APPROVE_POST`), and rejecting (`REJECT_POST`) — is written to
+`moderation_log` with the acting administrator (`actor_id`), the action, the target (`target_type`,
+`target_id`), the time (`created_at`), and — for approve/reject — an optional reason. A no-op that
+changes nothing is never logged. The log is append-only; entries are never edited or deleted by
+application code.
 
 ## Rationale
 
@@ -712,7 +779,7 @@ decision in order, including reasons that were later superseded.
 - Service: every writer builds a `ModerationLog` through `ModerationLogRepository` in the same
   transaction as the change (`PostService`, `AdminPostService`).
 - API references: `docs/apis/post/patch-posts-postid.md`, `docs/apis/post/delete-posts-postid.md`,
-  `docs/apis/post/patch-posts-postid-visibility.md`, `docs/apis/admin/post-posts-postid-approve.md`.
+  `docs/apis/admin/post-posts-postid-approve.md`.
 
 ## Last Reviewed
 

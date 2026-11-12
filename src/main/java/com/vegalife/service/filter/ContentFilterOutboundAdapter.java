@@ -37,17 +37,23 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * CONTENT_FILTER channel adapter (ADR-005): loads the queued post, runs the filter pipeline (FR-005
- * embedding scoring, FR-006 bands) and applies the verdict. {@code PASSED} publishes the post —
- * every queued message was enqueued by an explicit publish request (BR-FILTER-005); {@code
- * REJECTED} / {@code NEEDS_REVIEW} flag the post, move it to {@code unpublished} and WARN (FR-009).
- * A transient failure is rethrown as retryable so the queue waits the provider out; a permanent
- * rejection cannot be retried into success, so the post goes to manual review immediately with the
- * cause recorded in {@code moderation_log} (ADR-020). No {@code prev_status} tracking.
+ * embedding scoring, FR-006 bands) and applies the outcome under ADR-023.
  *
- * <p>Duplicate detection (issue #156, ADR-015) runs before the verdict is applied and before the
- * post's vector is stored. Storing first would make every post match itself at similarity 1.0. This
- * ordering has a consequence worth knowing: a flagged duplicate never publishes, so it never
- * becomes a comparison target itself — chained duplicates are therefore missed by design.
+ * <p>A {@code PASS} publishes the post and clears its flag. A {@code FAIL} or {@code UNCERTAIN}
+ * leaves it at {@code processing} with {@code flag = FILTER_FAILED}; the post never leaves the
+ * public feed on the filter's authority alone — only an admin can unpublish. A duplicate leaves it
+ * at {@code processing} with {@code flag = SIMILAR_CONTENT} and the matched post id in {@code
+ * flag_detail}. Every one of those states is visible on the admin review queue ({@code
+ * status=processing}), which is what replaces the old terminal {@code unpublished} the filter used
+ * to write itself.
+ *
+ * <p>A transient failure is rethrown as retryable so the queue waits the provider out; a permanent
+ * rejection cannot be retried into success, so the post is settled at {@code processing} with
+ * {@code FILTER_SKIPPED} and the cause recorded in {@code moderation_log} (ADR-020).
+ *
+ * <p>The verdict is applied only while the post is still {@code processing} and not soft-deleted. A
+ * post withdrawn or deleted while its message was in flight keeps its new state; the late result is
+ * discarded rather than republishing content its author already took down.
  */
 @Service
 @RequiredArgsConstructor
@@ -58,6 +64,9 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   private static final String FILTER_UNAVAILABLE = "FILTER_UNAVAILABLE";
 
   private static final String POST_TARGET = "POST";
+
+  /** {@code flag_detail} is a short cause, never a message: the column is {@code VARCHAR(64)}. */
+  private static final int FLAG_DETAIL_MAX_LENGTH = 64;
 
   private final PostRepository postRepository;
   private final ContentFilterService contentFilterService;
@@ -89,6 +98,19 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
                             + message.getId()
                             + " references missing post "
                             + payload.postId()));
+
+    // The author may have withdrawn or deleted the post after the message was queued. Applying the
+    // verdict would publish content they already took down, so the run is discarded - before the
+    // embedding call, which is the expensive part.
+    if (post.getDeletedAt() != null || post.getStatus() != PostStatus.processing) {
+      log.info(
+          "Discarding content-filter result for post {}: it is now {} (deleted={})",
+          post.getId(),
+          post.getStatus(),
+          post.getDeletedAt() != null);
+      return;
+    }
+
     FilterResult result;
     try {
       result = contentFilterService.filter(filterBody(post));
@@ -112,45 +134,45 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
           e.getMessage());
       return;
     }
+
     FilterVerdict verdict = result.verdict();
     post.setContentScore(verdict.score());
 
     // Component-level verification (ADR-016). The content verdict above stays authoritative for
-    // duplicate detection and for the REJECT band; the recipe body and the referenced names are
+    // the refusal band and for duplicate detection; the recipe body and the referenced names are
     // additional, independent checks. A component that needs review escalates the post, but never
-    // downgrades a REJECTED verdict.
+    // downgrades a refusal.
     ComponentOutcome recipe = scoreAttachedRecipes(post);
-    if (recipe.needsReview() && verdict.flag() != PostFlag.REJECTED) {
+    if (recipe.needsReview() && verdict.outcome() != FilterOutcome.FAIL) {
       verdict = escalateToReview(verdict, recipe);
     }
 
     // Dish and ingredient names carry no score: an unreviewed name is forwarded on its state
     // alone, because a member introduced it and no admin has approved it yet (BR-DISH-001).
     List<String> pendingNames = pendingComponentNames(post);
-    if (!pendingNames.isEmpty() && verdict.flag() != PostFlag.REJECTED) {
+    if (!pendingNames.isEmpty() && verdict.outcome() != FilterOutcome.FAIL) {
       verdict = escalateToReview(verdict, new ComponentOutcome(true, pendingNames));
     }
 
-    // The vector was computed inside the filter call; returning it keeps one embedding per
-    // publish. Only stored when the post was not rejected: a rejected post is never a comparison
-    // target, so its vector has no reader.
+    // The vector was computed inside the filter call; returning it keeps one embedding per run.
     float[] embedding = result.embedding();
 
     Optional<NearestMatch> duplicate =
-        verdict.flag() == PostFlag.REJECTED
+        verdict.outcome() == FilterOutcome.FAIL
             ? Optional.empty()
             : duplicateDetector.findDuplicate(embedding, post.getId());
 
     if (duplicate.isPresent()) {
-      NearestMatch match = duplicate.get();
-      applyDuplicate(post, match);
-      // Deliberately not stored: this post is unpublished, and only published posts are targets.
+      applyDuplicate(post, duplicate.get());
     } else {
       apply(post, verdict);
-      if (verdict.flag() != PostFlag.REJECTED) {
-        storeEmbedding(post.getId(), embedding);
-      }
     }
+
+    // Stored for every outcome, including refusals and duplicates: the lookup only compares
+    // published posts, and an admin may still publish this one later - at which point it must be
+    // able to act as a comparison target. Duplicate detection runs before this call, so a post can
+    // never match itself.
+    storeEmbedding(post.getId(), embedding);
     postRepository.save(post);
   }
 
@@ -178,13 +200,12 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
    * Applies the "filter unavailable" outcome: never visible, never attributed to the model's
    * judgement. Recorded as a system action ({@code actor_id} null) with the classified cause.
    *
-   * <p>The reason goes to {@code moderation_log} rather than a new {@code post.flag} value, so an
-   * operator can tell "the filter could not run" from "the filter judged this" without widening the
-   * verdict axis ADR-011 keeps narrow.
+   * <p>The post is held with {@code FILTER_SKIPPED} rather than {@code FILTER_FAILED} or a new flag
+   * value, so an operator can tell "the filter could not run" from "the filter judged this" without
+   * widening the blocker vocabulary (ADR-020, ADR-023).
    */
   private void applyFilterUnavailable(Post post, EmbeddingClientException e) {
-    post.setFlag(PostFlag.NEEDS_REVIEW);
-    post.setStatus(PostStatus.unpublished);
+    block(post, PostFlag.FILTER_SKIPPED, describeFailure(e));
     moderationLogRepository.save(
         ModerationLog.builder()
             .action(FILTER_UNAVAILABLE)
@@ -204,7 +225,7 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   /**
    * A message that was abandoned before delivery (permanent rejection or a retry that could not fit
    * inside max age) still owes the post a terminal state — the member's post must not stay {@code
-   * PENDING} and invisible forever (ADR-020, FR-011).
+   * processing} with no reason and invisible forever (ADR-020, FR-011).
    */
   @Override
   @Transactional
@@ -221,16 +242,15 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
       return;
     }
     Post post = found.get();
-    if (post.getFlag() != PostFlag.PENDING) {
-      // Already settled by an earlier attempt; never overwrite a real verdict.
+    if (post.getStatus() != PostStatus.processing || post.getFlag() != null) {
+      // Already settled by an earlier attempt, withdrawn, or deleted; never overwrite a real state.
       return;
     }
     String reason =
         cause instanceof EmbeddingClientException embedding
             ? describeFailure(embedding)
             : "FILTER_UNAVAILABLE: " + cause.getMessage();
-    post.setFlag(PostFlag.NEEDS_REVIEW);
-    post.setStatus(PostStatus.unpublished);
+    block(post, PostFlag.FILTER_SKIPPED, reason);
     postRepository.save(post);
     moderationLogRepository.save(
         ModerationLog.builder()
@@ -240,49 +260,68 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
             .reason(reason)
             .build());
     log.error(
-        "Outbound message {} was abandoned; post {} moved to NEEDS_REVIEW: {}",
+        "Outbound message {} was abandoned; post {} is held as FILTER_SKIPPED: {}",
         message.getId(),
         post.getId(),
         reason);
   }
 
+  /** Applies one outcome: a pass publishes and clears the flag, anything else holds the post. */
   private static void apply(Post post, FilterVerdict verdict) {
-    post.setFlag(verdict.flag());
-    switch (verdict.flag()) {
-      case PASSED -> {
+    switch (verdict.outcome()) {
+      case PASS -> {
         post.setStatus(PostStatus.published);
+        post.setFlag(null);
+        post.setFlagDetail(null);
         if (post.getPublishedAt() == null) {
           post.setPublishedAt(Instant.now());
         }
         log.info("Content filter passed post {} (score {})", post.getId(), verdict.score());
       }
-      case REJECTED -> {
-        post.setStatus(PostStatus.unpublished);
-        log.warn("Content filter rejected post {}: {}", post.getId(), verdict.reasons());
-      }
-      case NEEDS_REVIEW -> {
-        post.setStatus(PostStatus.unpublished);
+      case FAIL, UNCERTAIN -> {
+        block(post, PostFlag.FILTER_FAILED, scoreDetail(verdict.score()));
         log.warn(
-            "Content filter needs review for post {} (score between bands: {})",
+            "Content filter did not pass post {} (outcome {}, score {}): {}",
             post.getId(),
-            verdict.score());
+            verdict.outcome(),
+            verdict.score(),
+            verdict.reasons());
       }
-      default -> throw new IllegalStateException("Unexpected filter verdict: " + verdict.flag());
     }
   }
 
   /**
-   * Routes a near-duplicate to admin review (ADR-015). Both ids and the similarity are logged so an
-   * admin can see which post it resembles — without them the flag is unactionable.
+   * Routes a near-duplicate to admin review (ADR-015). The matched post id and the similarity are
+   * both recorded — the id in {@code flag_detail} so the admin can open the other post, the
+   * similarity in the log.
    */
   private static void applyDuplicate(Post post, NearestMatch match) {
-    post.setFlag(PostFlag.DUPLICATE);
-    post.setStatus(PostStatus.unpublished);
+    block(post, PostFlag.SIMILAR_CONTENT, "SIMILAR_CONTENT_POST_" + match.postId());
     log.warn(
         "Content filter flagged post {} as a near-duplicate of published post {} (similarity {})",
         post.getId(),
         match.postId(),
         match.similarity());
+  }
+
+  /** Records the blocker and keeps the post in the review queue. */
+  private static void block(Post post, PostFlag flag, String detail) {
+    post.setStatus(PostStatus.processing);
+    post.setFlag(flag);
+    post.setFlagDetail(truncate(detail));
+  }
+
+  private static String scoreDetail(double score) {
+    return String.format(Locale.ROOT, "score=%.3f", score);
+  }
+
+  private static String truncate(String detail) {
+    if (detail == null) {
+      return null;
+    }
+    return detail.length() <= FLAG_DETAIL_MAX_LENGTH
+        ? detail
+        : detail.substring(0, FLAG_DETAIL_MAX_LENGTH);
   }
 
   private ContentFilterPayload parse(OutboundMessage message) {
@@ -388,7 +427,7 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   private static FilterVerdict escalateToReview(FilterVerdict verdict, ComponentOutcome component) {
     List<String> reasons = new ArrayList<>(verdict.reasons());
     reasons.addAll(component.reasons());
-    return new FilterVerdict(PostFlag.NEEDS_REVIEW, verdict.score(), reasons);
+    return new FilterVerdict(FilterOutcome.UNCERTAIN, verdict.score(), reasons);
   }
 
   private static String formatReason(String code, double score) {
