@@ -166,7 +166,7 @@ class MenuOverlapConstraintIntegrationTest {
 
   private boolean overlapsScheduled(User owner, Menu candidate) {
     return menuRepository
-        .existsByUserIdAndStatusAndIdNotAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+        .existsByUserIdAndStatusAndIdNotAndDeletedAtIsNullAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
             owner.getId(),
             MenuStatus.scheduled,
             candidate.getId(),

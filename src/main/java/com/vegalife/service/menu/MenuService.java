@@ -99,7 +99,7 @@ public class MenuService {
   public MenuDetailResponse updateMenu(UUID userId, UUID menuId, UpdateMenuRequest request) {
     Menu menu =
         menuRepository
-            .findByIdAndUserId(menuId, userId)
+            .findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
             .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
     if (menu.getStatus() == MenuStatus.cancelled || menu.getStatus() == MenuStatus.completed) {
       throw new MenuNotEditableException("Only drafted or scheduled menus can be updated");
@@ -163,7 +163,7 @@ public class MenuService {
     if (menuId != null) {
       Menu menu =
           menuRepository
-              .findByIdAndUserId(menuId, userId)
+              .findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
               .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
       return List.of(toMealPlan(menu, detailsForMenus(List.of(menu)), userId));
     }
@@ -209,7 +209,7 @@ public class MenuService {
     MenuStatus target = parseTargetStatus(targetStatus);
     Menu menu =
         menuRepository
-            .findByIdAndUserId(menuId, userId)
+            .findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
             .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
     if (!isLegalTransition(menu.getStatus(), target)) {
       throw new InvalidMenuTransitionException(
@@ -217,7 +217,7 @@ public class MenuService {
     }
     if (target == MenuStatus.scheduled
         && menuRepository
-            .existsByUserIdAndStatusAndIdNotAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            .existsByUserIdAndStatusAndIdNotAndDeletedAtIsNullAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
                 userId, MenuStatus.scheduled, menuId, menu.getStartDate(), menu.getEndDate())) {
       throw new MenuOverlapException("Another scheduled menu already overlaps this week");
     }

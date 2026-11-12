@@ -12,15 +12,20 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface MenuRepository extends JpaRepository<Menu, UUID>, JpaSpecificationExecutor<Menu> {
 
-  /** BR-MENU-001: a menu is visible only to its owner. */
-  Optional<Menu> findByIdAndUserId(UUID id, UUID userId);
+  /**
+   * BR-MENU-001 / BR-MENU-008: a menu is visible only to its owner, and a deleted menu is
+   * indistinguishable from a missing one — the caller gets a 404 either way.
+   */
+  Optional<Menu> findByIdAndUserIdAndDeletedAtIsNull(UUID id, UUID userId);
 
   /**
    * BR-MENU-003 / BR-MENU-007: whether the user already has another scheduled menu whose window
    * overlaps {@code [startDate, endDate]} inclusively. Used as the scheduling pre-check so an
    * overlapping schedule is a clear 409 rather than V30's exclusion constraint surfacing as a raw
-   * persistence error.
+   * persistence error. BR-MENU-008: a deleted menu no longer occupies its week, so it cannot block
+   * a schedule.
    */
-  boolean existsByUserIdAndStatusAndIdNotAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
-      UUID userId, MenuStatus status, UUID id, LocalDate startDate, LocalDate endDate);
+  boolean
+      existsByUserIdAndStatusAndIdNotAndDeletedAtIsNullAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+          UUID userId, MenuStatus status, UUID id, LocalDate startDate, LocalDate endDate);
 }

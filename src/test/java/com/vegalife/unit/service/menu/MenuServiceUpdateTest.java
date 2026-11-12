@@ -60,7 +60,7 @@ class MenuServiceUpdateTest {
   @Test
   void updateMenuReplacesDaysAndUpdatesFreeTextFieldsOnADraft() {
     List<MenuDayRequest> week = newWeek();
-    when(menuRepository.findByIdAndUserId(MENU_ID, USER))
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
         .thenReturn(Optional.of(menu(MenuStatus.drafted)));
     when(menuRepository.save(any(Menu.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(dishRepository.findAllById(any())).thenReturn(dishesOf(week));
@@ -87,7 +87,7 @@ class MenuServiceUpdateTest {
   @Test
   void updateMenuAllowsEditingAScheduledMenu() {
     List<MenuDayRequest> week = newWeek();
-    when(menuRepository.findByIdAndUserId(MENU_ID, USER))
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
         .thenReturn(Optional.of(menu(MenuStatus.scheduled)));
     when(menuRepository.save(any(Menu.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(dishRepository.findAllById(any())).thenReturn(dishesOf(week));
@@ -105,7 +105,8 @@ class MenuServiceUpdateTest {
     List<MenuDayRequest> week = newWeek();
     Menu existing = menu(MenuStatus.drafted);
     existing.setNotes("original");
-    when(menuRepository.findByIdAndUserId(MENU_ID, USER)).thenReturn(Optional.of(existing));
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
+        .thenReturn(Optional.of(existing));
     when(menuRepository.save(any(Menu.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(dishRepository.findAllById(any())).thenReturn(dishesOf(week));
     when(menuDetailRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -119,7 +120,8 @@ class MenuServiceUpdateTest {
   @Test
   void updateMenuRejectsCancelledAndCompletedMenus() {
     for (MenuStatus status : List.of(MenuStatus.cancelled, MenuStatus.completed)) {
-      when(menuRepository.findByIdAndUserId(MENU_ID, USER)).thenReturn(Optional.of(menu(status)));
+      when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
+          .thenReturn(Optional.of(menu(status)));
 
       assertThatThrownBy(
               () ->
@@ -134,7 +136,8 @@ class MenuServiceUpdateTest {
 
   @Test
   void updateMenuForeignOrUnknownIdIsNotFound() {
-    when(menuRepository.findByIdAndUserId(MENU_ID, USER)).thenReturn(Optional.empty());
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
+        .thenReturn(Optional.empty());
 
     assertThatThrownBy(
             () ->
@@ -147,7 +150,7 @@ class MenuServiceUpdateTest {
 
   @Test
   void updateMenuPersistsNothingWhenRevalidationFails() {
-    when(menuRepository.findByIdAndUserId(MENU_ID, USER))
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(MENU_ID, USER))
         .thenReturn(Optional.of(menu(MenuStatus.drafted)));
     doThrow(new MenuValidationException("a menu must reference at least 5 distinct dishes"))
         .when(menuValidator)
