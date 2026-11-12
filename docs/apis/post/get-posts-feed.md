@@ -78,7 +78,7 @@ Item fields follow the existing `PostListResponse` shape used by `GET /api/posts
 
 ## Business Rules
 
-- BR-POST-010: only `published`, non-deleted posts are public; drafts, `processed`, `unpublished`, and `hidden` posts never appear (BR-CONTENT-003 keeps them private to owner and Administrators). A filter-rejected post is `unpublished` (BR-FILTER-008).
+- BR-POST-010: only `published`, non-deleted posts are public; `drafted`, `processing` (the post is awaiting a filter verdict or an admin decision), and `unpublished` posts never appear (BR-CONTENT-003 keeps them private to owner and Administrators). The content filter never unpublishes a post; it holds it at `processing` with a blocker for an admin (BR-FILTER-008).
 - BR-POST-003 pagination bounds apply: page `0`, size `20`, `size` 1–100.
 - Soft-deleted posts (`deleted_at IS NOT NULL`) are never returned.
 - `rejectionReason` is never populated on the feed: it is owner-scoped and this endpoint has no owner. A published post carrying a stale reason still returns `null`.

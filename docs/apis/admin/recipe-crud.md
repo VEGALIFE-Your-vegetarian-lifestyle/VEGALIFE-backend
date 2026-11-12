@@ -169,8 +169,8 @@ of decisions stays in `moderation_log`.
   (BR-DISH-001, ADR-016).
 - Approving a recipe approves its pending dish and ingredient names, but never resurrects
   a rejected one.
-- The recipe score escalates a passing post to `NEEDS_REVIEW` but never downgrades a
-  `REJECTED` verdict.
+- A recipe score below its threshold holds an otherwise-passing post at `processing` with
+  `flag = FILTER_FAILED` for an admin, but never downgrades a post the filter already refused.
 - Every real change writes a `moderation_log` row (`DELETE_RECIPE`,
   `APPROVE_COMPONENT`, `REJECT_COMPONENT`).
 

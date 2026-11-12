@@ -37,15 +37,15 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-001 | Post Ownership Comes from Authentication | Active | 2026-09-26 |
 | BR-POST-002 | Users List Only Their Non-Deleted Posts | Active | 2026-09-26 |
 | BR-POST-003 | User Post Lists Use Bounded Newest-First Pagination | Active | 2026-09-26 |
-| BR-POST-004 | New Posts Start in the Created State | Active | 2026-09-26 |
+| BR-POST-004 | New Posts Start as Drafts, and Submitting Parks Them in Processing | Active | 2026-11-13 |
 | BR-POST-005 | Post Title and Content Are Required | Active | 2026-09-26 |
 | BR-POST-006 | Users Edit Only Their Own Non-Deleted Posts | Active | 2026-09-27 |
 | BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-09-27 |
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
-| BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
-| BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
+| BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Retired (ADR-023) | 2026-11-13 |
+| BR-POST-010 | Only Published Posts Are Public | Active | 2026-11-13 |
 | BR-POST-011 | Single Post Detail Excludes Only Deleted Posts, Not Ownership | Active | 2026-10-10 |
-| BR-POST-012 | Only Administrators Publish or Unpublish a Post as a Moderation Action | Active | 2026-10-10 |
+| BR-POST-012 | Only Administrators Approve or Reject a Submitted Post | Active | 2026-11-13 |
 | BR-POST-013 | Only Approved Recipes May Be Attached to a Post | Active | 2026-11-12 |
 | BR-ADMIN-002 | Every Administrator Content-Moderation Action Is Logged | Active | 2026-10-10 |
 | BR-COMMENT-001 | Comment Creation Requires Authentication; Reading Is Public | Active | 2026-10-11 |
@@ -63,12 +63,12 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MEDIA-008 | Confirmation Trusts Only Provider Read-Back | Active | 2026-09-30 |
 | BR-MEDIA-009 | Media Deletion Is Owner-or-Admin, Idempotent, and Asynchronous | Active | 2026-10-03 |
 | BR-MEDIA-010 | Deleted Media Are Invisible on Every Read Path | Active | 2026-10-03 |
-| BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-09-30 |
-| BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-09-30 |
-| BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-09-30 |
-| BR-FILTER-007 | A Passed Filter Publishes the Post | Active | 2026-09-30 |
-| BR-FILTER-008 | A Rejected or Uncertain Filter Unpublishes the Post | Active | 2026-10-10 |
-| BR-FILTER-009 | Posts Stuck Pending Are Unpublished After 24 Hours | Active | 2026-10-10 |
+| BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-11-13 |
+| BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-11-13 |
+| BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-11-13 |
+| BR-FILTER-007 | A Passed Filter Publishes the Post | Active | 2026-11-13 |
+| BR-FILTER-008 | A Failed or Uncertain Filter Holds the Post for an Admin | Active | 2026-11-13 |
+| BR-FILTER-009 | Posts Stuck in Flight Are Marked Filter-Skipped After 24 Hours | Active | 2026-11-13 |
 | BR-RECP-001 | Recipe Ownership Comes from Authentication | Active | 2026-10-01 |
 | BR-RECP-002 | Ingredient and Dish Names Are Unique Case-Insensitively | Active | 2026-10-01 |
 | BR-RECP-003 | Recipe Name, Instructions, Servings, and Dish Are Required | Active | 2026-11-05 |

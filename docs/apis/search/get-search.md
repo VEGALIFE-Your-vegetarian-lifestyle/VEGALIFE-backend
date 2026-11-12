@@ -83,7 +83,7 @@ None. Any caller, including guests, may search.
 
 ## Business Rules
 
-- Only published, non-deleted posts are searchable — drafts, unpublished, hidden, and moderated-out posts never surface (same visibility floor as the public feed, BR-POST-010). Recipes are searchable whenever not soft-deleted; a recipe has no publish state of its own.
+- Only published, non-deleted posts are searchable — drafts, posts awaiting a decision (`processing`), and rejected (`unpublished`) posts never surface (same visibility floor as the public feed, BR-POST-010). Recipes are searchable whenever not soft-deleted; a recipe has no publish state of its own.
 - Matching is a case-insensitive substring match (`ILIKE`), not semantic/full-text search: post/video match on `title` or `content`; recipe matches on `name`, `description`, or `instructions`.
 - "Relevance" is a two-tier rank: a title/name match outranks a body-only match; within the same tier, newest first. There is no term-frequency or semantic scoring.
 - `type=post` and `type=video` both query the same underlying post rows; `type=video` keeps only posts with at least one `video/*` media, `type=post` keeps the rest.
