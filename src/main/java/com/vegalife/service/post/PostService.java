@@ -39,6 +39,7 @@ import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -322,6 +323,39 @@ public class PostService {
     recipeRepository.saveAll(requested);
 
     return toResponse(post, recipeIds, actorId);
+  }
+
+  /**
+   * Shapes the posts behind a saved-items page (BR-SAVED-002).
+   *
+   * <p>Separate from the saved-item query on purpose: that query decides <em>which</em> ids are in
+   * the page and in what order, and this one decides what a post looks like on the wire. Keeping
+   * them apart means the saved list cannot drift from the feed's post shape.
+   *
+   * <p>Same as the feed, {@code recipeIds} is empty here — only the single-post and attach-recipe
+   * endpoints populate it. Avatars and the author-only rejection reason are resolved in one batch,
+   * never per row.
+   */
+  @Transactional(readOnly = true)
+  public Map<UUID, PostListResponse> readPublishedPostsByIds(
+      UUID viewerId, Collection<UUID> postIds) {
+    if (postIds == null || postIds.isEmpty()) {
+      return Map.of();
+    }
+    List<Post> posts =
+        postRepository.findWithAuthorByIdIn(postIds).stream()
+            .filter(post -> post.getDeletedAt() == null)
+            .filter(post -> post.getStatus() == PostStatus.published)
+            .toList();
+    if (posts.isEmpty()) {
+      return Map.of();
+    }
+    List<PostListResponse> responses = posts.stream().map(postMapper::toListResponse).toList();
+    applyAuthorAvatars(responses);
+    applyRejectionReason(responses, posts, viewerId);
+    Map<UUID, PostListResponse> byId = new HashMap<>();
+    responses.forEach(response -> byId.put(response.getId(), response));
+    return byId;
   }
 
   /** Owner sees own posts; an Administrator sees every non-deleted post. */

@@ -90,6 +90,12 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |
 | `recipes/get-recipes-me.md` | `GET /api/recipes/me` | List own recipes, newest first, unpaginated (authenticated) |
 | `recipes/get-recipes-recipeid.md` | `GET /api/recipes/{recipeId}` | Read one own recipe by id; another member's recipe answers 404 (authenticated; owner only) |
+| `saved/get-saved-posts.md` | `GET /api/saved/posts` | List own saved posts, newest save first, visible posts only (authenticated) |
+| `saved/post-saved-posts-postid.md` | `POST /api/saved/posts/{postId}` | Save a published post; idempotent (authenticated) |
+| `saved/delete-saved-posts-postid.md` | `DELETE /api/saved/posts/{postId}` | Unsave a post; idempotent (authenticated) |
+| `saved/get-saved-recipes.md` | `GET /api/saved/recipes` | List own saved recipes, newest save first, approved recipes only (authenticated) |
+| `saved/post-saved-recipes-recipeid.md` | `POST /api/saved/recipes/{recipeId}` | Save an approved recipe; idempotent (authenticated) |
+| `saved/delete-saved-recipes-recipeid.md` | `DELETE /api/saved/recipes/{recipeId}` | Unsave a recipe; idempotent (authenticated) |
 | `search/get-search.md` | `GET /api/search` | Keyword search across posts, videos, and recipes (public) |
 | `subscriptions/get-subscriptions.md` | `GET /api/subscriptions` | List active AI plans with request quotas, descriptions, and price (public) |
 | `subscriptions/post-acquire.md` | `POST /api/subscriptions/acquire` | Claim a free plan or start a checkout for a paid plan (authenticated) |

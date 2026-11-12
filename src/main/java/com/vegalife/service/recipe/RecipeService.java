@@ -22,9 +22,12 @@ import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -135,6 +138,36 @@ public class RecipeService {
           .fiberG(nutrition.fiberG());
     }
     return builder.build();
+  }
+
+  /**
+   * Shapes the recipes behind a saved-items page (BR-SAVED-002).
+   *
+   * <p>Only approved, non-deleted recipes are returned: a saved recipe that is awaiting review or
+   * was rejected is invisible everywhere else, so it must not reappear through this list. Same
+   * mapping as {@code GET /api/recipes/me}, so a saved recipe and an authored one cannot describe
+   * themselves differently.
+   *
+   * <p>One batched ingredient lookup per recipe is unavoidable here — the response carries each
+   * line — but the ingredient rows are resolved inside the single read transaction, so a page of N
+   * saved recipes costs a bounded number of queries, not a per-row round trip to the database.
+   */
+  @Transactional(readOnly = true)
+  public Map<UUID, RecipeResponse> readApprovedRecipesByIds(Collection<UUID> recipeIds) {
+    if (recipeIds == null || recipeIds.isEmpty()) {
+      return Map.of();
+    }
+    List<Recipe> recipes =
+        recipeRepository.findByIdInAndDeletedAtIsNull(recipeIds).stream()
+            .filter(recipe -> recipe.getModerationStatus() == ModerationStatus.APPROVED)
+            .toList();
+    Map<UUID, RecipeResponse> byId = new HashMap<>();
+    for (Recipe recipe : recipes) {
+      byId.put(
+          recipe.getId(),
+          toResponse(recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe)));
+    }
+    return byId;
   }
 
   private RecipeResponse toResponse(

@@ -659,6 +659,32 @@ _Description: Curated association between a dish and the ingredients that normal
 
 ---
 
+## Table 26: Saved_Item
+
+_Description: A member's saved post or saved recipe (V52 / BR-SAVED-001, BR-SAVED-002). One row targets exactly one thing — `post_id` or `recipe_id`, never both and never neither — so a single bookmark table backs both saved lists while every target stays a real foreign key. Saves are private to the member and never counted as a public metric._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| id | UUID | PK | No | Unique identifier for the save |
+| user_id | UUID | FK | No | References User(id) — the member who saved the item |
+| post_id | UUID | FK | Yes | References Post(id); null when the save targets a recipe |
+| recipe_id | UUID | FK | Yes | References Recipe(id); null when the save targets a post |
+| saved_at | TIMESTAMPTZ | - | No | Timestamp of the first save of this target by this member |
+
+**Constraints:**
+- PK: (id)
+- CHECK `saved_item_exactly_one_target`: exactly one of `post_id`, `recipe_id` is non-null
+- FK: user_id REFERENCES `"user"`(id) ON DELETE CASCADE
+- FK: post_id REFERENCES post(id) ON DELETE CASCADE
+- FK: recipe_id REFERENCES recipe(id) ON DELETE CASCADE
+
+**Indexes:**
+- `uq_saved_item_post` UNIQUE ON (user_id, post_id) WHERE post_id IS NOT NULL
+- `uq_saved_item_recipe` UNIQUE ON (user_id, recipe_id) WHERE recipe_id IS NOT NULL
+- `idx_saved_item_user_saved_at` ON (user_id, saved_at DESC)
+
+---
+
 ## Relationship Summary
 
 - **User** 1:N **UserProfile** (1:1 via unique FK)
@@ -677,6 +703,7 @@ _Description: Curated association between a dish and the ingredients that normal
 - **Post** N:1 **Location** (tagged location)
 - **Comment** N:1 **Post**, N:1 **Comment** (parent)
 - **Vote** N:1 **Post**, N:1 **User** (unique per user+post)
+- **SavedItem** N:1 **User**, and N:1 **Post** *or* N:1 **Recipe** (exactly one target; unique per user+target)
 - **Recipe** N:1 **Dish** (variations of a canonical dish)
 - **Recipe** N:1 **User** (author)
 - **Recipe** M:N **Ingredient** (via Recipe_Ingredient)
