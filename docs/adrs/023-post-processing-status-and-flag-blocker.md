@@ -176,13 +176,20 @@ its own `FilterOutcome` (`PASS`, `FAIL`, `UNCERTAIN`). Writing
 - **A one-time, irreversible data rewrite.** `V56` maps `hidden` and
   machine-held `unpublished` rows; the mapping is recorded in the migration.
 - **`created` is no longer a status value.** Frontend clients that compared
-  against it must move to `drafted`; documented in
-  `docs/apis/post/post-status-lifecycle.md`.
+  against it must move to `drafted`; the transition table and the response
+  fields are documented in `docs/apis/post/patch-posts-postid.md` and
+  `docs/apis/post/post-posts.md`.
 
 ## Verification
 
-- `V56` applies on a fresh database and on one that held `created`,
-  `processed`, `hidden` and every legacy flag value.
+- `V56` applies on a fresh database: every integration context runs Flyway
+  from empty, so the constraints and the new columns are proven. The
+  legacy-row backfill (`created`/`processed`/`hidden` and the old flag values)
+  is **not** covered by an automated test — it needs a database that predates
+  the migration. It was reviewed statement by statement against the value sets
+  the earlier migrations (`V19`, `V31`, `V36`, `V38`, `V51`) could have left
+  behind, and its pre-flight query is in the migration header so an operator
+  can inspect the affected rows before applying it.
 - A filter pass publishes and clears `flag`; a refusal or an outage leaves
   `processing` with the matching flag and never sets `unpublished`.
 - Editing a published post moves it to `processing`; withdrawing while a run
