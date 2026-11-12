@@ -1,6 +1,5 @@
 package com.vegalife.service.filter;
 
-import com.vegalife.enums.post.PostFlag;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -8,9 +7,9 @@ import org.springframework.stereotype.Service;
 
 /**
  * Runs the filter pipeline for one post body: semantic relevance scoring against the committed
- * centroids (FR-005/FR-006). Maps the resulting band to the post flag: PASS → PASSED, REJECT →
- * REJECTED, REVIEW → NEEDS_REVIEW, carrying the score and reason codes. Never returns {@link
- * PostFlag#PENDING}; embedding failures propagate so the queue layer can retry.
+ * centroids (FR-005/FR-006). Maps the resulting band to a {@link FilterOutcome}: PASS, FAIL (REJECT
+ * band) or UNCERTAIN (REVIEW band), carrying the score and reason codes. Embedding failures
+ * propagate so the queue layer can retry.
  */
 @Service
 public class ContentFilterService {
@@ -24,7 +23,7 @@ public class ContentFilterService {
   }
 
   /**
-   * Filters a single content body and returns the verdict with flag, score, reasons and the
+   * Filters a single content body and returns the verdict with outcome, score, reasons and the
    * embedding it scored.
    *
    * <p>The embedding is returned rather than recomputed by the caller: duplicate detection needs
@@ -32,22 +31,22 @@ public class ContentFilterService {
    * provider cost for no benefit.
    *
    * @param content the post body (title/content already composed by the caller)
-   * @return the verdict; never {@link PostFlag#PENDING}
+   * @return the verdict; never null
    */
   public FilterResult filter(String content) {
     float[] embedding = embeddingModel.embed(content);
     RelevanceScore relevance = relevanceScorer.score(embedding);
     FilterVerdict verdict =
         switch (relevance.band()) {
-          case PASS -> new FilterVerdict(PostFlag.PASSED, relevance.score(), List.of());
+          case PASS -> new FilterVerdict(FilterOutcome.PASS, relevance.score(), List.of());
           case REJECT ->
               new FilterVerdict(
-                  PostFlag.REJECTED,
+                  FilterOutcome.FAIL,
                   relevance.score(),
                   List.of(formatReason("RELEVANCE_LOW", relevance.score())));
           case REVIEW ->
               new FilterVerdict(
-                  PostFlag.NEEDS_REVIEW,
+                  FilterOutcome.UNCERTAIN,
                   relevance.score(),
                   List.of(formatReason("RELEVANCE_REVIEW", relevance.score())));
         };

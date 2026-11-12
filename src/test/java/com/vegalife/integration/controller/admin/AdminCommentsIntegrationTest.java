@@ -418,7 +418,7 @@ class AdminCommentsIntegrationTest {
             .title(title)
             .content("Post content")
             .rawContent(com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
-            .status(PostStatus.created)
+            .status(PostStatus.drafted)
             .viewCount(0)
             .build());
   }

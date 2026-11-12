@@ -6,7 +6,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vegalife.enums.post.MediaStatus;
-import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
@@ -102,7 +101,6 @@ class AdminVideoControllerIntegrationTest {
                     com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .media(Set.of(withPost))
                 .status(PostStatus.published)
-                .flag(PostFlag.PASSED)
                 .viewCount(3)
                 .build());
     createVideo(uploader, "image/png", MediaStatus.succeed, 300);

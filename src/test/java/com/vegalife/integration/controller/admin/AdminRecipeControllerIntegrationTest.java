@@ -5,7 +5,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.Unit;
@@ -122,7 +121,6 @@ class AdminRecipeControllerIntegrationTest {
                     com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .categories(new HashSet<>(Set.of(recipes)))
                 .status(PostStatus.published)
-                .flag(PostFlag.PASSED)
                 .viewCount(3)
                 .build());
     Recipe tofuBowl = createRecipe(author2, "Aardvark tofu bowl", null, Set.of(linkedPost), true);

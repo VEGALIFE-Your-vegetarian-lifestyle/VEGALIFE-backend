@@ -20,6 +20,7 @@ public interface PostMapper {
   @Mapping(target = "media", ignore = true)
   @Mapping(target = "status", ignore = true)
   @Mapping(target = "flag", ignore = true)
+  @Mapping(target = "flagDetail", ignore = true)
   @Mapping(target = "viewCount", ignore = true)
   @Mapping(target = "publishedAt", ignore = true)
   @Mapping(target = "rejectionReason", ignore = true)

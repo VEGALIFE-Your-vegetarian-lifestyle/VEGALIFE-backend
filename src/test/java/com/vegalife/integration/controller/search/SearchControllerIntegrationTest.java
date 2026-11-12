@@ -145,7 +145,7 @@ class SearchControllerIntegrationTest {
 
   @Test
   void search_draftPostIsNeverReturned() throws Exception {
-    createPost("Tofu draft", "Not published yet.", PostStatus.created);
+    createPost("Tofu draft", "Not published yet.", PostStatus.drafted);
 
     mockMvc
         .perform(get("/api/search").param("q", "tofu"))

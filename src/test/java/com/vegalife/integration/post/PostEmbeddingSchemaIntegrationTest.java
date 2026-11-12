@@ -12,6 +12,7 @@ import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,9 +30,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * Proves the V35 and V36 schema effects on a real Postgres: the pgvector extension installs, the
  * {@code post_embedding} table and its cosine HNSW index exist, the store accepts a 768-dimension
- * vector, and {@code post.flag} admits the duplicate verdict. This is the gate that would have
- * caught the image swap being incomplete, since Flyway runs here just as it does in the other 40
- * integration contexts.
+ * vector, and {@code post.flag} admits the ADR-023 blocker vocabulary only while a post is held.
+ * This is the gate that would have caught the image swap being incomplete, since Flyway runs here
+ * just as it does in the other 40 integration contexts.
  */
 @Testcontainers
 @SpringBootTest
@@ -131,14 +132,31 @@ class PostEmbeddingSchemaIntegrationTest {
   }
 
   @Test
-  void postFlagAdmitsTheDuplicateVerdict() {
+  void heldPostAdmitsTheBlockerVocabulary() {
     Post post = publishablePost();
-    post.setFlag(PostFlag.DUPLICATE);
+    post.setStatus(PostStatus.processing);
+    post.setFlag(PostFlag.SIMILAR_CONTENT);
+    post.setFlagDetail("SIMILAR_CONTENT_POST_" + UUID.randomUUID());
 
     postRepository.saveAndFlush(post);
 
     Post reloaded = postRepository.findById(post.getId()).orElseThrow();
-    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.DUPLICATE);
+    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.SIMILAR_CONTENT);
+    assertThat(reloaded.getFlagDetail()).startsWith("SIMILAR_CONTENT_POST_");
+  }
+
+  /**
+   * ADR-023's invariant lives in the schema, not only in the services: a blocker describes a post
+   * that is waiting for a decision, so the database refuses one on a post that already has a
+   * terminal status.
+   */
+  @Test
+  void aFlagOnAPostOutsideProcessingIsRejectedByTheDatabase() {
+    Post post = publishablePost();
+    post.setFlag(PostFlag.FILTER_FAILED);
+
+    assertThatThrownBy(() -> postRepository.saveAndFlush(post))
+        .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   /** A persisted post in the default state: no flag, so the insert does not depend on V36. */
@@ -161,7 +179,7 @@ class PostEmbeddingSchemaIntegrationTest {
             .content("Món chay đơn giản cho bữa tối.")
             .rawContent(OBJECT_MAPPER.createObjectNode().put("type", "doc"))
             .viewCount(0)
-            .status(PostStatus.created)
+            .status(PostStatus.drafted)
             .build());
   }
 

@@ -5,7 +5,6 @@ import com.vegalife.dto.request.post.PostListRequest;
 import com.vegalife.dto.request.post.PostMediaAttachRequest;
 import com.vegalife.dto.request.post.PostRecipeAttachRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
-import com.vegalife.dto.request.post.PostVisibilityRequest;
 import com.vegalife.dto.request.post.RelatedPostsRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.dto.response.post.RelatedPostResponse;
@@ -106,18 +105,6 @@ public class PostController {
     PostListResponse post =
         postService.attachRecipes(userId, isAdmin(authentication), postId, request.getRecipeIds());
     return ResponseEntity.ok(ApiResponse.success(post, "Recipes attached successfully"));
-  }
-
-  @PatchMapping("/{postId}/visibility")
-  @PreAuthorize("hasRole('ADMIN')")
-  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
-  public ResponseEntity<ApiResponse<PostListResponse>> updateVisibility(
-      @AuthenticationPrincipal UUID adminId,
-      @PathVariable UUID postId,
-      @Valid @RequestBody PostVisibilityRequest request) {
-    PostListResponse post = postService.updateVisibility(adminId, postId, request.getHidden());
-    String message = request.getHidden() ? "Post hidden successfully" : "Post is visible again";
-    return ResponseEntity.ok(ApiResponse.success(post, message));
   }
 
   @DeleteMapping("/{postId}")

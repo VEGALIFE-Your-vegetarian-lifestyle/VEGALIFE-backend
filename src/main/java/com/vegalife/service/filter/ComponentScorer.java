@@ -1,6 +1,5 @@
 package com.vegalife.service.filter;
 
-import com.vegalife.enums.post.PostFlag;
 import java.util.Optional;
 
 /**
@@ -10,13 +9,15 @@ import java.util.Optional;
  * <p>Component-level verification (ADR-016) scores two things — the post body and the recipe body —
  * against <em>different</em> centroid pairs. Rather than let each caller re-implement the banding,
  * this service holds all four threshold values ({@code app.filter.accept-threshold} / {@code
- * reject-threshold} for content, {@code app.filter.recipe.*} for the recipe body) and maps a score
- * to a verdict. The arithmetic itself is not duplicated: {@link EmbeddingRelevanceScorer} remains
- * the only implementation of the cosine/centering formula, and is constructed twice with different
- * centroid pairs.
+ * app.filter.reject-threshold} for content, {@code app.filter.recipe.*} for the recipe body) and
+ * maps a score to a verdict. The arithmetic itself is not duplicated: {@link
+ * EmbeddingRelevanceScorer} remains the only implementation of the cosine/centering formula, and is
+ * constructed twice with different centroid pairs.
  *
- * <p>A component that could not be scored is reported as {@link PostFlag#NEEDS_REVIEW} with an
- * empty score rather than as a pass. Content that nobody has looked at must not publish itself.
+ * <p>A component that could not be scored is reported as needing review rather than as a pass.
+ * Content that nobody has looked at must not publish itself. The result deliberately does not carry
+ * a {@link com.vegalife.enums.post.PostFlag} (ADR-023): a component decision is not a stored
+ * reason.
  */
 public interface ComponentScorer {
 
@@ -41,21 +42,20 @@ public interface ComponentScorer {
    * Result of scoring one component.
    *
    * @param component the component scored
-   * @param flag {@link PostFlag#PASSED} when the score cleared the accept threshold, otherwise
-   *     {@link PostFlag#NEEDS_REVIEW}
+   * @param needsReview true when the score fell below the accept threshold or the component could
+   *     not be scored
    * @param score the relevance score, or empty when the component was never scored
    * @param embedding the raw embedding, present only when a model call happened
    */
   record ComponentResult(
-      Component component, PostFlag flag, Optional<Double> score, Optional<float[]> embedding) {
-
-    public boolean needsReview() {
-      return flag == PostFlag.NEEDS_REVIEW;
-    }
+      Component component,
+      boolean needsReview,
+      Optional<Double> score,
+      Optional<float[]> embedding) {
 
     /** A component that was deliberately not scored (no text to score, or no recipe attached). */
     public static ComponentResult notScored(Component component) {
-      return new ComponentResult(component, PostFlag.PASSED, Optional.empty(), Optional.empty());
+      return new ComponentResult(component, false, Optional.empty(), Optional.empty());
     }
 
     /**
@@ -63,8 +63,7 @@ public interface ComponentScorer {
      * human rather than failing the member's publish (ADR-016 decision D16).
      */
     public static ComponentResult failed(Component component) {
-      return new ComponentResult(
-          component, PostFlag.NEEDS_REVIEW, Optional.empty(), Optional.empty());
+      return new ComponentResult(component, true, Optional.empty(), Optional.empty());
     }
   }
 }

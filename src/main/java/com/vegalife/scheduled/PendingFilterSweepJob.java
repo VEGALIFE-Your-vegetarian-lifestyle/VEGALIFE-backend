@@ -18,17 +18,24 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Stale-pending sweep (FR-011, BR-FILTER-009): any post still {@code flag=PENDING} whose latest
- * CONTENT_FILTER queue row is older than {@code app.filter.sweep-max-age} moves to {@code
- * NEEDS_REVIEW} / {@code status=unpublished} with an ERROR log, covering queue messages that were
- * lost or exhausted their retries. The queue row's creation time is the enqueue clock — the message
- * and the PENDING flag are written in one transaction (ADR-005) — and terminal rows outlive the
- * sweep window, so a stuck post is always observable. Fresh {@code PENDING} and NULL-flag posts are
- * never touched.
+ * Stale-pending sweep (FR-011, BR-FILTER-009): any post still at {@code processing} with no blocker
+ * whose latest CONTENT_FILTER queue row is older than {@code app.filter.sweep-max-age} is settled
+ * as {@code flag=FILTER_SKIPPED} with an ERROR log, covering queue messages that were lost or
+ * exhausted their retries.
+ *
+ * <p>Under ADR-023 the predicate is the lifecycle, not a flag: a post is in flight when it is
+ * {@code processing} and carries no blocker, and a post already held for review ({@code
+ * FILTER_FAILED} / {@code SIMILAR_CONTENT}) is never touched. The queue row's creation time is the
+ * enqueue clock — the message and the {@code processing} status are written in one transaction
+ * (ADR-005) — and terminal rows outlive the sweep window, so a stuck post is always observable.
+ * Drafted and published posts are never touched.
  */
 @Component
 @Slf4j
 public class PendingFilterSweepJob {
+
+  /** Recorded so an operator can tell "the queue lost it" from "the provider refused it". */
+  private static final String SWEPT_DETAIL = "FILTER_SWEPT";
 
   private final PostRepository postRepository;
   private final OutboundMessageRepository outboundMessageRepository;
@@ -60,22 +67,23 @@ public class PendingFilterSweepJob {
     }
     List<Post> stalePosts =
         postRepository.findAllById(stalePostIds).stream()
-            .filter(post -> post.getFlag() == PostFlag.PENDING)
+            .filter(post -> post.getStatus() == PostStatus.processing)
+            .filter(post -> post.getFlag() == null)
             .filter(post -> post.getDeletedAt() == null)
             .toList();
     for (Post post : stalePosts) {
-      post.setFlag(PostFlag.NEEDS_REVIEW);
-      post.setStatus(PostStatus.unpublished);
+      post.setFlag(PostFlag.FILTER_SKIPPED);
+      post.setFlagDetail(SWEPT_DETAIL);
       postRepository.save(post);
       log.error(
-          "Post {} still pending while its content-filter queue row is older than {} — moved to"
-              + " NEEDS_REVIEW for manual review",
+          "Post {} is still processing while its content-filter queue row is older than {} —"
+              + " settled as FILTER_SKIPPED for manual review",
           post.getId(),
           filterProperties.getSweepMaxAge());
     }
     if (!stalePosts.isEmpty()) {
       log.info(
-          "Pending filter sweep moved {} post(s) to NEEDS_REVIEW with queue rows older than {}",
+          "Pending filter sweep settled {} post(s) as FILTER_SKIPPED with queue rows older than {}",
           stalePosts.size(),
           cutoff);
     }

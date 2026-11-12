@@ -147,6 +147,7 @@ public class AdminPostService {
         .content(post.getContent())
         .status(post.getStatus().name())
         .flag(post.getFlag() == null ? null : post.getFlag().name())
+        .flagDetail(post.getFlagDetail())
         .rejectionReason(post.getRejectionReason())
         .contentScore(post.getContentScore())
         .recipes(recipeSummaries)
@@ -168,8 +169,8 @@ public class AdminPostService {
    * are {@link ModerationStatus#REJECTED} ones: approving a post must never resurrect a name an
    * admin previously refused.
    *
-   * <p>Refuses a hidden post (it is moderated through the visibility endpoint) and a post with no
-   * category (BR-CONTENT-003), both carried over from the endpoint this replaces.
+   * <p>Refuses a drafted post (nobody submitted it) and a post with no category (BR-CONTENT-003),
+   * both carried over from the endpoint this replaces.
    */
   @Transactional
   public AdminPostDetailResponse approvePost(UUID adminId, UUID postId, String reason) {
@@ -184,6 +185,10 @@ public class AdminPostService {
     // Current state, not history: once approved again, a stale reason would describe a decision
     // that no longer holds. The audit trail stays in moderation_log.
     post.setRejectionReason(null);
+    // The post is published, so it is no longer being held for anyone: the flag and its detail
+    // describe a blocker that no longer exists (ADR-023).
+    post.setFlag(null);
+    post.setFlagDetail(null);
     postRepository.saveAndFlush(post);
 
     approveComponents(postId, adminId, reason);
@@ -219,6 +224,9 @@ public class AdminPostService {
     post.setStatus(PostStatus.unpublished);
     post.setPublishedAt(null);
     post.setRejectionReason(reason);
+    // The rejection is the terminal state now; the blocker is resolved, not carried forward.
+    post.setFlag(null);
+    post.setFlagDetail(null);
     postRepository.saveAndFlush(post);
 
     rejectPendingComponents(postId, adminId, reason);
@@ -240,18 +248,19 @@ public class AdminPostService {
   /**
    * Loads a post that may be approved or rejected.
    *
-   * <p>The hidden check is carried over from the endpoint this replaces: a hidden post is removed
-   * from public view through a different, admin-only path, and approving it here would silently
-   * override that decision.
+   * <p>A {@code drafted} post is refused: nobody submitted it, so there is nothing to moderate —
+   * approving it would publish content its author never asked to publish (ADR-023). A {@code
+   * published} post stays moderatable because approve/reject is also how the dish and ingredient
+   * names it introduced are decided (ADR-016).
    */
   private Post requireModeratablePost(UUID postId) {
     Post post =
         postRepository
             .findByIdAndDeletedAtIsNull(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-    if (post.getStatus() == PostStatus.hidden) {
+    if (post.getStatus() == PostStatus.drafted) {
       throw new ValidationException(
-          "A hidden post is moderated through the visibility endpoint, not approve/reject");
+          "A drafted post has not been submitted for publication and cannot be moderated");
     }
     return post;
   }
@@ -426,7 +435,7 @@ public class AdminPostService {
       return PostStatus.valueOf(status);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException(
-          "Status must be one of: created, processed, published, unpublished, hidden");
+          "Status must be one of: drafted, processing, published, unpublished");
     }
   }
 
@@ -438,7 +447,7 @@ public class AdminPostService {
       return PostFlag.valueOf(flag);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException(
-          "Flag must be one of: all, PENDING, PASSED, REJECTED, NEEDS_REVIEW");
+          "Flag must be one of: all, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED");
     }
   }
 

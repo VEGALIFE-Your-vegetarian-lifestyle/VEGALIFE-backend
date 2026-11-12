@@ -37,8 +37,19 @@ public class PostListResponse {
   private Set<UUID> recipeIds;
   private String status;
 
-  /** Content filter verdict: PENDING, PASSED, REJECTED, NEEDS_REVIEW; null when never filtered. */
+  /**
+   * Why the post is being held for review: {@code FILTER_FAILED}, {@code SIMILAR_CONTENT} or {@code
+   * FILTER_SKIPPED}; null when the post is not held. Only a post at {@code processing} can carry
+   * one (ADR-023).
+   */
   private String flag;
+
+  /**
+   * Detail for {@link #flag}: for {@code SIMILAR_CONTENT} the matched post as {@code
+   * SIMILAR_CONTENT_POST_<postId>}; for {@code FILTER_SKIPPED} a short cause code (for example
+   * {@code FILTER_DISABLED}); for {@code FILTER_FAILED} the band score ({@code score=0.312}).
+   */
+  private String flagDetail;
 
   /**
    * Why an admin rejected this post, or null if no admin rejection reason is recorded.

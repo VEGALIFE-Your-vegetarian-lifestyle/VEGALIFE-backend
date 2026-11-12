@@ -101,7 +101,6 @@ class AdminPostServiceTest {
             .title("Vegan chili")
             .content("A hearty chili recipe")
             .status(PostStatus.published)
-            .flag(PostFlag.PASSED)
             .viewCount(7)
             .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
             .build();
@@ -111,7 +110,6 @@ class AdminPostServiceTest {
             .title("Vegan chili")
             .content("A hearty chili recipe")
             .status("published")
-            .flag("PASSED")
             .viewCount(7)
             .createdAt(post.getCreatedAt())
             .userId(author.getId())
@@ -149,8 +147,8 @@ class AdminPostServiceTest {
             .page(1)
             .size(10)
             .sort("viewCount,asc")
-            .status("unpublished")
-            .flag("REJECTED")
+            .status("processing")
+            .flag("FILTER_FAILED")
             .userId(author.getId())
             .categoryId(UUID.randomUUID())
             .createdFrom(from)
@@ -188,7 +186,7 @@ class AdminPostServiceTest {
 
     assertThatThrownBy(() -> adminPostService.listPosts(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage("Status must be one of: created, processed, published, unpublished, hidden");
+        .hasMessage("Status must be one of: drafted, processing, published, unpublished");
   }
 
   @Test
@@ -197,7 +195,7 @@ class AdminPostServiceTest {
 
     assertThatThrownBy(() -> adminPostService.listPosts(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage("Flag must be one of: all, PENDING, PASSED, REJECTED, NEEDS_REVIEW");
+        .hasMessage("Flag must be one of: all, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED");
   }
 
   @Test
@@ -246,10 +244,11 @@ class AdminPostServiceTest {
   }
 
   @Test
-  void approvePost_publishesAndLogsWithReason() {
+  void approvePost_publishesAndClearsTheBlocker() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(PostStatus.unpublished);
-    post.setFlag(PostFlag.REJECTED);
+    post.setStatus(PostStatus.processing);
+    post.setFlag(PostFlag.FILTER_FAILED);
+    post.setFlagDetail("score=0.210");
     post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId())).thenReturn(List.of());
@@ -258,8 +257,9 @@ class AdminPostServiceTest {
 
     assertThat(post.getStatus()).isEqualTo(PostStatus.published);
     assertThat(post.getPublishedAt()).isNotNull();
-    // Auto-REJECTED is a record of what the filter decided; approving does not rewrite history.
-    assertThat(post.getFlag()).isEqualTo(PostFlag.REJECTED);
+    // The post is not being held any more: the blocker and its detail go with it (ADR-023).
+    assertThat(post.getFlag()).isNull();
+    assertThat(post.getFlagDetail()).isNull();
 
     ModerationLog entry = lastPostLog();
     assertThat(entry.getActorId()).isEqualTo(adminId);
@@ -342,9 +342,11 @@ class AdminPostServiceTest {
   }
 
   @Test
-  void rejectPost_unpublishesAndRejectsPendingComponents() {
+  void rejectPost_unpublishesClearsTheBlockerAndRejectsPendingComponents() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(PostStatus.published);
+    post.setStatus(PostStatus.processing);
+    post.setFlag(PostFlag.FILTER_FAILED);
+    post.setFlagDetail("score=0.180");
     post.setPublishedAt(Instant.parse("2026-09-21T10:00:00Z"));
     Dish dish =
         Dish.builder()
@@ -372,6 +374,9 @@ class AdminPostServiceTest {
     assertThat(post.getStatus()).isEqualTo(PostStatus.unpublished);
     assertThat(post.getPublishedAt()).isNull();
     assertThat(post.getRejectionReason()).isEqualTo("not vegan");
+    // The rejection is terminal; there is nothing left to hold for review.
+    assertThat(post.getFlag()).isNull();
+    assertThat(post.getFlagDetail()).isNull();
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
     // The recipe's author reads this from the recipe's own row, and it was the same decision.
     assertThat(recipe.getRejectionReason()).isEqualTo("not vegan");
@@ -490,25 +495,25 @@ class AdminPostServiceTest {
   }
 
   @Test
-  void approvePost_hiddenPost_throwsValidationException() {
+  void approvePost_draftedPost_throwsValidationException() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(PostStatus.hidden);
+    post.setStatus(PostStatus.drafted);
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
     assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId(), null))
         .isInstanceOf(ValidationException.class)
-        .hasMessageContaining("hidden post");
+        .hasMessageContaining("has not been submitted");
   }
 
   @Test
-  void rejectPost_hiddenPost_throwsValidationException() {
+  void rejectPost_draftedPost_throwsValidationException() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(PostStatus.hidden);
+    post.setStatus(PostStatus.drafted);
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
     assertThatThrownBy(() -> adminPostService.rejectPost(adminId, post.getId(), null))
         .isInstanceOf(ValidationException.class)
-        .hasMessageContaining("hidden post");
+        .hasMessageContaining("has not been submitted");
   }
 
   @Test
@@ -586,7 +591,8 @@ class AdminPostServiceTest {
             .moderationStatus(ModerationStatus.APPROVED)
             .build();
     post.setContentScore(0.63);
-    post.setFlag(PostFlag.NEEDS_REVIEW);
+    post.setFlag(PostFlag.FILTER_FAILED);
+    post.setFlagDetail("score=0.580");
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));
@@ -601,7 +607,8 @@ class AdminPostServiceTest {
     AdminPostDetailResponse detail = adminPostService.getPostDetail(post.getId());
 
     assertThat(detail.getContentScore()).isEqualTo(0.63);
-    assertThat(detail.getFlag()).isEqualTo("NEEDS_REVIEW");
+    assertThat(detail.getFlag()).isEqualTo("FILTER_FAILED");
+    assertThat(detail.getFlagDetail()).isEqualTo("score=0.580");
     assertThat(detail.getRecipes()).hasSize(1);
     assertThat(detail.getRecipes().get(0).getScore()).isEqualTo(0.81);
     assertThat(detail.getRecipes().get(0).getType()).isEqualTo("RECIPE");
