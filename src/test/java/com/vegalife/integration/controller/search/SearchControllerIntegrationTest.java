@@ -16,14 +16,18 @@ import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Recipe;
+import com.vegalife.model.restaurant.Restaurant;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.repository.restaurant.RestaurantRepository;
 import com.vegalife.repository.user.UserRepository;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,6 +83,8 @@ class SearchControllerIntegrationTest {
   @Autowired private RecipeRepository recipeRepository;
 
   @Autowired private DishRepository dishRepository;
+
+  @Autowired private RestaurantRepository restaurantRepository;
 
   private User user;
 
@@ -222,6 +228,61 @@ class SearchControllerIntegrationTest {
         .perform(get("/api/search").param("q", "tofu"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.content").isEmpty());
+  }
+
+  @Test
+  void search_typeRestaurantReturnsNameMatch() throws Exception {
+    Restaurant restaurant = createRestaurant("Vegan Tofu House", "Cozy vegan spot.");
+    createRestaurant("Unrelated Place", "Nothing special here.");
+
+    mockMvc
+        .perform(get("/api/search").param("q", "tofu").param("type", "restaurant"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].id").value(restaurant.getId().toString()))
+        .andExpect(jsonPath("$.data.content[0].type").value("restaurant"));
+  }
+
+  @Test
+  void search_unspecifiedTypeIncludesRestaurants() throws Exception {
+    Restaurant restaurant = createRestaurant("Tofu Garden", "A quiet place.");
+
+    mockMvc
+        .perform(get("/api/search").param("q", "tofu"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.data.content[*].id")
+                .value(org.hamcrest.Matchers.hasItem(restaurant.getId().toString())));
+  }
+
+  @Test
+  void search_restaurantDishOnlyMatchNamesTheMatchedDishInTheSnippet() throws Exception {
+    Restaurant restaurant = createRestaurant("Garden Cafe", "A small vegan eatery.");
+    Dish dish =
+        dishRepository.save(
+            Dish.builder().name("Pho Chay").moderationStatus(ModerationStatus.APPROVED).build());
+    restaurant.setDishes(new HashSet<>(Set.of(dish)));
+    restaurantRepository.save(restaurant);
+
+    mockMvc
+        .perform(get("/api/search").param("q", "pho").param("type", "restaurant"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].id").value(restaurant.getId().toString()))
+        .andExpect(
+            jsonPath("$.data.content[0].snippet")
+                .value(org.hamcrest.Matchers.containsString("<mark>Pho</mark>")));
+  }
+
+  private Restaurant createRestaurant(String name, String description) {
+    return restaurantRepository.save(
+        Restaurant.builder()
+            .name(name)
+            .address("123 Vegan St")
+            .latitude(new BigDecimal("10.776889"))
+            .longitude(new BigDecimal("106.700806"))
+            .description(description)
+            .build());
   }
 
   private Post createPublishedPost(String title, String content) {

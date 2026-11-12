@@ -2,7 +2,7 @@
 
 ## Overview
 
-Keyword search across posts, videos, and recipes in one query (issue #40). Public endpoint, no authentication required.
+Keyword search across posts, videos, recipes, and restaurants in one query (issues #40, #196). Public endpoint, no authentication required.
 
 ## Endpoint
 
@@ -21,8 +21,8 @@ None. Any caller, including guests, may search.
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | q | string | Yes | Keyword to search for. Missing or blank → 400. |
-| type | string | No | One of `post`, `video`, `recipe`. Omitted searches all three. Any other value → 400. |
-| categoryId | UUID | No | Narrows `post`/`video` results to that category. Never excludes recipe results — a recipe has no category of its own. |
+| type | string | No | One of `post`, `video`, `recipe`, `restaurant`. Omitted searches all four. Any other value → 400. |
+| categoryId | UUID | No | Narrows `post`/`video` results to that category. Never excludes recipe or restaurant results — neither has a category of its own. |
 | dateFrom | ISO-8601 datetime | No | Only rows created at or after this instant. |
 | dateTo | ISO-8601 datetime | No | Only rows created at or before this instant. |
 | page | integer | No | 0-based page index, default `0`. `< 0` → 400. |
@@ -53,6 +53,14 @@ None. Any caller, including guests, may search.
         "snippet": "Fried <mark>tofu</mark> with vegetables.",
         "categoryIds": [],
         "createdAt": "2026-10-13T09:00:00Z"
+      },
+      {
+        "type": "restaurant",
+        "id": "9b2e6679-7425-40de-944b-e07fc1f90b11",
+        "title": "Garden Cafe",
+        "snippet": "Matches via dish: <mark>Pho</mark> Chay",
+        "categoryIds": [],
+        "createdAt": "2026-10-12T08:00:00Z"
       }
     ],
     "page": 0,
@@ -67,33 +75,33 @@ None. Any caller, including guests, may search.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| data.content[].type | string | `post`, `video`, or `recipe`. A `video` is a post carrying at least one `video/*` media; there is no separate video entity. |
-| data.content[].id | uuid | The post's or recipe's own id. |
-| data.content[].title | string | Post title or recipe name. |
-| data.content[].snippet | string | ~150-character excerpt around the first case-insensitive match, with the matched text wrapped in `<mark>`. The same trust rules as every other text field returned by this API apply — the client is responsible for safely rendering it. |
-| data.content[].categoryIds | array of UUID | Assigned categories; always empty for a recipe. |
+| data.content[].type | string | `post`, `video`, `recipe`, or `restaurant`. A `video` is a post carrying at least one `video/*` media; there is no separate video entity. |
+| data.content[].id | uuid | The post's, recipe's, or restaurant's own id. |
+| data.content[].title | string | Post title, recipe name, or restaurant name. |
+| data.content[].snippet | string | ~150-character excerpt around the first case-insensitive match, with the matched text wrapped in `<mark>`. For a restaurant matched only through an attached dish's name (not its own name or description), the snippet instead names the matched dish, e.g. `Matches via dish: <mark>Pho</mark> Chay`, so a human can tell why the restaurant matched. The same trust rules as every other text field returned by this API apply — the client is responsible for safely rendering it. |
+| data.content[].categoryIds | array of UUID | Assigned categories; always empty for a recipe or restaurant. |
 | data.content[].createdAt | string | ISO-8601 creation timestamp. |
 
 ### Error Responses
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | `q` missing/blank, `type` not one of `post`/`video`/`recipe`, or `page`/`size` out of range | `Validation failed` |
+| 400 | `q` missing/blank, `type` not one of `post`/`video`/`recipe`/`restaurant`, or `page`/`size` out of range | `Validation failed` |
 | 500 | Unexpected server error | `Internal server error` |
 
 ## Business Rules
 
-- Only published, non-deleted posts are searchable — drafts, unpublished, hidden, and moderated-out posts never surface (same visibility floor as the public feed, BR-POST-010). Recipes are searchable whenever not soft-deleted; a recipe has no publish state of its own.
-- Matching is a case-insensitive substring match (`ILIKE`), not semantic/full-text search: post/video match on `title` or `content`; recipe matches on `name`, `description`, or `instructions`.
-- "Relevance" is a two-tier rank: a title/name match outranks a body-only match; within the same tier, newest first. There is no term-frequency or semantic scoring.
+- Only published, non-deleted posts are searchable — drafts, unpublished, hidden, and moderated-out posts never surface (same visibility floor as the public feed, BR-POST-010). Recipes and restaurants are searchable whenever not soft-deleted; neither has a publish state of its own.
+- Matching is a case-insensitive substring match (`ILIKE`), not semantic/full-text search: post/video match on `title` or `content`; recipe matches on `name`, `description`, or `instructions`; restaurant matches on `name`, `description`, or the name of an attached, approved, non-deleted dish (issue #196). A dish is never itself returned as a search result — only the restaurant it's attached to.
+- "Relevance" is a two-tier rank: a title/name match outranks a body-only, instructions-only, description-only, or dish-only match; within the same tier, newest first. There is no term-frequency or semantic scoring. A restaurant matched through more than one of {name, description, a dish} appears exactly once, at its best (lowest) rank.
 - `type=post` and `type=video` both query the same underlying post rows; `type=video` keeps only posts with at least one `video/*` media, `type=post` keeps the rest.
-- A `categoryId` filter narrows posts/videos only; it is silently ignored for recipes, which are never excluded by it.
-- Search suggestions/autocomplete, personalized ranking, and search analytics are out of scope (issue #40 non-goals).
+- A `categoryId` filter narrows posts/videos only; it is silently ignored for recipes and restaurants, neither of which is ever excluded by it.
+- Search suggestions/autocomplete, personalized ranking, and search analytics are out of scope (issue #40 non-goals); so are fuzzy/stemmed matching and ranking by distance, reviews, or popularity for restaurant results (issue #196 non-goals).
 
 ## Example
 
 ```bash
-curl -X GET "http://localhost:8080/api/search?q=tofu&type=recipe&page=0&size=10"
+curl -X GET "http://localhost:8080/api/search?q=tofu&type=restaurant&page=0&size=10"
 ```
 
 ## Related
