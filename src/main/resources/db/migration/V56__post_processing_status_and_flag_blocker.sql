@@ -22,6 +22,11 @@
 
 ALTER TABLE post DROP CONSTRAINT chk_post_status;
 
+-- A submitted post waiting on the filter was stored as 'created' with flag PENDING; that is now
+-- status 'processing' with no flag. This must run before the 'created' -> 'drafted' rewrite below,
+-- or these rows would be mistaken for withdrawn drafts.
+UPDATE post SET status = 'processing' WHERE status = 'created' AND flag = 'PENDING';
+
 -- A withdrawn post: keep it, it is exactly 'drafted'.
 UPDATE post SET status = 'drafted' WHERE status = 'created';
 
@@ -53,9 +58,7 @@ UPDATE post
    AND rejection_reason IS NULL
    AND flag IN ('REJECTED', 'NEEDS_REVIEW', 'DUPLICATE');
 
--- A submitted post waiting on the filter was stored as 'created' with flag PENDING; that is now
--- status 'processing' with no flag.
-UPDATE post SET status = 'processing' WHERE status = 'created' AND flag = 'PENDING';
+-- A submitted post waiting on the filter is already 'processing' from the rewrite above.
 
 ALTER TABLE post
     ADD CONSTRAINT chk_post_status
