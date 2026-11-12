@@ -29,6 +29,7 @@ import com.vegalife.shared.exception.MenuNotEditableException;
 import com.vegalife.shared.exception.MenuOverlapException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -129,6 +130,27 @@ public class MenuService {
         userId,
         details.size());
     return toDetail(menu, details);
+  }
+
+  /**
+   * BR-MENU-008: removes an owned menu from every caller-visible surface. Deletion is soft — the
+   * row and its recorded days stay, and {@code deleted_at} marks the removal — so the plan is no
+   * longer listed, no longer readable by id, no longer editable or dispatchable through a status
+   * transition, and no longer occupies its week for the BR-MENU-003 overlap check.
+   *
+   * <p>Any status may be deleted, including a {@code scheduled} week; deleting the live plan simply
+   * frees that week. A foreign, absent, or already-deleted id is a 404, never a 403, and a repeat
+   * delete is therefore a 404 rather than a silent success.
+   */
+  @Transactional
+  public void deleteMenu(UUID userId, UUID menuId) {
+    Menu menu =
+        menuRepository
+            .findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
+            .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
+    menu.setDeletedAt(Instant.now());
+    menuRepository.save(menu);
+    log.info("Soft-deleted {} menu {} for user {}", menu.getStatus(), menuId, userId);
   }
 
   /**
