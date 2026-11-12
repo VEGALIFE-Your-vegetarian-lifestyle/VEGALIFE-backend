@@ -80,7 +80,7 @@ _Description: Manages community blog posts and vegetarian articles._
 |------------|-----------|-----|------------|-------------|
 | id | UUID | PK | No | Unique identifier for each post |
 | user_id | UUID | FK | No | References User(id) - Author of the post |
-| location_id | UUID | FK | Yes | References Location(id) - Location tagged in post |
+| restaurant_id | UUID | FK | Yes | References Restaurant(id) - Restaurant tagged in post |
 | title | VARCHAR(255) | - | No | Title of the blog post |
 | content | TEXT | - | No | Plain-text content body, used as the semantic-filtering input |
 | raw_content | JSONB | - | No | Rich-text document produced by the frontend editor (V27) |
@@ -95,11 +95,11 @@ _Description: Manages community blog posts and vegetarian articles._
 **Constraints:**
 - `chk_post_status`: status IN ('created','processed','published','unpublished','hidden')
 - FK: user_id REFERENCES "user"(id) ON DELETE CASCADE
-- FK: location_id REFERENCES location(id) ON DELETE SET NULL
+- FK: restaurant_id REFERENCES restaurant(id) ON DELETE SET NULL
 
 **Indexes:**
 - `idx_post_user_id` ON (user_id)
-- `idx_post_location_id` ON (location_id)
+- `idx_post_restaurant_id` ON (restaurant_id)
 - `idx_post_status` ON (status) WHERE deleted_at IS NULL
 - `idx_post_published_at` ON (published_at)
 
@@ -412,19 +412,18 @@ _Description: Maps specific dishes to individual days and meals within a weekly 
 
 ---
 
-## Table 17: Location
+## Table 17: Restaurant
 
-_Description: Stores vegan restaurant and grocery store locations for map discovery._
+_Description: Stores vegan restaurant directory entries for map discovery._
 
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
-| id | UUID | PK | No | Unique identifier for each location |
-| name | VARCHAR(255) | - | No | Store / Restaurant name |
+| id | UUID | PK | No | Unique identifier for each restaurant |
+| name | VARCHAR(255) | - | No | Restaurant name |
 | address | VARCHAR(255) | - | No | Physical street address |
 | latitude | DECIMAL(9,6) | - | No | GPS latitude coordinate |
 | longitude | DECIMAL(9,6) | - | No | GPS longitude coordinate |
 | phone_number | VARCHAR(20) | - | Yes | Contact phone number |
-| place_type | VARCHAR(20) | - | No | Type: restaurant, grocery, cafe, market |
 | opening_hours | JSONB | - | Yes | Structured opening hours for "open now" queries |
 | website_url | TEXT | - | Yes | External website URL |
 | rating | DECIMAL(2,1) | - | Yes | Average rating (0.0-5.0) |
@@ -434,14 +433,12 @@ _Description: Stores vegan restaurant and grocery store locations for map discov
 | deleted_at | TIMESTAMPTZ | - | Yes | Soft delete timestamp |
 
 **Constraints:**
-- `chk_place_type`: place_type IN ('restaurant','grocery','cafe','market')
 - `chk_price_level`: price_level BETWEEN 1 AND 4
 
 **Indexes:**
-- `idx_location_active` ON (id) WHERE deleted_at IS NULL
-- `idx_location_place_type` ON (place_type)
-- `idx_location_coords` ON (latitude, longitude)
-- `idx_location_opening_hours` ON (opening_hours) USING GIN
+- `idx_restaurant_active` ON (id) WHERE deleted_at IS NULL
+- `idx_restaurant_coords` ON (latitude, longitude)
+- `idx_restaurant_opening_hours` ON (opening_hours) USING GIN
 
 ---
 
@@ -685,6 +682,25 @@ _Description: A member's saved post or saved recipe (V52 / BR-SAVED-001, BR-SAVE
 
 ---
 
+## Table 27: Restaurant_Dish
+
+_Description: Curated association between a restaurant and the dishes an admin attaches to it (V55 / issue #195). Nested in the restaurant detail/create/update responses as the public 5-field `dishes` shape (id, name, description, imageUrl, cuisineType), filtered to non-soft-deleted dishes and ordered by name at read time. No extra attributes — no pricing, availability, or ordering._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| restaurant_id | UUID | PK, FK | No | References Restaurant(id) |
+| dish_id | UUID | PK, FK | No | References Dish(id) |
+
+**Constraints:**
+- PK: (restaurant_id, dish_id)
+- FK: restaurant_id REFERENCES restaurant(id) ON DELETE CASCADE
+- FK: dish_id REFERENCES dish(id) ON DELETE CASCADE
+
+**Indexes:**
+- `idx_restaurant_dish_dish_id` ON (dish_id)
+
+---
+
 ## Relationship Summary
 
 - **User** 1:N **UserProfile** (1:1 via unique FK)
@@ -700,7 +716,7 @@ _Description: A member's saved post or saved recipe (V52 / BR-SAVED-001, BR-SAVE
 - **Post** M:N **Category** (via Post_Category)
 - **Post** M:N **Media** (via Post_Media)
 - **Post** M:N **Recipe** (via Post_Recipe)
-- **Post** N:1 **Location** (tagged location)
+- **Post** N:1 **Restaurant** (tagged restaurant)
 - **Comment** N:1 **Post**, N:1 **Comment** (parent)
 - **Vote** N:1 **Post**, N:1 **User** (unique per user+post)
 - **SavedItem** N:1 **User**, and N:1 **Post** *or* N:1 **Recipe** (exactly one target; unique per user+target)
@@ -710,7 +726,8 @@ _Description: A member's saved post or saved recipe (V52 / BR-SAVED-001, BR-SAVE
 - **Dish** M:N **Ingredient** (via Dish_Ingredient; curated suggestions, soft-withdrawable)
 - **Menu** N:1 **User**
 - **MenuDetail** N:1 **Menu**, N:1 **Dish** (unique per menu+date+meal_type)
-- **Location** 1:N **Post** (via location_id)
+- **Restaurant** 1:N **Post** (via restaurant_id)
+- **Restaurant** M:N **Dish** (via Restaurant_Dish)
 - **AIConversation** N:1 **User** (nullable)
 - **AIMessage** N:1 **AIConversation**
 - **AIUsage** N:1 **User** (nullable)

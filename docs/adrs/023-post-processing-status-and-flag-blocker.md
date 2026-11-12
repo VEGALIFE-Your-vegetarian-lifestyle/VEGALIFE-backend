@@ -173,7 +173,7 @@ its own `FilterOutcome` (`PASS`, `FAIL`, `UNCERTAIN`). Writing
 - **The refuse/unsure distinction is lost.** `FILTER_FAILED` covers both; the
   reviewer reads `content_score` plus the component detail instead. ADR-016's
   component escalations still surface as `FILTER_FAILED` on the same post.
-- **A one-time, irreversible data rewrite.** `V54` maps `hidden` and
+- **A one-time, irreversible data rewrite.** `V56` maps `hidden` and
   machine-held `unpublished` rows; the mapping is recorded in the migration.
 - **`created` is no longer a status value.** Frontend clients that compared
   against it must move to `drafted`; documented in
@@ -181,7 +181,7 @@ its own `FilterOutcome` (`PASS`, `FAIL`, `UNCERTAIN`). Writing
 
 ## Verification
 
-- `V54` applies on a fresh database and on one that held `created`,
+- `V56` applies on a fresh database and on one that held `created`,
   `processed`, `hidden` and every legacy flag value.
 - A filter pass publishes and clears `flag`; a refusal or an outage leaves
   `processing` with the matching flag and never sets `unpublished`.

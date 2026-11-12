@@ -168,7 +168,7 @@ Applies to `POST /api/posts`. The status vocabulary is `drafted`, `processing`, 
 - Service: `PostService.createPost()` sets status, view count, and blocker; it enqueues the filter
   message in the caller's transaction, and `publishedAt` is assigned only when the filter or an
   admin decision publishes the post.
-- Database: `V54__post_processing_status_and_flag_blocker.sql` rewrites the old status/flag values
+- Database: `V56__post_processing_status_and_flag_blocker.sql` rewrites the old status/flag values
   and adds `CHECK (flag IS NULL OR status = 'processing')`.
 - Request DTO: `PostCreateRequest` does not expose lifecycle fields.
 - API reference: `docs/apis/post/post-posts.md`.
@@ -351,7 +351,7 @@ filter changes it.
 
 ## Enforcement
 
-- Migration `V54__post_processing_status_and_flag_blocker.sql` rewrites every `hidden` row: one that
+- Migration `V56__post_processing_status_and_flag_blocker.sql` rewrites every `hidden` row: one that
   had passed the filter (`flag = PASSED`) is restored to `published` (its `published_at` recovered
   from `updated_at`); one with no `flag` (a draft an admin hid) returns to `drafted`; every other
   hidden post was held by the filter and becomes `processing` so a human decides it.
@@ -461,7 +461,7 @@ Applies to every filter run. There is no `NOT_FILTERED` value: a post carries no
 ## Enforcement
 
 - `EmbeddingRelevanceScorer` reads both thresholds from `PlatformSettingsProvider` (falling back to `app.filter.*`) on every `score()` call and returns the band; `ContentFilterService` turns it into a `FilterVerdict` carrying a `FilterOutcome`.
-- `post.flag VARCHAR(32)` is constrained to `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` or NULL, and `CHECK (flag IS NULL OR status = 'processing')` keeps the two columns from disagreeing (migration V54).
+- `post.flag VARCHAR(32)` is constrained to `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` or NULL, and `CHECK (flag IS NULL OR status = 'processing')` keeps the two columns from disagreeing (migration V56).
 - Unit tests cover all three bands at the exact threshold boundaries; a fixture-based regression test replays captured embeddings through the configured thresholds, and `CentroidRegenerationTest` refreshes those fixtures whenever the centroids are regenerated.
 
 ## Last Reviewed
@@ -617,7 +617,7 @@ cannot be recovered later, which is why it is persisted in `flagDetail`.
 - `ContentFilterOutboundAdapter` applies a non-pass verdict as `status = processing` plus
   `flag`/`flagDetail`; it never writes `unpublished`.
 - Database: `CHECK (flag IS NULL OR status = 'processing')` and `flag IN ('FILTER_FAILED',
-  'SIMILAR_CONTENT', 'FILTER_SKIPPED')` (migration V54).
+  'SIMILAR_CONTENT', 'FILTER_SKIPPED')` (migration V56).
 - API: `flag`/`flagDetail` are exposed on the admin post list and detail, and the review queue is
   `GET /api/admin/posts?status=processing`.
 

@@ -109,7 +109,7 @@ The client must not send `userId`, `status`, `flag`, `viewCount`, `type`, `video
 - A post in `processing` may come back with a blocker (`FILTER_FAILED`, `SIMILAR_CONTENT`) once the filter runs; readers should treat `status` as the visibility answer and `flag` as the reason a post is being held (ADR-023).
 - Filtering runs asynchronously; this endpoint never blocks on the embedding service (BR-FILTER-006).
 - `content` stays the semantic-filtering input; `rawContent` is never read by the filter (BR-FILTER-005).
-- Schema: the `flag` column is added by migration `V19__add_post_filtering.sql`; `raw_content` is added and `type`/`video_url` are dropped by migration `V27__add_post_raw_content_drop_type_video_url.sql`; `V54__post_processing_status_and_flag_blocker.sql` reshapes `status`/`flag`, adds `flag_detail`, and enforces that a `flag` exists only on a `processing` post.
+- Schema: the `flag` column is added by migration `V19__add_post_filtering.sql`; `raw_content` is added and `type`/`video_url` are dropped by migration `V27__add_post_raw_content_drop_type_video_url.sql`; `V56__post_processing_status_and_flag_blocker.sql` reshapes `status`/`flag`, adds `flag_detail`, and enforces that a `flag` exists only on a `processing` post.
 
 ## Example
 
