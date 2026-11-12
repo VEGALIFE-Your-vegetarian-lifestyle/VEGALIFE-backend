@@ -62,6 +62,7 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `menus/get-menus.md` | `GET /api/menus` | List own menus as summaries, filtered by an inclusive date range, plus status (authenticated) |
 | `menus/post-menus.md` | `POST /api/menus` | Create a drafted weekly menu with its 7 days of meals (authenticated) |
 | `menus/get-menus-details.md` | `GET /api/menus/details` | Read own meal plan over a date range — every menu with its days, meals and embedded dishes (authenticated) |
+| `menus/delete-menu-menuid.md` | `DELETE /api/menus/{menuId}` | Soft-delete an owned menu in any status; deleted plans vanish from every read (authenticated) |
 | `menus/patch-menus.md` | `PATCH /api/menus/{menuId}` | Update an owned drafted or scheduled menu's meals and preferences (authenticated) |
 | `menus/post-menu-status.md` | `POST /api/menus/{menuId}/status` | Transition an owned menu's status: schedule, cancel, or complete (authenticated) |
 | `payments/get-payments.md` | `GET /api/payments` | List own payments, newest first, money-only (authenticated) |
