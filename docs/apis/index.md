@@ -18,9 +18,6 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `admin/get-dashboard.md` | `GET /api/admin/dashboard` | Aggregated, time-range-filtered platform metrics, cached (Admin) |
 | `admin/dish-and-ingredient-crud.md` | `GET/POST/PATCH/DELETE /api/admin/dishes[/{dishId}][/approve\|/reject]` | Manage dish names, including review state; `admin/ingredients` mirrors it (Admin) |
 | `admin/dish-ingredient-crud.md` | `GET/POST/PATCH/DELETE /api/admin/dishes/{dishId}/ingredients[/{ingredientId}]` | Curate a dish's associated ingredients and which are required (Admin) |
-| `admin/post-locations.md` | `POST /api/admin/locations` | Create a location (Admin) |
-| `admin/patch-locations-locationid.md` | `PATCH /api/admin/locations/{locationId}` | Edit a location (Admin) |
-| `admin/delete-locations-locationid.md` | `DELETE /api/admin/locations/{locationId}` | Soft-delete a location (Admin) |
 | `admin/get-payments.md` | `GET /api/admin/payments` | List payments across all users, money-only, with user/status/date filters (Admin) |
 | `admin/plan-crud.md` | `GET/POST/PATCH/DELETE /api/admin/plans[/{planId}]` | Manage AI plans, request quotas, and descriptions, including soft-deactivation (Admin) |
 | `admin/get-posts.md` | `GET /api/admin/posts` | List all posts across users and statuses (Admin) |
@@ -28,6 +25,9 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `admin/post-posts-postid-approve.md` | `GET/POST /api/admin/posts/{postId}[/approve\|/reject]` | Read a post's component detail, approve or reject it with its components (Admin) |
 | `admin/get-recipes.md` | `GET /api/admin/recipes` | List all recipes across users with ingredients and instructions (Admin) |
 | `admin/recipe-crud.md` | `GET/PATCH/DELETE /api/admin/recipes[/{recipeId}][/approve\|/reject]` | Manage recipes, including review state (Admin) |
+| `admin/post-restaurants.md` | `POST /api/admin/restaurants` | Create a restaurant (Admin) |
+| `admin/patch-restaurants-restaurantid.md` | `PATCH /api/admin/restaurants/{restaurantId}` | Edit a restaurant (Admin) |
+| `admin/delete-restaurants-restaurantid.md` | `DELETE /api/admin/restaurants/{restaurantId}` | Soft-delete a restaurant (Admin) |
 | `admin/settings-crud.md` | `GET/PATCH /api/admin/settings` | Manage grouped platform settings, audited (Admin) |
 | `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
 | `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |
@@ -53,8 +53,6 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `recipes/get-dishes-dishid.md` | `GET /api/dishes/{dishId}` | Read one approved dish; pending/rejected names answer 404 (authenticated) |
 | `recipes/get-dishes-dishid-ingredients-suggestions.md` | `GET /api/dishes/{dishId}/ingredients/suggestions` | Read an approved dish's curated ingredient list, with its advisory `required` flags (authenticated) |
 | `ingredients/get-ingredients.md` | `GET /api/ingredients` | List ingredients paginated, with case-insensitive name filter (authenticated) |
-| `locations/get-locations.md` | `GET /api/locations` | List recommend locations with rating/type/price/open-now filters (authenticated) |
-| `locations/get-locations-nearby.md` | `GET /api/locations/nearby` | List every active location within a radius, nearest first, no pagination (authenticated) |
 | `media/post-upload.md` | `POST /api/media/upload` | Issue a signed upload grant and media ID |
 | `media/get-media-mediaid.md` | `GET /api/media/{mediaId}` | Read a stored media record |
 | `media/delete-media-mediaid.md` | `DELETE /api/media/{mediaId}` | Soft-delete a media record (owner or Admin); physical purge is async |
@@ -91,13 +89,16 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |
 | `recipes/get-recipes-me.md` | `GET /api/recipes/me` | List own recipes, newest first, unpaginated (authenticated) |
 | `recipes/get-recipes-recipeid.md` | `GET /api/recipes/{recipeId}` | Read one own recipe by id; another member's recipe answers 404 (authenticated; owner only) |
+| `restaurants/get-restaurants.md` | `GET /api/restaurants` | List recommended restaurants with rating/price/open-now/keyword filters (authenticated) |
+| `restaurants/get-restaurants-nearby.md` | `GET /api/restaurants/nearby` | List every active restaurant within a radius, nearest first, no pagination (authenticated) |
+| `restaurants/get-restaurants-restaurantid.md` | `GET /api/restaurants/{restaurantId}` | Read one active restaurant by id, with its curated dishes nested (authenticated) |
 | `saved/get-saved-posts.md` | `GET /api/saved/posts` | List own saved posts, newest save first, visible posts only (authenticated) |
 | `saved/post-saved-posts-postid.md` | `POST /api/saved/posts/{postId}` | Save a published post; idempotent (authenticated) |
 | `saved/delete-saved-posts-postid.md` | `DELETE /api/saved/posts/{postId}` | Unsave a post; idempotent (authenticated) |
 | `saved/get-saved-recipes.md` | `GET /api/saved/recipes` | List own saved recipes, newest save first, approved recipes only (authenticated) |
 | `saved/post-saved-recipes-recipeid.md` | `POST /api/saved/recipes/{recipeId}` | Save an approved recipe; idempotent (authenticated) |
 | `saved/delete-saved-recipes-recipeid.md` | `DELETE /api/saved/recipes/{recipeId}` | Unsave a recipe; idempotent (authenticated) |
-| `search/get-search.md` | `GET /api/search` | Keyword search across posts, videos, and recipes (public) |
+| `search/get-search.md` | `GET /api/search` | Keyword search across posts, videos, recipes, and restaurants (public) |
 | `subscriptions/get-subscriptions.md` | `GET /api/subscriptions` | List active AI plans with request quotas, descriptions, and price (public) |
 | `subscriptions/post-acquire.md` | `POST /api/subscriptions/acquire` | Claim a free plan or start a checkout for a paid plan (authenticated) |
 | `subscriptions/get-me.md` | `GET /api/subscriptions/me` | Read own remaining AI request allowance (authenticated) |
