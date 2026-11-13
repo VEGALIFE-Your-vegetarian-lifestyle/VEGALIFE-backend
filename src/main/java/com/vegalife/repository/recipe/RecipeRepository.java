@@ -41,6 +41,9 @@ public interface RecipeRepository
   /** Admin dashboard (issue #12): recipes awaiting moderation review. */
   long countByModerationStatusAndDeletedAtIsNull(ModerationStatus moderationStatus);
 
+  /** Owner-scoped lookup for a member delete (BR-RECP-010). */
+  Optional<Recipe> findByIdAndUser_IdAndDeletedAtIsNull(UUID id, UUID userId);
+
   /**
    * Batch lookup of every recipe that could be recommended for the given dishes (issue #163).
    *
