@@ -173,7 +173,8 @@ curl -X GET "http://localhost:8080/api/recipes/550e8400-e29b-41d4-a716-446655440
 - List approved recipes (public): `docs/apis/recipes/get-recipes.md`
 - List own recipes: `docs/apis/recipes/get-recipes-me.md`
 - Create counterpart: `docs/apis/recipes/post-recipes.md`
+- Delete counterpart: `docs/apis/recipes/delete-recipes-recipeid.md`
 - Admin counterpart: `docs/apis/admin/recipe-crud.md`
-- Business rules: `docs/brs/recipes.md` (BR-RECP-001, BR-RECP-004, BR-RECP-006, BR-RECP-008, BR-DISH-001)
+- Business rules: `docs/brs/recipes.md` (BR-RECP-001, BR-RECP-004, BR-RECP-006, BR-RECP-008, BR-RECP-010, BR-DISH-001)
 - Feature spec: `docs/feats/public-recipe-browsing.md`, `docs/feats/ingredient-nutrition.md`
 - ADR: [`docs/adrs/022-ingredient-level-nutrition.md`](../../adrs/022-ingredient-level-nutrition.md)
