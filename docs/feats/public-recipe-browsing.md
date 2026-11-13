@@ -37,22 +37,22 @@ The post routes are also inconsistent with the recipe ones. The public feed live
 
 ### Functional Requirements
 
-- [ ] FR-001: `GET /api/posts` returns the public feed: published, non-deleted posts, newest first, paginated by `page` (default `0`) and `size` (default `20`, `1`–`100`). It is reachable without a token.
-- [ ] FR-002: `GET /api/posts/me` returns the authenticated caller's own non-deleted posts in every status, newest first, with the same pagination bounds. It requires a token.
-- [ ] FR-003: `GET /api/posts/feed` no longer exists; a request to it is not served by a feed handler.
-- [ ] FR-004: `GET /api/recipes` returns a page of `APPROVED`, non-deleted recipes, newest `createdAt` first, using `page`/`size` and the shared `PageResponse` envelope. It is reachable without a token and returns an empty page when no recipe is approved.
-- [ ] FR-005: `GET /api/recipes/{recipeId}` returns the recipe when its `moderationStatus` is `APPROVED` and it is not soft-deleted, regardless of who authored it, with or without a token.
-- [ ] FR-006: `GET /api/recipes/{recipeId}` still returns the caller's own recipe in any status (`PENDING`, `APPROVED`, `REJECTED`), so an author never loses access to what they submitted.
-- [ ] FR-007: `GET /api/recipes/{recipeId}` answers `404 Recipe not found` when the recipe is missing, soft-deleted, or not approved and the caller is not its author.
-- [ ] FR-008: `rejectionReason` is returned only to the recipe's author. It is `null` for every other caller, including guests.
-- [ ] FR-009: `POST /api/recipes` and `GET /api/recipes/me` remain authenticated.
+- [x] FR-001: `GET /api/posts` returns the public feed: published, non-deleted posts, newest first, paginated by `page` (default `0`) and `size` (default `20`, `1`–`100`). It is reachable without a token.
+- [x] FR-002: `GET /api/posts/me` returns the authenticated caller's own non-deleted posts in every status, newest first, with the same pagination bounds. It requires a token.
+- [x] FR-003: `GET /api/posts/feed` no longer exists; a request to it is not served by a feed handler.
+- [x] FR-004: `GET /api/recipes` returns a page of `APPROVED`, non-deleted recipes, newest `createdAt` first, using `page`/`size` and the shared `PageResponse` envelope. It is reachable without a token and returns an empty page when no recipe is approved.
+- [x] FR-005: `GET /api/recipes/{recipeId}` returns the recipe when its `moderationStatus` is `APPROVED` and it is not soft-deleted, regardless of who authored it, with or without a token.
+- [x] FR-006: `GET /api/recipes/{recipeId}` still returns the caller's own recipe in any status (`PENDING`, `APPROVED`, `REJECTED`), so an author never loses access to what they submitted.
+- [x] FR-007: `GET /api/recipes/{recipeId}` answers `404 Recipe not found` when the recipe is missing, soft-deleted, or not approved and the caller is not its author.
+- [x] FR-008: `rejectionReason` is returned only to the recipe's author. It is `null` for every other caller, including guests.
+- [x] FR-009: `POST /api/recipes` and `GET /api/recipes/me` remain authenticated.
 
 ### Non-Functional Requirements
 
-- [ ] NFR-SEC-001: No non-author read can reveal an unapproved recipe's body, instructions, or `rejectionReason`.
-- [ ] NFR-SEC-002: Public recipe routes are explicit `permitAll` rules in `SecurityConfig`; every other recipe route stays behind the authenticated catch-all.
-- [ ] NFR-SCALE-001: Both list endpoints return a bounded page (maximum `100`) instead of an unbounded result set.
-- [ ] NFR-MAINT-001: Recipe list and detail reuse `RecipeService.toResponse` and the existing `RecipeResponse` shape rather than introducing a second mapping.
+- [x] NFR-SEC-001: No non-author read can reveal an unapproved recipe's body, instructions, or `rejectionReason`.
+- [x] NFR-SEC-002: Public recipe routes are explicit `permitAll` rules in `SecurityConfig`; every other recipe route stays behind the authenticated catch-all.
+- [x] NFR-SCALE-001: Both list endpoints return a bounded page (maximum `100`) instead of an unbounded result set.
+- [x] NFR-MAINT-001: Recipe list and detail reuse `RecipeService.toResponse` and the existing `RecipeResponse` shape rather than introducing a second mapping.
 
 ## Design overview
 
@@ -70,13 +70,13 @@ Before merge, the integration suite covers: a guest reading the approved list, a
 
 **As a** visitor or member, **I want to** browse and open approved recipes without being their author, **so that** community recipes are discoverable; **as a** member, **I want** my own post list at `GET /api/posts/me`, **so that** the API matches the recipe routes.
 
-- [ ] Given a guest, when `GET /api/recipes` is called, then only `APPROVED`, non-deleted recipes are returned, newest first, in a page envelope.
-- [ ] Given a guest, when `GET /api/recipes/{recipeId}` is called for an approved recipe, then the full recipe is returned with `rejectionReason` null.
-- [ ] Given a non-author, when `GET /api/recipes/{recipeId}` is called for a `PENDING` or `REJECTED` recipe, then the response is `404`.
-- [ ] Given the author, when `GET /api/recipes/{recipeId}` is called for their own `PENDING` recipe, then it is returned with its state and `rejectionReason`.
-- [ ] Given a guest, when `GET /api/posts` is called, then the published feed is returned and a token is not required.
-- [ ] Given a valid token, when `GET /api/posts/me` is called, then only the caller's non-deleted posts are returned in every status.
-- [ ] Given any caller, when `GET /api/posts/feed` is called, then no feed handler serves it.
+- [x] Given a guest, when `GET /api/recipes` is called, then only `APPROVED`, non-deleted recipes are returned, newest first, in a page envelope.
+- [x] Given a guest, when `GET /api/recipes/{recipeId}` is called for an approved recipe, then the full recipe is returned with `rejectionReason` null.
+- [x] Given a non-author, when `GET /api/recipes/{recipeId}` is called for a `PENDING` or `REJECTED` recipe, then the response is `404`.
+- [x] Given the author, when `GET /api/recipes/{recipeId}` is called for their own `PENDING` recipe, then it is returned with its state and `rejectionReason`.
+- [x] Given a guest, when `GET /api/posts` is called, then the published feed is returned and a token is not required.
+- [x] Given a valid token, when `GET /api/posts/me` is called, then only the caller's non-deleted posts are returned in every status.
+- [x] Given any caller, when `GET /api/posts/feed` is called, then no feed handler serves it.
 
 ## Risks / open questions
 
