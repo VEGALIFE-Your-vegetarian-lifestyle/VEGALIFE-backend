@@ -489,6 +489,39 @@ class RecipeServiceTest {
   }
 
   @Test
+  void deleteRecipe_ownRecipeStampsDeletedAtAndKeepsTheRow() {
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .user(user)
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .build();
+    when(recipeRepository.findByIdAndUser_IdAndDeletedAtIsNull(recipeId, userId))
+        .thenReturn(Optional.of(recipe));
+
+    recipeService.deleteRecipe(userId, recipeId);
+
+    ArgumentCaptor<Recipe> saved = ArgumentCaptor.forClass(Recipe.class);
+    verify(recipeRepository).save(saved.capture());
+    assertThat(saved.getValue().getId()).isEqualTo(recipeId);
+    assertThat(saved.getValue().getDeletedAt()).isNotNull();
+  }
+
+  @Test
+  void deleteRecipe_anotherMembersOrMissingRecipe_isReportedAsNotFound() {
+    when(recipeRepository.findByIdAndUser_IdAndDeletedAtIsNull(recipeId, userId))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> recipeService.deleteRecipe(userId, recipeId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Recipe not found");
+    verify(recipeRepository, never()).save(any(Recipe.class));
+  }
+
+  @Test
   void getRecipe_lineCarriesItsOwnContributionWhenTheIngredientIsCurated() {
     Recipe recipe =
         Recipe.builder()
