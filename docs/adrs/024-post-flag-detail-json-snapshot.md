@@ -58,6 +58,10 @@ SIMILAR_CONTENT  {"kind":"SIMILAR_CONTENT","postId":"<uuid>","similarity":0.9712
 FILTER_SKIPPED   {"kind":"FILTER_SKIPPED","cause":"DISABLED"|"SWEPT"|"UNAVAILABLE"}
 ```
 
+> Extended by [ADR-025](025-post-flag-survives-publication.md): a passing run now
+> stores `FILTER_PASSED` as `{"kind":"FILTER_PASSED","score":…,"threshold":…}`
+> instead of clearing the columns.
+
 1. **`kind` is the discriminator and is redundant with `flag` on purpose.**
    The database enforces `flag_detail->>'kind' = flag`, so the snapshot and the
    blocker it qualifies can never describe different things.
@@ -73,7 +77,9 @@ FILTER_SKIPPED   {"kind":"FILTER_SKIPPED","cause":"DISABLED"|"SWEPT"|"UNAVAILABL
 5. **The API exposes the object, not the raw text** (`PostFlagDetailResponse`);
    absent fields are omitted rather than sent as `null`.
 6. **`content_score` is unchanged** and remains the canonical last relevance
-   score, including after publication, when `flag_detail` is cleared.
+   score. It is now written alongside the snapshot rather than outliving it:
+   since [ADR-025](025-post-flag-survives-publication.md) `flag_detail` is kept
+   after publication too.
 
 ## Considered options
 

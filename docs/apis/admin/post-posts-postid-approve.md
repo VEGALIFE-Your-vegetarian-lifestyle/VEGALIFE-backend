@@ -80,8 +80,8 @@ roles receive `403 Forbidden`.
 |---|---|---|
 | contentScore | number \| null | Relevance score for `title + content`. `null` = never scored. |
 | status | string | `drafted`, `processing`, `published` or `unpublished`. A post awaiting a decision is `processing`. |
-| flag | string \| null | Why the post is being held: `FILTER_FAILED`, `SIMILAR_CONTENT` or `FILTER_SKIPPED`; `null` when no decision is outstanding (ADR-023). |
-| flagDetail | object \| null | The evidence behind `flag` as a JSON snapshot (ADR-024): `kind` (always equal to `flag`) plus the fields that blocker owns — `outcome`/`score`/`threshold` for `FILTER_FAILED`, `postId`/`similarity`/`threshold` for `SIMILAR_CONTENT`, `cause` for `FILTER_SKIPPED`. Absent fields are omitted. |
+| flag | string \| null | The post's last verdict: `FILTER_PASSED` (the filter cleared it), or `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` (held, or approved/rejected over the blocker). `null` on a draft, on a run still in flight, and on rows published before V58 (ADR-025). |
+| flagDetail | object \| null | The evidence behind `flag` as a JSON snapshot (ADR-024, ADR-025): `kind` (always equal to `flag`) plus the fields that verdict owns — `score`/`threshold` for `FILTER_PASSED`, `outcome`/`score`/`threshold` for `FILTER_FAILED`, `postId`/`similarity`/`threshold` for `SIMILAR_CONTENT`, `cause` for `FILTER_SKIPPED`. Absent fields are omitted. |
 | rejectionReason | string \| null | Why an admin rejected this post. Cleared when the post is approved. `null` = no reason recorded. |
 | recipes | array | Recipe bodies the post attaches, each with its own score. Empty when none is attached. |
 | names | array | Every dish and ingredient name the post references. |
@@ -108,8 +108,10 @@ the post references. They are not stored.
 
 - Sets `status = published` and stamps `publishedAt` (`now` when it was null; a re-check
   keeps the original publication time).
-- Clears `flag`, `flagDetail` and `rejectionReason` — the post is no longer held, and a
-  stale reason would describe a decision that no longer stands.
+- Clears `rejectionReason` — a stale reason would describe a decision that no longer stands.
+- **Keeps** `flag` and `flagDetail`: approving a `FILTER_FAILED` post publishes it but does
+  not relabel the filter's verdict, so the row still says the decision was a human override
+  (ADR-025).
 - Sets every referenced `PENDING` dish, ingredient and recipe to `APPROVED`.
 - Does **not** delete anything.
 - Requires at least one category, as before.
@@ -134,8 +136,8 @@ the post references. They are not stored.
 ### Behaviour
 
 - Sets `status = unpublished`, clears `publishedAt`.
-- Clears `flag` and `flagDetail`: the rejection is the terminal state, so nothing is left
-  to hold.
+- **Keeps** `flag` and `flagDetail`: together with `rejectionReason` they are the full
+  decision record — what the machine saw next to what the admin decided (ADR-025).
 - Stores the supplied `reason` in `rejection_reason` (null when the body omits it).
 - Sets referenced rows that are still `PENDING` to `REJECTED`, and records the
   same `reason` on each of those recipe rows.
@@ -163,8 +165,9 @@ the post references. They are not stored.
   `REJECT_POST`) with actor, target and reason (BR-ADMIN-002).
 - Approving approves the referenced names; rejecting rejects only the pending
   ones (BR-DISH-001).
-- Both endpoints clear `flag`/`flagDetail`: a blocker describes a post that is
-  being held, and neither terminal state holds one.
+- Both endpoints **keep** `flag`/`flagDetail` untouched: the verdict is history the admin
+  decided on, not state belonging to the decision. `published` + `FILTER_FAILED` therefore
+  means "a human overrode the filter", which clearing the columns used to hide (ADR-025).
 - `rejection_reason` is current state, not history: rejection stores the reason
   and approval clears it. The full sequence of decisions stays in
   `moderation_log`, which this change does not alter.
@@ -175,5 +178,6 @@ the post references. They are not stored.
 - [Feature spec: component-level verification](../../feats/component-level-verification.md)
 - [ADR-016: Component-aware moderation](../../adrs/016-component-level-moderation.md)
 - [ADR-023: Post processing status and flag blocker](../../adrs/023-post-processing-status-and-flag-blocker.md)
+- [ADR-025: The post verdict survives publication](../../adrs/025-post-flag-survives-publication.md)
 - List posts (Admin): [`admin/get-posts.md`](get-posts.md)
 - The author's own unlist action: `docs/apis/post/patch-posts-postid.md` (`publish: false`)

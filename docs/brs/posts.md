@@ -160,8 +160,9 @@ which a single draft/published pair cannot express.
 ## Scope & Exceptions
 
 Applies to `POST /api/posts`. The status vocabulary is `drafted`, `processing`, `published`,
-`unpublished`, and a `flag` may exist only while the post is `processing` (ADR-023). A draft
-(`publish: false`) keeps `flag` NULL and is never filtered (BR-FILTER-005).
+`unpublished`. A `flag` records the last verdict and is absent only on a draft (ADR-025); the
+constraint is `flag IS NULL OR status <> 'drafted'`. A draft (`publish: false`) keeps `flag` NULL
+and is never filtered (BR-FILTER-005).
 
 ## Enforcement
 
@@ -169,7 +170,9 @@ Applies to `POST /api/posts`. The status vocabulary is `drafted`, `processing`, 
   message in the caller's transaction, and `publishedAt` is assigned only when the filter or an
   admin decision publishes the post.
 - Database: `V56__post_processing_status_and_flag_blocker.sql` rewrites the old status/flag values
-  and adds `CHECK (flag IS NULL OR status = 'processing')`.
+  and adds `flag_detail`; `V58__keep_post_flag_after_publication.sql` widens the vocabulary with
+  `FILTER_PASSED` and replaces the constraint with
+  `CHECK (flag IS NULL OR status <> 'drafted')` (ADR-025).
 - Request DTO: `PostCreateRequest` does not expose lifecycle fields.
 - API reference: `docs/apis/post/post-posts.md`.
 
@@ -448,7 +451,7 @@ Active
 
 ## Statement
 
-The content is embedded and mean-centered — the text embedding and both centroids have the seed-corpus mean subtracted first (raw e5 embeddings are anisotropic, so an uncentered margin score collapses into a ~0.46–0.54 band no threshold can reach) — and compared by cosine similarity with two precomputed centroids, one built from on-topic seed texts and one from off-topic seed texts, both Vietnamese and English. The relevance score is the normalized margin between the two centered similarities, `score = (cos(text - mean, onTopic - mean) - cos(text - mean, offTopic - mean) + 1) / 2`, clamped to `[0, 1]`. The score maps to exactly one band: `score >= accept-threshold` is a pass; `score < reject-threshold` is a refusal; anything between the two is uncertain. The two thresholds are read live, per scoring call, from the `content_filter_accept_threshold` / `content_filter_reject_threshold` platform settings (issue #13 follow-up), falling back to the compiled `app.filter.accept-threshold` / `app.filter.reject-threshold` defaults on a missing, invalid, or contradictory (`reject >= accept`) stored pair — never a startup or request failure. The compiled defaults are recalibrated whenever the embedding model changes; the current values (`0.70` / `0.45`) are calibrated for `gemini-embedding-001` at 768 dimensions from the measured centered seed distribution (highest off-topic `0.3491`, lowest on-topic `0.7553`). The derivation and the selected values are recorded in [Filter Calibration: gemini-embedding-001](../feats/filter-calibration-gemini.md); thresholds derived for a previous model (e5: `0.65` / `0.43`) must not be carried across. The band is an internal observation (`FilterOutcome`: `PASS` / `FAIL` / `UNCERTAIN`), deliberately not a persisted value; what a post stores is a *blocker* in `post.flag` — `FILTER_FAILED`, `SIMILAR_CONTENT`, or `FILTER_SKIPPED` — and only while the post is `processing` (ADR-023).
+The content is embedded and mean-centered — the text embedding and both centroids have the seed-corpus mean subtracted first (raw e5 embeddings are anisotropic, so an uncentered margin score collapses into a ~0.46–0.54 band no threshold can reach) — and compared by cosine similarity with two precomputed centroids, one built from on-topic seed texts and one from off-topic seed texts, both Vietnamese and English. The relevance score is the normalized margin between the two centered similarities, `score = (cos(text - mean, onTopic - mean) - cos(text - mean, offTopic - mean) + 1) / 2`, clamped to `[0, 1]`. The score maps to exactly one band: `score >= accept-threshold` is a pass; `score < reject-threshold` is a refusal; anything between the two is uncertain. The two thresholds are read live, per scoring call, from the `content_filter_accept_threshold` / `content_filter_reject_threshold` platform settings (issue #13 follow-up), falling back to the compiled `app.filter.accept-threshold` / `app.filter.reject-threshold` defaults on a missing, invalid, or contradictory (`reject >= accept`) stored pair — never a startup or request failure. The compiled defaults are recalibrated whenever the embedding model changes; the current values (`0.70` / `0.45`) are calibrated for `gemini-embedding-001` at 768 dimensions from the measured centered seed distribution (highest off-topic `0.3491`, lowest on-topic `0.7553`). The derivation and the selected values are recorded in [Filter Calibration: gemini-embedding-001](../feats/filter-calibration-gemini.md); thresholds derived for a previous model (e5: `0.65` / `0.43`) must not be carried across. The band is an internal observation (`FilterOutcome`: `PASS` / `FAIL` / `UNCERTAIN`), deliberately not a persisted value; what a post stores in `post.flag` is the verdict — `FILTER_PASSED`, `FILTER_FAILED`, `SIMILAR_CONTENT`, or `FILTER_SKIPPED` — and it is kept after publication rather than cleared (ADR-023, ADR-025).
 
 ## Rationale
 
@@ -456,12 +459,14 @@ A three-band outcome separates confident failures from content that is merely am
 
 ## Scope & Exceptions
 
-Applies to every filter run. There is no `NOT_FILTERED` value: a post carries no blocker when it is not being held (draft, or in flight), and every run ends in exactly one band. The centroid model and regeneration procedure are recorded in `docs/adrs/007-post-content-filtering.md`.
+Applies to every filter run. There is no `NOT_FILTERED` value: a draft carries no flag, and every run ends in exactly one band, persisted as `FILTER_PASSED` or `FILTER_FAILED`. The centroid model and regeneration procedure are recorded in `docs/adrs/007-post-content-filtering.md`.
 
 ## Enforcement
 
 - `EmbeddingRelevanceScorer` reads both thresholds from `PlatformSettingsProvider` (falling back to `app.filter.*`) on every `score()` call and returns the band; `ContentFilterService` turns it into a `FilterVerdict` carrying a `FilterOutcome`.
-- `post.flag VARCHAR(32)` is constrained to `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` or NULL, and `CHECK (flag IS NULL OR status = 'processing')` keeps the two columns from disagreeing (migration V56).
+- `post.flag VARCHAR(32)` is constrained to `FILTER_PASSED` / `FILTER_FAILED` / `SIMILAR_CONTENT` /
+  `FILTER_SKIPPED` or NULL, and `CHECK (flag IS NULL OR status <> 'drafted')` keeps a verdict off a
+  draft (migration V58, ADR-025).
 - Unit tests cover all three bands at the exact threshold boundaries; a fixture-based regression test replays captured embeddings through the configured thresholds, and `CentroidRegenerationTest` refreshes those fixtures whenever the centroids are regenerated.
 
 ## Last Reviewed
@@ -556,11 +561,11 @@ Active
 
 ## Statement
 
-When a filter run ends in a pass, the post's status becomes `published`, its `flag` and `flagDetail` are cleared, and `publishedAt` is set if it was null (a re-check keeps the original publication time). Every queued run was enqueued by an explicit submit request or by a content change on a post that was meant to be visible (BR-FILTER-005), so a pass publishes the post — the verdict, not the client's request, drives publication. The verdict is applied only while the post is still `processing` and not soft-deleted: a pass arriving after the author withdrew the post is discarded rather than resurrecting it.
+When a filter run ends in a pass, the post's status becomes `published`, `flag` becomes `FILTER_PASSED`, `flagDetail` becomes `{"kind":"FILTER_PASSED","score":…,"threshold":…}` (the score and the accept boundary the run cleared), and `publishedAt` is set if it was null (a re-check keeps the original publication time). Every queued run was enqueued by an explicit submit request or by a content change on a post that was meant to be visible (BR-FILTER-005), so a pass publishes the post — the verdict, not the client's request, drives publication. The verdict is applied only while the post is still `processing` and not soft-deleted: a pass arriving after the author withdrew the post is discarded rather than resurrecting it.
 
 ## Rationale
 
-Passing the filter is the gate that makes publication legitimate; the transition is driven by the verdict, not by the client's request, so the API response and the public visibility can never disagree about a filtered post. Discarding a stale pass keeps the author's withdrawal stronger than a late machine decision.
+Passing the filter is the gate that makes publication legitimate; the transition is driven by the verdict, not by the client's request, so the API response and the public visibility can never disagree about a filtered post. Storing `FILTER_PASSED` instead of clearing the columns is what lets a reviewer later tell a genuine pass from a post an admin approved over a blocker (ADR-025). Discarding a stale pass keeps the author's withdrawal stronger than a late machine decision.
 
 ## Scope & Exceptions
 
@@ -568,8 +573,8 @@ Applies to every pass, whether it comes from a create, an edit, or a re-check of
 
 ## Enforcement
 
-- `ContentFilterOutboundAdapter` guards on `status = processing` and `deletedAt` before scoring, then sets `status = published` and clears `flag`/`flagDetail`, stamping `publishedAt` only when it is null.
-- Unit tests: `ContentFilterOutboundAdapterTest.passPublishesThePostAndClearsTheFlag`, `passIsDiscardedWhenTheAuthorWithdrewWhileTheMessageWasInFlight`.
+- `ContentFilterOutboundAdapter` guards on `status = processing` and `deletedAt` before scoring, then sets `status = published`, `flag = FILTER_PASSED`, and the `flagDetail` snapshot, stamping `publishedAt` only when it is null.
+- Unit tests: `ContentFilterOutboundAdapterTest.passPublishesThePostAndRecordsTheVerdict`, `passIsDiscardedWhenTheAuthorWithdrewWhileTheMessageWasInFlight`.
 - API references: `docs/apis/post/post-posts.md`, `docs/apis/post/patch-posts-postid.md`.
 
 ## Last Reviewed
@@ -612,18 +617,19 @@ something no human ever saw.
 
 Applies to every non-pass verdict and to the stale-message sweep (BR-FILTER-009), which writes
 `FILTER_SKIPPED` with `cause = SWEPT`. The owner can edit the post again; an edit re-queues it
-(BR-FILTER-005) and clears the blocker, or the owner can withdraw it to `drafted` (BR-POST-007). A
-duplicate's matched post id and its similarity cannot be recovered later, which is why they are
-persisted in `flagDetail`.
+(BR-FILTER-005) and clears the previous blocker until the new run records its own (ADR-025), or the
+owner can withdraw it to `drafted` (BR-POST-007). A duplicate's matched post id and its similarity
+cannot be recovered later, which is why they are persisted in `flagDetail`.
 
 ## Enforcement
 
 - `ContentFilterOutboundAdapter` applies a non-pass verdict as `status = processing` plus
   `flag`/`flagDetail`; it never writes `unpublished`.
-- Database: `CHECK (flag IS NULL OR status = 'processing')`, `flag IN ('FILTER_FAILED',
-  'SIMILAR_CONTENT', 'FILTER_SKIPPED')` (migration V56), and `flag_detail->>'kind' = flag`
-  (migration V57, ADR-024).
-- API: `flag`/`flagDetail` are exposed on the admin post list and detail, and the review queue is
+- Database: `CHECK (flag IS NULL OR status <> 'drafted')` (V58, ADR-025) and
+  `flag IN ('FILTER_PASSED', 'FILTER_FAILED', 'SIMILAR_CONTENT', 'FILTER_SKIPPED')` (V58), plus
+  `flag_detail->>'kind' = flag` (migration V57, ADR-024).
+- API: `flag`/`flagDetail` are exposed only on the admin post list and detail — never on the
+  member-facing post shape — and the review queue is
   `GET /api/admin/posts?status=processing`.
 
 ## Last Reviewed
@@ -699,13 +705,16 @@ Only an Administrator may decide a post that is waiting for review, through
 decidable in `processing` and `unpublished`; a `drafted` post has not been submitted and is refused
 with `400`.
 
-`approve` sets `status = published`, stamps `publishedAt` when it is null, clears `flag`,
-`flagDetail`, and `rejectionReason`, and requires the post to have at least one category
-(BR-CONTENT-003). It also approves every `PENDING` component (recipe, dish, ingredient) of the post
-and never resurrects a `REJECTED` component (BR-DISH-001).
+`approve` sets `status = published`, stamps `publishedAt` when it is null, clears
+`rejectionReason`, and requires the post to have at least one category (BR-CONTENT-003). It keeps
+`flag`/`flagDetail` exactly as the filter left them, so the row records whether the filter cleared
+the post (`FILTER_PASSED`) or a human overrode it (`FILTER_FAILED`, `SIMILAR_CONTENT`,
+`FILTER_SKIPPED`) — ADR-025. It also approves every `PENDING` component (recipe, dish, ingredient) of
+the post and never resurrects a `REJECTED` component (BR-DISH-001).
 
-`reject` sets `status = unpublished`, clears `publishedAt`, clears `flag`/`flagDetail` (the rejection
-is terminal, so nothing is left to hold), stores the reason in `rejectionReason` for the author, and
+`reject` sets `status = unpublished`, clears `publishedAt`, keeps `flag`/`flagDetail` so the decision
+record pairs what the machine saw with what the human decided (ADR-025), stores the reason in
+`rejectionReason` for the author, and
 rejects every still-`PENDING` component.
 
 Every real decision is recorded in `moderation_log` as `APPROVE_POST` / `REJECT_POST` with the
@@ -714,9 +723,9 @@ optional reason (BR-ADMIN-002).
 ## Rationale
 
 Approving and rejecting are the two things a human reviewer actually decides; a generic
-"moderate with PUBLISH/UNPUBLISH" verb cannot express "the filter was wrong, publish it" and it left
-the blocker dangling on a published row. Clearing the blocker on both terminals keeps ADR-023's
-invariant — a blocker describes a post that is being held — true by construction. Refusing `drafted`
+"moderate with PUBLISH/UNPUBLISH" verb cannot express "the filter was wrong, publish it". Keeping the
+blocker through both decisions is what preserves that distinction: `published` + `FILTER_FAILED`
+says the filter was overridden, which clearing the columns used to hide (ADR-025). Refusing `drafted`
 prevents an admin from publishing a post its own author never submitted.
 
 ## Scope & Exceptions
@@ -731,9 +740,10 @@ chosen so no blocker is silently hidden, not a rule about which posts exist.
 - Security: `AdminPostController` carries `@PreAuthorize("hasRole('ADMIN')")` (ADR-009); no
   `SecurityConfig` path rule grants `/api/admin/**`.
 - Service: `AdminPostService.approvePost()` / `rejectPost()` load a non-deleted post, refuse
-  `drafted`, validate categories on approve, clear `flag`/`flagDetail`, cascade to components, and
-  write the log row.
-- Database: `CHECK (flag IS NULL OR status = 'processing')` makes a lingering blocker impossible.
+  `drafted`, validate categories on approve, keep `flag`/`flagDetail` untouched, cascade to
+  components, and write the log row.
+- Database: `CHECK (flag IS NULL OR status <> 'drafted')` (V58) allows a blocker on `published` and
+  `unpublished` by design and still forbids one on a draft.
 - API reference: `docs/apis/admin/post-posts-postid-approve.md`.
 
 ## Last Reviewed

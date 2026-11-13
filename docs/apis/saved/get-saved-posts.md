@@ -48,7 +48,6 @@ belongs to the caller; no member id is accepted.
         "mediaIds": [],
         "recipeIds": [],
         "status": "published",
-        "flag": "PASSED",
         "rejectionReason": null,
         "viewCount": 12,
         "publishedAt": "2026-11-01T09:30:00Z",

@@ -38,7 +38,7 @@ Required: a valid JWT access token in the `Authorization` header (`Bearer <token
 
 ### Success Response (200 OK)
 
-Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `status`, `flag`, `rejectionReason`, `viewCount`, `publishedAt`, `createdAt`). `rejectionReason` is returned only to the post's author, so an Administrator attaching recipes to someone else's post gets `null`.
+Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `status`, `rejectionReason`, `viewCount`, `publishedAt`, `createdAt`). `rejectionReason` is returned only to the post's author, so an Administrator attaching recipes to someone else's post gets `null`. The filter verdict (`flag`/`flagDetail`) is not part of this shape (ADR-025).
 
 ```json
 {
@@ -72,7 +72,8 @@ Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, 
 - Only an `APPROVED` recipe can be attached (`BR-POST-013`). A `PENDING` or `REJECTED` recipe is refused with `404`, because a post must never become the way an unreviewed or refused recipe body reaches the public. This applies to Administrators too — approval happens in the moderation queue, not by attaching.
 - Every requested id is validated, including ids already attached: a post that somehow holds a non-approved recipe cannot keep it by re-sending the same set. The recipe must be detached (or approved) first.
 - Replace-the-full-set semantics: re-calling with the same set is idempotent, and a smaller set detaches the rest. Nothing is written if validation fails for any id in the request.
-- Attaching recipes never changes the post's `status`, publication state (`publishedAt`), or triggers content filtering (`flag` is untouched) — this is a pure association change.
+- Attaching recipes never changes the post's `status`, publication state (`publishedAt`), or its
+  filter verdict — this is a pure association change.
 - `post_recipe` is owned by `Recipe.posts`, not `Post`; the service mutates the recipe side (`recipe.getPosts()`) to keep the association consistent, but this is an implementation detail invisible to the API contract.
 - Creating recipes and hard-deleting recipes are out of scope for this endpoint (issue #137 non-goals); recipes are created separately via `POST /api/recipes`.
 - Deleting the post or the recipe later cascades the `post_recipe` row automatically (`ON DELETE CASCADE`); this endpoint never needs to clean that up.

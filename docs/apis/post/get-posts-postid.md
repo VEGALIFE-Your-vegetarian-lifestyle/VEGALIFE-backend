@@ -50,8 +50,6 @@ No request body.
     "mediaIds": [],
     "recipeIds": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
     "status": "published",
-    "flag": null,
-    "flagDetail": null,
     "rejectionReason": null,
     "viewCount": 12,
     "publishedAt": "2026-09-26T10:00:00Z",
