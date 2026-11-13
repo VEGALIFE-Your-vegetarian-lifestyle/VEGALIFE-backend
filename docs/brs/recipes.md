@@ -577,8 +577,10 @@ route; administrative removal stays on
 Deletion is soft: `deleted_at` is stamped and the row is kept. The recipe then
 disappears from the public catalogue, the author's own list, saved-recipe
 lists, and the single-read route, including for its own author. A second
-delete returns `404`. References from posts and menus keep resolving; no post
-or menu row is modified.
+delete returns `404`. The `post_recipe` rows and saves are not deleted, but a
+deleted recipe stops appearing in a post's recipe list and in saved lists
+because both resolve it as active only; existing menu meals are snapshots and
+are unaffected.
 
 ## Rationale
 

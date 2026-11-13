@@ -58,9 +58,12 @@ No query parameters. No request body.
   so the route cannot confirm that another member's recipe exists. An
   Administrator on this route is treated as an ordinary caller; the admin
   route is the supported override.
-- Deleting a recipe that a published post references is allowed. The post keeps
-  resolving the attachment; the recipe simply stops being listed or readable
-  on its own. No post is edited.
+- Deleting a recipe that a published post references is allowed. The post and
+  its `post_recipe` row are not modified, but the attachment stops appearing in
+  the post's recipe list, because that list is resolved from active recipes
+  only. Existing menu meals are snapshots and are unaffected. The save row
+  survives as well, so a saved recipe reappears if an administrator restores
+  it.
 - A second delete on the same id returns `404` because the row is already
   soft-deleted.
 - There is no member-facing restore path. Restoration is an administrative
