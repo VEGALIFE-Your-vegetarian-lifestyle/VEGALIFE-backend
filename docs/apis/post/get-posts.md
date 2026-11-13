@@ -28,8 +28,12 @@ No path parameters.
 |------|------|----------|-------------|
 | page | integer | No | Zero-based page index. Defaults to `0`; must be `>= 0`. |
 | size | integer | No | Page size. Defaults to `20`; between `1` and `100`. |
+| keyword | string | No | Case-insensitive whole-phrase match on `title` or the plain-text `content`. Trimmed; blank means no filter. `%`, `_`, and `\` are matched literally. |
+| categoryId | UUID | No | Only posts assigned that category. A post is never returned twice. |
+| createdFrom | instant | No | Inclusive lower bound on `createdAt`, ISO-8601. |
+| createdTo | instant | No | Inclusive upper bound on `createdAt`, ISO-8601. |
 
-Order is fixed: `published_at DESC, created_at DESC`. It cannot be changed; there is no sort, category, or keyword parameter.
+Order is fixed: `published_at DESC, created_at DESC`. It cannot be changed. Filters combine with AND and only narrow the published feed — no filter can make a non-published or deleted post appear.
 
 ### Request Body
 
@@ -72,7 +76,7 @@ Item fields follow the existing `PostListResponse` shape used by `GET /api/posts
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | `page` or `size` out of range | `Validation failed` |
+| 400 | `page`/`size` out of range, or an unparseable `categoryId`/instant | `Validation failed` |
 | 401 | A token is supplied but is invalid, expired, or the account is inactive | `Unauthorized` |
 | 500 | Unexpected server error | `Internal server error` |
 
@@ -80,6 +84,8 @@ Item fields follow the existing `PostListResponse` shape used by `GET /api/posts
 
 - BR-POST-010: only `published`, non-deleted posts are public; `drafted`, `processing` (the post is awaiting a filter verdict or an admin decision), and `unpublished` posts never appear (BR-CONTENT-003 keeps them private to owner and Administrators). The content filter never unpublishes a post; it holds it at `processing` with a blocker for an admin (BR-FILTER-008).
 - BR-POST-003 pagination bounds apply: page `0`, size `20`, `size` 1–100.
+- `keyword` matches the title or the plain-text `content` only — not `rawContent`, the author, or attached recipes. Matching is a whole trimmed phrase, case-insensitive, with no tokenization or ranking (BR-POST-014).
+- `categoryId`, `createdFrom`, and `createdTo` only narrow the published feed; they never widen visibility.
 - Soft-deleted posts (`deleted_at IS NOT NULL`) are never returned.
 - `rejectionReason` is never populated on the feed: it is owner-scoped and this endpoint has no owner. A published post carrying a stale reason still returns `null`.
 - No schema migration is needed.
@@ -87,7 +93,7 @@ Item fields follow the existing `PostListResponse` shape used by `GET /api/posts
 ## Example
 
 ```bash
-curl "http://localhost:8080/api/posts?page=0&size=10"
+curl "http://localhost:8080/api/posts?page=0&size=10&keyword=pho&categoryId=7c9e6679-7425-40de-944b-e07fc1f90ae7"
 ```
 
 ## Related

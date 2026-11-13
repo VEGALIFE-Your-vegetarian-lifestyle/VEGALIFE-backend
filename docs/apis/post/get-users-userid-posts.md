@@ -34,8 +34,11 @@ Optional. No JWT is needed, but if a valid token is sent it decides how much the
 |------|------|----------|-------------|
 | page | integer | No | Zero-based page index. Defaults to `0`; must be `>= 0`. |
 | size | integer | No | Page size. Defaults to `20`; between `1` and `100`. |
+| categoryId | UUID | No | Only posts assigned that category. |
+| createdFrom | instant | No | Inclusive lower bound on `createdAt`, ISO-8601. |
+| createdTo | instant | No | Inclusive upper bound on `createdAt`, ISO-8601. |
 
-Public listings are ordered by `publishedAt` descending; owner/admin listings by `createdAt` descending. Order cannot be changed.
+Public listings are ordered by `publishedAt` descending; owner/admin listings by `createdAt` descending. Order cannot be changed. There is no `keyword` parameter.
 
 ## Responses
 
@@ -47,7 +50,7 @@ Same envelope and item shape as `GET /api/posts/me` (`PageResponse<PostListRespo
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | `page` or `size` out of range | `Validation failed` |
+| 400 | `page`/`size` out of range, or a filter value cannot be parsed | `Validation failed` |
 | 401 | A token is supplied but is invalid, expired, or the account is inactive | `Unauthorized` |
 | 404 | The user does not exist or is deleted | `User not found` |
 | 500 | Unexpected server error | `Internal server error` |
@@ -56,6 +59,7 @@ Same envelope and item shape as `GET /api/posts/me` (`PageResponse<PostListRespo
 
 - Only `published` posts are listed for anyone other than the creator; drafts, posts awaiting a decision (`processing`), and rejected (`unpublished`) posts are visible only to the creator and Administrators (BR-CONTENT-003).
 - Soft-deleted posts are never returned.
+- `categoryId`, `createdFrom`, and `createdTo` only narrow the visible list; they never widen what a caller may see (BR-POST-014).
 - `rejectionReason` is populated only for the post's author. An Administrator browsing another member's profile sees the payload without it — the admin post surfaces carry the reason instead.
 - No migration is needed.
 

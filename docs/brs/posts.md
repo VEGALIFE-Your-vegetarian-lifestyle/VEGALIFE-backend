@@ -15,6 +15,9 @@
 | BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Retired (ADR-023) | 2026-11-13 |
 | BR-POST-010 | Only Published Posts Are Public | Active | 2026-11-13 |
 | BR-POST-011 | Single Post Detail Excludes Only Deleted Posts, Not Ownership | Active | 2026-10-10 |
+| BR-POST-012 | Only Administrators Approve or Reject a Submitted Post | Active | 2026-11-13 |
+| BR-POST-013 | Only Approved Recipes May Be Attached to a Post | Active | 2026-11-12 |
+| BR-POST-014 | Post List Filters Only Narrow the Visible Set | Active | 2026-11-13 |
 | BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-11-13 |
 | BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-11-13 |
 | BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-11-13 |
@@ -434,6 +437,43 @@ Applies to `GET /api/posts/{postId}`. It does not define owner/admin draft previ
 ## Last Reviewed
 
 2026-10-10, by Vegalife backend team
+
+---
+
+# Business Rule: Post List Filters Only Narrow the Visible Set
+
+## Rule ID
+
+`BR-POST-014`
+
+## Status
+
+Active
+
+## Statement
+
+The post list routes accept filters — the public feed (`GET /api/posts`) accepts `keyword`, `categoryId`, `createdFrom`, and `createdTo`; the caller's own list (`GET /api/posts/me`) accepts `status`, `categoryId`, `createdFrom`, and `createdTo`; another member's list (`GET /api/users/{userId}/posts`) accepts `categoryId`, `createdFrom`, and `createdTo`. Every supplied filter is combined with `AND` and can only remove rows from the set the route already allows; no filter can add a row the route's visibility rule would otherwise hide. Blank or absent values never narrow. An unknown `status` value is rejected, not ignored.
+
+`keyword` is trimmed and matched as one case-insensitive substring of the title or the plain-text content; it is not tokenized, ranked, stemmed, or expanded with synonyms. `%`, `_`, and `\` in a keyword are literal characters, not wildcards.
+
+## Rationale
+
+A browse filter is a narrowing tool. If a filter could bypass BR-POST-010 (only published posts are public) or BR-POST-002 (the caller's own non-deleted posts), a client could read content the route was not meant to expose. Rejecting an unknown status instead of ignoring it keeps a typo from silently returning the wrong set. Literal wildcard matching keeps the endpoint's contract identical to a plain substring, so a user searching for `%` sees posts containing a percent sign, not the whole feed.
+
+## Scope & Exceptions
+
+Applies to the three post list routes named above. It does not apply to `GET /api/posts/{postId}` (BR-POST-011) or the admin listings, which have their own filters. `keyword` is only on the public feed; the author-scoped routes deliberately omit it.
+
+## Enforcement
+
+- Specifications: `PostSpecifications.filtering(...)` always adds `deletedAt is null` and the caller's status/author predicates before any optional filter; `PostSpecifications.searchable(...)` reuses the same keyword predicate for the deprecated global search.
+- DTOs: `PostFeedRequest`, `MyPostListRequest`, and `UserPostListRequest` each declare only the filters their route supports; `@Pattern` rejects an unknown `status`.
+- API references: `docs/apis/post/get-posts.md`, `docs/apis/post/get-posts-me.md`, `docs/apis/post/get-users-userid-posts.md`.
+- Tests: `PostControllerIntegrationTest` covers keyword on title/content, category, date range, literal `%`, and an unknown status.
+
+## Last Reviewed
+
+2026-11-13, by Vegalife backend team
 
 ---
 

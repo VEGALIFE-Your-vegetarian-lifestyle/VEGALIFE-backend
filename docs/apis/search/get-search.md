@@ -1,8 +1,17 @@
 # API Reference: GET /api/search
 
+> **Deprecated.** Use the typed list filters instead: `GET /api/posts` (`keyword`,
+> `categoryId`, `createdFrom`, `createdTo`) returns `PostListResponse` pages, and
+> `GET /api/recipes` (`keyword`, `dishId`, `difficulty`, `maxTotalTimeMinutes`)
+> returns `RecipeResponse` pages. This endpoint is kept for compatibility only; its
+> behavior is unchanged.
+
 ## Overview
 
 Keyword search across posts, videos, recipes, and restaurants in one query (issues #40, #196). Public endpoint, no authentication required.
+
+Deprecated in favour of the typed list filters on `GET /api/posts` and
+`GET /api/recipes`; see `docs/feats/post-recipe-list-filters.md`.
 
 ## Endpoint
 
