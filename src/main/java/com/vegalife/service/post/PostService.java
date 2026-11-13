@@ -35,6 +35,7 @@ import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
 import com.vegalife.service.filter.ContentFilterPayload;
+import com.vegalife.service.filter.PostFlagDetail;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -145,9 +146,10 @@ public class PostService {
     boolean willEnqueue = shouldEnqueueFilter(post, request.getPublish(), contentChanged);
     applyPublishState(post, request.getPublish(), willEnqueue);
     if (willEnqueue) {
-      // A new revision invalidates the previous verdict: the post is re-checked from scratch and
-      // carries no blocker until the new run says otherwise (ADR-023). It is also out of view for
-      // the duration, so nobody reads content that is mid-review.
+      // A new revision invalidates the previous verdict: the post is re-checked from scratch, and
+      // the new run overwrites whatever the old one recorded (ADR-025). Until it lands the post
+      // carries no flag, and it is out of view for the duration, so nobody reads content that is
+      // mid-review.
       post.setStatus(PostStatus.processing);
       post.setFlag(null);
       post.setFlagDetail(null);
@@ -366,8 +368,8 @@ public class PostService {
     if (!publish && post.getStatus() != PostStatus.drafted) {
       post.setStatus(PostStatus.drafted);
       post.setPublishedAt(null);
-      // A withdrawn post is not being held for anyone: the invariant forbids a flag outside
-      // `processing`, and the author's withdrawal outranks a stale verdict (ADR-023).
+      // A withdrawn post is not being held for anyone, and a draft carries no verdict: the old
+      // filter result describes content the author has taken back (ADR-025).
       post.setFlag(null);
       post.setFlagDetail(null);
     }
@@ -411,7 +413,7 @@ public class PostService {
   private void markForAdminReview(Post post) {
     post.setStatus(PostStatus.processing);
     post.setFlag(PostFlag.FILTER_SKIPPED);
-    post.setFlagDetail("FILTER_DISABLED");
+    post.setFlagDetail(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
     post.setPublishedAt(null);
     postRepository.saveAndFlush(post);
     log.info("Filter disabled: post {} is held for admin review", post.getId());

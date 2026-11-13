@@ -37,6 +37,9 @@ import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
+import com.vegalife.service.filter.FilterOutcome;
+import com.vegalife.service.filter.FilterVerdict;
+import com.vegalife.service.filter.PostFlagDetail;
 import com.vegalife.service.post.PostService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -189,7 +192,8 @@ class PostServiceTest {
 
     assertThat(post.getStatus()).isEqualTo(PostStatus.processing);
     assertThat(post.getFlag()).isEqualTo(PostFlag.FILTER_SKIPPED);
-    assertThat(post.getFlagDetail()).isEqualTo("FILTER_DISABLED");
+    assertThat(post.getFlagDetail())
+        .isEqualTo(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
     assertThat(post.getPublishedAt()).isNull();
     verifyContentFilterNotQueued();
   }
@@ -675,7 +679,8 @@ class PostServiceTest {
 
     assertThat(existing.getStatus()).isEqualTo(PostStatus.processing);
     assertThat(existing.getFlag()).isEqualTo(PostFlag.FILTER_SKIPPED);
-    assertThat(existing.getFlagDetail()).isEqualTo("FILTER_DISABLED");
+    assertThat(existing.getFlagDetail())
+        .isEqualTo(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
     assertThat(existing.getPublishedAt()).isNull();
     verifyContentFilterNotQueued();
   }
@@ -685,7 +690,8 @@ class PostServiceTest {
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, PostStatus.processing);
     existing.setFlag(PostFlag.FILTER_FAILED);
-    existing.setFlagDetail("score=0.210");
+    existing.setFlagDetail(
+        PostFlagDetail.filterFailed(new FilterVerdict(FilterOutcome.FAIL, 0.21, 0.45, List.of())));
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);
@@ -767,7 +773,8 @@ class PostServiceTest {
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, PostStatus.processing);
     existing.setFlag(PostFlag.FILTER_FAILED);
-    existing.setFlagDetail("score=0.210");
+    existing.setFlagDetail(
+        PostFlagDetail.filterFailed(new FilterVerdict(FilterOutcome.FAIL, 0.21, 0.45, List.of())));
     when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
         .thenReturn(Optional.of(existing));
     when(postRepository.saveAndFlush(existing)).thenReturn(existing);

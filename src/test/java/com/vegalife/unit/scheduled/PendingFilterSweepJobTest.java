@@ -17,6 +17,7 @@ import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.scheduled.PendingFilterSweepJob;
 import com.vegalife.service.filter.FilterProperties;
+import com.vegalife.service.filter.PostFlagDetail;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -63,7 +64,8 @@ class PendingFilterSweepJobTest {
     // stays where it was: processing, waiting for a human.
     assertThat(stalePost.getStatus()).isEqualTo(PostStatus.processing);
     assertThat(stalePost.getFlag()).isEqualTo(PostFlag.FILTER_SKIPPED);
-    assertThat(stalePost.getFlagDetail()).isEqualTo("FILTER_SWEPT");
+    assertThat(stalePost.getFlagDetail())
+        .isEqualTo(PostFlagDetail.skipped(PostFlagDetail.CAUSE_SWEPT));
     verify(postRepository).save(stalePost);
   }
 

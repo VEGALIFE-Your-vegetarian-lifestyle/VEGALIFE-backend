@@ -7,6 +7,7 @@ import com.vegalife.model.post.Post;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.service.filter.FilterProperties;
+import com.vegalife.service.filter.PostFlagDetail;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,9 +34,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @Slf4j
 public class PendingFilterSweepJob {
-
-  /** Recorded so an operator can tell "the queue lost it" from "the provider refused it". */
-  private static final String SWEPT_DETAIL = "FILTER_SWEPT";
 
   private final PostRepository postRepository;
   private final OutboundMessageRepository outboundMessageRepository;
@@ -73,7 +71,7 @@ public class PendingFilterSweepJob {
             .toList();
     for (Post post : stalePosts) {
       post.setFlag(PostFlag.FILTER_SKIPPED);
-      post.setFlagDetail(SWEPT_DETAIL);
+      post.setFlagDetail(PostFlagDetail.skipped(PostFlagDetail.CAUSE_SWEPT));
       postRepository.save(post);
       log.error(
           "Post {} is still processing while its content-filter queue row is older than {} —"

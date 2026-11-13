@@ -127,7 +127,8 @@ class FilterBypassForwardsToAdminIntegrationTest {
                         .formatted(category.getId())))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.data.status").value("processing"))
-        .andExpect(jsonPath("$.data.flag").value("FILTER_SKIPPED"));
+        // The member-facing response does not carry the verdict; the admin list below does.
+        .andExpect(jsonPath("$.data.flag").doesNotExist());
 
     UUID postId = findPostId("Bát đậu hũ non sốt mè rang");
     assertThat(outboundMessageRepository.findAll())
@@ -151,7 +152,9 @@ class FilterBypassForwardsToAdminIntegrationTest {
                 .content("{\"reason\":\"Bypass demo\"}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.status").value("published"))
-        .andExpect(jsonPath("$.data.flag").doesNotExist());
+        // Approving does not relabel the verdict: it stays the record of why the post was held
+        // (ADR-025).
+        .andExpect(jsonPath("$.data.flag").value("FILTER_SKIPPED"));
   }
 
   private User createUser(String displayName, String email, UserRole role) {

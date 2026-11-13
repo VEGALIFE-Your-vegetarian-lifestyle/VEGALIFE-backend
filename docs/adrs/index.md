@@ -27,3 +27,5 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [021-request-allowance-as-acquisition-sum.md](021-request-allowance-as-acquisition-sum.md) | Treat AI Request Entitlement as the Live Sum of Granted Acquisitions | Accepted | 2026-11-04 |
 | [022-ingredient-level-nutrition.md](022-ingredient-level-nutrition.md) | Derive Recipe Nutrition From Ingredient Nutrition Measured Per One Unit | Accepted | 2026-11-05 |
 | [023-post-processing-status-and-flag-blocker.md](023-post-processing-status-and-flag-blocker.md) | Model Post Moderation as Four Statuses Plus One Held-State Blocker, Drop Admin Hide | Accepted | 2026-11-13 |
+| [024-post-flag-detail-json-snapshot.md](024-post-flag-detail-json-snapshot.md) | Store the Post Blocker Detail as a Typed JSON Snapshot | Accepted | 2026-11-13 |
+| [025-post-flag-survives-publication.md](025-post-flag-survives-publication.md) | Keep the Post Verdict After Publication and Name the Passing One | Accepted | 2026-11-13 |

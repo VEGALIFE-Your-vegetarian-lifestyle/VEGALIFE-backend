@@ -118,7 +118,10 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
         score >= acceptThreshold
             ? RelevanceScore.Band.PASS
             : score < rejectThreshold ? RelevanceScore.Band.REJECT : RelevanceScore.Band.REVIEW;
-    return new RelevanceScore(score, band);
+    // The boundary that decided the band travels with the score so a stored verdict can be
+    // re-read against the settings that were in force at the time (ADR-024).
+    double threshold = band == RelevanceScore.Band.REJECT ? rejectThreshold : acceptThreshold;
+    return new RelevanceScore(score, band, threshold);
   }
 
   /**

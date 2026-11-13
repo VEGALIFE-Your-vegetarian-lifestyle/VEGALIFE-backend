@@ -33,6 +33,9 @@ import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.service.admin.AdminPostService;
+import com.vegalife.service.filter.FilterOutcome;
+import com.vegalife.service.filter.FilterVerdict;
+import com.vegalife.service.filter.PostFlagDetail;
 import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -195,7 +198,8 @@ class AdminPostServiceTest {
 
     assertThatThrownBy(() -> adminPostService.listPosts(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage("Flag must be one of: all, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED");
+        .hasMessage(
+            "Flag must be one of: all, FILTER_PASSED, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED");
   }
 
   @Test
@@ -244,11 +248,12 @@ class AdminPostServiceTest {
   }
 
   @Test
-  void approvePost_publishesAndClearsTheBlocker() {
+  void approvePost_publishesAndKeepsTheBlocker() {
     UUID adminId = UUID.randomUUID();
     post.setStatus(PostStatus.processing);
     post.setFlag(PostFlag.FILTER_FAILED);
-    post.setFlagDetail("score=0.210");
+    post.setFlagDetail(
+        PostFlagDetail.filterFailed(new FilterVerdict(FilterOutcome.FAIL, 0.21, 0.45, List.of())));
     post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId())).thenReturn(List.of());
@@ -257,9 +262,11 @@ class AdminPostServiceTest {
 
     assertThat(post.getStatus()).isEqualTo(PostStatus.published);
     assertThat(post.getPublishedAt()).isNotNull();
-    // The post is not being held any more: the blocker and its detail go with it (ADR-023).
-    assertThat(post.getFlag()).isNull();
-    assertThat(post.getFlagDetail()).isNull();
+    // Published + FILTER_FAILED is the record of a human override; relabelling it FILTER_PASSED
+    // would say the filter cleared content it refused (ADR-025).
+    assertThat(post.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
+    assertThat(post.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_FAILED");
+    assertThat(post.getFlagDetail().path("score").asDouble()).isEqualTo(0.21);
 
     ModerationLog entry = lastPostLog();
     assertThat(entry.getActorId()).isEqualTo(adminId);
@@ -342,11 +349,12 @@ class AdminPostServiceTest {
   }
 
   @Test
-  void rejectPost_unpublishesClearsTheBlockerAndRejectsPendingComponents() {
+  void rejectPost_unpublishesKeepsTheBlockerAndRejectsPendingComponents() {
     UUID adminId = UUID.randomUUID();
     post.setStatus(PostStatus.processing);
     post.setFlag(PostFlag.FILTER_FAILED);
-    post.setFlagDetail("score=0.180");
+    post.setFlagDetail(
+        PostFlagDetail.filterFailed(new FilterVerdict(FilterOutcome.FAIL, 0.18, 0.45, List.of())));
     post.setPublishedAt(Instant.parse("2026-09-21T10:00:00Z"));
     Dish dish =
         Dish.builder()
@@ -374,9 +382,10 @@ class AdminPostServiceTest {
     assertThat(post.getStatus()).isEqualTo(PostStatus.unpublished);
     assertThat(post.getPublishedAt()).isNull();
     assertThat(post.getRejectionReason()).isEqualTo("not vegan");
-    // The rejection is terminal; there is nothing left to hold for review.
-    assertThat(post.getFlag()).isNull();
-    assertThat(post.getFlagDetail()).isNull();
+    // Rejection is terminal, but the blocker is part of the decision record: what the machine saw,
+    // next to what the admin decided (ADR-025).
+    assertThat(post.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
+    assertThat(post.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_FAILED");
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
     // The recipe's author reads this from the recipe's own row, and it was the same decision.
     assertThat(recipe.getRejectionReason()).isEqualTo("not vegan");
@@ -592,7 +601,9 @@ class AdminPostServiceTest {
             .build();
     post.setContentScore(0.63);
     post.setFlag(PostFlag.FILTER_FAILED);
-    post.setFlagDetail("score=0.580");
+    post.setFlagDetail(
+        PostFlagDetail.filterFailed(
+            new FilterVerdict(FilterOutcome.UNCERTAIN, 0.58, 0.7, List.of())));
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));
@@ -608,7 +619,12 @@ class AdminPostServiceTest {
 
     assertThat(detail.getContentScore()).isEqualTo(0.63);
     assertThat(detail.getFlag()).isEqualTo("FILTER_FAILED");
-    assertThat(detail.getFlagDetail()).isEqualTo("score=0.580");
+    // The detail reaches the API as an object, not as the raw string it was stored as before
+    // ADR-024.
+    assertThat(detail.getFlagDetail().getKind()).isEqualTo("FILTER_FAILED");
+    assertThat(detail.getFlagDetail().getOutcome()).isEqualTo("UNCERTAIN");
+    assertThat(detail.getFlagDetail().getScore()).isEqualTo(0.58);
+    assertThat(detail.getFlagDetail().getThreshold()).isEqualTo(0.7);
     assertThat(detail.getRecipes()).hasSize(1);
     assertThat(detail.getRecipes().get(0).getScore()).isEqualTo(0.81);
     assertThat(detail.getRecipes().get(0).getType()).isEqualTo("RECIPE");

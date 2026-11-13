@@ -132,7 +132,7 @@ class ModeratePostIntegrationTest {
   }
 
   @Test
-  void approve_publishesAndClearsTheBlocker() throws Exception {
+  void approve_publishesAndKeepsTheBlocker() throws Exception {
     Post post =
         createPost(
             member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
@@ -142,19 +142,40 @@ class ModeratePostIntegrationTest {
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Post approved successfully"))
         .andExpect(jsonPath("$.data.status").value("published"))
-        .andExpect(jsonPath("$.data.flag").doesNotExist());
+        .andExpect(jsonPath("$.data.flag").value("FILTER_FAILED"));
 
     Post reloaded = postRepository.findById(post.getId()).orElseThrow();
     assertThat(reloaded.getStatus()).isEqualTo(PostStatus.published);
     assertThat(reloaded.getPublishedAt()).isNotNull();
-    // A blocker only describes a held post; publishing leaves nothing to hold (ADR-023).
-    assertThat(reloaded.getFlag()).isNull();
-    assertThat(reloaded.getFlagDetail()).isNull();
+    // Published + FILTER_FAILED is how the row says a human overrode the filter (ADR-025).
+    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
 
     ModerationLog entry = singlePostLog();
     assertThat(entry.getActorId()).isEqualTo(admin.getId());
     assertThat(entry.getAction()).isEqualTo("APPROVE_POST");
     assertThat(entry.getReason()).isEqualTo("Vegan recipe false positive");
+  }
+
+  @Test
+  void reject_keepsTheBlockerAsPartOfTheDecisionRecord() throws Exception {
+    Post post =
+        createPost(
+            member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
+
+    mockMvc
+        .perform(
+            post("/api/admin/posts/" + post.getId() + "/reject")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"not vegan\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("unpublished"))
+        .andExpect(jsonPath("$.data.flag").value("FILTER_FAILED"));
+
+    Post reloaded = postRepository.findById(post.getId()).orElseThrow();
+    // What the machine saw, next to what the admin decided (ADR-025).
+    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
+    assertThat(reloaded.getRejectionReason()).isEqualTo("not vegan");
   }
 
   @Test

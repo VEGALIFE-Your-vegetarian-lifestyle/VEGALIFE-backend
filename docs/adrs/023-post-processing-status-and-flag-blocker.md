@@ -47,6 +47,10 @@ columns:
 **`status` answers "where is this post in its life"; `flag` answers "why is
 it not published". A published post therefore has no flag.**
 
+> Superseded by [ADR-025](025-post-flag-survives-publication.md): `flag` now
+> records the last verdict and survives publication, `FILTER_PASSED` was added,
+> and the constraint below became `flag IS NULL OR status <> 'drafted'`.
+
 ### 1. Status vocabulary
 
 `drafted`, `processing`, `published`, `unpublished`.
@@ -63,6 +67,9 @@ author hide: withdrawing (`publish: false`) is the author's way to unlist, and
 it yields `drafted`.
 
 ### 2. `flag` is the blocking reason, and only exists while blocked
+
+> Superseded by [ADR-025](025-post-flag-survives-publication.md): `FILTER_PASSED`
+> is now stored, and `flag` is kept after publication instead of being cleared.
 
 Stored values: `FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`.
 
@@ -83,6 +90,9 @@ with a NULL flag.
 ```sql
 CHECK (flag IS NULL OR status = 'processing')
 ```
+
+> Superseded by [ADR-025](025-post-flag-survives-publication.md): `V58` replaced
+> this with `CHECK (flag IS NULL OR status <> 'drafted')`.
 
 The axes are now provably disjoint rather than kept apart by convention. A
 published post cannot carry a verdict, a drafted post cannot carry a blocker,
@@ -105,7 +115,11 @@ fixes the withdraw-during-flight republish.
 
 ### 6. The duplicate target and the score are stored
 
-- `post.flag_detail` (new, `VARCHAR(64)`) carries
+> Superseded by [ADR-024](024-post-flag-detail-json-snapshot.md): `flag_detail`
+> is now a `JSONB` snapshot (`kind` plus the blocker's own fields) instead of a
+> `VARCHAR(64)` string carrying `SIMILAR_CONTENT_POST_<uuid>`.
+
+- `post.flag_detail` (new in `V56`) carries
   `SIMILAR_CONTENT_POST_<uuid>` for duplicates.
 - `post.content_score` (ADR-016, `V38`) already carries the relevance score
   and is unchanged.
@@ -115,6 +129,10 @@ fixes the withdraw-during-flight republish.
 is unchanged and keeps the audit trail.
 
 ### 7. Admin approval and rejection are the only visibility decisions
+
+> Superseded in part by [ADR-025](025-post-flag-survives-publication.md): neither
+> decision clears `flag`/`flag_detail` any more. Approval still clears
+> `rejection_reason`.
 
 - approve: `processing`/`unpublished` -> `published`, clears `flag`,
   `flag_detail` and `rejection_reason`. A `drafted` post is refused (400) —
@@ -170,9 +188,11 @@ its own `FilterOutcome` (`PASS`, `FAIL`, `UNCERTAIN`). Writing
   re-checked disappears from the feed until it passes. Accepted: the
   alternative lets unreviewed changes stay live with no way to tell whether
   a check is pending.
-- **The refuse/unsure distinction is lost.** `FILTER_FAILED` covers both; the
-  reviewer reads `content_score` plus the component detail instead. ADR-016's
-  component escalations still surface as `FILTER_FAILED` on the same post.
+- **The refuse/unsure distinction is lost in `flag`.** `FILTER_FAILED` covers
+  both; the reviewer reads `content_score` plus the component detail instead.
+  ADR-016's component escalations still surface as `FILTER_FAILED` on the same
+  post. (Since ADR-024 the distinction is recoverable from
+  `flag_detail.outcome`, but `flag` itself stays a two-value vocabulary.)
 - **A one-time, irreversible data rewrite.** `V56` maps `hidden` and
   machine-held `unpublished` rows; the mapping is recorded in the migration.
 - **`created` is no longer a status value.** Frontend clients that compared
@@ -192,6 +212,8 @@ its own `FilterOutcome` (`PASS`, `FAIL`, `UNCERTAIN`). Writing
   can inspect the affected rows before applying it.
 - A filter pass publishes and clears `flag`; a refusal or an outage leaves
   `processing` with the matching flag and never sets `unpublished`.
+  (Since [ADR-025](025-post-flag-survives-publication.md) a pass records
+  `FILTER_PASSED` instead of clearing anything.)
 - Editing a published post moves it to `processing`; withdrawing while a run
   is in flight leaves it `drafted` and the late verdict is discarded.
 - The stale-pending sweep settles to `FILTER_SKIPPED` at `processing`.

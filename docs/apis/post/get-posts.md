@@ -55,7 +55,6 @@ No request body.
         "mediaIds": [],
         "recipeIds": [],
         "status": "published",
-        "flag": null,
         "viewCount": 12,
         "publishedAt": "2026-09-26T10:00:00Z",
         "createdAt": "2026-09-26T09:50:00Z"
@@ -87,8 +86,6 @@ No request body.
 | data.content[].mediaIds | array of UUID | Attached uploaded media. |
 | data.content[].recipeIds | array of UUID | Always empty on this list endpoint and on create/edit — recipes are only resolved on `GET /api/posts/{postId}` and the two attach endpoints, to avoid a query per row on a paginated list (issue #137). |
 | data.content[].status | string | Post status: `drafted`, `processing`, `published`, or `unpublished`. `processing` means a filter verdict or an admin decision is outstanding; `unpublished` means an admin rejected it (BR-POST-010, BR-FILTER-008). |
-| data.content[].flag | string or null | Blocker of a held post: `FILTER_FAILED`, `SIMILAR_CONTENT`, or `FILTER_SKIPPED`; `null` when the post is not being held — a draft, an in-flight filter run, or a published/rejected post (ADR-023). |
-| data.content[].flagDetail | string or null | Machine-readable detail behind `flag`: the failing score, `SIMILAR_CONTENT_POST_<postId>`, `FILTER_DISABLED`, or `FILTER_SWEPT`. `null` with no blocker. |
 | data.content[].rejectionReason | string or null | Why an admin rejected this post. Always populated on this endpoint — these are the caller's own posts. `null` when no reason was recorded. |
 | data.content[].viewCount | integer | Number of recorded views. |
 | data.content[].publishedAt | string | ISO-8601 publication timestamp. |
@@ -112,7 +109,7 @@ No request body.
 
 - Only posts owned by the authenticated user are included. The owner ID comes from the JWT; there is no user ID query parameter.
 - All post statuses are included so the owner can manage drafts, posts awaiting a decision, and rejected posts. Soft-deleted posts are excluded.
-- `flag`/`flagDetail` are returned for every post; `null` means nothing is holding the post — it is a draft, its filter run is still in flight, or it reached a terminal state (ADR-023).
+- The post's `flag`/`flagDetail` verdict is not part of this response: it is exposed on the admin post endpoints only (ADR-025). Owners see `status` — `processing` means a verdict is outstanding.
 - A valid JWT is required by the existing security configuration.
 - Every item carries its author summary (`userId`, `displayName`, `avatarUrl`), resolved with one batched avatar lookup per page — never one query per post.
 - Results use zero-based pagination and are ordered by creation time, newest first.

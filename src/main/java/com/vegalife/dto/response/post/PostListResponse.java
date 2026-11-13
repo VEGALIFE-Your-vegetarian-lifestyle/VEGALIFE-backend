@@ -38,20 +38,6 @@ public class PostListResponse {
   private String status;
 
   /**
-   * Why the post is being held for review: {@code FILTER_FAILED}, {@code SIMILAR_CONTENT} or {@code
-   * FILTER_SKIPPED}; null when the post is not held. Only a post at {@code processing} can carry
-   * one (ADR-023).
-   */
-  private String flag;
-
-  /**
-   * Detail for {@link #flag}: for {@code SIMILAR_CONTENT} the matched post as {@code
-   * SIMILAR_CONTENT_POST_<postId>}; for {@code FILTER_SKIPPED} a short cause code (for example
-   * {@code FILTER_DISABLED}); for {@code FILTER_FAILED} the band score ({@code score=0.312}).
-   */
-  private String flagDetail;
-
-  /**
    * Why an admin rejected this post, or null if no admin rejection reason is recorded.
    *
    * <p><strong>Owner-scoped.</strong> Populated only when the caller authored the post — this DTO
@@ -60,7 +46,8 @@ public class PostListResponse {
    *
    * <p>Null is ambiguous on purpose: it means "no reason recorded", which covers never-rejected,
    * rejected without a reason (the reason is optional, BR-ADMIN-002), and withheld by the content
-   * filter rather than an admin. See {@link #flag} for that last case.
+   * filter rather than an admin. The filter's own verdict is not part of this response: the flag
+   * and its snapshot are exposed on the admin endpoints only (ADR-025).
    */
   private String rejectionReason;
 

@@ -23,7 +23,7 @@ None.
 | size | integer | No | Page size, default 20, max 100 |
 | sort | string | No | Format `property,direction`. Default `createdAt,desc`. Property must be one of: `createdAt`, `publishedAt`, `updatedAt`, `viewCount`, `title` |
 | status | string | No | One of: `drafted`, `processing`, `published`, `unpublished`. The review queue is `processing` |
-| flag | string | No | Blocker of a held post: `FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`, or `all`. Defaults to `all` when omitted, so nothing is silently hidden; matches exactly |
+| flag | string | No | Last verdict: `FILTER_PASSED`, `FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`, or `all`. Defaults to `all` when omitted, so nothing is silently hidden; matches exactly (ADR-025) |
 | userId | uuid | No | Only posts authored by this user |
 | categoryId | uuid | No | Only posts belonging to this category |
 | createdFrom | string | No | ISO-8601 datetime lower bound (inclusive) on `createdAt`, e.g. `2026-01-01T00:00:00Z` |
@@ -80,8 +80,8 @@ No request body
 | data.content[].categoryIds | uuid[] | Category ids the post belongs to |
 | data.content[].mediaIds | uuid[] | Media ids attached to the post |
 | data.content[].status | string | drafted, processing, published, or unpublished |
-| data.content[].flag | string | Blocker of a held post: FILTER_FAILED, SIMILAR_CONTENT, or FILTER_SKIPPED; null when the post is not being held (including every published post) |
-| data.content[].flagDetail | string | Machine-readable detail behind the blocker (failing score, `SIMILAR_CONTENT_POST_<postId>`, `FILTER_DISABLED`, `FILTER_SWEPT`); null with no blocker |
+| data.content[].flag | string \| null | The post's last verdict: `FILTER_PASSED` (the filter cleared it), or `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` (held, or approved over the blocker). `null` on a draft, on a run still in flight, and on rows published before V58 (ADR-025) |
+| data.content[].flagDetail | object \| null | The evidence behind `flag` as a JSON snapshot (ADR-024, ADR-025): `kind` (always equal to `flag`) plus the fields that verdict owns — `score`/`threshold` for `FILTER_PASSED`, `outcome`/`score`/`threshold` for `FILTER_FAILED`, `postId`/`similarity`/`threshold` for `SIMILAR_CONTENT`, `cause` for `FILTER_SKIPPED`. Absent fields are omitted; null with no verdict |
 | data.content[].rejectionReason | string | Why an admin rejected the post; null when no reason was recorded |
 | data.content[].viewCount | integer | View counter |
 | data.content[].publishedAt | string | ISO-8601 publish timestamp, nullable |
@@ -108,9 +108,10 @@ No request body
 - Soft-deleted posts (`deletedAt != null`) are excluded (issue #1 / FR-006).
 - Only `ROLE_ADMIN` may call this endpoint (`@PreAuthorize("hasRole('ADMIN')")` on `AdminPostController`; ADR-009 — there is no `/api/admin/**` path rule).
 - Unlike `GET /api/posts` and `GET /api/users/{userId}/posts`, no status restriction is applied: every status is listable (issue #1 / FR-002).
-- `status` and `flag` are independent filters and combine with AND; `flag` matches the blocker exactly (BR-FILTER-008).
-- When no `flag` parameter is supplied the list defaults to `flag=all`, so no blocker is silently hidden (issue #5). The review queue is `status=processing`, which lists every post awaiting a decision regardless of blocker.
-- A post is `processing` while a decision is outstanding; `flag` says why it has not been published (`FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`) and is `null` while the filter run is still in flight (ADR-023).
+- `status` and `flag` are independent filters and combine with AND; `flag` matches the verdict exactly (BR-FILTER-008).
+- When no `flag` parameter is supplied the list defaults to `flag=all`, so no verdict is silently hidden (issue #5). The review queue is `status=processing`, which lists every post awaiting a decision regardless of verdict.
+- `flag` is the post's last verdict and survives publication (ADR-025). At `processing` it says why the post is held (`FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`) or is `null` while the run is still in flight. At `published` it distinguishes a post the filter cleared (`FILTER_PASSED`) from one an admin approved over a blocker — the only place that distinction is readable.
+- This is the only API surface that exposes `flag`/`flagDetail`; the member-facing post responses do not carry them (ADR-025).
 
 ## Example
 
@@ -136,7 +137,12 @@ curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&status=process
         "mediaIds": [],
         "status": "processing",
         "flag": "SIMILAR_CONTENT",
-        "flagDetail": "SIMILAR_CONTENT_POST_9a1f0d2c-3b4e-4c5d-8e6f-7a8b9c0d1e2f",
+        "flagDetail": {
+          "kind": "SIMILAR_CONTENT",
+          "postId": "9a1f0d2c-3b4e-4c5d-8e6f-7a8b9c0d1e2f",
+          "similarity": 0.9712,
+          "threshold": 0.85
+        },
         "viewCount": 42,
         "publishedAt": null,
         "createdAt": "2026-09-28T08:00:00Z",

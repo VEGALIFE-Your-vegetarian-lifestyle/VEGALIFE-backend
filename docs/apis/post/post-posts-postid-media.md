@@ -38,7 +38,7 @@ Required: a valid JWT access token in the `Authorization` header (`Bearer <token
 
 ### Success Response (200 OK)
 
-Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `status`, `flag`, `rejectionReason`, `viewCount`, `publishedAt`, `createdAt`). `rejectionReason` is returned only to the post's author, so an Administrator attaching media to someone else's post gets `null`.
+Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `status`, `rejectionReason`, `viewCount`, `publishedAt`, `createdAt`). `rejectionReason` is returned only to the post's author, so an Administrator attaching media to someone else's post gets `null`. The filter verdict (`flag`/`flagDetail`) is not part of this shape (ADR-025).
 
 ```json
 {
@@ -69,7 +69,8 @@ Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, 
 
 - Only the owner or an Administrator can attach media to a post, reusing the ownership rule from `PATCH /api/posts/{postId}` (`BR-POST-006`); a non-admin gets `404` for another user's post, same as edit.
 - Replace-the-full-set semantics: re-calling with the same set is idempotent, and a smaller set detaches the rest. Nothing is written if validation fails for any id in the request.
-- Attaching media never changes the post's `status`, publication state (`publishedAt`), or triggers content filtering (`flag` is untouched) — this is a pure association change.
+- Attaching media never changes the post's `status`, publication state (`publishedAt`), or its filter
+  verdict — this is a pure association change.
 - Creating media, hard-deleting media, media ordering, cover images, and captions are out of scope for this endpoint (issue #137 non-goals); media is created separately via `POST /api/media/upload` and `POST /api/media/{mediaId}/confirm`.
 - Deleting the post or the media later cascades the `post_media` row automatically (`ON DELETE CASCADE`); this endpoint never needs to clean that up.
 
