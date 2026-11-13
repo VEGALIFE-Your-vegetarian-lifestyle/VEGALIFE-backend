@@ -107,7 +107,7 @@ No request body
 ## Business Rules
 - Soft-deleted posts (`deletedAt != null`) are excluded (issue #1 / FR-006).
 - Only `ROLE_ADMIN` may call this endpoint (`@PreAuthorize("hasRole('ADMIN')")` on `AdminPostController`; ADR-009 — there is no `/api/admin/**` path rule).
-- Unlike `GET /api/posts` and `GET /api/users/{userId}/posts`, no status restriction is applied: every status is listable (issue #1 / FR-002).
+- Unlike `GET /api/posts/me` and `GET /api/users/{userId}/posts`, no status restriction is applied: every status is listable (issue #1 / FR-002).
 - `status` and `flag` are independent filters and combine with AND; `flag` matches the verdict exactly (BR-FILTER-008).
 - When no `flag` parameter is supplied the list defaults to `flag=all`, so no verdict is silently hidden (issue #5). The review queue is `status=processing`, which lists every post awaiting a decision regardless of verdict.
 - `flag` is the post's last verdict and survives publication (ADR-025). At `processing` it says why the post is held (`FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`) or is `null` while the run is still in flight. At `published` it distinguishes a post the filter cleared (`FILTER_PASSED`) from one an admin approved over a blocker — the only place that distinction is readable.

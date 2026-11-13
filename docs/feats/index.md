@@ -63,3 +63,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `ingredient-nutrition.md`           | Ingredient-Level Recipe Nutrition         | Implemented | 2026-11-05 |
 | `nutrition-read-surfaces.md`        | Nutrition on Read Surfaces                | Implemented | 2026-11-06 |
 | `saved-items.md`                    | Saved Posts and Recipes                   | Implemented | 2026-11-12 |
+| `public-recipe-browsing.md`         | Public Recipe Browsing and Post Route Alignment | Approved | 2026-11-13 |

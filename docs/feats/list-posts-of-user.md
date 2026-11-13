@@ -14,7 +14,7 @@ Public endpoint to list a member's posts. Guests and other members see published
 
 ## Problem / motivation
 
-`GET /api/posts` only serves the authenticated user's own posts. The business rules let anyone view published content and a member's public profile, so a way to browse another member's posts is missing.
+`GET /api/posts/me` only serves the authenticated user's own posts. The business rules let anyone view published content and a member's public profile, so a way to browse another member's posts is missing.
 
 ## Goals
 
@@ -24,7 +24,7 @@ Public endpoint to list a member's posts. Guests and other members see published
 ## Non-goals
 
 - A global public feed, search, or filtering by category/type (separate tasks).
-- Changing `GET /api/posts`.
+- Changing `GET /api/posts/me`.
 
 ## Requirements
 

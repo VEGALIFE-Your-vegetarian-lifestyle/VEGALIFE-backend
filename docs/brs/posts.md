@@ -46,13 +46,13 @@ Deriving ownership from the authenticated identity prevents users from creating 
 
 ## Scope & Exceptions
 
-Applies to `POST /api/posts`, `GET /api/posts`, and `PATCH /api/posts/{postId}`. Administrative moderation APIs are outside this rule and require their own authorization contract.
+Applies to `POST /api/posts`, `GET /api/posts/me`, and `PATCH /api/posts/{postId}`. Administrative moderation APIs are outside this rule and require their own authorization contract.
 
 ## Enforcement
 
 - Controller: `PostController` receives `@AuthenticationPrincipal UUID userId` for these endpoints.
 - Service: `PostService.createPost()` assigns the loaded user; list/edit operations use that user ID when querying posts.
-- API references: `docs/apis/post/post-posts.md`, `docs/apis/post/get-posts.md`, and `docs/apis/post/patch-posts-postid.md`.
+- API references: `docs/apis/post/post-posts.md`, `docs/apis/post/get-posts-me.md`, and `docs/apis/post/patch-posts-postid.md`.
 
 ## Last Reviewed
 
@@ -80,12 +80,12 @@ Owners need to manage their own content, while soft-deleted records and other us
 
 ## Scope & Exceptions
 
-Applies to `GET /api/posts`. It does not define visibility for a public feed or admin moderation view.
+Applies to `GET /api/posts/me`. It does not define visibility for the public feed (`GET /api/posts`, BR-POST-010) or admin moderation view.
 
 ## Enforcement
 
 - Repository: `PostRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc()`.
-- API reference: `docs/apis/post/get-posts.md`.
+- API reference: `docs/apis/post/get-posts-me.md`.
 
 ## Last Reviewed
 
@@ -107,7 +107,7 @@ Active
 
 ## Statement
 
-`GET /api/posts` uses zero-based pagination. If omitted, `page` is `0` and `size` is `20`; `size` must be between `1` and `100`. Results are sorted by creation time descending.
+`GET /api/posts/me` uses zero-based pagination. If omitted, `page` is `0` and `size` is `20`; `size` must be between `1` and `100`. Results are sorted by creation time descending.
 
 ## Rationale
 
@@ -115,7 +115,7 @@ Bounded pages control response size, and newest-first ordering lets users see th
 
 ## Scope & Exceptions
 
-Applies to the authenticated user's post-list endpoint. Clients cannot request a different sort order.
+Applies to the authenticated user's post-list endpoint (`GET /api/posts/me`) and the public feed (`GET /api/posts`). Clients cannot request a different sort order.
 
 ## Enforcement
 
@@ -388,7 +388,7 @@ Published content is open to everyone (BR-PUBLIC-001, BR-SEARCH-002), while unpu
 
 ## Scope & Exceptions
 
-Applies to `GET /api/users/{userId}/posts`. `GET /api/posts` is the caller's own list and already includes all non-deleted statuses.
+Applies to `GET /api/users/{userId}/posts`. `GET /api/posts/me` is the caller's own list and already includes all non-deleted statuses.
 
 ## Enforcement
 
@@ -422,13 +422,13 @@ A shared or linked post must be readable by anyone who opens the link, signed in
 
 ## Scope & Exceptions
 
-Applies to `GET /api/posts/{postId}`. It does not define owner/admin draft preview, caching, or view-count behavior — none of these exist for this endpoint. `GET /api/posts` (the caller's own list, all statuses, authenticated) and `GET /api/users/{userId}/posts` (public, owner/admin see all statuses) have their own rules (BR-POST-002, BR-POST-010).
+Applies to `GET /api/posts/{postId}`. It does not define owner/admin draft preview, caching, or view-count behavior — none of these exist for this endpoint. `GET /api/posts/me` (the caller's own list, all statuses, authenticated) and `GET /api/users/{userId}/posts` (public, owner/admin see all statuses) have their own rules (BR-POST-002, BR-POST-010).
 
 ## Enforcement
 
 - Repository: `PostRepository.findDetailById(id)` (`where p.id = :id and p.deletedAt is null` — no status predicate).
 - Service: `PostService.getPost()` maps a missing result to `ResourceNotFoundException("Post not found")`.
-- Security: `SecurityConfig` permits unauthenticated `GET /api/posts/*` (single path segment — matches `feed` and `{postId}`, never the auth-required list route); `PostController` declares `@SecurityRequirement` per protected operation instead of at class level, so `getPost` is documented as public in OpenAPI.
+- Security: `SecurityConfig` permits unauthenticated `GET /api/posts` and `GET /api/posts/*` (single path segment — matches `me` and `{postId}`), with `GET /api/posts/me` matched as authenticated ahead of the wildcard; `PostController` declares `@SecurityRequirement` per protected operation instead of at class level, so `getPost` is documented as public in OpenAPI.
 - API reference: `docs/apis/post/get-posts-postid.md`.
 
 ## Last Reviewed

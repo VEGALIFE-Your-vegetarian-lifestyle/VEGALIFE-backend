@@ -1,7 +1,7 @@
 # API Reference: GET /api/recipes/{recipeId}
 
 ## Overview
-Read one of the authenticated member's own recipes by id, including the resolved dish, ingredient rows, and both review states. A recipe owned by someone else is indistinguishable from a missing one (404).
+Read one recipe by id, including the resolved dish, ingredient rows, and both review states. An `APPROVED`, non-deleted recipe is public — anyone, including a guest, can read it. A `PENDING` or `REJECTED` recipe is readable only by its author; for everyone else it is indistinguishable from a missing one (404).
 
 ## Endpoint
 ```
@@ -9,14 +9,14 @@ GET /api/recipes/{recipeId}
 ```
 
 ## Authentication
-JWT Bearer required (`@PreAuthorize("isAuthenticated()")` on `RecipeController`). The caller is also the ownership filter: only the owner's own recipe resolves.
+Optional. The route is `permitAll`. A supplied but invalid or expired token is still validated and returns `401`. When a valid token is present, the caller's identity is used only to grant the author access to their own non-approved recipe.
 
 ## Request
 
 ### Path Parameters
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| recipeId | uuid | Yes | Id of the recipe to read — an `id` from `GET /api/recipes/me` |
+| recipeId | uuid | Yes | Id of the recipe to read — an `id` from `GET /api/recipes` or `GET /api/recipes/me` |
 
 ### Query Parameters
 No query parameters
@@ -37,7 +37,7 @@ No request body
     "dishId": "9b2d8e11-2c33-4f5a-8f1d-0a1b2c3d4e5f",
     "dishName": "tofu stir-fry",
     "dishModerationStatus": "APPROVED",
-    "moderationStatus": "PENDING",
+    "moderationStatus": "APPROVED",
     "rejectionReason": null,
     "name": "Spicy tofu stir-fry",
     "description": "A quick weeknight dinner.",
@@ -78,12 +78,12 @@ No request body
 | message | string | `Recipe retrieved successfully` |
 | data | object | The recipe — same shape as one element of `GET /api/recipes/me` |
 | data.id | uuid | Recipe id |
-| data.userId | uuid | Owner, always the authenticated caller |
+| data.userId | uuid | Owner of the recipe; not necessarily the caller |
 | data.dishId | uuid | Resolved shared dish row; never null |
 | data.dishName | string | Dish name after lowercasing (e.g. request `Tofu Stir-Fry` → `tofu stir-fry`) |
 | data.dishModerationStatus | string | Review state of the linked dish name: `PENDING`, `APPROVED`, or `REJECTED` |
 | data.moderationStatus | string | Review state of this recipe: `PENDING`, `APPROVED`, or `REJECTED` |
-| data.rejectionReason | string or null | Why an admin rejected this recipe. `null` when no reason was recorded (never rejected, or rejected without one). |
+| data.rejectionReason | string or null | Why an admin rejected this recipe. Returned only to the author; always `null` for a non-author or guest read. |
 | data.name | string | Recipe name as submitted |
 | data.description | string \| null | Optional description |
 | data.instructions | string | Cooking instructions |
@@ -107,25 +107,25 @@ No request body
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
 | 400 | `recipeId` is not a valid UUID | "Validation failed" |
-| 401 | Missing, invalid, expired JWT, or the account is inactive | "Unauthorized" |
-| 404 | Recipe does not exist, is soft-deleted, or belongs to another member | "Recipe not found" |
+| 401 | A token is supplied but is invalid, expired, or the account is inactive | "Unauthorized" |
+| 404 | Recipe does not exist, is soft-deleted, or is not `APPROVED` and the caller is not its author | "Recipe not found" |
 | 500 | Server error | "Internal server error" |
 
 ## Business Rules
-- The lookup is `id = :recipeId AND deleted_at IS NULL AND user_id = :caller`. A recipe owned by another member is reported as 404, not 403: answering "exists but is not yours" would confirm the id (BR-RECP-001).
-- Review state never hides the recipe from its own author. `moderationStatus` and `dishModerationStatus` are returned as-is, so a `PENDING` recipe or a recipe whose dish name is still awaiting approval is readable — with the state attached — instead of looking inexplicably withheld (BR-DISH-001).
-- `rejectionReason` is readable here because every endpoint returning this shape is already scoped to the caller's own recipes, so there is no wider audience to leak it to.
+- BR-RECP-008: visibility is decided by moderation state plus authorship, not by who is asking. A recipe with `moderationStatus = APPROVED` and `deleted_at IS NULL` resolves for every caller, including a guest. A `PENDING` or `REJECTED` recipe resolves only when the caller is its author.
+- An ineligible read is reported as 404, not 403: answering "exists but is not approved" would confirm the id to a non-author.
+- Review state never hides the recipe from its own author. `moderationStatus` and `dishModerationStatus` are returned as-is, so an author can still read a `PENDING` recipe or a recipe whose dish name is still awaiting approval — with the state attached — instead of looking inexplicably withheld (BR-DISH-001).
+- `rejectionReason` is author-only. It is returned when the caller authored the recipe and cleared to `null` for every other caller, because this payload is now also a public read.
 - Nutrition is derived from the recipe's ingredients and stored, never authored (BR-RECP-004, ADR-022). `nutritionResolved` distinguishes "all ingredients curated" from "cannot be priced yet"; a `null` total is never a `0` (BR-RECP-006).
 - Each line reports its own contribution (`amount × per-unit value`, rounded to 2 decimals) so a member can see which ingredient drives the total. Line values are rounded individually while the total is rounded once over the exact sum, so the visible lines need not add up exactly to the visible total (BR-RECP-007).
 - Members cannot edit recipes (`PUT`/`PATCH` are deliberately absent, BR-RECP-001); corrections go through an admin, which is why this is a read-only endpoint.
-- This is the owner's read surface only. Cross-user recipe lists live on `GET /api/recipes/me` (own), `GET /api/admin/recipes` (Admin), and the post surfaces that embed recipes.
+- The public catalogue lives at `GET /api/recipes`; the author's own list lives at `GET /api/recipes/me`; the admin surface is `GET /api/admin/recipes`.
 
 ## Example
 
 ### Request
 ```bash
-curl -X GET "http://localhost:8080/api/recipes/550e8400-e29b-41d4-a716-446655440000" \
-  -H "Authorization: Bearer <access-token>"
+curl -X GET "http://localhost:8080/api/recipes/550e8400-e29b-41d4-a716-446655440000"
 ```
 
 ### Success Response (200)
@@ -139,7 +139,7 @@ curl -X GET "http://localhost:8080/api/recipes/550e8400-e29b-41d4-a716-446655440
     "dishId": "9b2d8e11-2c33-4f5a-8f1d-0a1b2c3d4e5f",
     "dishName": "tofu stir-fry",
     "dishModerationStatus": "APPROVED",
-    "moderationStatus": "PENDING",
+    "moderationStatus": "APPROVED",
     "name": "Spicy tofu stir-fry",
     "description": null,
     "instructions": "Press the tofu. Stir-fry with vegetables and sauce.",
@@ -170,9 +170,10 @@ curl -X GET "http://localhost:8080/api/recipes/550e8400-e29b-41d4-a716-446655440
 ```
 
 ## Related
+- List approved recipes (public): `docs/apis/recipes/get-recipes.md`
 - List own recipes: `docs/apis/recipes/get-recipes-me.md`
 - Create counterpart: `docs/apis/recipes/post-recipes.md`
 - Admin counterpart: `docs/apis/admin/recipe-crud.md`
-- Business rules: `docs/brs/recipes.md` (BR-RECP-001, BR-RECP-004, BR-RECP-006, BR-DISH-001)
-- Feature spec: `docs/feats/ingredient-nutrition.md`
+- Business rules: `docs/brs/recipes.md` (BR-RECP-001, BR-RECP-004, BR-RECP-006, BR-RECP-008, BR-DISH-001)
+- Feature spec: `docs/feats/public-recipe-browsing.md`, `docs/feats/ingredient-nutrition.md`
 - ADR: [`docs/adrs/022-ingredient-level-nutrition.md`](../../adrs/022-ingredient-level-nutrition.md)

@@ -11,6 +11,7 @@
 | BR-RECP-005 | Ingredient Nutrition Is Per One Unit, and All-or-Nothing | Active | 2026-11-05 |
 | BR-RECP-006 | A Recipe Reports No Nutrition Unless Every Ingredient Is Resolved | Active | 2026-11-05 |
 | BR-RECP-007 | A Line's Nutrition Is Derived, Rounded Per Line, and Never Partial | Active | 2026-11-06 |
+| BR-RECP-008 | Approved Recipes Are Publicly Readable | Active | 2026-11-13 |
 
 ---
 
@@ -417,3 +418,62 @@ once. They are never recomputed from the rounded per-line values.
 ## Last Reviewed
 
 2026-11-06, by Vegalife backend team
+
+---
+
+# Business Rule: Approved Recipes Are Publicly Readable
+
+## Rule ID
+
+`BR-RECP-008`
+
+## Status
+
+Active
+
+## Statement
+
+A recipe whose `moderationStatus` is `APPROVED` and whose `deleted_at` is null is public
+content: any caller, including an unauthenticated guest, may list it and read it by id.
+A recipe that is `PENDING` or `REJECTED`, or whose `deleted_at` is set, is readable only by
+its author; for everyone else it is reported as `404 Not Found`.
+
+Any endpoint that lists recipes for non-admin callers returns `APPROVED` recipes only.
+`rejectionReason` remains author-only: a non-author read always receives `null`.
+
+## Rationale
+
+Recipe moderation exists to keep unreviewed text out of public view, not to keep reviewed
+recipes private. Once an administrator approves a recipe it is community content — it is
+already embedded in published posts and returned by public search — so scoping it to its
+author contradicts the approval decision and leaves the recipe catalogue unbuildable.
+
+The author exception preserves ownership. A `PENDING` recipe that vanished from its author's
+view would look lost rather than queued, and the author could not review what they submitted.
+
+`rejectionReason` is an administrative message to the author, not public metadata. Exposing it
+on a public read would tell the world why content was refused and second-guess the reviewer.
+
+## Scope & Exceptions
+
+- Applies to `GET /api/recipes` and `GET /api/recipes/{recipeId}`.
+- `GET /api/recipes/me` is author-scoped by authentication and intentionally lists every
+  non-deleted status for the same ownership reason (BR-RECP-001).
+- `GET /api/admin/recipes` is outside this rule: an administrator sees every status.
+- A soft-deleted recipe is invisible to everyone on the public and author routes, including
+  its author, until an administrator restores it (no restore path exists today).
+
+## Enforcement
+
+- `RecipeService.listApprovedRecipes` queries by `moderationStatus = APPROVED` and
+  `deletedAt IS NULL`.
+- `RecipeService.getRecipe` filters on "approved **or** caller is the author" and clears
+  `rejectionReason` for a non-author viewer.
+- `SecurityConfig` permits `GET /api/recipes` and `GET /api/recipes/*` while keeping
+  `GET /api/recipes/me` and `POST /api/recipes` authenticated.
+- API references: `docs/apis/recipes/get-recipes.md`,
+  `docs/apis/recipes/get-recipes-recipeid.md`.
+
+## Last Reviewed
+
+2026-11-13, by Vegalife backend team

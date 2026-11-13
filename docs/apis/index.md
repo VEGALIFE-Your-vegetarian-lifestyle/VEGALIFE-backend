@@ -67,8 +67,8 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `payments/get-vnpay-ipn.md` | `GET /api/payments/vnpay/ipn` | VNPay payment notification webhook; grants a verified acquisition (public, signed) |
 | `payments/get-payments-paymentid.md` | `GET /api/payments/{paymentId}` | Read one of your payments' status from the ledger (authenticated; owner only) |
 | `post/post-posts.md` | `POST /api/posts` | Create a post for the authenticated user |
-| `post/get-posts.md` | `GET /api/posts` | List the authenticated user's posts |
-| `post/get-posts-feed.md` | `GET /api/posts/feed` | Global feed of published posts, newest first (public) |
+| `post/get-posts.md` | `GET /api/posts` | Global feed of published posts, newest first (public) |
+| `post/get-posts-me.md` | `GET /api/posts/me` | List the authenticated user's posts |
 | `post/get-posts-postid.md` | `GET /api/posts/{postId}` | View a single non-deleted post by id (any status, any author, public) |
 | `post/patch-posts-postid.md` | `PATCH /api/posts/{postId}` | Edit a post (owner or Admin) |
 | `post/delete-posts-postid.md` | `DELETE /api/posts/{postId}` | Soft-delete a post (owner or Admin) |
@@ -87,8 +87,9 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `profile/get-profile.md` | `GET /api/profile` | Get own profile (authenticated; auto-creates empty row) |
 | `profile/get-profile-userid.md` | `GET /api/profile/{userId}` | Get a member's profile (public) |
 | `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |
+| `recipes/get-recipes.md` | `GET /api/recipes` | List approved recipes, newest first, paginated (public) |
 | `recipes/get-recipes-me.md` | `GET /api/recipes/me` | List own recipes, newest first, unpaginated (authenticated) |
-| `recipes/get-recipes-recipeid.md` | `GET /api/recipes/{recipeId}` | Read one own recipe by id; another member's recipe answers 404 (authenticated; owner only) |
+| `recipes/get-recipes-recipeid.md` | `GET /api/recipes/{recipeId}` | Read one recipe by id; approved is public, non-approved is author-only (public, author-aware) |
 | `restaurants/get-restaurants.md` | `GET /api/restaurants` | List recommended restaurants with rating/price/open-now/keyword filters (authenticated) |
 | `restaurants/get-restaurants-nearby.md` | `GET /api/restaurants/nearby` | List every active restaurant within a radius, nearest first, no pagination (authenticated) |
 | `restaurants/get-restaurants-restaurantid.md` | `GET /api/restaurants/{restaurantId}` | Read one active restaurant by id, with its curated dishes nested (authenticated) |

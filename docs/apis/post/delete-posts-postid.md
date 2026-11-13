@@ -46,7 +46,7 @@ No query parameters or request body.
 
 ## Business Rules
 
-- Deletion is soft: `deleted_at` is set and the row is kept. Deleted posts no longer appear in `GET /api/posts` and cannot be edited or deleted again.
+- Deletion is soft: `deleted_at` is set and the row is kept. Deleted posts no longer appear in `GET /api/posts/me` and cannot be edited or deleted again.
 - A non-admin gets `404` for other users' posts, so existence is not disclosed.
 - Every deletion an Administrator makes to another user's post is written to `moderation_log` with action `DELETE_POST` (BR-ADMIN-002).
 - No new migration: uses the existing `post.deleted_at` column and `moderation_log` from `V18`.

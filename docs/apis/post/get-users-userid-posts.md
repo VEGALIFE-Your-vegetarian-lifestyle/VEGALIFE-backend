@@ -41,7 +41,7 @@ Public listings are ordered by `publishedAt` descending; owner/admin listings by
 
 ### Success Response (200 OK)
 
-Same envelope and item shape as `GET /api/posts` (`PageResponse<PostListResponse>`), message `Posts retrieved successfully`.
+Same envelope and item shape as `GET /api/posts/me` (`PageResponse<PostListResponse>`), message `Posts retrieved successfully`.
 
 ### Error Responses
 
