@@ -3,6 +3,7 @@ package com.vegalife.service.recipe;
 import com.vegalife.dto.mapper.recipe.RecipeMapper;
 import com.vegalife.dto.request.recipe.RecipeCreateRequest;
 import com.vegalife.dto.request.recipe.RecipeIngredientItem;
+import com.vegalife.dto.request.recipe.RecipeListRequest;
 import com.vegalife.dto.response.recipe.RecipeIngredientResponse;
 import com.vegalife.dto.response.recipe.RecipeResponse;
 import com.vegalife.enums.recipe.Difficulty;
@@ -18,6 +19,7 @@ import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.math.BigDecimal;
@@ -34,6 +36,9 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -75,21 +80,72 @@ public class RecipeService {
   }
 
   /**
-   * One of the caller's own recipes.
+   * One recipe, by moderation state plus authorship (BR-RECP-008).
    *
-   * <p>Owner-scoped rather than public: a recipe starts {@link ModerationStatus#PENDING}, and
-   * returning someone else's unreviewed recipe here would make the approval step cosmetic. The
-   * author still sees their own, with the state attached, so a withheld recipe is not a mystery.
+   * <p>An approved, non-deleted recipe is public: anyone, including a guest ({@code callerId =
+   * null}), can read it. A {@code PENDING} or {@code REJECTED} recipe still resolves for its
+   * author, so a submitted recipe never looks lost to the person who wrote it. Everyone else gets
+   * the same generic not-found answer as a missing id, so the endpoint cannot confirm that an
+   * unapproved recipe exists.
    */
   @Transactional(readOnly = true)
   public RecipeResponse getRecipe(UUID callerId, UUID recipeId) {
     Recipe recipe =
         recipeRepository
             .findByIdAndDeletedAtIsNull(recipeId)
-            .filter(found -> found.getUser().getId().equals(callerId))
+            .filter(
+                found ->
+                    found.getModerationStatus() == ModerationStatus.APPROVED
+                        || isAuthor(found, callerId))
             .orElseThrow(() -> new ResourceNotFoundException("Recipe not found"));
 
-    return toResponse(recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe));
+    RecipeResponse response =
+        toResponse(recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe));
+    // The rejection reason is an administrative message to the author; this payload is now also a
+    // public read, so a non-author must never receive it.
+    if (!isAuthor(recipe, callerId)) {
+      clearRejectionReason(response);
+    }
+    return response;
+  }
+
+  /**
+   * The public recipe catalogue (BR-RECP-008): approved, non-deleted recipes, newest first.
+   *
+   * <p>Ingredient lines are resolved per recipe inside the single read transaction, mirroring the
+   * saved-recipe read path. The page size ceiling bounds that work.
+   */
+  @Transactional(readOnly = true)
+  public PageResponse<RecipeResponse> listApprovedRecipes(RecipeListRequest request) {
+    Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
+    Page<Recipe> recipes =
+        recipeRepository.findByModerationStatusAndDeletedAtIsNullOrderByCreatedAtDesc(
+            ModerationStatus.APPROVED, pageable);
+
+    Page<RecipeResponse> mapped = recipes.map(this::toPublicResponse);
+    return PageResponse.from(mapped);
+  }
+
+  /**
+   * A recipe line for an audience that may not be its author.
+   *
+   * <p>Every caller of this helper reads approved recipes — the public catalogue, or another
+   * member's saved item — so {@code rejectionReason} must never survive: it is an administrative
+   * message to the author (BR-RECP-008).
+   */
+  private RecipeResponse toPublicResponse(Recipe recipe) {
+    RecipeResponse response =
+        toResponse(recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe));
+    clearRejectionReason(response);
+    return response;
+  }
+
+  private static void clearRejectionReason(RecipeResponse response) {
+    response.setRejectionReason(null);
+  }
+
+  private static boolean isAuthor(Recipe recipe, UUID callerId) {
+    return callerId != null && recipe.getUser().getId().equals(callerId);
   }
 
   /** Every non-deleted recipe the caller created, newest first. */
@@ -145,8 +201,8 @@ public class RecipeService {
    *
    * <p>Only approved, non-deleted recipes are returned: a saved recipe that is awaiting review or
    * was rejected is invisible everywhere else, so it must not reappear through this list. Same
-   * mapping as {@code GET /api/recipes/me}, so a saved recipe and an authored one cannot describe
-   * themselves differently.
+   * mapping as {@code GET /api/recipes/me} and {@code GET /api/recipes}, so a saved recipe and an
+   * authored or browsed one cannot describe themselves differently.
    *
    * <p>One batched ingredient lookup per recipe is unavoidable here — the response carries each
    * line — but the ingredient rows are resolved inside the single read transaction, so a page of N
@@ -163,9 +219,7 @@ public class RecipeService {
             .toList();
     Map<UUID, RecipeResponse> byId = new HashMap<>();
     for (Recipe recipe : recipes) {
-      byId.put(
-          recipe.getId(),
-          toResponse(recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe)));
+      byId.put(recipe.getId(), toPublicResponse(recipe));
     }
     return byId;
   }

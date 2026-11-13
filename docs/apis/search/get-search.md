@@ -106,6 +106,6 @@ curl -X GET "http://localhost:8080/api/search?q=tofu&type=restaurant&page=0&size
 
 ## Related
 
-- Public feed: `docs/apis/post/get-posts-feed.md`
+- Public feed: `docs/apis/post/get-posts.md`
 - Create a recipe: `docs/apis/recipes/post-recipes.md`
 - Shared error/response contract: `docs/apis/error-responses.md`

@@ -7,6 +7,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -31,6 +33,10 @@ public interface RecipeRepository
   List<Recipe> findByPosts_IdAndDeletedAtIsNull(UUID postId);
 
   Optional<Recipe> findByIdAndDeletedAtIsNull(UUID id);
+
+  /** The public catalogue (BR-RECP-008): approved, non-deleted recipes, newest first. */
+  Page<Recipe> findByModerationStatusAndDeletedAtIsNullOrderByCreatedAtDesc(
+      ModerationStatus moderationStatus, Pageable pageable);
 
   /** A member's own recipes, newest first. */
   List<Recipe> findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID userId);

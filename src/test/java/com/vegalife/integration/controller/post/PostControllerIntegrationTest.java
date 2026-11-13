@@ -576,7 +576,7 @@ class PostControllerIntegrationTest {
   @Test
   void listFeed_withInvalidSize_returnsFieldLevelError() throws Exception {
     mockMvc
-        .perform(get("/api/posts/feed").param("size", "0"))
+        .perform(get("/api/posts").param("size", "0"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.message").value("Validation failed"))
         .andExpect(jsonPath("$.data.size").isNotEmpty());
@@ -859,7 +859,7 @@ class PostControllerIntegrationTest {
     assertThat(postRepository.findById(existingPost.getId()).orElseThrow().getDeletedAt())
         .isNotNull();
     mockMvc
-        .perform(get("/api/posts").header("Authorization", "Bearer " + accessToken))
+        .perform(get("/api/posts/me").header("Authorization", "Bearer " + accessToken))
         .andExpect(jsonPath("$.data.totalElements").value(0));
     mockMvc
         .perform(
@@ -995,7 +995,7 @@ class PostControllerIntegrationTest {
     createPost(otherUser, "Another user's post", PostStatus.published, null);
 
     mockMvc
-        .perform(get("/api/posts").header("Authorization", "Bearer " + accessToken))
+        .perform(get("/api/posts/me").header("Authorization", "Bearer " + accessToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Posts retrieved successfully"))
@@ -1017,7 +1017,7 @@ class PostControllerIntegrationTest {
 
     mockMvc
         .perform(
-            get("/api/posts")
+            get("/api/posts/me")
                 .header("Authorization", "Bearer " + accessToken)
                 .param("page", "0")
                 .param("size", "1"))
@@ -1031,14 +1031,16 @@ class PostControllerIntegrationTest {
 
   @Test
   void listUserPosts_withoutJwt_returns401() throws Exception {
-    mockMvc.perform(get("/api/posts")).andExpect(status().isUnauthorized());
+    mockMvc.perform(get("/api/posts/me")).andExpect(status().isUnauthorized());
   }
 
   @Test
   void listUserPosts_withInvalidPageSize_returns400() throws Exception {
     mockMvc
         .perform(
-            get("/api/posts").header("Authorization", "Bearer " + accessToken).param("size", "101"))
+            get("/api/posts/me")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("size", "101"))
         .andExpect(status().isBadRequest());
   }
 
@@ -1051,7 +1053,7 @@ class PostControllerIntegrationTest {
     createPublished(otherUser, "Newer", Instant.parse("2026-02-01T00:00:00Z"));
 
     mockMvc
-        .perform(get("/api/posts/feed"))
+        .perform(get("/api/posts"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Posts retrieved successfully"))
@@ -1067,7 +1069,7 @@ class PostControllerIntegrationTest {
     createPost(user, "Published", PostStatus.published, null);
 
     mockMvc
-        .perform(get("/api/posts/feed").header("Authorization", "Bearer " + accessToken))
+        .perform(get("/api/posts").header("Authorization", "Bearer " + accessToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(1))
         .andExpect(jsonPath("$.data.content[0].title").value("Published"));
@@ -1076,7 +1078,7 @@ class PostControllerIntegrationTest {
   @Test
   void listFeed_invalidTokenReturns401() throws Exception {
     mockMvc
-        .perform(get("/api/posts/feed").header("Authorization", "Bearer not-a-jwt"))
+        .perform(get("/api/posts").header("Authorization", "Bearer not-a-jwt"))
         .andExpect(status().isUnauthorized());
   }
 
@@ -1087,7 +1089,7 @@ class PostControllerIntegrationTest {
     createPublished(user, "Third", Instant.parse("2026-01-03T00:00:00Z"));
 
     mockMvc
-        .perform(get("/api/posts/feed").param("page", "0").param("size", "2"))
+        .perform(get("/api/posts").param("page", "0").param("size", "2"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.page").value(0))
         .andExpect(jsonPath("$.data.size").value(2))
@@ -1095,7 +1097,7 @@ class PostControllerIntegrationTest {
         .andExpect(jsonPath("$.data.totalPages").value(2))
         .andExpect(jsonPath("$.data.content[0].title").value("Third"));
 
-    mockMvc.perform(get("/api/posts/feed").param("size", "0")).andExpect(status().isBadRequest());
+    mockMvc.perform(get("/api/posts").param("size", "0")).andExpect(status().isBadRequest());
   }
 
   @Test
@@ -1140,7 +1142,7 @@ class PostControllerIntegrationTest {
     createRejectedPost(user, "My rejected post", "off-topic for the platform");
 
     mockMvc
-        .perform(get("/api/posts").header("Authorization", "Bearer " + accessToken))
+        .perform(get("/api/posts/me").header("Authorization", "Bearer " + accessToken))
         .andExpect(status().isOk())
         .andExpect(
             jsonPath("$.data.content[0].rejectionReason").value("off-topic for the platform"));
@@ -1153,7 +1155,7 @@ class PostControllerIntegrationTest {
     postRepository.save(post);
 
     mockMvc
-        .perform(get("/api/posts/feed"))
+        .perform(get("/api/posts"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.content[0].rejectionReason").doesNotExist());
   }

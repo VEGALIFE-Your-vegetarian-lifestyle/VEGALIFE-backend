@@ -103,13 +103,15 @@ class ApiDocsIntegrationTest {
     mockMvc
         .perform(get("/v3/api-docs"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.paths['/api/posts'].get.security[0].bearerAuth").exists())
+        .andExpect(jsonPath("$.paths['/api/posts/me'].get.security[0].bearerAuth").exists())
         .andExpect(
             jsonPath("$.paths['/api/posts/{postId}/comments'].post.security[0].bearerAuth")
                 .exists())
         .andExpect(jsonPath("$.paths['/api/profile'].put.security[0].bearerAuth").exists())
         .andExpect(jsonPath("$.paths['/api/admin/users'].get.security[0].bearerAuth").exists())
         .andExpect(jsonPath("$.paths['/api/admin/posts'].get.security[0].bearerAuth").exists())
+        .andExpect(jsonPath("$.paths['/api/recipes'].post.security[0].bearerAuth").exists())
+        .andExpect(jsonPath("$.paths['/api/recipes/me'].get.security[0].bearerAuth").exists())
         .andExpect(
             jsonPath("$.paths['/api/admin/posts/{postId}'].get.security[0].bearerAuth").exists())
         .andExpect(
@@ -128,7 +130,10 @@ class ApiDocsIntegrationTest {
         .andExpect(jsonPath("$.security").doesNotExist())
         .andExpect(jsonPath("$.paths['/api/categories'].get.security").doesNotExist())
         .andExpect(jsonPath("$.paths['/api/auth/login'].post.security").doesNotExist())
-        .andExpect(jsonPath("$.paths['/api/posts/{postId}'].get.security").doesNotExist());
+        .andExpect(jsonPath("$.paths['/api/posts'].get.security").doesNotExist())
+        .andExpect(jsonPath("$.paths['/api/posts/{postId}'].get.security").doesNotExist())
+        .andExpect(jsonPath("$.paths['/api/recipes'].get.security").doesNotExist())
+        .andExpect(jsonPath("$.paths['/api/recipes/{recipeId}'].get.security").doesNotExist());
   }
 
   /**

@@ -10,11 +10,11 @@ Vegalife backend team (issue #8)
 
 ## Summary
 
-Public, paginated feed of every published post on the platform, newest first: `GET /api/posts/feed`. Reachable without a login, so guests and members browse community content the same way.
+Public, paginated feed of every published post on the platform, newest first: `GET /api/posts`. Reachable without a login, so guests and members browse community content the same way.
 
 ## Problem / motivation
 
-There is no way to browse the community's content as a whole. `GET /api/posts` only returns the caller's own posts, and `GET /api/users/{userId}/posts` only returns one member's posts — discovering other people's content means walking user IDs by hand.
+There was no way to browse the community's content as a whole. Before this endpoint existed, `GET /api/posts` only returned the caller's own posts, and `GET /api/users/{userId}/posts` only returns one member's posts — discovering other people's content meant walking user IDs by hand.
 
 Issue #8 was originally a personalized recommendation feed, but the schema cannot record the per-user signals a recommendation needs: no view-history table exists, the `vote` table has no write path, and there is no member-facing comment endpoint. A global feed delivers the browsing capability now and gives a later recommendation engine a baseline ranking to improve on (see the issue's deferral comment).
 
@@ -34,7 +34,7 @@ Issue #8 was originally a personalized recommendation feed, but the schema canno
 
 ### Functional Requirements
 
-- [ ] FR-001: `GET /api/posts/feed` is reachable without a JWT (public `permitAll` route).
+- [ ] FR-001: `GET /api/posts` is reachable without a JWT (public `permitAll` route).
 - [ ] FR-002: The feed returns only posts with status `published` and `deleted_at IS NULL`.
 - [ ] FR-003: Results are ordered by `published_at DESC, created_at DESC` (ties fall back to creation time).
 - [ ] FR-004: Pagination uses the existing `PostListRequest` bounds: `page` defaults to `0`, `size` defaults to `20`, `size` must be between `1` and `100`; out-of-range values return `400`.
@@ -54,19 +54,19 @@ Four touch points, no migration:
 
 1. `PostRepository` — new derived query `findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(Pageable)`, mirroring the existing user-feed method.
 2. `PostService.listFeed(PageRequest)` — maps the page through the existing `PostMapper` into `PostListResponse`.
-3. `PostController` — `@GetMapping("/feed")` returning `ApiResponse.ok(...)` with the `PageResponse` envelope; route does not collide with `GET /api/posts` because `PostController` defines no `GET /{postId}`.
-4. `SecurityConfig` — add `GET /api/posts/feed` to the `permitAll` chain alongside `GET /api/users/*/posts`.
+3. `PostController` — the bare `@GetMapping` on `/api/posts` returns `ApiResponse.ok(...)` with the `PageResponse` envelope; the caller's own list moved to `@GetMapping("/me")`. The literal `me` segment is preferred over `/{postId}`, so it is never read as a post id.
+4. `SecurityConfig` — add `GET /api/posts` to the `permitAll` chain alongside `GET /api/users/*/posts`.
 
 ## Success metrics
 
-- Guest `GET /api/posts/feed` returns `200` with only published posts in the integration suite.
+- Guest `GET /api/posts` returns `200` with only published posts in the integration suite.
 - Full verification (`clean compile`, `test`, `checkstyle:check`, `spotless:apply`) green before review.
 
 ## Acceptance criteria
 
 **As a** guest or member, **I want to** scroll a platform-wide feed of published posts, **so that** I can discover community content without knowing whose profile to open.
 
-- [ ] Given a guest, when `GET /api/posts/feed` is requested, then a paginated list of published, non-deleted posts is returned.
+- [ ] Given a guest, when `GET /api/posts` is requested, then a paginated list of published, non-deleted posts is returned.
 - [ ] Given mixed post statuses in the database, when the feed is read, then drafts, unpublished (including filter-rejected), hidden, and soft-deleted posts are absent.
 - [ ] Given several published posts, when the feed is read, then they appear newest-first by publish time, with creation time as the tie-breaker.
 - [ ] Given no pagination parameters, when the feed is read, then page `0` of size `20` is returned; given `size=101`, then `400`.

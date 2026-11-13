@@ -12,7 +12,7 @@ GET /api/posts/{postId}/related
 
 ## Authentication
 
-None required — public, like `GET /api/posts/{postId}` and `GET /api/posts/feed`.
+None required — public, like `GET /api/posts/{postId}` and `GET /api/posts`.
 
 ## Request
 

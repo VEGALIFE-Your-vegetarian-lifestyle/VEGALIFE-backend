@@ -14,7 +14,7 @@ Add `GET /api/posts/{postId}` so any caller can read a single non-deleted post b
 
 ## Problem / motivation
 
-The frontend post detail page (and shared links) cannot fetch a single post today: the API only exposes `GET /api/posts` (the caller's own posts) and `GET /api/users/{userId}/posts` (a profile list). Reading one post by id means fetching lists and filtering client-side, and someone else's post is unreachable entirely.
+The frontend post detail page (and shared links) cannot fetch a single post today: the API only exposes `GET /api/posts/me` (the caller's own posts) and `GET /api/users/{userId}/posts` (a profile list). Reading one post by id means fetching lists and filtering client-side, and someone else's post is unreachable entirely.
 
 ## Goals
 
@@ -27,9 +27,9 @@ The frontend post detail page (and shared links) cannot fetch a single post toda
 - Gating the response on the post's status or on ownership — only soft-deletion excludes a post.
 - View-count increment, caching, or ETags.
 - Comments, reactions, or "related posts" in the payload.
-- A global feed or listing other users' posts (that's `GET /api/posts/feed`, a separate feature).
+- A global feed or listing other users' posts (that's `GET /api/posts`, a separate feature).
 
-> Note: the original scope (issue #100) required a valid JWT and listed public access as a non-goal. That decision was reversed so a shared/linked post can be opened by a signed-out visitor; this endpoint now follows the same public-read pattern as `GET /api/posts/feed` and `GET /api/users/{userId}/posts`.
+> Note: the original scope (issue #100) required a valid JWT and listed public access as a non-goal. That decision was reversed so a shared/linked post can be opened by a signed-out visitor; this endpoint now follows the same public-read pattern as `GET /api/posts` and `GET /api/users/{userId}/posts`.
 
 ## Requirements
 
@@ -46,7 +46,7 @@ The frontend post detail page (and shared links) cannot fetch a single post toda
 
 ## Design overview
 
-`PostController.getPost()` accepts the path `postId` and delegates to `PostService.getPost(postId)`, which calls `PostRepository.findDetailById(id)` (a `where p.id = :id and p.deletedAt is null` query — no status predicate) and maps a missing result to the existing `ResourceNotFoundException("Post not found")` — the same not-found-over-leak pattern `PostService` already uses elsewhere (e.g. `findManageablePost`). The status-scoped `findByIdAndStatusAndDeletedAtIsNull` is retained for callers that gate on publication (comment creation). The route is opened to guests by a `permitAll` rule in `SecurityConfig` for `GET /api/posts/*` (a single path segment, so it matches `feed` and `{postId}` but never the auth-required `GET /api/posts` list); the controller no longer carries a class-level bearer requirement — each protected operation declares `@SecurityRequirement` itself, so `getPost` (and `listFeed`) are documented as public.
+`PostController.getPost()` accepts the path `postId` and delegates to `PostService.getPost(postId)`, which calls `PostRepository.findDetailById(id)` (a `where p.id = :id and p.deletedAt is null` query — no status predicate) and maps a missing result to the existing `ResourceNotFoundException("Post not found")` — the same not-found-over-leak pattern `PostService` already uses elsewhere (e.g. `findManageablePost`). The status-scoped `findByIdAndStatusAndDeletedAtIsNull` is retained for callers that gate on publication (comment creation). The route is opened to guests by a `permitAll` rule in `SecurityConfig` for `GET /api/posts/*` (a single path segment, so it matches `me` and `{postId}`); `GET /api/posts/me` is registered as authenticated ahead of the wildcard. The controller carries no class-level bearer requirement — each protected operation declares `@SecurityRequirement` itself, so `getPost` (and the feed) are documented as public.
 
 ## Success metrics
 

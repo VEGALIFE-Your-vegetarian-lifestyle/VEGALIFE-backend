@@ -49,7 +49,7 @@ renderable without extra work.
       `PostListResponse`: `POST /api/posts`, `GET /api/posts/{postId}`,
       `PATCH /api/posts/{postId}`, `PATCH /api/posts/{postId}/visibility`,
       `POST /api/posts/{postId}/media`, `POST /api/posts/{postId}/recipes`,
-      `GET /api/posts`, `GET /api/posts/feed`,
+      `GET /api/posts/me`, `GET /api/posts`, `GET /api/posts/{postId}/related`,
       `GET /api/users/{userId}/posts`, and `GET /api/posts/{postId}/related`
       (whose items embed the same shape).
 - [x] FR-003: `userId` is the author's account id — the stable way to address
@@ -118,7 +118,7 @@ profile without extra requests.
 
 ## Related
 
-- API reference: `docs/apis/post/get-posts.md`, `docs/apis/post/get-posts-postid.md`,
-  `docs/apis/post/get-posts-feed.md`, `docs/apis/post/get-posts-postid-related.md`
+- API reference: `docs/apis/post/get-posts-me.md`, `docs/apis/post/get-posts-postid.md`,
+  `docs/apis/post/get-posts.md`, `docs/apis/post/get-posts-postid-related.md`
 - ADR: `docs/adrs/019-display-name-instead-of-username.md`
 - Business rules: `docs/brs/posts.md`, `docs/brs/profile.md` (BR-PROFILE-003)

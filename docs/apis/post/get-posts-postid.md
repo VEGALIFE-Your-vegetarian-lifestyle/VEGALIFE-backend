@@ -58,7 +58,7 @@ No request body.
 }
 ```
 
-Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-posts.md` for the full field table, including the author summary (`userId`, `displayName`, `avatarUrl`). Unlike the list and feed endpoints, this endpoint resolves `recipeIds` to the post's actual attached recipes (issue #137), since it returns a single post rather than a page.
+Same `PostListResponse` shape as `GET /api/posts/me` — see `docs/apis/post/get-posts-me.md` for the full field table, including the author summary (`userId`, `displayName`, `avatarUrl`). Unlike the list and feed endpoints, this endpoint resolves `recipeIds` to the post's actual attached recipes (issue #137), since it returns a single post rather than a page.
 
 `rejectionReason` is owner-scoped on this endpoint: it is populated only when the caller authored the post, and is `null` for a guest or another member. See Business Rules.
 
@@ -75,7 +75,7 @@ Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-po
 - Visibility is gated by `deleted_at IS NULL` only (BR-POST-011); neither status nor ownership is checked, so another user's post is returned and the caller's own non-published post is returned too.
 - `rejectionReason` is owner-scoped: the post's author reads why an admin rejected it, but a guest or another member gets `null` even though the rest of the payload is identical. The reason is admin wording about the author's own content, not public information.
 - A soft-deleted post and an unknown id are both reported as `404 Post not found` — the same not-found-over-leak pattern used elsewhere in the post API, so no post data or existence is leaked.
-- Public access: this route is `permitAll`, so guests may read any non-deleted post — like `GET /api/posts/feed` and `GET /api/users/{userId}/posts`. Only a supplied-but-invalid token is rejected (`401`); a missing token is not.
+- Public access: this route is `permitAll`, so guests may read any non-deleted post — like `GET /api/posts` and `GET /api/users/{userId}/posts`. Only a supplied-but-invalid token is rejected (`401`); a missing token is not.
 - No view-count increment, caching, or ETags are performed by this endpoint.
 
 ## Example

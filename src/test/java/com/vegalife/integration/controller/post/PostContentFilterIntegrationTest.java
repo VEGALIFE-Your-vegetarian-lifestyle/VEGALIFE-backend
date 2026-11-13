@@ -374,7 +374,7 @@ class PostContentFilterIntegrationTest {
     // ...but the member-facing surface does not carry it: a published post that an admin approved
     // over a FILTER_FAILED blocker must not announce that to readers (ADR-025).
     mockMvc
-        .perform(get("/api/posts").header("Authorization", "Bearer " + accessToken))
+        .perform(get("/api/posts/me").header("Authorization", "Bearer " + accessToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.content.length()").value(1))
         .andExpect(jsonPath("$.data.content[0].id").value(postId.toString()))
