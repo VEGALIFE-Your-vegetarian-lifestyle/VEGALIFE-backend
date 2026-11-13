@@ -249,14 +249,33 @@ class AdminPostControllerIntegrationTest {
   }
 
   @Test
+  void listPosts_filterByPassedFlag_returnsThePostTheFilterCleared() throws Exception {
+    createPost(member, "Live", PostStatus.published, PostFlag.FILTER_PASSED, null);
+    createPost(member, "Overridden", PostStatus.published, PostFlag.FILTER_FAILED, null);
+
+    // published + FILTER_PASSED vs published + FILTER_FAILED is exactly the distinction an admin
+    // cannot recover any other way: one was cleared by the filter, the other by a human (ADR-025).
+    mockMvc
+        .perform(
+            get("/api/admin/posts")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("status", "published")
+                .param("flag", "FILTER_PASSED"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].title").value("Live"))
+        .andExpect(jsonPath("$.data.content[0].flag").value("FILTER_PASSED"));
+  }
+
+  @Test
   void listPosts_withoutFlagParam_doesNotFilterByFlag() throws Exception {
     createPost(member, "Draft", PostStatus.drafted, null, null);
     createPost(member, "Rejected", PostStatus.unpublished, null, null);
     createPost(member, "Failed", PostStatus.processing, PostFlag.FILTER_FAILED, null);
     createPost(member, "Live", PostStatus.published, null, null);
 
-    // The default is `all`: a held post can be blocked for any of three reasons, so preselecting
-    // one would silently hide the others (ADR-023).
+    // The default is `all`: a post can carry any of the four verdicts, so preselecting one would
+    // silently hide the others (ADR-023, ADR-025).
     mockMvc
         .perform(get("/api/admin/posts").header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())

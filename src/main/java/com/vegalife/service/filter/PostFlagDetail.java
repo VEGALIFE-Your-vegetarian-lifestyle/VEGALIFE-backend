@@ -8,13 +8,15 @@ import java.math.RoundingMode;
 import java.util.UUID;
 
 /**
- * Builds the JSON snapshot stored in {@code post.flag_detail} (ADR-024).
+ * Builds the JSON snapshot stored in {@code post.flag_detail} (ADR-024, ADR-025).
  *
- * <p>One object per blocker, always carrying {@code kind} so the snapshot and the flag it qualifies
+ * <p>One object per verdict, always carrying {@code kind} so the snapshot and the flag it qualifies
  * can never describe different things — the database enforces {@code flag_detail->>'kind' = flag}.
- * Everything else is the evidence that blocker actually owns:
+ * Everything else is the evidence that verdict actually owns:
  *
  * <ul>
+ *   <li>{@code FILTER_PASSED} — the score and the accept boundary it cleared. Publication keeps the
+ *       snapshot, so the row still explains itself after the post leaves the review queue.
  *   <li>{@code FILTER_FAILED} — the outcome, the score, and the accept/reject boundary that was in
  *       force for that run. The boundary is snapshotted because both thresholds are live platform
  *       settings: a score without the bar it was measured against stops explaining itself the
@@ -38,6 +40,19 @@ public final class PostFlagDetail {
   private static final int SCALE = 4;
 
   private PostFlagDetail() {}
+
+  /**
+   * Snapshot for a verdict that published the post. There is no {@code outcome}: the kind already
+   * says the run passed, and repeating it would let the two disagree.
+   */
+  public static ObjectNode passed(FilterVerdict verdict) {
+    ObjectNode node = base(PostFlag.FILTER_PASSED);
+    node.put("score", round(verdict.score()));
+    if (verdict.threshold() != null) {
+      node.put("threshold", round(verdict.threshold()));
+    }
+    return node;
+  }
 
   /** Snapshot for a refused or uncertain content verdict. */
   public static ObjectNode filterFailed(FilterVerdict verdict) {

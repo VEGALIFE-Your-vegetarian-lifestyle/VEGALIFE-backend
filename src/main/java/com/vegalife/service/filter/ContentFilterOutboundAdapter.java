@@ -40,7 +40,8 @@ import org.springframework.transaction.annotation.Transactional;
  * CONTENT_FILTER channel adapter (ADR-005): loads the queued post, runs the filter pipeline (FR-005
  * embedding scoring, FR-006 bands) and applies the outcome under ADR-023.
  *
- * <p>A {@code PASS} publishes the post and clears its flag. A {@code FAIL} or {@code UNCERTAIN}
+ * <p>A {@code PASS} publishes the post and records {@code FILTER_PASSED}: publication and the
+ * verdict are two facts, and the row keeps both (ADR-025). A {@code FAIL} or {@code UNCERTAIN}
  * leaves it at {@code processing} with {@code flag = FILTER_FAILED}; the post never leaves the
  * public feed on the filter's authority alone — only an admin can unpublish. A duplicate leaves it
  * at {@code processing} with {@code flag = SIMILAR_CONTENT} and a JSON snapshot of the matched
@@ -266,13 +267,15 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
         reason);
   }
 
-  /** Applies one outcome: a pass publishes and clears the flag, anything else holds the post. */
+  /**
+   * Applies one outcome: a pass publishes and records the verdict, anything else holds the post.
+   */
   private static void apply(Post post, FilterVerdict verdict) {
     switch (verdict.outcome()) {
       case PASS -> {
         post.setStatus(PostStatus.published);
-        post.setFlag(null);
-        post.setFlagDetail(null);
+        post.setFlag(PostFlag.FILTER_PASSED);
+        post.setFlagDetail(PostFlagDetail.passed(verdict));
         if (post.getPublishedAt() == null) {
           post.setPublishedAt(Instant.now());
         }

@@ -172,6 +172,10 @@ public class AdminPostService {
    *
    * <p>Refuses a drafted post (nobody submitted it) and a post with no category (BR-CONTENT-003),
    * both carried over from the endpoint this replaces.
+   *
+   * <p>The post's flag is left exactly as it was (ADR-025): approving a {@code FILTER_FAILED} post
+   * publishes it but does not relabel the verdict, so the row still says the decision was a human
+   * override rather than a filter pass.
    */
   @Transactional
   public AdminPostDetailResponse approvePost(UUID adminId, UUID postId, String reason) {
@@ -186,10 +190,9 @@ public class AdminPostService {
     // Current state, not history: once approved again, a stale reason would describe a decision
     // that no longer holds. The audit trail stays in moderation_log.
     post.setRejectionReason(null);
-    // The post is published, so it is no longer being held for anyone: the flag and its detail
-    // describe a blocker that no longer exists (ADR-023).
-    post.setFlag(null);
-    post.setFlagDetail(null);
+    // The flag is deliberately kept: published + FILTER_FAILED says a human overrode the filter,
+    // which is a different fact from published + FILTER_PASSED. Clearing it here would erase the
+    // only place that distinction is stored (ADR-025).
     postRepository.saveAndFlush(post);
 
     approveComponents(postId, adminId, reason);
@@ -225,9 +228,8 @@ public class AdminPostService {
     post.setStatus(PostStatus.unpublished);
     post.setPublishedAt(null);
     post.setRejectionReason(reason);
-    // The rejection is the terminal state now; the blocker is resolved, not carried forward.
-    post.setFlag(null);
-    post.setFlagDetail(null);
+    // The blocker stays: together with rejection_reason it is the full decision record — what the
+    // machine saw and what the admin decided on top of it (ADR-025).
     postRepository.saveAndFlush(post);
 
     rejectPendingComponents(postId, adminId, reason);
@@ -448,7 +450,7 @@ public class AdminPostService {
       return PostFlag.valueOf(flag);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException(
-          "Flag must be one of: all, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED");
+          "Flag must be one of: all, FILTER_PASSED, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED");
     }
   }
 

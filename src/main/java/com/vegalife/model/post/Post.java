@@ -86,12 +86,12 @@ public class Post {
   private PostFlag flag;
 
   /**
-   * JSON snapshot for {@link #flag}, never a free-form caption (ADR-024). One object per blocker,
-   * always carrying {@code kind} so it cannot describe a different blocker than {@code flag}: the
-   * matched post, similarity and threshold for {@code SIMILAR_CONTENT}; the outcome, score and
-   * applied threshold for {@code FILTER_FAILED}; a cause code for {@code FILTER_SKIPPED}. Kept out
-   * of {@code flag} so the flag stays a closed, exactly-matchable vocabulary the admin filter can
-   * rely on (ADR-023).
+   * JSON snapshot for {@link #flag}, never a free-form caption (ADR-024, ADR-025). One object per
+   * verdict, always carrying {@code kind} so it cannot describe a different verdict than {@code
+   * flag}: the matched post, similarity and threshold for {@code SIMILAR_CONTENT}; the outcome,
+   * score and applied threshold for {@code FILTER_FAILED}; the score and accept boundary for {@code
+   * FILTER_PASSED}; a cause code for {@code FILTER_SKIPPED}. Kept out of {@code flag} so the flag
+   * stays a closed, exactly-matchable vocabulary the admin filter can rely on (ADR-023).
    */
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "flag_detail")

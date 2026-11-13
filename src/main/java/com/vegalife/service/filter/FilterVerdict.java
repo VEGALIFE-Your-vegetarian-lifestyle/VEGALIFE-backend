@@ -8,9 +8,9 @@ import java.util.Objects;
  * that decision was measured against, and the reason codes carried into the WARN/ERROR logs
  * (FR-009, ADR-023, ADR-024).
  *
- * <p>The outcome is deliberately not a {@link com.vegalife.enums.post.PostFlag}: a passing run
- * publishes the post and clears the flag rather than storing a value, so the two vocabularies must
- * not be interchangeable.
+ * <p>The outcome is deliberately not a {@link com.vegalife.enums.post.PostFlag}: the mapping is not
+ * one-to-one — {@code FAIL} and {@code UNCERTAIN} both become {@code FILTER_FAILED} — so the two
+ * vocabularies must not be interchangeable.
  *
  * @param outcome what this run decided
  * @param score relevance score in [0, 1]

@@ -1,17 +1,22 @@
 package com.vegalife.enums.post;
 
 /**
- * Why a post is held at {@link PostStatus#processing} (ADR-023).
+ * The verdict of the last moderation decision on a post, and — when it blocked — why (ADR-023,
+ * ADR-025).
  *
- * <p>This is deliberately <em>not</em> the filter's verdict vocabulary: a passing verdict publishes
- * the post and clears the flag, and "a run is in flight" is {@code status = processing} with a null
- * flag. The enum therefore contains only the reasons a post may be blocked, and the database
- * enforces that a flag can only exist while the post is {@code processing}.
+ * <p>This is deliberately <em>not</em> the filter's verdict vocabulary: {@link
+ * com.vegalife.service.filter.FilterOutcome} is the internal type, and the adapter maps it onto
+ * these values. "A run is in flight" is {@code status = processing} with a null flag, not a value
+ * here.
  *
- * <p>{@link com.vegalife.service.filter.FilterOutcome} is the internal verdict type; the adapter
- * maps it onto these values.
+ * <p>Publishing does not erase the verdict. A published post carries {@link #FILTER_PASSED} when
+ * the filter cleared it, or the blocker it was held by when an admin overrode the filter — the two
+ * are different facts and the API reports them as such. Rejection keeps the blocker too. Only a
+ * {@code drafted} post has none, which is what the database enforces.
  */
 public enum PostFlag {
+  /** The filter cleared the content and published it. */
+  FILTER_PASSED,
   /** The filter refused the content, or was unsure. Either way a human decides. */
   FILTER_FAILED,
   /** A near-duplicate of a published post; the target is recorded in {@code flag_detail}. */

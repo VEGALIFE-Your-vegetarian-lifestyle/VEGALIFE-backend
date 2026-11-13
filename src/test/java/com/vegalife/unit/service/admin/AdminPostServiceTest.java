@@ -198,7 +198,8 @@ class AdminPostServiceTest {
 
     assertThatThrownBy(() -> adminPostService.listPosts(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage("Flag must be one of: all, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED");
+        .hasMessage(
+            "Flag must be one of: all, FILTER_PASSED, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED");
   }
 
   @Test
@@ -247,7 +248,7 @@ class AdminPostServiceTest {
   }
 
   @Test
-  void approvePost_publishesAndClearsTheBlocker() {
+  void approvePost_publishesAndKeepsTheBlocker() {
     UUID adminId = UUID.randomUUID();
     post.setStatus(PostStatus.processing);
     post.setFlag(PostFlag.FILTER_FAILED);
@@ -261,9 +262,11 @@ class AdminPostServiceTest {
 
     assertThat(post.getStatus()).isEqualTo(PostStatus.published);
     assertThat(post.getPublishedAt()).isNotNull();
-    // The post is not being held any more: the blocker and its detail go with it (ADR-023).
-    assertThat(post.getFlag()).isNull();
-    assertThat(post.getFlagDetail()).isNull();
+    // Published + FILTER_FAILED is the record of a human override; relabelling it FILTER_PASSED
+    // would say the filter cleared content it refused (ADR-025).
+    assertThat(post.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
+    assertThat(post.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_FAILED");
+    assertThat(post.getFlagDetail().path("score").asDouble()).isEqualTo(0.21);
 
     ModerationLog entry = lastPostLog();
     assertThat(entry.getActorId()).isEqualTo(adminId);
@@ -346,7 +349,7 @@ class AdminPostServiceTest {
   }
 
   @Test
-  void rejectPost_unpublishesClearsTheBlockerAndRejectsPendingComponents() {
+  void rejectPost_unpublishesKeepsTheBlockerAndRejectsPendingComponents() {
     UUID adminId = UUID.randomUUID();
     post.setStatus(PostStatus.processing);
     post.setFlag(PostFlag.FILTER_FAILED);
@@ -379,9 +382,10 @@ class AdminPostServiceTest {
     assertThat(post.getStatus()).isEqualTo(PostStatus.unpublished);
     assertThat(post.getPublishedAt()).isNull();
     assertThat(post.getRejectionReason()).isEqualTo("not vegan");
-    // The rejection is terminal; there is nothing left to hold for review.
-    assertThat(post.getFlag()).isNull();
-    assertThat(post.getFlagDetail()).isNull();
+    // Rejection is terminal, but the blocker is part of the decision record: what the machine saw,
+    // next to what the admin decided (ADR-025).
+    assertThat(post.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
+    assertThat(post.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_FAILED");
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
     // The recipe's author reads this from the recipe's own row, and it was the same decision.
     assertThat(recipe.getRejectionReason()).isEqualTo("not vegan");

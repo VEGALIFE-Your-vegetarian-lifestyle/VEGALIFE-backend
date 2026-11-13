@@ -12,8 +12,8 @@ package com.vegalife.enums.post;
  * </ul>
  *
  * <p>{@code status} is the only visibility gate: the feed and every read surface select {@code
- * published}. Whether a post is held is therefore never inferred from {@code status} alone — a
- * non-null {@link PostFlag} is what says why, and only applies at {@code processing}.
+ * published}. A {@link PostFlag} is not a second gate — it is the last verdict, kept after the post
+ * leaves the review queue (ADR-025). Only {@code drafted} has none.
  */
 public enum PostStatus {
   drafted,

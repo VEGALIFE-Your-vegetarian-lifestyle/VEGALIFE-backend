@@ -1,8 +1,6 @@
 package com.vegalife.dto.mapper.post;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.vegalife.dto.request.post.PostCreateRequest;
-import com.vegalife.dto.response.post.PostFlagDetailResponse;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
@@ -62,11 +60,6 @@ public interface PostMapper {
 
   default Set<UUID> categoryIds(Set<Category> categories) {
     return categories.stream().map(Category::getId).collect(Collectors.toSet());
-  }
-
-  /** The stored {@code flag_detail} snapshot, exposed as a typed object (ADR-024). */
-  default PostFlagDetailResponse flagDetail(JsonNode node) {
-    return PostFlagDetailResponse.from(node);
   }
 
   default Set<UUID> mediaIds(Set<Media> media) {

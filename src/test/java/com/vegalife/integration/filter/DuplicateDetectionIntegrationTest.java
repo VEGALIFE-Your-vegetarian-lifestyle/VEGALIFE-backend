@@ -146,7 +146,7 @@ class DuplicateDetectionIntegrationTest {
     // Orthogonal to the original: similarity exactly 0.0, so "unrelated" needs no tuned constant.
     deliver(unrelated, axis(1));
 
-    assertThat(state(unrelated)).isEqualTo("published/no-flag");
+    assertThat(state(unrelated)).isEqualTo("published/FILTER_PASSED");
   }
 
   @Test
@@ -191,7 +191,7 @@ class DuplicateDetectionIntegrationTest {
     deliver(copy, nearly(axis(0), 0.1));
 
     // Identical direction, but incomparable models, so the copy publishes rather than flagging.
-    assertThat(state(copy)).isEqualTo("published/no-flag");
+    assertThat(state(copy)).isEqualTo("published/FILTER_PASSED");
   }
 
   @Test
@@ -204,7 +204,7 @@ class DuplicateDetectionIntegrationTest {
     Post incoming = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội!");
     deliver(incoming, nearly(axis(0), 0.1));
 
-    assertThat(state(incoming)).isEqualTo("published/no-flag");
+    assertThat(state(incoming)).isEqualTo("published/FILTER_PASSED");
   }
 
   @Test

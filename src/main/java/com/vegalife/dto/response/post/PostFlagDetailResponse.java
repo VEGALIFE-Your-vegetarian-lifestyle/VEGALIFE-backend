@@ -8,18 +8,22 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * The {@code flag_detail} snapshot of a held post, as the API exposes it (ADR-024).
+ * The {@code flag_detail} snapshot of a post, as the API exposes it (ADR-024, ADR-025).
  *
- * <p>The stored value is one JSON object per blocker, so the shape is stable but sparse: {@link
- * #kind} always identifies the blocker (and always equals {@code flag}), and only the fields that
- * blocker owns are present. Absent fields are omitted from the payload rather than sent as {@code
+ * <p>The stored value is one JSON object per verdict, so the shape is stable but sparse: {@link
+ * #kind} always identifies the verdict (and always equals {@code flag}), and only the fields that
+ * verdict owns are present. Absent fields are omitted from the payload rather than sent as {@code
  * null}.
  *
  * <ul>
+ *   <li>{@code FILTER_PASSED} — {@code score}, {@code threshold}
  *   <li>{@code FILTER_FAILED} — {@code outcome}, {@code score}, {@code threshold}
  *   <li>{@code SIMILAR_CONTENT} — {@code postId}, {@code similarity}, {@code threshold}
  *   <li>{@code FILTER_SKIPPED} — {@code cause}
  * </ul>
+ *
+ * <p>Only the admin post endpoints expose this: a published post carrying {@code FILTER_FAILED}
+ * means an admin overrode the filter, and that is a moderation fact, not feed content (ADR-025).
  */
 @Data
 @Builder
@@ -29,21 +33,21 @@ import lombok.NoArgsConstructor;
 public class PostFlagDetailResponse {
 
   /**
-   * Always equal to the post's {@code flag}: {@code FILTER_FAILED}, {@code SIMILAR_CONTENT} or
-   * {@code FILTER_SKIPPED}.
+   * Always equal to the post's {@code flag}: {@code FILTER_PASSED}, {@code FILTER_FAILED}, {@code
+   * SIMILAR_CONTENT} or {@code FILTER_SKIPPED}.
    */
   private String kind;
 
   /** For {@code FILTER_FAILED}: {@code FAIL} (below the reject threshold) or {@code UNCERTAIN}. */
   private String outcome;
 
-  /** For {@code FILTER_FAILED}: the relevance score the snapshot was taken from, 0–1. */
+  /** For {@code FILTER_PASSED}/{@code FILTER_FAILED}: the relevance score, 0–1. */
   private Double score;
 
   /**
-   * The boundary in force for that run: the accept/reject threshold for {@code FILTER_FAILED}, the
-   * duplicate threshold for {@code SIMILAR_CONTENT}. Absent on rows blocked before ADR-024 and when
-   * the caller could not know it.
+   * The boundary in force for that run: the accept/reject threshold for {@code
+   * FILTER_PASSED}/{@code FILTER_FAILED}, the duplicate threshold for {@code SIMILAR_CONTENT}.
+   * Absent on rows written before ADR-024 and when the caller could not know it.
    */
   private Double threshold;
 

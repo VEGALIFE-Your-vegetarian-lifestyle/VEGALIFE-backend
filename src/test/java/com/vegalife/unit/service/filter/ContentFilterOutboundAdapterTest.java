@@ -1,6 +1,7 @@
 package com.vegalife.unit.service.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -63,11 +64,11 @@ import org.springframework.dao.InvalidDataAccessResourceUsageException;
 /**
  * Verdict-matrix tests for the CONTENT_FILTER queue adapter.
  *
- * <p>Under ADR-023 the adapter writes two things and nothing else: {@code status} and, while the
- * post is held, {@code flag} + {@code flag_detail}. A {@code PASS} publishes and clears the flag; a
- * {@code FAIL} or {@code UNCERTAIN} holds the post at {@code processing} with {@code
- * FILTER_FAILED}; a near-duplicate holds it with {@code SIMILAR_CONTENT} and the matched post id in
- * {@code flag_detail}. The filter never unpublishes — only an admin does.
+ * <p>Under ADR-023 the adapter writes one decision and nothing else: {@code status} plus the
+ * verdict in {@code flag} + {@code flag_detail}. A {@code PASS} publishes with {@code
+ * FILTER_PASSED}; a {@code FAIL} or {@code UNCERTAIN} holds the post at {@code processing} with
+ * {@code FILTER_FAILED}; a near-duplicate holds it with {@code SIMILAR_CONTENT} and the matched
+ * post id in {@code flag_detail}. The filter never unpublishes — only an admin does.
  *
  * <p>Two more obligations these tests pin: a verdict is discarded unless the post is still {@code
  * processing} and not deleted (otherwise a withdrawn post would be republished), and the vector is
@@ -127,14 +128,20 @@ class ContentFilterOutboundAdapterTest {
   }
 
   @Test
-  void passPublishesThePostAndClearsTheFlag() throws Exception {
+  void passPublishesThePostAndRecordsTheVerdict() throws Exception {
     Post post = passing(0.91);
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
     assertEquals(PostStatus.published, post.getStatus());
-    assertNull(post.getFlag());
-    assertNull(post.getFlagDetail());
+    assertEquals(PostFlag.FILTER_PASSED, post.getFlag());
+    // The snapshot survives publication: score and the accept boundary it cleared (ADR-025).
+    JsonNode detail = post.getFlagDetail();
+    assertEquals("FILTER_PASSED", detail.path("kind").asText());
+    assertEquals(0.91, detail.path("score").asDouble(), 1e-9);
+    assertEquals(0.70, detail.path("threshold").asDouble(), 1e-9);
+    // No outcome: the kind already says the run passed.
+    assertFalse(detail.has("outcome"));
     assertNotNull(post.getPublishedAt());
     verify(postRepository).save(post);
   }
@@ -152,7 +159,10 @@ class ContentFilterOutboundAdapterTest {
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
     assertEquals(PostStatus.published, post.getStatus());
-    assertNull(post.getFlag());
+    assertEquals(PostFlag.FILTER_PASSED, post.getFlag());
+    // The caller did not know which boundary applied, so the snapshot omits it rather than
+    // inventing one (ADR-024).
+    assertFalse(post.getFlagDetail().has("threshold"));
     assertEquals(Instant.parse("2026-01-01T00:00:00Z"), post.getPublishedAt());
   }
 
@@ -298,7 +308,7 @@ class ContentFilterOutboundAdapterTest {
     // Storing the vector powers future detection; it is not what publishes this post. Blocking the
     // publish would let one misconfigured database stop the whole platform's posts.
     assertEquals(PostStatus.published, post.getStatus());
-    assertNull(post.getFlag());
+    assertEquals(PostFlag.FILTER_PASSED, post.getFlag());
     verify(postRepository).save(post);
   }
 
@@ -459,7 +469,7 @@ class ContentFilterOutboundAdapterTest {
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
     assertEquals(PostStatus.published, post.getStatus());
-    assertNull(post.getFlag());
+    assertEquals(PostFlag.FILTER_PASSED, post.getFlag());
     assertEquals(0.90, post.getContentScore());
     assertEquals(0.84, recipe.getScore());
   }

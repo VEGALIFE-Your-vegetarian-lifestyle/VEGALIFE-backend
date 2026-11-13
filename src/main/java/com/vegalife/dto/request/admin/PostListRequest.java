@@ -32,8 +32,9 @@ public class PostListRequest {
   private String status;
 
   @Pattern(
-      regexp = "^(all|FILTER_FAILED|SIMILAR_CONTENT|FILTER_SKIPPED)?$",
-      message = "Flag must be one of: all, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED")
+      regexp = "^(all|FILTER_PASSED|FILTER_FAILED|SIMILAR_CONTENT|FILTER_SKIPPED)?$",
+      message =
+          "Flag must be one of: all, FILTER_PASSED, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED")
   private String flag;
 
   private UUID userId;
@@ -59,9 +60,11 @@ public class PostListRequest {
   }
 
   /**
-   * No flag filter by default: a held post can be blocked for any of the three reasons, so
-   * preselecting one would silently hide the others. The review queue itself is {@code
-   * status=processing} (ADR-023).
+   * No flag filter by default: a post can carry any of the four verdicts, so preselecting one would
+   * silently hide the others. The review queue itself is {@code status=processing}, which lists
+   * every post still awaiting a decision (ADR-023). {@code FILTER_PASSED} is most useful combined
+   * with {@code status=published}: it separates a post the filter cleared from one an admin
+   * approved over a blocker (ADR-025).
    */
   public String getFlag() {
     return flag == null || flag.isBlank() ? "all" : flag;
