@@ -119,19 +119,19 @@ public class PostController {
   }
 
   @GetMapping
+  public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listFeed(
+      @Valid @ParameterObject @ModelAttribute PostListRequest request) {
+    PageResponse<PostListResponse> posts = postService.listFeed(request);
+    return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
+  }
+
+  @GetMapping("/me")
   @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listUserPosts(
       @AuthenticationPrincipal UUID userId,
       @Valid @ParameterObject @ModelAttribute PostListRequest request) {
     PageResponse<PostListResponse> posts = postService.listUserPosts(userId, request);
-    return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
-  }
-
-  @GetMapping("/feed")
-  public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listFeed(
-      @Valid @ParameterObject @ModelAttribute PostListRequest request) {
-    PageResponse<PostListResponse> posts = postService.listFeed(request);
     return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
   }
 
