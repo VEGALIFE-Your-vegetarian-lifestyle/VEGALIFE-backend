@@ -8,6 +8,7 @@ import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.post.PostSpecifications;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.context.ActiveProfiles;
 
 @DataJpaTest
@@ -36,8 +38,9 @@ class PostRepositoryTest {
     entityManager.clear();
 
     Page<Post> result =
-        postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
-            owner.getId(), PageRequest.of(0, 20));
+        postRepository.findAll(
+            PostSpecifications.filtering(null, null, owner.getId(), null, null, null, null),
+            PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt")));
 
     assertThat(result.getTotalElements()).isEqualTo(1);
     assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Owner's post");
@@ -50,8 +53,9 @@ class PostRepositoryTest {
     entityManager.clear();
 
     Page<Post> result =
-        postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
-            owner.getId(), PageRequest.of(0, 20));
+        postRepository.findAll(
+            PostSpecifications.filtering(null, null, owner.getId(), null, null, null, null),
+            PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt")));
 
     assertThat(result.getContent()).isEmpty();
     assertThat(result.getTotalElements()).isZero();

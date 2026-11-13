@@ -136,6 +136,14 @@ class ApiDocsIntegrationTest {
         .andExpect(jsonPath("$.paths['/api/recipes/{recipeId}'].get.security").doesNotExist());
   }
 
+  @Test
+  void searchOperationIsMarkedDeprecated() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/api/search'].get.deprecated").value(true));
+  }
+
   /**
    * Swagger UI builds its index from the document's top-level {@code tags} array, and SpringDoc
    * emits none — it only tags each operation, leaving the UI to order groups by first-seen order
