@@ -1160,6 +1160,95 @@ class PostControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].rejectionReason").doesNotExist());
   }
 
+  @Test
+  void listFeed_filtersByKeywordInTitleOrContentCaseInsensitively() throws Exception {
+    createPublishedWithContent(user, "Vegan pho", "Warm broth", Instant.now());
+    createPublishedWithContent(user, "Other", "A PHO recipe", Instant.now());
+    createPost(user, "Draft pho", PostStatus.drafted, null);
+
+    mockMvc
+        .perform(get("/api/posts").param("keyword", "PhO"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(2));
+  }
+
+  @Test
+  void listFeed_filtersByCategoryAndCreatedRange() throws Exception {
+    Category category =
+        categoryRepository.save(Category.builder().name("Vegan " + UUID.randomUUID()).build());
+    Post categorized = createPublishedWithContent(user, "Categorized", "Body", Instant.now());
+    categorized.getCategories().add(category);
+    postRepository.save(categorized);
+    createPublishedWithContent(user, "Uncategorized", "Body", Instant.now());
+
+    mockMvc
+        .perform(get("/api/posts").param("categoryId", category.getId().toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].title").value("Categorized"));
+
+    mockMvc
+        .perform(get("/api/posts").param("createdFrom", Instant.now().plusSeconds(3600).toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(0));
+  }
+
+  @Test
+  void listFeed_treatsKeywordWildcardsLiterally() throws Exception {
+    createPublishedWithContent(user, "100% vegan", "Body", Instant.now());
+    createPublishedWithContent(user, "Plain", "Body", Instant.now());
+
+    mockMvc
+        .perform(get("/api/posts").param("keyword", "%"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].title").value("100% vegan"));
+  }
+
+  @Test
+  void listMyPosts_filtersByStatus() throws Exception {
+    createPost(user, "Draft", PostStatus.drafted, null);
+    createPost(user, "Published", PostStatus.published, null);
+
+    mockMvc
+        .perform(
+            get("/api/posts/me")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("status", "drafted"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].title").value("Draft"));
+  }
+
+  @Test
+  void listMyPosts_rejectsAnUnknownStatus() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/posts/me")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("status", "bogus"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+  }
+
+  @Test
+  void listPostsOfUser_filtersByCategory() throws Exception {
+    Category category =
+        categoryRepository.save(Category.builder().name("Cat " + UUID.randomUUID()).build());
+    Post inCategory = createPost(user, "In category", PostStatus.published, null);
+    inCategory.getCategories().add(category);
+    postRepository.save(inCategory);
+    createPost(user, "Out of category", PostStatus.published, null);
+
+    mockMvc
+        .perform(
+            get("/api/users/{userId}/posts", user.getId())
+                .param("categoryId", category.getId().toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].title").value("In category"));
+  }
+
   private Post createRejectedPost(User owner, String title, String rejectionReason) {
     Post post = createPost(owner, title, PostStatus.unpublished, null);
     post.setRejectionReason(rejectionReason);
@@ -1199,6 +1288,20 @@ class PostControllerIntegrationTest {
     Post post = createPost(owner, title, PostStatus.published, null);
     post.setPublishedAt(publishedAt);
     return postRepository.save(post);
+  }
+
+  private Post createPublishedWithContent(
+      User owner, String title, String content, Instant publishedAt) {
+    return postRepository.save(
+        Post.builder()
+            .user(owner)
+            .title(title)
+            .content(content)
+            .rawContent(JsonNodeFactory.instance.objectNode())
+            .status(PostStatus.published)
+            .publishedAt(publishedAt)
+            .viewCount(0)
+            .build());
   }
 
   private Media createMedia(MediaStatus status) {

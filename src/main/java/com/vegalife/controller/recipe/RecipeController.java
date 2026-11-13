@@ -1,5 +1,6 @@
 package com.vegalife.controller.recipe;
 
+import com.vegalife.dto.request.recipe.MyRecipeListRequest;
 import com.vegalife.dto.request.recipe.RecipeCreateRequest;
 import com.vegalife.dto.request.recipe.RecipeListRequest;
 import com.vegalife.dto.response.recipe.RecipeResponse;
@@ -9,7 +10,6 @@ import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
@@ -55,13 +55,14 @@ public class RecipeController {
         .body(ApiResponse.success(recipe, "Recipe created successfully"));
   }
 
-  /** The caller's own recipes, newest first. */
+  /** The caller's own recipes, newest first, paginated and filterable. */
   @GetMapping("/me")
   @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
-  public ResponseEntity<ApiResponse<List<RecipeResponse>>> listMyRecipes(
-      @AuthenticationPrincipal UUID userId) {
-    List<RecipeResponse> recipes = recipeService.listMyRecipes(userId);
+  public ResponseEntity<ApiResponse<PageResponse<RecipeResponse>>> listMyRecipes(
+      @AuthenticationPrincipal UUID userId,
+      @Valid @ParameterObject @ModelAttribute MyRecipeListRequest request) {
+    PageResponse<RecipeResponse> recipes = recipeService.listMyRecipes(userId, request);
     return ResponseEntity.ok(ApiResponse.success(recipes, "Recipes retrieved successfully"));
   }
 

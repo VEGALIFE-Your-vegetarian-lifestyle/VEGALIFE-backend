@@ -1,6 +1,7 @@
 package com.vegalife.service.recipe;
 
 import com.vegalife.dto.mapper.recipe.RecipeMapper;
+import com.vegalife.dto.request.recipe.MyRecipeListRequest;
 import com.vegalife.dto.request.recipe.RecipeCreateRequest;
 import com.vegalife.dto.request.recipe.RecipeIngredientItem;
 import com.vegalife.dto.request.recipe.RecipeListRequest;
@@ -18,6 +19,7 @@ import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.repository.recipe.RecipeSpecifications;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -39,6 +41,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -117,10 +120,19 @@ public class RecipeService {
    */
   @Transactional(readOnly = true)
   public PageResponse<RecipeResponse> listApprovedRecipes(RecipeListRequest request) {
-    Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
+    Pageable pageable =
+        PageRequest.of(
+            request.getPage(), request.getSize(), Sort.by(Sort.Direction.DESC, "createdAt"));
     Page<Recipe> recipes =
-        recipeRepository.findByModerationStatusAndDeletedAtIsNullOrderByCreatedAtDesc(
-            ModerationStatus.APPROVED, pageable);
+        recipeRepository.findAll(
+            RecipeSpecifications.catalogue(
+                null,
+                ModerationStatus.APPROVED,
+                request.getDishId(),
+                parseDifficulty(request.getDifficulty()),
+                request.getMaxTotalTimeMinutes(),
+                request.getKeyword()),
+            pageable);
 
     Page<RecipeResponse> mapped = recipes.map(this::toPublicResponse);
     return PageResponse.from(mapped);
@@ -148,13 +160,27 @@ public class RecipeService {
     return callerId != null && recipe.getUser().getId().equals(callerId);
   }
 
-  /** Every non-deleted recipe the caller created, newest first. */
+  /** Every non-deleted recipe the caller created, newest first, optionally filtered. */
   @Transactional(readOnly = true)
-  public List<RecipeResponse> listMyRecipes(UUID callerId) {
-    return recipeRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(callerId).stream()
-        .map(
-            recipe -> toResponse(recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe)))
-        .toList();
+  public PageResponse<RecipeResponse> listMyRecipes(UUID callerId, MyRecipeListRequest request) {
+    Pageable pageable =
+        PageRequest.of(
+            request.getPage(), request.getSize(), Sort.by(Sort.Direction.DESC, "createdAt"));
+    Page<Recipe> recipes =
+        recipeRepository.findAll(
+            RecipeSpecifications.catalogue(
+                callerId,
+                parseModerationStatus(request.getModerationStatus()),
+                request.getDishId(),
+                parseDifficulty(request.getDifficulty()),
+                request.getMaxTotalTimeMinutes(),
+                null),
+            pageable);
+
+    return PageResponse.from(
+        recipes.map(
+            recipe ->
+                toResponse(recipe, recipe.getDish().getName(), ingredientResponsesOf(recipe))));
   }
 
   /**
@@ -418,6 +444,18 @@ public class RecipeService {
       return Difficulty.valueOf(difficulty);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException("Difficulty must be EASY, MEDIUM, or HARD");
+    }
+  }
+
+  /** Absent or blank means "every state"; the caller's own list may span all of them. */
+  private ModerationStatus parseModerationStatus(String moderationStatus) {
+    if (moderationStatus == null || moderationStatus.isBlank()) {
+      return null;
+    }
+    try {
+      return ModerationStatus.valueOf(moderationStatus.trim().toUpperCase(Locale.ROOT));
+    } catch (IllegalArgumentException ex) {
+      throw new ValidationException("moderationStatus must be PENDING, APPROVED, or REJECTED");
     }
   }
 

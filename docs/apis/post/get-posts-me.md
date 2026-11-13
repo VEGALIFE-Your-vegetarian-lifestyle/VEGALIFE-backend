@@ -26,8 +26,12 @@ No path parameters. `me` is a literal segment, so it is never read as a post id.
 |------|------|----------|-------------|
 | page | integer | No | Zero-based page index. Defaults to `0`; must be zero or greater. |
 | size | integer | No | Number of posts per page. Defaults to `20`; must be between `1` and `100`. |
+| status | string | No | Only posts in this state: `drafted`, `processing`, `published`, or `unpublished`. Absent means every state. Any other value is `400 Validation failed`. |
+| categoryId | UUID | No | Only posts assigned that category. |
+| createdFrom | instant | No | Inclusive lower bound on `createdAt`, ISO-8601. |
+| createdTo | instant | No | Inclusive upper bound on `createdAt`, ISO-8601. |
 
-Posts are ordered by `createdAt` descending. The order cannot be changed by the request.
+Posts are ordered by `createdAt` descending. The order cannot be changed by the request. There is no `keyword` parameter; use `GET /api/posts` for public search.
 
 ### Request Body
 
@@ -101,7 +105,7 @@ No request body.
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | Page is negative or size is outside `1`–`100` | `Validation failed` |
+| 400 | Page is negative, size is outside `1`–`100`, `status` is not a documented value, or a filter value cannot be parsed | `Validation failed` |
 | 401 | JWT is missing, invalid, or the account is inactive | `Unauthorized` |
 | 500 | Unexpected server error | `Internal server error` |
 
@@ -113,6 +117,7 @@ No request body.
 - A valid JWT is required by the existing security configuration.
 - Every item carries its author summary (`userId`, `displayName`, `avatarUrl`), resolved with one batched avatar lookup per page — never one query per post.
 - Results use zero-based pagination and are ordered by creation time, newest first.
+- All supplied filters combine with AND and only narrow the caller's own list; none can widen it.
 
 ## Related
 

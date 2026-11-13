@@ -67,8 +67,8 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `payments/get-vnpay-ipn.md` | `GET /api/payments/vnpay/ipn` | VNPay payment notification webhook; grants a verified acquisition (public, signed) |
 | `payments/get-payments-paymentid.md` | `GET /api/payments/{paymentId}` | Read one of your payments' status from the ledger (authenticated; owner only) |
 | `post/post-posts.md` | `POST /api/posts` | Create a post for the authenticated user |
-| `post/get-posts.md` | `GET /api/posts` | Global feed of published posts, newest first (public) |
-| `post/get-posts-me.md` | `GET /api/posts/me` | List the authenticated user's posts |
+| `post/get-posts.md` | `GET /api/posts` | Global feed of published posts, newest first, filterable by keyword, category, and date (public) |
+| `post/get-posts-me.md` | `GET /api/posts/me` | List the authenticated user's posts, filterable by status, category, and date |
 | `post/get-posts-postid.md` | `GET /api/posts/{postId}` | View a single non-deleted post by id (any status, any author, public) |
 | `post/patch-posts-postid.md` | `PATCH /api/posts/{postId}` | Edit a post (owner or Admin) |
 | `post/delete-posts-postid.md` | `DELETE /api/posts/{postId}` | Soft-delete a post (owner or Admin) |
@@ -87,8 +87,8 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `profile/get-profile.md` | `GET /api/profile` | Get own profile (authenticated; auto-creates empty row) |
 | `profile/get-profile-userid.md` | `GET /api/profile/{userId}` | Get a member's profile (public) |
 | `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |
-| `recipes/get-recipes.md` | `GET /api/recipes` | List approved recipes, newest first, paginated (public) |
-| `recipes/get-recipes-me.md` | `GET /api/recipes/me` | List own recipes, newest first, unpaginated (authenticated) |
+| `recipes/get-recipes.md` | `GET /api/recipes` | List approved recipes, newest first, paginated, filterable by keyword, dish, difficulty, and total time (public) |
+| `recipes/get-recipes-me.md` | `GET /api/recipes/me` | List own recipes, newest first, paginated and filterable (authenticated) |
 | `recipes/get-recipes-recipeid.md` | `GET /api/recipes/{recipeId}` | Read one recipe by id; approved is public, non-approved is author-only (public, author-aware) |
 | `restaurants/get-restaurants.md` | `GET /api/restaurants` | List recommended restaurants with rating/price/open-now/keyword filters (authenticated) |
 | `restaurants/get-restaurants-nearby.md` | `GET /api/restaurants/nearby` | List every active restaurant within a radius, nearest first, no pagination (authenticated) |
@@ -99,10 +99,10 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `saved/get-saved-recipes.md` | `GET /api/saved/recipes` | List own saved recipes, newest save first, approved recipes only (authenticated) |
 | `saved/post-saved-recipes-recipeid.md` | `POST /api/saved/recipes/{recipeId}` | Save an approved recipe; idempotent (authenticated) |
 | `saved/delete-saved-recipes-recipeid.md` | `DELETE /api/saved/recipes/{recipeId}` | Unsave a recipe; idempotent (authenticated) |
-| `search/get-search.md` | `GET /api/search` | Keyword search across posts, videos, recipes, and restaurants (public) |
+| `search/get-search.md` | `GET /api/search` | **Deprecated** — keyword search across posts, videos, recipes, and restaurants (public); use the typed list filters |
 | `subscriptions/get-subscriptions.md` | `GET /api/subscriptions` | List active AI plans with request quotas, descriptions, and price (public) |
 | `subscriptions/post-acquire.md` | `POST /api/subscriptions/acquire` | Claim a free plan or start a checkout for a paid plan (authenticated) |
 | `subscriptions/get-me.md` | `GET /api/subscriptions/me` | Read own remaining AI request allowance (authenticated) |
 | `subscriptions/get-history.md` | `GET /api/subscriptions/me/history` | Paginated acquisition history — purchases and claims — newest first (authenticated) |
-| `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts (public: published only; owner/Admin: all) |
+| `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts, filterable by category and date (public: published only; owner/Admin: all) |
 | `mcp/post-mcp.md` | In-process `@Tool` methods (no HTTP endpoint) | Six menu tools — get_menu, get_meal_plan, create_menu, update_menu, schedule_menu, suggest_dishes — served by the backend's own tool layer for the AI chat (ADR-013) |

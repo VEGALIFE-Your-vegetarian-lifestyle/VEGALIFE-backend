@@ -16,6 +16,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.mapper.recipe.RecipeMapper;
+import com.vegalife.dto.request.recipe.MyRecipeListRequest;
 import com.vegalife.dto.request.recipe.RecipeCreateRequest;
 import com.vegalife.dto.request.recipe.RecipeIngredientItem;
 import com.vegalife.dto.response.recipe.RecipeIngredientResponse;
@@ -36,6 +37,7 @@ import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.service.recipe.RecipeNutritionService;
 import com.vegalife.service.recipe.RecipeService;
+import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.math.BigDecimal;
@@ -51,6 +53,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -582,12 +589,15 @@ class RecipeServiceTest {
             .servings(2)
             .build();
     RecipeResponse expected = RecipeResponse.builder().id(recipeId).build();
-    when(recipeRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId))
-        .thenReturn(List.of(first));
+    Page<Recipe> page = new PageImpl<>(List.of(first), PageRequest.of(0, 20), 1);
+    when(recipeRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
     when(recipeIngredientRepository.findByRecipeId(recipeId)).thenReturn(List.of());
     when(recipeMapper.toResponse(eq(first), eq("tofu stir-fry"), anyList())).thenReturn(expected);
 
-    assertThat(recipeService.listMyRecipes(userId)).containsExactly(expected);
+    PageResponse<RecipeResponse> result =
+        recipeService.listMyRecipes(userId, new MyRecipeListRequest());
+
+    assertThat(result.getContent()).containsExactly(expected);
   }
 
   private void stubUserFound() {

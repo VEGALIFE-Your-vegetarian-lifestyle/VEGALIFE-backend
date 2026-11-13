@@ -1,7 +1,8 @@
 package com.vegalife.controller.post;
 
+import com.vegalife.dto.request.post.MyPostListRequest;
 import com.vegalife.dto.request.post.PostCreateRequest;
-import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.PostFeedRequest;
 import com.vegalife.dto.request.post.PostMediaAttachRequest;
 import com.vegalife.dto.request.post.PostRecipeAttachRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
@@ -120,7 +121,7 @@ public class PostController {
 
   @GetMapping
   public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listFeed(
-      @Valid @ParameterObject @ModelAttribute PostListRequest request) {
+      @Valid @ParameterObject @ModelAttribute PostFeedRequest request) {
     PageResponse<PostListResponse> posts = postService.listFeed(request);
     return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
   }
@@ -130,7 +131,7 @@ public class PostController {
   @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listUserPosts(
       @AuthenticationPrincipal UUID userId,
-      @Valid @ParameterObject @ModelAttribute PostListRequest request) {
+      @Valid @ParameterObject @ModelAttribute MyPostListRequest request) {
     PageResponse<PostListResponse> posts = postService.listUserPosts(userId, request);
     return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
   }

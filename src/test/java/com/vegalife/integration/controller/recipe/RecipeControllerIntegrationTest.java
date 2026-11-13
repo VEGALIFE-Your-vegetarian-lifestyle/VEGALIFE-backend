@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.enums.recipe.Unit;
 import com.vegalife.enums.user.UserRole;
@@ -22,7 +23,9 @@ import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
@@ -375,7 +378,165 @@ class RecipeControllerIntegrationTest {
     mockMvc
         .perform(get("/api/recipes/me").header("Authorization", "Bearer " + accessToken))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data[0].rejectionReason").value("instructions are off-topic"));
+        .andExpect(
+            jsonPath("$.data.content[0].rejectionReason").value("instructions are off-topic"));
+  }
+
+  @Test
+  void listMyRecipes_isPaginatedAndFiltersByModerationStatus() throws Exception {
+    createRecipeWithStatus("Approved bowl", ModerationStatus.APPROVED);
+    createRecipeWithStatus("Rejected bowl", ModerationStatus.REJECTED);
+
+    mockMvc
+        .perform(
+            get("/api/recipes/me")
+                .header("Authorization", "Bearer " + accessToken)
+                .param("moderationStatus", "REJECTED")
+                .param("size", "1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.size").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Rejected bowl"));
+  }
+
+  @Test
+  void listRecipes_keywordMatchesTextDishAndIngredientFields() throws Exception {
+    createApprovedRecipe("Pho bowl", "Noodle soup", List.of());
+    createApprovedRecipe("Weeknight dinner", "Pho noodle soup", List.of());
+    createApprovedRecipe("Other bowl", "Rice bowl", List.of("pho spice"));
+    createApprovedRecipe("Unrelated", "Salad", List.of("lettuce"));
+
+    mockMvc
+        .perform(get("/api/recipes").param("keyword", "PHO"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(3));
+  }
+
+  @Test
+  void listRecipes_keywordReturnsOneRowWhenSeveralIngredientLinesMatch() throws Exception {
+    createApprovedRecipe("Bowl", "Rice", List.of("tofu", "smoked tofu"));
+    createApprovedRecipe("Other", "Salad", List.of("lettuce"));
+
+    mockMvc
+        .perform(get("/api/recipes").param("keyword", "tofu"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content.length()").value(1));
+  }
+
+  @Test
+  void listRecipes_treatsKeywordWildcardsLiterally() throws Exception {
+    createApprovedRecipe("100% vegan", "Bowl", List.of());
+    createApprovedRecipe("Plain", "Salad", List.of());
+
+    mockMvc
+        .perform(get("/api/recipes").param("keyword", "%"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("100% vegan"));
+  }
+
+  @Test
+  void listRecipes_filtersByDishDifficultyAndTotalTime() throws Exception {
+    Recipe quick = createApprovedRecipe("Quick soup", "Soup", Difficulty.EASY, 10, 10, List.of());
+    createApprovedRecipe("Slow stew", "Stew", Difficulty.HARD, 60, 60, List.of());
+    createApprovedRecipe("Unknown time", "Mystery", Difficulty.EASY, 10, null, List.of());
+
+    mockMvc
+        .perform(get("/api/recipes").param("difficulty", "EASY"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(2));
+    mockMvc
+        .perform(get("/api/recipes").param("maxTotalTimeMinutes", "30"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].id").value(quick.getId().toString()));
+    mockMvc
+        .perform(get("/api/recipes").param("dishId", quick.getDish().getId().toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1));
+    mockMvc
+        .perform(get("/api/recipes").param("difficulty", "HARD").param("maxTotalTimeMinutes", "30"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(0));
+    mockMvc
+        .perform(get("/api/recipes").param("difficulty", "IMPOSSIBLE"))
+        .andExpect(status().isBadRequest());
+  }
+
+  private Recipe createApprovedRecipe(String name, String dishName, List<String> ingredientNames) {
+    return createApprovedRecipe(
+        name, dishName, "Simple", "Cook it", null, null, null, ingredientNames);
+  }
+
+  private Recipe createApprovedRecipe(
+      String name,
+      String dishName,
+      Difficulty difficulty,
+      Integer prepTimeMinutes,
+      Integer cookTimeMinutes,
+      List<String> ingredientNames) {
+    return createApprovedRecipe(
+        name,
+        dishName,
+        "Simple",
+        "Cook it",
+        difficulty,
+        prepTimeMinutes,
+        cookTimeMinutes,
+        ingredientNames);
+  }
+
+  private Recipe createApprovedRecipe(
+      String name,
+      String dishName,
+      String description,
+      String instructions,
+      Difficulty difficulty,
+      Integer prepTimeMinutes,
+      Integer cookTimeMinutes,
+      List<String> ingredientNames) {
+    Dish dish =
+        dishRepository.save(Dish.builder().name(dishName + " " + UUID.randomUUID()).build());
+    Recipe recipe =
+        recipeRepository.save(
+            Recipe.builder()
+                .user(testUser)
+                .dish(dish)
+                .name(name)
+                .description(description)
+                .instructions(instructions)
+                .servings(2)
+                .difficulty(difficulty)
+                .prepTimeMinutes(prepTimeMinutes)
+                .cookTimeMinutes(cookTimeMinutes)
+                .moderationStatus(ModerationStatus.APPROVED)
+                .build());
+    for (String ingredientName : ingredientNames) {
+      Ingredient ingredient =
+          ingredientRepository.save(
+              Ingredient.builder().name(ingredientName + " " + UUID.randomUUID()).build());
+      recipeIngredientRepository.save(
+          RecipeIngredient.builder()
+              .recipeId(recipe.getId())
+              .ingredientId(ingredient.getId())
+              .amount(BigDecimal.ONE)
+              .build());
+    }
+    return recipe;
+  }
+
+  private Recipe createRecipeWithStatus(String name, ModerationStatus status) {
+    Dish dish = dishRepository.save(Dish.builder().name("Dish " + UUID.randomUUID()).build());
+    return recipeRepository.save(
+        Recipe.builder()
+            .user(testUser)
+            .dish(dish)
+            .name(name)
+            .instructions("Cook it")
+            .servings(2)
+            .moderationStatus(status)
+            .build());
   }
 
   private Recipe createRejectedRecipe(String name, String rejectionReason) {

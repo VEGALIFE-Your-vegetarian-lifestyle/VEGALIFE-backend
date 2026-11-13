@@ -47,6 +47,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-011 | Single Post Detail Excludes Only Deleted Posts, Not Ownership | Active | 2026-10-10 |
 | BR-POST-012 | Only Administrators Approve or Reject a Submitted Post | Active | 2026-11-13 |
 | BR-POST-013 | Only Approved Recipes May Be Attached to a Post | Active | 2026-11-12 |
+| BR-POST-014 | Post List Filters Only Narrow the Visible Set | Active | 2026-11-13 |
 | BR-ADMIN-002 | Every Administrator Content-Moderation Action Is Logged | Active | 2026-10-10 |
 | BR-COMMENT-001 | Comment Creation Requires Authentication; Reading Is Public | Active | 2026-10-11 |
 | BR-COMMENT-002 | Only the Owner May Edit a Comment | Active | 2026-10-11 |
@@ -77,6 +78,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-RECP-006 | A Recipe Reports No Nutrition Unless Every Ingredient Is Resolved | Active | 2026-11-05 |
 | BR-RECP-007 | A Line's Nutrition Is Derived, Rounded Per Line, and Never Partial | Active | 2026-11-06 |
 | BR-RECP-008 | Approved Recipes Are Publicly Readable | Active | 2026-11-13 |
+| BR-RECP-009 | Recipe Catalogue Filters and Keyword Only Narrow the Visible Set | Active | 2026-11-13 |
 | BR-DISH-001 | Dish and Ingredient Names Require Admin Approval and Rejection Is Permanent | Active | 2026-10-23 |
 | BR-DISH-002 | Dish Ingredient Suggestions and Advisory Required Flag | Active | 2026-11-02 |
 | BR-DISH-003 | Dish Ingredient Entries Come From Approved Recipes or an Administrator, and Deletion Is Permanent for Seeding | Active | 2026-11-02 |

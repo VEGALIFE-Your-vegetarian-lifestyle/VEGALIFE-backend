@@ -2,16 +2,20 @@ package com.vegalife.unit.service.post;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.post.PostMapper;
+import com.vegalife.dto.request.post.MyPostListRequest;
 import com.vegalife.dto.request.post.PostCreateRequest;
-import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.PostFeedRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.request.post.RelatedPostsRequest;
+import com.vegalife.dto.request.post.UserPostListRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.dto.response.post.RelatedPostResponse;
 import com.vegalife.enums.outbound.OutboundChannel;
@@ -51,6 +55,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -59,6 +64,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 @ExtendWith(MockitoExtension.class)
 class PostServiceTest {
@@ -466,16 +473,14 @@ class PostServiceTest {
     rejected.setRejectionReason("off-topic for the platform");
     Post published = ownedPost(UUID.randomUUID(), PostStatus.published);
     Page<Post> page = new PageImpl<>(List.of(rejected, published), PageRequest.of(0, 20), 2);
-    when(postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
-            userId, PageRequest.of(0, 20)))
-        .thenReturn(page);
+    when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
     when(postMapper.toListResponse(rejected))
         .thenReturn(PostListResponse.builder().id(rejected.getId()).userId(userId).build());
     when(postMapper.toListResponse(published))
         .thenReturn(PostListResponse.builder().id(published.getId()).userId(userId).build());
 
     PageResponse<PostListResponse> result =
-        postService.listUserPosts(userId, PostListRequest.builder().build());
+        postService.listUserPosts(userId, new MyPostListRequest());
 
     assertThat(result.getContent().get(0).getRejectionReason())
         .isEqualTo("off-topic for the platform");
@@ -489,14 +494,12 @@ class PostServiceTest {
     rejected.setRejectionReason("off-topic for the platform");
     Page<Post> page = new PageImpl<>(List.of(rejected), PageRequest.of(0, 20), 1);
     when(userRepository.findById(ownerId)).thenReturn(Optional.of(user));
-    when(postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
-            ownerId, PageRequest.of(0, 20)))
-        .thenReturn(page);
+    when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
     when(postMapper.toListResponse(rejected))
         .thenReturn(PostListResponse.builder().id(rejected.getId()).userId(ownerId).build());
 
     PageResponse<PostListResponse> result =
-        postService.listPostsOfUser(ownerId, false, ownerId, PostListRequest.builder().build());
+        postService.listPostsOfUser(ownerId, false, ownerId, new UserPostListRequest());
 
     assertThat(result.getContent().get(0).getRejectionReason())
         .isEqualTo("off-topic for the platform");
@@ -509,15 +512,12 @@ class PostServiceTest {
     rejected.setRejectionReason("off-topic for the platform");
     Page<Post> page = new PageImpl<>(List.of(rejected), PageRequest.of(0, 20), 1);
     when(userRepository.findById(ownerId)).thenReturn(Optional.of(user));
-    when(postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
-            ownerId, PageRequest.of(0, 20)))
-        .thenReturn(page);
+    when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
     when(postMapper.toListResponse(rejected))
         .thenReturn(PostListResponse.builder().id(rejected.getId()).userId(ownerId).build());
 
     PageResponse<PostListResponse> result =
-        postService.listPostsOfUser(
-            UUID.randomUUID(), true, ownerId, PostListRequest.builder().build());
+        postService.listPostsOfUser(UUID.randomUUID(), true, ownerId, new UserPostListRequest());
 
     // An administrator browsing a profile is not the author; the admin surfaces carry the reason.
     assertThat(result.getContent().get(0).getRejectionReason()).isNull();
@@ -528,13 +528,11 @@ class PostServiceTest {
     Post post = ownedPost(UUID.randomUUID(), PostStatus.published);
     post.setRejectionReason("left over from an earlier refusal");
     Page<Post> page = new PageImpl<>(List.of(post), PageRequest.of(0, 20), 1);
-    when(postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            PostStatus.published, PageRequest.of(0, 20)))
-        .thenReturn(page);
+    when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
     when(postMapper.toListResponse(post))
         .thenReturn(PostListResponse.builder().id(post.getId()).userId(userId).build());
 
-    PageResponse<PostListResponse> result = postService.listFeed(PostListRequest.builder().build());
+    PageResponse<PostListResponse> result = postService.listFeed(new PostFeedRequest());
 
     assertThat(result.getContent().get(0).getRejectionReason()).isNull();
   }
@@ -893,34 +891,35 @@ class PostServiceTest {
   }
 
   @Test
-  void listPostsOfUser_guestSeesOnlyPublishedPosts() {
-    Pageable pageable = PageRequest.of(0, 20);
-    Page<Post> page = new PageImpl<>(List.of(), pageable, 0);
+  void listPostsOfUser_guestUsesPublishedAtThenCreatedAtOrder() {
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-    when(postRepository.findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            userId, PostStatus.published, pageable))
-        .thenReturn(page);
+    Page<Post> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+    when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
-    postService.listPostsOfUser(null, false, userId, new PostListRequest());
+    postService.listPostsOfUser(null, false, userId, new UserPostListRequest());
 
-    verify(postRepository, never())
-        .findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
-            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+    verify(postRepository).findAll(any(Specification.class), pageable.capture());
+    assertThat(pageable.getValue().getSort().toList())
+        .containsExactly(Sort.Order.desc("publishedAt"), Sort.Order.desc("createdAt"));
   }
 
   @Test
-  void listPostsOfUser_ownerAndAdminSeeAllStatuses() {
-    Pageable pageable = PageRequest.of(0, 20);
-    Page<Post> page = new PageImpl<>(List.of(), pageable, 0);
+  void listPostsOfUser_ownerAndAdminSeeAllStatusesNewestCreatedFirst() {
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-    when(postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(userId, pageable))
-        .thenReturn(page);
+    Page<Post> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+    when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
-    postService.listPostsOfUser(userId, false, userId, new PostListRequest());
-    postService.listPostsOfUser(UUID.randomUUID(), true, userId, new PostListRequest());
+    postService.listPostsOfUser(userId, false, userId, new UserPostListRequest());
+    postService.listPostsOfUser(UUID.randomUUID(), true, userId, new UserPostListRequest());
 
-    verify(postRepository, org.mockito.Mockito.times(2))
-        .findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(userId, pageable);
+    ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+    verify(postRepository, times(2)).findAll(any(Specification.class), pageable.capture());
+    assertThat(pageable.getAllValues())
+        .allSatisfy(
+            captured ->
+                assertThat(captured.getSort().toList())
+                    .containsExactly(Sort.Order.desc("createdAt")));
   }
 
   @Test
@@ -928,46 +927,42 @@ class PostServiceTest {
     when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
     assertThatThrownBy(
-            () -> postService.listPostsOfUser(null, false, userId, new PostListRequest()))
+            () -> postService.listPostsOfUser(null, false, userId, new UserPostListRequest()))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("User not found");
 
     user.setDeletedAt(java.time.Instant.now());
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
     assertThatThrownBy(
-            () -> postService.listPostsOfUser(null, false, userId, new PostListRequest()))
+            () -> postService.listPostsOfUser(null, false, userId, new UserPostListRequest()))
         .isInstanceOf(ResourceNotFoundException.class);
   }
 
   @Test
   void listFeed_queriesOnlyPublishedPostsNewestFirst() {
-    Pageable pageable = PageRequest.of(0, 20);
-    Page<Post> page = new PageImpl<>(List.of(), pageable, 0);
-    when(postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            PostStatus.published, pageable))
-        .thenReturn(page);
+    Page<Post> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+    when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
-    PageResponse<PostListResponse> response = postService.listFeed(new PostListRequest());
+    PageResponse<PostListResponse> response = postService.listFeed(new PostFeedRequest());
 
     assertThat(response.getTotalElements()).isZero();
-    verify(postRepository)
-        .findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            PostStatus.published, pageable);
+    ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+    verify(postRepository).findAll(any(Specification.class), pageable.capture());
+    assertThat(pageable.getValue().getSort().toList())
+        .containsExactly(Sort.Order.desc("publishedAt"), Sort.Order.desc("createdAt"));
   }
 
   @Test
   void listFeed_passesRequestedPageAndSize() {
-    Pageable pageable = PageRequest.of(2, 5);
-    Page<Post> page = new PageImpl<>(List.of(), pageable, 0);
-    when(postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            PostStatus.published, pageable))
-        .thenReturn(page);
+    Page<Post> page = new PageImpl<>(List.of(), PageRequest.of(2, 5), 0);
+    when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
 
-    postService.listFeed(PostListRequest.builder().page(2).size(5).build());
+    postService.listFeed(PostFeedRequest.builder().page(2).size(5).build());
 
-    verify(postRepository)
-        .findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            PostStatus.published, pageable);
+    ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+    verify(postRepository).findAll(any(Specification.class), pageable.capture());
+    assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+    assertThat(pageable.getValue().getPageSize()).isEqualTo(5);
   }
 
   @Test

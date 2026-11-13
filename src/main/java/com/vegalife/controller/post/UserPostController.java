@@ -1,6 +1,6 @@
 package com.vegalife.controller.post;
 
-import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.UserPostListRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.service.post.PostService;
 import com.vegalife.shared.dto.ApiResponse;
@@ -29,7 +29,7 @@ public class UserPostController {
   public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listPostsOfUser(
       Authentication authentication,
       @PathVariable UUID userId,
-      @Valid @ParameterObject @ModelAttribute PostListRequest request) {
+      @Valid @ParameterObject @ModelAttribute UserPostListRequest request) {
     UUID viewerId =
         authentication != null && authentication.getPrincipal() instanceof UUID id ? id : null;
     boolean isAdmin =

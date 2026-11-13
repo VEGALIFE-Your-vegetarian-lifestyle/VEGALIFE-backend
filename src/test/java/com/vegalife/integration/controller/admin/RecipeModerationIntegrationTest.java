@@ -153,7 +153,7 @@ class RecipeModerationIntegrationTest {
     mockMvc
         .perform(get("/api/recipes/me").header("Authorization", "Bearer " + authorToken))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data[0].id").value(recipeId.toString()));
+        .andExpect(jsonPath("$.data.content[0].id").value(recipeId.toString()));
   }
 
   @Test
@@ -327,7 +327,8 @@ class RecipeModerationIntegrationTest {
     mockMvc
         .perform(get("/api/recipes/me").header("Authorization", "Bearer " + authorToken))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data").isEmpty());
+        .andExpect(jsonPath("$.data.content").isEmpty())
+        .andExpect(jsonPath("$.data.totalElements").value(0));
     mockMvc
         .perform(
             get("/api/admin/recipes/" + recipeId).header("Authorization", "Bearer " + adminToken))

@@ -12,6 +12,7 @@
 | BR-RECP-006 | A Recipe Reports No Nutrition Unless Every Ingredient Is Resolved | Active | 2026-11-05 |
 | BR-RECP-007 | A Line's Nutrition Is Derived, Rounded Per Line, and Never Partial | Active | 2026-11-06 |
 | BR-RECP-008 | Approved Recipes Are Publicly Readable | Active | 2026-11-13 |
+| BR-RECP-009 | Recipe Catalogue Filters and Keyword Only Narrow the Visible Set | Active | 2026-11-13 |
 
 ---
 
@@ -465,14 +466,86 @@ on a public read would tell the world why content was refused and second-guess t
 
 ## Enforcement
 
-- `RecipeService.listApprovedRecipes` queries by `moderationStatus = APPROVED` and
-  `deletedAt IS NULL`.
+- `RecipeService.listApprovedRecipes` queries through
+  `RecipeSpecifications.catalogue(null, APPROVED, ...)`, which always adds
+  `deletedAt IS NULL` and `moderationStatus = APPROVED`.
 - `RecipeService.getRecipe` filters on "approved **or** caller is the author" and clears
   `rejectionReason` for a non-author viewer.
 - `SecurityConfig` permits `GET /api/recipes` and `GET /api/recipes/*` while keeping
   `GET /api/recipes/me` and `POST /api/recipes` authenticated.
 - API references: `docs/apis/recipes/get-recipes.md`,
   `docs/apis/recipes/get-recipes-recipeid.md`.
+
+## Last Reviewed
+
+2026-11-13, by Vegalife backend team
+
+---
+
+# Business Rule: Recipe Catalogue Filters and Keyword Only Narrow the Visible Set
+
+## Rule ID
+
+`BR-RECP-009`
+
+## Status
+
+Active
+
+## Statement
+
+The recipe list routes accept filters — the public catalogue (`GET /api/recipes`)
+accepts `keyword`, `dishId`, `difficulty`, and `maxTotalTimeMinutes`; the caller's
+own list (`GET /api/recipes/me`) accepts `moderationStatus`, `dishId`,
+`difficulty`, and `maxTotalTimeMinutes`. Every supplied filter is combined with
+`AND` and can only remove rows from the set the route already allows; no filter
+can add a row the route's visibility rule would otherwise hide. Blank or absent
+values never narrow. An unknown `difficulty` or `moderationStatus` is rejected,
+not ignored.
+
+`keyword` is trimmed and matched as one case-insensitive substring of the
+recipe's `name`, `description`, or `instructions`, the attached dish's `name`, or
+the name of any attached ingredient. It is not tokenized, ranked, stemmed, or
+expanded with synonyms. A recipe with several matching ingredient lines is
+returned once. `%`, `_`, and `\` in a keyword are literal characters.
+
+`maxTotalTimeMinutes` matches when `prepTimeMinutes + cookTimeMinutes` is at most
+the supplied value; a recipe missing either time does not match, because unknown
+is not "short enough".
+
+## Rationale
+
+A browse filter is a narrowing tool. `GET /api/recipes` must never expose a
+`PENDING` or `REJECTED` recipe (BR-RECP-008) merely because the caller supplied a
+filter, and the author-scoped route must never leak another member's recipe.
+Whole-phrase matching keeps the result predictable and cheap; including the dish
+and ingredient names is what makes a recipe findable by what it actually is, not
+only by its title.
+
+## Scope & Exceptions
+
+- Applies to `GET /api/recipes` and `GET /api/recipes/me`.
+- There is no `categoryId` filter: a recipe has no category of its own, only
+  categories reached indirectly through attached posts.
+- `GET /api/search` keeps its original text-fields-only recipe matching while it
+  is deprecated; it is not widened to dish or ingredient names.
+- Admin recipe listings have their own filters and are outside this rule.
+
+## Enforcement
+
+- `RecipeSpecifications.catalogue(...)` composes the author, moderation-state,
+  dish, difficulty, total-time, and keyword predicates; the public route always
+  passes `ModerationStatus.APPROVED` and no author.
+- The keyword predicate uses an `EXISTS` subquery over `recipe_ingredient` →
+  `ingredient`, so an ingredient match cannot duplicate a recipe row or inflate
+  `totalElements`.
+- DTOs: `RecipeListRequest` and `MyRecipeListRequest` declare only their route's
+  filters; `@Pattern` rejects an unknown `difficulty` or `moderationStatus`.
+- API references: `docs/apis/recipes/get-recipes.md`,
+  `docs/apis/recipes/get-recipes-me.md`.
+- Tests: `RecipeControllerIntegrationTest` covers keyword on text, dish, and
+  ingredient names, ingredient-match de-duplication, literal `%`, difficulty,
+  total time, dish, the page envelope, and an invalid difficulty.
 
 ## Last Reviewed
 

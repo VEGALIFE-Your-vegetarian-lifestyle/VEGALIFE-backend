@@ -3,10 +3,12 @@ package com.vegalife.service.post;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.post.PostMapper;
+import com.vegalife.dto.request.post.MyPostListRequest;
 import com.vegalife.dto.request.post.PostCreateRequest;
-import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.PostFeedRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.request.post.RelatedPostsRequest;
+import com.vegalife.dto.request.post.UserPostListRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.dto.response.post.RelatedPostResponse;
 import com.vegalife.enums.outbound.OutboundChannel;
@@ -29,6 +31,7 @@ import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.post.PostSpecifications;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -55,6 +58,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -442,10 +446,21 @@ public class PostService {
   }
 
   @Transactional(readOnly = true)
-  public PageResponse<PostListResponse> listUserPosts(UUID userId, PostListRequest request) {
-    Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
+  public PageResponse<PostListResponse> listUserPosts(UUID userId, MyPostListRequest request) {
+    Pageable pageable =
+        PageRequest.of(
+            request.getPage(), request.getSize(), Sort.by(Sort.Direction.DESC, "createdAt"));
     Page<Post> posts =
-        postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(userId, pageable);
+        postRepository.findAll(
+            PostSpecifications.filtering(
+                parseStatus(request.getStatus()),
+                null,
+                userId,
+                request.getCategoryId(),
+                request.getCreatedFrom(),
+                request.getCreatedTo(),
+                null),
+            pageable);
 
     // Always the caller's own posts, so the reason is theirs to read.
     return toPage(posts, userId);
@@ -457,20 +472,30 @@ public class PostService {
    */
   @Transactional(readOnly = true)
   public PageResponse<PostListResponse> listPostsOfUser(
-      UUID viewerId, boolean isAdmin, UUID ownerId, PostListRequest request) {
+      UUID viewerId, boolean isAdmin, UUID ownerId, UserPostListRequest request) {
     userRepository
         .findById(ownerId)
         .filter(owner -> owner.getDeletedAt() == null)
         .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-    Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
     boolean callerIsOwner = ownerId.equals(viewerId);
+    boolean seesAllStatuses = isAdmin || callerIsOwner;
+    Sort sort =
+        seesAllStatuses
+            ? Sort.by(Sort.Direction.DESC, "createdAt")
+            : Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("createdAt"));
+    Pageable pageable = PageRequest.of(request.getPage(), request.getSize(), sort);
     Page<Post> posts =
-        isAdmin || callerIsOwner
-            ? postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(ownerId, pageable)
-            : postRepository
-                .findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-                    ownerId, PostStatus.published, pageable);
+        postRepository.findAll(
+            PostSpecifications.filtering(
+                seesAllStatuses ? null : PostStatus.published,
+                null,
+                ownerId,
+                request.getCategoryId(),
+                request.getCreatedFrom(),
+                request.getCreatedTo(),
+                null),
+            pageable);
 
     // Only the owner gets the reason: an Administrator browsing this endpoint is not the author,
     // and reads the same reason from the admin surfaces instead.
@@ -479,14 +504,39 @@ public class PostService {
 
   /** BR-POST-010: the public feed serves every published, non-deleted post, newest first. */
   @Transactional(readOnly = true)
-  public PageResponse<PostListResponse> listFeed(PostListRequest request) {
-    Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
+  public PageResponse<PostListResponse> listFeed(PostFeedRequest request) {
+    Pageable pageable =
+        PageRequest.of(
+            request.getPage(),
+            request.getSize(),
+            Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("createdAt")));
     Page<Post> posts =
-        postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            PostStatus.published, pageable);
+        postRepository.findAll(
+            PostSpecifications.filtering(
+                PostStatus.published,
+                null,
+                null,
+                request.getCategoryId(),
+                request.getCreatedFrom(),
+                request.getCreatedTo(),
+                request.getKeyword()),
+            pageable);
 
     // Public feed: no caller, so no reason. Published posts are not rejected ones anyway.
     return toPage(posts, null);
+  }
+
+  /** Absent or blank means "every status"; ownership already grants visibility on this route. */
+  private PostStatus parseStatus(String status) {
+    if (status == null || status.isBlank()) {
+      return null;
+    }
+    try {
+      return PostStatus.valueOf(status);
+    } catch (IllegalArgumentException ex) {
+      throw new ValidationException(
+          "Status must be one of: drafted, processing, published, unpublished");
+    }
   }
 
   /**

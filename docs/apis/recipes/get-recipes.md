@@ -28,8 +28,12 @@ No path parameters.
 |------|------|----------|-------------|
 | page | integer | No | Zero-based page index. Defaults to `0`; must be `>= 0`. |
 | size | integer | No | Page size. Defaults to `20`; between `1` and `100`. |
+| keyword | string | No | Case-insensitive whole-phrase match on `name`, `description`, `instructions`, the dish name, or any attached ingredient name. Trimmed; blank means no filter. `%`, `_`, and `\` are matched literally. |
+| dishId | UUID | No | Only recipes using that dish. |
+| difficulty | string | No | `EASY`, `MEDIUM`, or `HARD`. Any other value is `400 Validation failed`. |
+| maxTotalTimeMinutes | integer | No | Only recipes whose `prepTimeMinutes + cookTimeMinutes` is at most this value. A recipe missing either time does not match. |
 
-Order is fixed: `created_at DESC`. There is no sort, dish, category, or keyword parameter.
+Order is fixed: `created_at DESC`. There is no sort or category parameter. Filters combine with AND and only narrow the approved catalogue — no filter can make a `PENDING`, `REJECTED`, or deleted recipe appear.
 
 ### Request Body
 
@@ -97,7 +101,7 @@ Each `data.content[]` item is the same `RecipeResponse` shape returned by `GET /
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | `page` is negative or `size` is outside `1`–`100` | `Validation failed` |
+| 400 | `page`/`size` out of range, an invalid `difficulty`, or an unparseable `dishId` | `Validation failed` |
 | 401 | A token is supplied but is invalid, expired, or the account is inactive | `Unauthorized` |
 | 500 | Unexpected server error | `Internal server error` |
 
@@ -109,6 +113,8 @@ Each `data.content[]` item is the same `RecipeResponse` shape returned by `GET /
 - Ordering is `created_at` descending — newest recipe first.
 - BR-RECP-006 / BR-RECP-007 apply: nutrition totals and per-line values are derived, and a recipe reports `nutritionResolved = false` when any ingredient is unresolved.
 - Pagination is bounded: page `0`, size `20` by default, `size` 1–100.
+- `keyword` matches the recipe's own text plus the attached dish name and any attached ingredient name. A recipe with several matching ingredient lines is returned once. Matching is case-insensitive on a trimmed phrase, with no tokenization or ranking (BR-RECP-009).
+- `dishId`, `difficulty`, and `maxTotalTimeMinutes` only narrow the approved catalogue; they never widen it.
 - No schema migration is needed; visibility is already stored on the recipe row.
 
 ## Example
@@ -116,7 +122,7 @@ Each `data.content[]` item is the same `RecipeResponse` shape returned by `GET /
 ### Request
 
 ```bash
-curl "http://localhost:8080/api/recipes?page=0&size=10"
+curl "http://localhost:8080/api/recipes?page=0&size=10&difficulty=EASY&maxTotalTimeMinutes=30&keyword=tofu"
 ```
 
 ### Success Response (200)
@@ -143,5 +149,5 @@ curl "http://localhost:8080/api/recipes?page=0&size=10"
 - List own recipes: `docs/apis/recipes/get-recipes-me.md`
 - Create counterpart: `docs/apis/recipes/post-recipes.md`
 - Admin list across users: `docs/apis/admin/get-recipes.md`
-- Business rules: `docs/brs/recipes.md` (BR-RECP-008)
-- Feature spec: `docs/feats/public-recipe-browsing.md`
+- Business rules: `docs/brs/recipes.md` (BR-RECP-008, BR-RECP-009)
+- Feature spec: `docs/feats/public-recipe-browsing.md`, `docs/feats/post-recipe-list-filters.md`
