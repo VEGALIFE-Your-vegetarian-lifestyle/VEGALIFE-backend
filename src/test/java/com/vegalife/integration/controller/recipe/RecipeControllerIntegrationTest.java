@@ -2,6 +2,7 @@ package com.vegalife.integration.controller.recipe;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -462,6 +463,105 @@ class RecipeControllerIntegrationTest {
     mockMvc
         .perform(get("/api/recipes").param("difficulty", "IMPOSSIBLE"))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void deleteRecipe_ownRecipe_returns200AndRemovesItFromReadAndLists() throws Exception {
+    Recipe recipe = createApprovedRecipe("Deletable", "Deletable Dish", List.of("tofu"));
+
+    mockMvc
+        .perform(
+            delete("/api/recipes/{recipeId}", recipe.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.message").value("Recipe deleted successfully"))
+        .andExpect(jsonPath("$.data").value(nullValue()));
+
+    assertThat(recipeRepository.findById(recipe.getId()).orElseThrow().getDeletedAt()).isNotNull();
+
+    mockMvc
+        .perform(get("/api/recipes/{recipeId}", recipe.getId()))
+        .andExpect(status().isNotFound());
+
+    mockMvc
+        .perform(get("/api/recipes/me").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content").isEmpty())
+        .andExpect(jsonPath("$.data.totalElements").value(0));
+  }
+
+  @Test
+  void deleteRecipe_repeatDelete_returns404() throws Exception {
+    Recipe recipe = createApprovedRecipe("Deleted Twice", "Deleted Dish", List.of("tofu"));
+
+    mockMvc
+        .perform(
+            delete("/api/recipes/{recipeId}", recipe.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk());
+    mockMvc
+        .perform(
+            delete("/api/recipes/{recipeId}", recipe.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void deleteRecipe_anotherMembersRecipe_returns404AndKeepsIt() throws Exception {
+    Recipe recipe = createApprovedRecipe("Someone Else's", "Shared Dish", List.of("tofu"));
+    User other =
+        userRepository.save(
+            User.builder()
+                .displayName("recipeother")
+                .email("recipe-other@example.com")
+                .passwordHash("$2a$10$test")
+                .role(UserRole.USER)
+                .status(UserStatus.activated)
+                .emailVerified(true)
+                .build());
+    String otherToken = jwtTokenService.generateAccessToken(other);
+
+    mockMvc
+        .perform(
+            delete("/api/recipes/{recipeId}", recipe.getId())
+                .header("Authorization", "Bearer " + otherToken))
+        .andExpect(status().isNotFound());
+
+    assertThat(recipeRepository.findById(recipe.getId()).orElseThrow().getDeletedAt()).isNull();
+  }
+
+  @Test
+  void deleteRecipe_adminIsNotAnOverrideOnTheMemberRoute() throws Exception {
+    Recipe recipe = createApprovedRecipe("Admin Cannot", "Admin Dish", List.of("tofu"));
+    User admin =
+        userRepository.save(
+            User.builder()
+                .displayName("recipeadmin")
+                .email("recipe-admin@example.com")
+                .passwordHash("$2a$10$test")
+                .role(UserRole.ADMIN)
+                .status(UserStatus.activated)
+                .emailVerified(true)
+                .build());
+    String adminToken = jwtTokenService.generateAccessToken(admin);
+
+    mockMvc
+        .perform(
+            delete("/api/recipes/{recipeId}", recipe.getId())
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isNotFound());
+
+    assertThat(recipeRepository.findById(recipe.getId()).orElseThrow().getDeletedAt()).isNull();
+  }
+
+  @Test
+  void deleteRecipe_withoutToken_returns401() throws Exception {
+    Recipe recipe = createApprovedRecipe("No Token", "No Token Dish", List.of("tofu"));
+
+    mockMvc
+        .perform(delete("/api/recipes/{recipeId}", recipe.getId()))
+        .andExpect(status().isUnauthorized());
   }
 
   private Recipe createApprovedRecipe(String name, String dishName, List<String> ingredientNames) {

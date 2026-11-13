@@ -25,6 +25,7 @@ import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -110,6 +111,25 @@ public class RecipeService {
       clearRejectionReason(response);
     }
     return response;
+  }
+
+  /**
+   * BR-RECP-010: only the author may delete their recipe. Deletion is soft ({@code deletedAt}) so
+   * posts and menus that reference it keep resolving; the row simply stops listing and reading.
+   *
+   * <p>The lookup is author-scoped, so another member's recipe is reported as not found rather than
+   * forbidden, matching the single-read route.
+   */
+  @Transactional
+  public void deleteRecipe(UUID callerId, UUID recipeId) {
+    Recipe recipe =
+        recipeRepository
+            .findByIdAndUser_IdAndDeletedAtIsNull(recipeId, callerId)
+            .orElseThrow(() -> new ResourceNotFoundException("Recipe not found"));
+
+    recipe.setDeletedAt(Instant.now());
+    recipeRepository.save(recipe);
+    log.info("Recipe {} soft-deleted by author {}", recipe.getId(), callerId);
   }
 
   /**

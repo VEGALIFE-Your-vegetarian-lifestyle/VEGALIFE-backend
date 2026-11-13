@@ -90,6 +90,7 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `recipes/get-recipes.md` | `GET /api/recipes` | List approved recipes, newest first, paginated, filterable by keyword, dish, difficulty, and total time (public) |
 | `recipes/get-recipes-me.md` | `GET /api/recipes/me` | List own recipes, newest first, paginated and filterable (authenticated) |
 | `recipes/get-recipes-recipeid.md` | `GET /api/recipes/{recipeId}` | Read one recipe by id; approved is public, non-approved is author-only (public, author-aware) |
+| `recipes/delete-recipes-recipeid.md` | `DELETE /api/recipes/{recipeId}` | Soft-delete own recipe; owner only (authenticated) |
 | `restaurants/get-restaurants.md` | `GET /api/restaurants` | List recommended restaurants with rating/price/open-now/keyword filters (authenticated) |
 | `restaurants/get-restaurants-nearby.md` | `GET /api/restaurants/nearby` | List every active restaurant within a radius, nearest first, no pagination (authenticated) |
 | `restaurants/get-restaurants-restaurantid.md` | `GET /api/restaurants/{restaurantId}` | Read one active restaurant by id, with its curated dishes nested (authenticated) |

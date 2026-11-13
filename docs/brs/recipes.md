@@ -13,6 +13,7 @@
 | BR-RECP-007 | A Line's Nutrition Is Derived, Rounded Per Line, and Never Partial | Active | 2026-11-06 |
 | BR-RECP-008 | Approved Recipes Are Publicly Readable | Active | 2026-11-13 |
 | BR-RECP-009 | Recipe Catalogue Filters and Keyword Only Narrow the Visible Set | Active | 2026-11-13 |
+| BR-RECP-010 | Only the Author May Soft-Delete a Recipe | Active | 2026-11-13 |
 
 ---
 
@@ -546,6 +547,71 @@ only by its title.
 - Tests: `RecipeControllerIntegrationTest` covers keyword on text, dish, and
   ingredient names, ingredient-match de-duplication, literal `%`, difficulty,
   total time, dish, the page envelope, and an invalid difficulty.
+
+## Last Reviewed
+
+2026-11-13, by Vegalife backend team
+
+---
+
+# Business Rule: Only the Author May Soft-Delete a Recipe
+
+## Rule ID
+
+`BR-RECP-010`
+
+## Status
+
+Active
+
+## Statement
+
+A recipe is deleted only by its author, through
+`DELETE /api/recipes/{recipeId}`. The caller is identified by the JWT and the
+lookup is scoped to `user_id = caller`, so a missing recipe, an already
+soft-deleted recipe, and another member's recipe all return the same
+`404 Recipe not found`. An Administrator does not get an override on this
+route; administrative removal stays on
+`DELETE /api/admin/recipes/{recipeId}`.
+
+Deletion is soft: `deleted_at` is stamped and the row is kept. The recipe then
+disappears from the public catalogue, the author's own list, saved-recipe
+lists, and the single-read route, including for its own author. A second
+delete returns `404`. The `post_recipe` rows and saves are not deleted, but a
+deleted recipe stops appearing in a post's recipe list and in saved lists
+because both resolve it as active only; existing menu meals are snapshots and
+are unaffected.
+
+## Rationale
+
+Deletion is not an edit: removing a recipe does not publish unreviewed text, so
+the author may do it without the admin correction path that governs edits
+(BR-RECP-001). Making the lookup author-scoped keeps the route from confirming
+that someone else's recipe exists, mirroring the post delete route. A soft
+delete is required because posts and menus hold references: a hard delete
+would either orphan them or force a cascade that rewrites content nobody asked
+to change.
+
+## Scope & Exceptions
+
+- Applies to `DELETE /api/recipes/{recipeId}`.
+- `DELETE /api/admin/recipes/{recipeId}` is outside this rule; an admin may
+  remove any recipe there and the action is recorded in the moderation log.
+- Dish and ingredient rows are not deleted, and an attached recipe is not
+  detached from a post.
+- There is no member-facing restore route.
+
+## Enforcement
+
+- `RecipeRepository.findByIdAndUser_IdAndDeletedAtIsNull(...)` scopes the
+  lookup to author + non-deleted.
+- `RecipeService.deleteRecipe(...)` stamps `deletedAt` and never removes the
+  row.
+- `RecipeController.deleteRecipe` requires authentication and uses the JWT
+  principal as the caller.
+- API reference: `docs/apis/recipes/delete-recipes-recipeid.md`.
+- Tests: unit and integration coverage for owner success, non-owner, guest,
+  repeat delete, and disappearance from the read and list routes.
 
 ## Last Reviewed
 

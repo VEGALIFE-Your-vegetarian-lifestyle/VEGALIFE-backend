@@ -18,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,9 +30,10 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Member-facing recipe endpoints.
  *
- * <p>Writes are limited to {@code POST} on purpose (BR-RECP-001): a member who could edit a recipe
- * after its post passed the filter could turn clean text into something else without being reviewed
- * again. Corrections go through an admin.
+ * <p>Member writes are limited to create and delete on purpose (BR-RECP-001): a member who could
+ * edit a recipe after its post passed the filter could turn clean text into something else without
+ * being reviewed again. Corrections go through an admin. Deleting is not an edit — it removes the
+ * recipe from every list without republishing anything (BR-RECP-010).
  *
  * <p>Reads split by audience: {@code GET /api/recipes} is the public approved catalogue and {@code
  * GET /api/recipes/{recipeId}} is public for an approved recipe but author-only otherwise
@@ -82,5 +84,15 @@ public class RecipeController {
         authentication != null && authentication.getPrincipal() instanceof UUID id ? id : null;
     RecipeResponse recipe = recipeService.getRecipe(viewerId, recipeId);
     return ResponseEntity.ok(ApiResponse.success(recipe, "Recipe retrieved successfully"));
+  }
+
+  /** Soft-delete the caller's own recipe; only the author may delete (BR-RECP-010). */
+  @DeleteMapping("/{recipeId}")
+  @PreAuthorize("isAuthenticated()")
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<Void>> deleteRecipe(
+      @AuthenticationPrincipal UUID userId, @PathVariable UUID recipeId) {
+    recipeService.deleteRecipe(userId, recipeId);
+    return ResponseEntity.ok(ApiResponse.success(null, "Recipe deleted successfully"));
   }
 }
