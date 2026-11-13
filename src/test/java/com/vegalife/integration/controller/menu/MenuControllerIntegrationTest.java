@@ -25,8 +25,10 @@ import com.vegalife.repository.menu.MenuRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -78,6 +80,14 @@ class MenuControllerIntegrationTest {
   @Autowired private ObjectMapper objectMapper;
 
   private static final LocalDate MONDAY = LocalDate.of(2026, 10, 5);
+
+  /**
+   * A Monday the create endpoint can accept: it now requires {@code startDate >= tomorrow}, so the
+   * fixed 2026 window is only usable for menus persisted directly through the repository. Computed
+   * at runtime so the suite does not rot.
+   */
+  private static final LocalDate CREATE_START =
+      LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.next(DayOfWeek.MONDAY));
 
   @Autowired private UserRepository userRepository;
 
@@ -652,13 +662,13 @@ class MenuControllerIntegrationTest {
             post("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(createMenuJson(MONDAY, oneBreakfastPerDay(dishes))))
+                .content(createMenuJson(CREATE_START, oneBreakfastPerDayForCreate(dishes))))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Menu created successfully"))
         .andExpect(jsonPath("$.data.status").value("drafted"))
-        .andExpect(jsonPath("$.data.startDate").value("2026-10-05"))
-        .andExpect(jsonPath("$.data.endDate").value("2026-10-11"))
+        .andExpect(jsonPath("$.data.startDate").value(CREATE_START.toString()))
+        .andExpect(jsonPath("$.data.endDate").value(CREATE_START.plusDays(6).toString()))
         .andExpect(jsonPath("$.data.days.length()").value(7))
         .andExpect(jsonPath("$.data.days[0].meals[0].mealType").value("BREAKFAST"))
         .andExpect(jsonPath("$.data.days[0].meals[0].servings").value(2));
@@ -676,7 +686,7 @@ class MenuControllerIntegrationTest {
             post("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(createMenuJson(MONDAY, oneBreakfastPerDay(dishes))))
+                .content(createMenuJson(CREATE_START, oneBreakfastPerDayForCreate(dishes))))
         .andExpect(status().isCreated());
 
     Menu created = menuRepository.findAll().get(0);
@@ -687,11 +697,11 @@ class MenuControllerIntegrationTest {
   @Test
   void createMenu_duplicateMealTypeReturns400AndPersistsNothing() throws Exception {
     List<UUID> dishes = createDishes(7);
-    List<Map<String, Object>> days = new ArrayList<>(oneBreakfastPerDay(dishes));
+    List<Map<String, Object>> days = new ArrayList<>(oneBreakfastPerDayForCreate(dishes));
     days.set(
         0,
         day(
-            "2026-10-05",
+            createDateOf(0),
             List.of(meal("BREAKFAST", dishes.get(0), 2), meal("BREAKFAST", dishes.get(1), 1))));
 
     mockMvc
@@ -699,7 +709,7 @@ class MenuControllerIntegrationTest {
             post("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(createMenuJson(MONDAY, days)))
+                .content(createMenuJson(CREATE_START, days)))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(jsonPath("$.message").value("a date may have at most one meal per mealType"));
@@ -711,7 +721,7 @@ class MenuControllerIntegrationTest {
   void createMenu_unknownDishReturns400() throws Exception {
     List<Map<String, Object>> days = new ArrayList<>();
     for (int i = 0; i < 7; i++) {
-      days.add(day(dateOf(i), List.of(meal("BREAKFAST", UUID.randomUUID(), 2))));
+      days.add(day(createDateOf(i), List.of(meal("BREAKFAST", UUID.randomUUID(), 2))));
     }
 
     mockMvc
@@ -719,7 +729,7 @@ class MenuControllerIntegrationTest {
             post("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(createMenuJson(MONDAY, days)))
+                .content(createMenuJson(CREATE_START, days)))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.message").value(containsString("dish not found or deleted")));
 
@@ -732,7 +742,7 @@ class MenuControllerIntegrationTest {
     UUID favourite = dishes.get(0);
     List<Map<String, Object>> days = new ArrayList<>();
     for (int i = 0; i < 7; i++) {
-      days.add(day(dateOf(i), List.of(meal("BREAKFAST", favourite, 2))));
+      days.add(day(createDateOf(i), List.of(meal("BREAKFAST", favourite, 2))));
     }
 
     mockMvc
@@ -740,7 +750,7 @@ class MenuControllerIntegrationTest {
             post("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(createMenuJson(MONDAY, days)))
+                .content(createMenuJson(CREATE_START, days)))
         .andExpect(status().isBadRequest())
         .andExpect(
             jsonPath("$.message").value("the same dish may appear at most 3 times in a menu"));
@@ -753,7 +763,7 @@ class MenuControllerIntegrationTest {
     List<UUID> dishes = createDishes(4);
     List<Map<String, Object>> days = new ArrayList<>();
     for (int i = 0; i < 7; i++) {
-      days.add(day(dateOf(i), List.of(meal("BREAKFAST", dishes.get(i % 4), 2))));
+      days.add(day(createDateOf(i), List.of(meal("BREAKFAST", dishes.get(i % 4), 2))));
     }
 
     mockMvc
@@ -761,9 +771,31 @@ class MenuControllerIntegrationTest {
             post("/api/menus")
                 .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(createMenuJson(MONDAY, days)))
+                .content(createMenuJson(CREATE_START, days)))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.message").value("a menu must reference at least 5 distinct dishes"));
+  }
+
+  @Test
+  void createMenu_startingTodayReturns400AndPersistsNothing() throws Exception {
+    List<UUID> dishes = createDishes(7);
+    LocalDate today = LocalDate.now(ZoneOffset.UTC);
+    List<Map<String, Object>> days = new ArrayList<>();
+    for (int i = 0; i < 7; i++) {
+      days.add(day(today.plusDays(i).toString(), List.of(meal("BREAKFAST", dishes.get(i), 2))));
+    }
+
+    mockMvc
+        .perform(
+            post("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createMenuJson(today, days)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("startDate must be tomorrow or later"));
+
+    assertThat(menuRepository.count()).isZero();
   }
 
   @Test
@@ -1243,6 +1275,19 @@ class MenuControllerIntegrationTest {
 
   private static String dateOf(int dayOffset) {
     return MONDAY.plusDays(dayOffset).toString();
+  }
+
+  private static String createDateOf(int dayOffset) {
+    return CREATE_START.plusDays(dayOffset).toString();
+  }
+
+  /** One BREAKFAST meal per day on the window a create call can accept. */
+  private static List<Map<String, Object>> oneBreakfastPerDayForCreate(List<UUID> dishes) {
+    List<Map<String, Object>> days = new ArrayList<>();
+    for (int i = 0; i < 7; i++) {
+      days.add(day(createDateOf(i), List.of(meal("BREAKFAST", dishes.get(i), 2))));
+    }
+    return days;
   }
 
   /** One BREAKFAST meal per day, each with its own dish — the minimal valid week. */

@@ -27,8 +27,10 @@ import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.InvalidMenuTransitionException;
 import com.vegalife.shared.exception.MenuNotEditableException;
 import com.vegalife.shared.exception.MenuOverlapException;
+import com.vegalife.shared.exception.MenuValidationException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -64,14 +66,17 @@ public class MenuService {
   private final MenuValidator menuValidator;
   private final DishRepository dishRepository;
   private final RecipeRecommendationService recipeRecommendationService;
+  private final Clock clock;
 
   /**
    * BR-MENU-005: validates the week payload and persists a new {@code drafted} menu with its days
-   * in one transaction. The owner is the authenticated caller; {@code endDate} is derived.
+   * in one transaction. The owner is the authenticated caller; {@code endDate} is derived. A new
+   * week may not start today or earlier — the member would be planning days that are already gone.
    */
   @Transactional
   public MenuDetailResponse createMenu(UUID userId, CreateMenuRequest request) {
     menuValidator.validate(request);
+    requireStartDateIsUpcoming(request.getStartDate());
 
     LocalDate startDate = request.getStartDate();
     Menu menu =
@@ -88,6 +93,34 @@ public class MenuService {
     log.info(
         "Created drafted menu {} for user {} with {} meals", menu.getId(), userId, details.size());
     return toDetail(menu, details);
+  }
+
+  /**
+   * BR-MENU-005: a new week must start tomorrow or later in server-UTC terms (BR-MENU-004), so the
+   * member is never handed a plan whose first days have already passed. Create-only by design:
+   * {@link #updateMenu} rewrites an existing, immutable window and must keep working after that
+   * window has started (BR-MENU-006).
+   */
+  private void requireStartDateIsUpcoming(LocalDate startDate) {
+    LocalDate earliest = LocalDate.now(clock).plusDays(1);
+    if (startDate.isBefore(earliest)) {
+      throw new MenuValidationException("startDate must be tomorrow or later");
+    }
+  }
+
+  /**
+   * BR-MCP-005: whether the caller may edit this menu through the chat tools — their own, not
+   * deleted, still {@code drafted}, and not started yet ({@code startDate >= tomorrow}). A draft
+   * that was already scheduled is deliberately excluded: a scheduled window may have days in the
+   * past even though its meals can still be rewritten through REST (BR-MENU-006).
+   */
+  @Transactional(readOnly = true)
+  public boolean isUpcomingDraft(UUID userId, UUID menuId) {
+    return menuRepository
+        .findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
+        .filter(menu -> menu.getStatus() == MenuStatus.drafted)
+        .filter(menu -> !menu.getStartDate().isBefore(LocalDate.now(clock).plusDays(1)))
+        .isPresent();
   }
 
   /**

@@ -33,6 +33,7 @@ import com.vegalife.shared.exception.AiProviderException;
 import com.vegalife.shared.exception.AiUnavailableException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import jakarta.validation.Validation;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -270,7 +271,14 @@ class AiChatServiceTest {
                     .createdAt(base)
                     .build()));
     when(userProfileRepository.findByUserId(userId))
-        .thenReturn(Optional.of(UserProfile.builder().age(30).description("vegan runner").build()));
+        .thenReturn(
+            Optional.of(
+                UserProfile.builder()
+                    .age(30)
+                    .description("vegan runner")
+                    .heightCm(new BigDecimal("170.00"))
+                    .weightKg(new BigDecimal("70"))
+                    .build()));
     when(requestAllowanceService.requireAllowance(userId)).thenReturn(remaining);
     when(callSpec.content()).thenReturn("reply");
     when(conversationRepository.save(any(AiConversation.class)))
@@ -285,7 +293,10 @@ class AiChatServiceTest {
 
     ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
     verify(spec).system(systemPrompt.capture());
-    assertThat(systemPrompt.getValue()).contains("Age: 30").contains("vegan runner");
+    assertThat(systemPrompt.getValue())
+        .contains("Height: 170.00 cm")
+        .doesNotContain("Age: 30")
+        .doesNotContain("vegan runner");
 
     ArgumentCaptor<List<Message>> messages = ArgumentCaptor.forClass(List.class);
     verify(spec).messages(messages.capture());

@@ -51,22 +51,26 @@ or observe another member's messages through chat endpoints.
 - Related: NFR-SEC-001, FR-006
 - Added: 2026-10-07
 
-### BR-AI-004 — Context is the stored profile plus own conversation history
-Each turn's model context = a system prompt containing only the caller's own
-`UserProfile` fields (age, gender, height, weight, description), a BMI
+### BR-AI-004 — Context is the stored health profile plus own conversation history
+Each turn's model context = a system prompt containing the current server-UTC
+date, the caller's own `UserProfile` **health** fields (height, weight), a BMI
 computed at prompt-build time from height/weight (one decimal; omitted when
-either input is missing; never stored), the stored dietary profile from
+either input is missing; never stored), and the stored dietary profile from
 `user_profile.dietary_preferences` (allergies and restrictions framed as hard
 constraints, dislikes as avoid-unless-asked, preferences as a lean-in, health
 goal to shape intent; unset members omitted) + the last 20 messages of the
-conversation including the new message. The model is told to respect the
-stored dietary data, never to infer or guess it from the conversation. No
-cross-user data, no external stores.
+conversation including the new message. Personal identifiers — display name,
+age, gender, and the free-text description ("About") — are never placed in the
+prompt, even when stored. The model is told to respect the stored dietary data,
+never to infer or guess it from the conversation. No cross-user data, no
+external stores.
 
 - Enforcement: `AiChatService` (system prompt builder + history query),
   `ProfileMapper.computeBmi`
 - Related: FR-005
-- Added: 2026-10-07; rewritten 2026-10-13 (dietary JSONB + BMI, inference removed)
+- Added: 2026-10-07; rewritten 2026-10-13 (dietary JSONB + BMI, inference
+  removed); amended 2026-11-14 (health-only profile: age, gender and
+  description removed; current UTC date added so week planning is computable)
 
 ### BR-AI-006 — Persona is scoped to vegan and platform topics, with a polite refusal otherwise
 The assistant answers only vegan/plant-based food and lifestyle questions,

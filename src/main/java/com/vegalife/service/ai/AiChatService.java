@@ -20,6 +20,8 @@ import com.vegalife.shared.exception.ResourceNotFoundException;
 import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -249,8 +251,9 @@ public class AiChatService {
   }
 
   /**
-   * System prompt: scoped persona plus whatever profile facts are known (BR-AI-004). Dietary data
-   * and BMI come from the stored profile — the model is told to respect them, never to infer them.
+   * System prompt: scoped persona, the current date, and the member's health profile plus dietary
+   * rules (BR-AI-004). Dietary data and BMI come from the stored profile — the model is told to
+   * respect them, never to infer them. Personal identifiers never enter the prompt.
    */
   private String buildSystemPrompt(UUID userId) {
     UserProfile profile = userProfileRepository.findByUserId(userId).orElse(null);
@@ -265,24 +268,26 @@ public class AiChatService {
             + "cooking (meat, poultry, fish, dairy), or unrelated assistant tasks — with a "
             + "brief refusal and a redirect back to vegan or platform topics. Adjacent "
             + "plant-based nutrition and health questions are allowed.\n");
+    prompt.append("\nToday's date is ").append(LocalDate.now(ZoneOffset.UTC)).append(" (UTC).\n");
 
     if (profile != null) {
-      appendProfileFacts(prompt, profile);
+      appendHealthProfile(prompt, profile);
       appendDietaryProfile(prompt, profile.getDietaryPreferences());
     }
     appendWeeklyMenuTools(prompt);
     return prompt.toString();
   }
 
-  /** The member's known profile facts; BMI is derived at prompt-build time, never stored. */
-  private void appendProfileFacts(StringBuilder prompt, UserProfile profile) {
-    prompt.append("\nMember profile:\n");
-    if (profile.getAge() != null) {
-      prompt.append("- Age: ").append(profile.getAge()).append('\n');
+  /**
+   * The member's health metrics only: height, weight, and the BMI derived from them at prompt-build
+   * time (never stored). Personal identifiers — name, age, gender, bio — are deliberately excluded
+   * from the model context (BR-AI-004).
+   */
+  private void appendHealthProfile(StringBuilder prompt, UserProfile profile) {
+    if (profile.getHeightCm() == null && profile.getWeightKg() == null) {
+      return;
     }
-    if (profile.getGender() != null) {
-      prompt.append("- Gender: ").append(profile.getGender()).append('\n');
-    }
+    prompt.append("\nHealth profile:\n");
     if (profile.getHeightCm() != null) {
       prompt.append("- Height: ").append(profile.getHeightCm()).append(" cm\n");
     }
@@ -292,9 +297,6 @@ public class AiChatService {
     BigDecimal bmi = profileMapper.computeBmi(profile.getHeightCm(), profile.getWeightKg());
     if (bmi != null) {
       prompt.append("- BMI: ").append(bmi).append(" (context only, not medical advice)\n");
-    }
-    if (profile.getDescription() != null && !profile.getDescription().isBlank()) {
-      prompt.append("- About: ").append(profile.getDescription()).append('\n');
     }
   }
 
@@ -348,21 +350,32 @@ public class AiChatService {
 
   /**
    * Prompt guidance for the menu tools (ADR-012, BR-MCP-006): plan with tools, confirm before
-   * scheduling, and relay tool failures honestly.
+   * scheduling, and relay tool failures honestly. Every tool the runtime exposes is named here,
+   * because a tool the model cannot see in the prompt is a tool it invents arguments for.
    */
   private static void appendWeeklyMenuTools(StringBuilder prompt) {
     prompt.append(
         "\nWeekly menu tools are available:\n"
-            + "- get_menu reads the member's menu for a week (pass any date of that week, or"
-            + " nothing for the current week).\n"
+            + "- get_menu lists menu summaries (from, to, status, page, size, sort). from/to are"
+            + " optional inclusive bounds; omitting them means unbounded, not the current week. It"
+            + " returns no meals.\n"
+            + "- get_meal_plan reads the member's plan with its days, meals and dishes. from/to are"
+            + " inclusive; omitting both means the current Monday–Sunday week (UTC). Pass menuId to"
+            + " read one menu. It has no status filter, so report the scheduled week as the plan"
+            + " and mention drafts separately.\n"
             + "- suggest_dishes browses dishes that can be planned, each with a few recipes and"
             + " their nutrition. Use it to obtain real dish ids before creating a week; never"
             + " invent an id. Its result is already filtered for the member's stored allergies,"
             + " so prefer what it returns. Pass filters (cuisine, difficulty, times, calories,"
             + " protein) to honour what they asked for in conversation.\n"
-            + "- create_menu plans a new drafted week: a start date plus seven days of meals, each"
-            + " meal using a dish id returned by suggest_dishes.\n"
-            + "- update_menu rewrites their current-week draft.\n"
+            + "- create_menu plans a new drafted week. startDate is the first day and must be"
+            + " tomorrow or later in UTC; the week covers exactly startDate .. startDate + 6 with"
+            + " one day object per date. Each day has 1 to 3 meals, at most one per meal type"
+            + " (BREAKFAST, LUNCH, DINNER), and every meal uses a dish id returned by"
+            + " suggest_dishes. Across the whole week a dish may appear at most 3 times in total"
+            + " and at least 5 distinct dishes must be used.\n"
+            + "- update_menu replaces the days of the member's drafted week that starts tomorrow or"
+            + " later; a week that has already started cannot be rewritten through chat.\n"
             + "- schedule_menu activates a drafted week. Ask the member to confirm the exact"
             + " week first and call it only after they clearly agree.\n"
             + "Allergies are matched exactly against ingredient names as the member typed them,"

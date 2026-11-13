@@ -107,7 +107,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-AI-001 | Quota Gate Precedes the Provider Call | Active | 2026-11-04 |
 | BR-AI-002 | Only Successful Replies Count Toward Quota | Active | 2026-11-04 |
 | BR-AI-003 | Conversation Ownership Comes from Authentication | Active | 2026-10-07 |
-| BR-AI-004 | Context Is the Stored Profile (Incl. Dietary JSON and BMI) Plus Own Conversation History | Active | 2026-10-13 |
+| BR-AI-004 | Context Is the Stored Health Profile Plus Own Conversation History | Active | 2026-11-14 |
 | BR-AI-005 | Chat Provider Is OpenAI-Compatible and Set by Dedicated Env Vars | Active | 2026-10-07 |
 | BR-AI-006 | Persona Is Scoped to Vegan and Platform Topics, With a Polite Refusal Otherwise | Active | 2026-10-13 |
 | BR-AI-007 | AI Chat Can Be Disabled Platform-Wide, With No Turn, Provider Call, or Quota | Active | 2026-11-02 |
@@ -116,7 +116,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MENU-002 | Menu Read Windows Are Intersections | Active | 2026-10-10 |
 | BR-MENU-003 | One Scheduled Week per User, No Overlap | Active | 2026-10-10 |
 | BR-MENU-004 | Menu Windows Are Evaluated in Server (UTC) Time | Active | 2026-10-10 |
-| BR-MENU-005 | New Menus Are Drafts and Must Cover a Valid, Varied Week | Active | 2026-10-12 |
+| BR-MENU-005 | New Menus Are Drafts and Must Cover a Valid, Varied Week | Active | 2026-11-14 |
 | BR-MENU-006 | Menus Are Editable Only While Drafted or Scheduled | Active | 2026-10-12 |
 | BR-MENU-007 | Menu Status Changes Are Explicit, Legal Transitions | Active | 2026-10-12 |
 | BR-MENU-008 | Menus Are Soft-Deleted by Their Owner, in Any Status | Active | 2026-11-12 |
@@ -124,7 +124,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MCP-002 | Exactly Six Tools Are Exposed | Active | 2026-10-25 |
 | BR-MCP-003 | Tool Calls Consume No AI Quota | Active | 2026-10-12 |
 | BR-MCP-004 | Credentials Are Never Model-Visible or Logged | Active | 2026-10-13 |
-| BR-MCP-005 | Chat Edits Only the Caller's Current-Week Draft | Active | 2026-10-13 |
+| BR-MCP-005 | Chat Edits Only the Caller's Own Upcoming Draft | Active | 2026-11-14 |
 | BR-MCP-006 | Scheduling Happens Only After Explicit User Confirmation | Active | 2026-10-12 |
 | BR-MCP-007 | Tool Failures Are Model-Readable Results, Not Transport Errors | Active | 2026-11-06 |
 | BR-MCP-008 | Allergies Come from the Profile, Never from a Tool Argument | Active | 2026-10-25 |

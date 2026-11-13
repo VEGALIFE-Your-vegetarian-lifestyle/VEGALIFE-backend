@@ -23,11 +23,8 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
-import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -59,7 +56,8 @@ public class MenuTools {
 
   /** Refusal text of the update_menu pre-check (BR-MCP-005). */
   static final String UPDATE_REFUSED =
-      "update refused: the target must be the caller's own current-week menu with status drafted";
+      "update refused: the target must be the caller's own drafted menu that starts tomorrow or"
+          + " later";
 
   private static final String MISSING_IDENTITY =
       "error: caller identity missing (no caller identity on this tool invocation)";
@@ -180,16 +178,18 @@ public class MenuTools {
       resultConverter = RawTextToolResultConverter.class,
       description =
           "Create the caller's weekly menu as a drafted plan. Pass startDate (the week's first"
-              + " day) and days: exactly 7 day objects, each {date, meals[]}, meal = {mealType,"
-              + " dishId, servings} with mealType BREAKFAST, LUNCH or DINNER. All structural"
-              + " rules (7 dates, one meal per type per day, dish diversity) are validated by the"
-              + " backend, which returns a readable error when the week is invalid. Returns the"
-              + " created menu's full detail with its new id. The caller's identity comes from"
-              + " their session and is never a parameter.")
+              + " day, tomorrow or later) and days: exactly 7 day objects, each {date, meals[]},"
+              + " meal = {mealType, dishId, servings} with mealType BREAKFAST, LUNCH or DINNER."
+              + " All structural rules (7 dates, one meal per type per day, start not in the past,"
+              + " dish diversity) are validated by the backend, which returns a readable error when"
+              + " the week is invalid. Returns the created menu's full detail with its new id. The"
+              + " caller's identity comes from their session and is never a parameter.")
   public String createMenu(
       @ToolParam(
               required = true,
-              description = "First day of the week, format YYYY-MM-DD (a Monday by convention).")
+              description =
+                  "First day of the week, format YYYY-MM-DD. Must be tomorrow or later in server"
+                      + " UTC; a Monday by convention ('next week' means next Monday).")
           String startDate,
       @ToolParam(
               required = true,
@@ -238,14 +238,16 @@ public class MenuTools {
       name = "update_menu",
       resultConverter = RawTextToolResultConverter.class,
       description =
-          "Replace the days of the caller's current-week drafted menu. Meals are replaced"
-              + " wholesale. Refused unless the target is the caller's own menu of the current"
-              + " week with status drafted; notes, when passed, replace the stored value. The"
+          "Replace the days of the caller's drafted menu that starts tomorrow or later. Meals are"
+              + " replaced wholesale. Refused unless the target is the caller's own drafted menu"
+              + " that has not started yet; notes, when passed, replace the stored value. The"
               + " backend re-validates the whole week. Returns the updated menu's full detail.")
   public String updateMenu(
       @ToolParam(
               required = true,
-              description = "UUID of the menu to replace: the caller's current-week drafted menu.")
+              description =
+                  "UUID of the menu to replace: the caller's drafted menu whose week starts tomorrow"
+                      + " or later.")
           String menuId,
       @ToolParam(
               required = true,
@@ -271,7 +273,7 @@ public class MenuTools {
       return "error: menuId is required";
     }
 
-    String refusal = preCheckCurrentWeekDraft(userId, id);
+    String refusal = preCheckUpcomingDraft(userId, id);
     if (refusal != null) {
       return refusal;
     }
@@ -522,30 +524,17 @@ public class MenuTools {
   }
 
   /**
-   * BR-MCP-005 pre-check: update_menu may target only the caller's own current-week drafted menu.
-   * The backend no longer resolves a week for us (BR-MENU-002 is a flat from/to pair), so this
-   * computes the Monday–Sunday window of the current server-UTC day and asks for that range; it
-   * only compares membership and status. Returns null when the pre-check passes, or the refusal
-   * message.
+   * BR-MCP-005 pre-check: update_menu may target only the caller's own drafted menu that has not
+   * started yet ({@code startDate >= tomorrow}, server UTC). A menu that was already scheduled is
+   * excluded precisely because its window may contain past days. Returns null when the pre-check
+   * passes, or the refusal message.
    */
-  private String preCheckCurrentWeekDraft(UUID userId, UUID menuId) {
-    LocalDate today = LocalDate.now(ZoneOffset.UTC);
+  private String preCheckUpcomingDraft(UUID userId, UUID menuId) {
     try {
-      MenuQueryFilter currentWeek =
-          filterResolver.resolve(
-              today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString(),
-              today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toString(),
-              "drafted");
-      var page = menuService.listMenus(userId, currentWeek, DEFAULT_PAGE, DEFAULT_SIZE, null);
-      for (var summary : page.getContent()) {
-        if (menuId.equals(summary.getId())) {
-          return null;
-        }
-      }
-      return UPDATE_REFUSED;
+      return menuService.isUpcomingDraft(userId, menuId) ? null : UPDATE_REFUSED;
     } catch (RuntimeException e) {
-      log.debug("current-week draft could not be verified for the update_menu pre-check", e);
-      return UPDATE_REFUSED + " (the current-week draft could not be verified)";
+      log.debug("upcoming draft could not be verified for the update_menu pre-check", e);
+      return UPDATE_REFUSED + " (the draft could not be verified)";
     }
   }
 

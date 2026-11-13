@@ -99,8 +99,11 @@ class MenuToolsEndToEndIntegrationTest {
   private User stranger;
   private List<UUID> dishIds;
 
-  /** Monday of the server-UTC week, the only window BR-MCP-005 lets update_menu touch. */
-  private LocalDate currentWeekMonday;
+  /**
+   * The next Monday in server UTC: the earliest week {@code create_menu} accepts, and a draft that
+   * has not started (the only kind BR-MCP-005 lets {@code update_menu} touch).
+   */
+  private LocalDate upcomingMonday;
 
   @BeforeEach
   void setUp() {
@@ -110,8 +113,7 @@ class MenuToolsEndToEndIntegrationTest {
     owner = createUser();
     stranger = createUser();
     dishIds = seedDishes(5);
-    currentWeekMonday =
-        LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+    upcomingMonday = LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.next(DayOfWeek.MONDAY));
   }
 
   // ------------------------------------------------------------------ the tool surface
@@ -155,8 +157,7 @@ class MenuToolsEndToEndIntegrationTest {
   @Test
   void createMenuThroughTheToolPersistsADraftForTheCaller() throws Exception {
     JsonNode created =
-        parseSuccess(
-            call("create_menu", contextFor(owner), createMenuArguments(currentWeekMonday)));
+        parseSuccess(call("create_menu", contextFor(owner), createMenuArguments(upcomingMonday)));
 
     assertThat(created.path("message").asText()).isEqualTo("Menu created successfully");
     String menuId = created.path("data").path("id").asText();
@@ -166,7 +167,7 @@ class MenuToolsEndToEndIntegrationTest {
     assertThat(persisted.getUserId())
         .as("the drafted menu must be persisted in Postgres for the caller")
         .isEqualTo(owner.getId());
-    assertThat(persisted.getStartDate()).isEqualTo(currentWeekMonday);
+    assertThat(persisted.getStartDate()).isEqualTo(upcomingMonday);
     assertThat(persisted.getStatus()).isEqualTo(MenuStatus.drafted);
 
     // A deep read with the same identity returns the menu it just wrote, meals and dishes intact.
@@ -183,7 +184,7 @@ class MenuToolsEndToEndIntegrationTest {
   @Test
   void aSecondCallerSeesNoneOfTheFirstCallersMenus() throws Exception {
     String menuId =
-        parseSuccess(call("create_menu", contextFor(owner), createMenuArguments(currentWeekMonday)))
+        parseSuccess(call("create_menu", contextFor(owner), createMenuArguments(upcomingMonday)))
             .path("data")
             .path("id")
             .asText();
@@ -207,7 +208,7 @@ class MenuToolsEndToEndIntegrationTest {
   @Test
   void aSecondCallerCannotUpdateOrScheduleTheFirstCallersMenu() throws Exception {
     String menuId =
-        parseSuccess(call("create_menu", contextFor(owner), createMenuArguments(currentWeekMonday)))
+        parseSuccess(call("create_menu", contextFor(owner), createMenuArguments(upcomingMonday)))
             .path("data")
             .path("id")
             .asText();
@@ -232,6 +233,30 @@ class MenuToolsEndToEndIntegrationTest {
         .isEqualTo("Menu status updated successfully");
   }
 
+  @Test
+  void updateMenuRefusesADraftWhoseWeekAlreadyStarted() throws Exception {
+    LocalDate started = upcomingMonday.minusWeeks(1);
+    Menu draft =
+        menuRepository.save(
+            Menu.builder()
+                .userId(owner.getId())
+                .startDate(started)
+                .endDate(started.plusDays(6))
+                .status(MenuStatus.drafted)
+                .build());
+
+    String result =
+        call(
+            "update_menu",
+            contextFor(owner),
+            updateMenuArguments(draft.getId().toString(), started));
+
+    assertThat(result)
+        .as("a week that has already started must not be rewritten through chat")
+        .startsWith("update refused");
+    assertThat(menuRepository.findById(draft.getId()).orElseThrow().getNotes()).isNull();
+  }
+
   // ------------------------------------------------------------------ identity
 
   @Test
@@ -241,7 +266,7 @@ class MenuToolsEndToEndIntegrationTest {
     // forUser(null) is the only way to reach this branch: the map must be non-empty, since
     // Spring AI rejects a ToolContext-taking method handed an empty one outright.
     String result =
-        call("create_menu", AiToolContext.forUser(null), createMenuArguments(currentWeekMonday));
+        call("create_menu", AiToolContext.forUser(null), createMenuArguments(upcomingMonday));
 
     assertThat(result).contains("caller identity missing");
     assertThat(menuRepository.count())
@@ -291,10 +316,15 @@ class MenuToolsEndToEndIntegrationTest {
   }
 
   private String updateMenuArguments(String menuId) throws JsonProcessingException {
+    return updateMenuArguments(menuId, upcomingMonday);
+  }
+
+  private String updateMenuArguments(String menuId, LocalDate startDate)
+      throws JsonProcessingException {
     ObjectNode arguments = MAPPER.createObjectNode();
     arguments.put("menuId", menuId);
     arguments.put("notes", "Updated week summary");
-    arguments.set("days", sevenBreakfastDays(currentWeekMonday));
+    arguments.set("days", sevenBreakfastDays(startDate));
     return MAPPER.writeValueAsString(arguments);
   }
 
