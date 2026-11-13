@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -35,21 +36,12 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
 
   Optional<Post> findByIdAndUser_IdAndDeletedAtIsNull(UUID id, UUID userId);
 
-  /** Author-fetched: each row's response carries the author's id and display name. */
+  /** Author-fetched for every specification-based list query. */
+  @Override
   @EntityGraph(attributePaths = "user")
-  Page<Post> findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID userId, Pageable pageable);
+  Page<Post> findAll(Specification<Post> spec, Pageable pageable);
 
-  /** Author-fetched; see {@link #findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc}. */
-  @EntityGraph(attributePaths = "user")
-  Page<Post> findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-      UUID userId, PostStatus status, Pageable pageable);
-
-  /** Author-fetched; see {@link #findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc}. */
-  @EntityGraph(attributePaths = "user")
-  Page<Post> findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-      PostStatus status, Pageable pageable);
-
-  /** Author-fetched; see {@link #findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc}. */
+  /** Author-fetched; see {@link #findAll(Specification, Pageable)}. */
   @EntityGraph(attributePaths = "user")
   @Query("select p from Post p where p.id in :ids")
   List<Post> findWithAuthorByIdIn(@Param("ids") Collection<UUID> ids);
