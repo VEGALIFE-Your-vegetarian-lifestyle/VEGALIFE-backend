@@ -4,6 +4,7 @@ import com.vegalife.dto.mapper.admin.AdminPostMapper;
 import com.vegalife.dto.request.admin.PostListRequest;
 import com.vegalife.dto.response.admin.AdminPostDetailResponse;
 import com.vegalife.dto.response.admin.AdminPostListResponse;
+import com.vegalife.dto.response.post.PostFlagDetailResponse;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
@@ -147,7 +148,7 @@ public class AdminPostService {
         .content(post.getContent())
         .status(post.getStatus().name())
         .flag(post.getFlag() == null ? null : post.getFlag().name())
-        .flagDetail(post.getFlagDetail())
+        .flagDetail(PostFlagDetailResponse.from(post.getFlagDetail()))
         .rejectionReason(post.getRejectionReason())
         .contentScore(post.getContentScore())
         .recipes(recipeSummaries)

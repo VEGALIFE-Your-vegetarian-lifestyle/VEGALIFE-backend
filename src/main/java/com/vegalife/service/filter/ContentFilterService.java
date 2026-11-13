@@ -38,16 +38,20 @@ public class ContentFilterService {
     RelevanceScore relevance = relevanceScorer.score(embedding);
     FilterVerdict verdict =
         switch (relevance.band()) {
-          case PASS -> new FilterVerdict(FilterOutcome.PASS, relevance.score(), List.of());
+          case PASS ->
+              new FilterVerdict(
+                  FilterOutcome.PASS, relevance.score(), relevance.threshold(), List.of());
           case REJECT ->
               new FilterVerdict(
                   FilterOutcome.FAIL,
                   relevance.score(),
+                  relevance.threshold(),
                   List.of(formatReason("RELEVANCE_LOW", relevance.score())));
           case REVIEW ->
               new FilterVerdict(
                   FilterOutcome.UNCERTAIN,
                   relevance.score(),
+                  relevance.threshold(),
                   List.of(formatReason("RELEVANCE_REVIEW", relevance.score())));
         };
     return new FilterResult(verdict, embedding);

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.user.UserRole;
@@ -122,7 +123,12 @@ class DuplicateDetectionIntegrationTest {
     deliver(copy, nearly(axis(0), 0.1));
 
     assertThat(state(copy)).isEqualTo("processing/SIMILAR_CONTENT");
-    assertThat(flagDetail(copy)).isEqualTo("SIMILAR_CONTENT_POST_" + original.getId());
+    JsonNode detail = flagDetail(copy);
+    assertThat(detail.path("kind").asText()).isEqualTo("SIMILAR_CONTENT");
+    assertThat(detail.path("postId").asText()).isEqualTo(original.getId().toString());
+    // The similarity is the reason for the block, and it survives the round trip through jsonb.
+    assertThat(detail.path("similarity").asDouble()).isGreaterThan(0.9);
+    assertThat(detail.path("threshold").asDouble()).isEqualTo(0.85);
     assertThat(
             jdbcTemplate.queryForObject(
                 "SELECT published_at FROM post WHERE id = ?",
@@ -168,7 +174,8 @@ class DuplicateDetectionIntegrationTest {
     deliver(secondCopy, nearly(axis(0), 0.1));
 
     assertThat(state(secondCopy)).isEqualTo("processing/SIMILAR_CONTENT");
-    assertThat(flagDetail(secondCopy)).isEqualTo("SIMILAR_CONTENT_POST_" + original.getId());
+    assertThat(flagDetail(secondCopy).path("postId").asText())
+        .isEqualTo(original.getId().toString());
   }
 
   @Test
@@ -232,9 +239,11 @@ class DuplicateDetectionIntegrationTest {
         "SELECT count(*) FROM post_embedding WHERE post_id = ?", Long.class, post.getId());
   }
 
-  private String flagDetail(Post post) {
-    return jdbcTemplate.queryForObject(
-        "SELECT flag_detail FROM post WHERE id = ?", String.class, post.getId());
+  private JsonNode flagDetail(Post post) throws Exception {
+    String stored =
+        jdbcTemplate.queryForObject(
+            "SELECT flag_detail FROM post WHERE id = ?", String.class, post.getId());
+    return stored == null ? null : OBJECT_MAPPER.readTree(stored);
   }
 
   /** A submitted post waiting for its verdict: {@code processing} with no blocker yet. */

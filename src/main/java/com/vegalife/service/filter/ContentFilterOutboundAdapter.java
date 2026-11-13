@@ -1,6 +1,7 @@
 package com.vegalife.service.filter;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.enums.post.PostFlag;
@@ -42,10 +43,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>A {@code PASS} publishes the post and clears its flag. A {@code FAIL} or {@code UNCERTAIN}
  * leaves it at {@code processing} with {@code flag = FILTER_FAILED}; the post never leaves the
  * public feed on the filter's authority alone — only an admin can unpublish. A duplicate leaves it
- * at {@code processing} with {@code flag = SIMILAR_CONTENT} and the matched post id in {@code
- * flag_detail}. Every one of those states is visible on the admin review queue ({@code
- * status=processing}), which is what replaces the old terminal {@code unpublished} the filter used
- * to write itself.
+ * at {@code processing} with {@code flag = SIMILAR_CONTENT} and a JSON snapshot of the matched
+ * post, its similarity and the threshold applied in {@code flag_detail} (ADR-024). Every one of
+ * those states is visible on the admin review queue ({@code status=processing}), which is what
+ * replaces the old terminal {@code unpublished} the filter used to write itself.
  *
  * <p>A transient failure is rethrown as retryable so the queue waits the provider out; a permanent
  * rejection cannot be retried into success, so the post is settled at {@code processing} with
@@ -65,9 +66,6 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
 
   private static final String POST_TARGET = "POST";
 
-  /** {@code flag_detail} is a short cause, never a message: the column is {@code VARCHAR(64)}. */
-  private static final int FLAG_DETAIL_MAX_LENGTH = 64;
-
   private final PostRepository postRepository;
   private final ContentFilterService contentFilterService;
   private final RecipeRepository recipeRepository;
@@ -78,6 +76,7 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   private final ObjectMapper objectMapper;
   private final EmbeddingComponentScorer.Factory componentScorerFactory;
   private final ModerationLogRepository moderationLogRepository;
+  private final FilterProperties filterProperties;
 
   @Override
   public OutboundChannel channel() {
@@ -202,10 +201,11 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
    *
    * <p>The post is held with {@code FILTER_SKIPPED} rather than {@code FILTER_FAILED} or a new flag
    * value, so an operator can tell "the filter could not run" from "the filter judged this" without
-   * widening the blocker vocabulary (ADR-020, ADR-023).
+   * widening the blocker vocabulary (ADR-020, ADR-023). The classified cause stays on the
+   * moderation log; the row carries only {@code cause = UNAVAILABLE} (ADR-024).
    */
   private void applyFilterUnavailable(Post post, EmbeddingClientException e) {
-    block(post, PostFlag.FILTER_SKIPPED, describeFailure(e));
+    block(post, PostFlag.FILTER_SKIPPED, PostFlagDetail.skipped(PostFlagDetail.CAUSE_UNAVAILABLE));
     moderationLogRepository.save(
         ModerationLog.builder()
             .action(FILTER_UNAVAILABLE)
@@ -250,7 +250,7 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
         cause instanceof EmbeddingClientException embedding
             ? describeFailure(embedding)
             : "FILTER_UNAVAILABLE: " + cause.getMessage();
-    block(post, PostFlag.FILTER_SKIPPED, reason);
+    block(post, PostFlag.FILTER_SKIPPED, PostFlagDetail.skipped(PostFlagDetail.CAUSE_UNAVAILABLE));
     postRepository.save(post);
     moderationLogRepository.save(
         ModerationLog.builder()
@@ -279,7 +279,7 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
         log.info("Content filter passed post {} (score {})", post.getId(), verdict.score());
       }
       case FAIL, UNCERTAIN -> {
-        block(post, PostFlag.FILTER_FAILED, scoreDetail(verdict.score()));
+        block(post, PostFlag.FILTER_FAILED, PostFlagDetail.filterFailed(verdict));
         log.warn(
             "Content filter did not pass post {} (outcome {}, score {}): {}",
             post.getId(),
@@ -291,12 +291,16 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   }
 
   /**
-   * Routes a near-duplicate to admin review (ADR-015). The matched post id and the similarity are
-   * both recorded — the id in {@code flag_detail} so the admin can open the other post, the
-   * similarity in the log.
+   * Routes a near-duplicate to admin review (ADR-015). The matched post, the similarity and the
+   * threshold applied are all snapshotted: the ids alone made the flag actionable but not arguable,
+   * because a reviewer could not tell a 0.86 coincidence from a 0.99 repost.
    */
-  private static void applyDuplicate(Post post, NearestMatch match) {
-    block(post, PostFlag.SIMILAR_CONTENT, "SIMILAR_CONTENT_POST_" + match.postId());
+  private void applyDuplicate(Post post, NearestMatch match) {
+    block(
+        post,
+        PostFlag.SIMILAR_CONTENT,
+        PostFlagDetail.similarContent(
+            match.postId(), match.similarity(), filterProperties.getDuplicateThreshold()));
     log.warn(
         "Content filter flagged post {} as a near-duplicate of published post {} (similarity {})",
         post.getId(),
@@ -305,23 +309,10 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   }
 
   /** Records the blocker and keeps the post in the review queue. */
-  private static void block(Post post, PostFlag flag, String detail) {
+  private static void block(Post post, PostFlag flag, JsonNode detail) {
     post.setStatus(PostStatus.processing);
     post.setFlag(flag);
-    post.setFlagDetail(truncate(detail));
-  }
-
-  private static String scoreDetail(double score) {
-    return String.format(Locale.ROOT, "score=%.3f", score);
-  }
-
-  private static String truncate(String detail) {
-    if (detail == null) {
-      return null;
-    }
-    return detail.length() <= FLAG_DETAIL_MAX_LENGTH
-        ? detail
-        : detail.substring(0, FLAG_DETAIL_MAX_LENGTH);
+    post.setFlagDetail(detail);
   }
 
   private ContentFilterPayload parse(OutboundMessage message) {
@@ -427,7 +418,10 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   private static FilterVerdict escalateToReview(FilterVerdict verdict, ComponentOutcome component) {
     List<String> reasons = new ArrayList<>(verdict.reasons());
     reasons.addAll(component.reasons());
-    return new FilterVerdict(FilterOutcome.UNCERTAIN, verdict.score(), reasons);
+    // The threshold belongs to the content band that was applied, so it survives an escalation:
+    // a reviewer can compare score with threshold to see that the content itself cleared the bar.
+    return new FilterVerdict(
+        FilterOutcome.UNCERTAIN, verdict.score(), verdict.threshold(), reasons);
   }
 
   private static String formatReason(String code, double score) {

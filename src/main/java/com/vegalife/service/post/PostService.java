@@ -35,6 +35,7 @@ import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
 import com.vegalife.service.filter.ContentFilterPayload;
+import com.vegalife.service.filter.PostFlagDetail;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -411,7 +412,7 @@ public class PostService {
   private void markForAdminReview(Post post) {
     post.setStatus(PostStatus.processing);
     post.setFlag(PostFlag.FILTER_SKIPPED);
-    post.setFlagDetail("FILTER_DISABLED");
+    post.setFlagDetail(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
     post.setPublishedAt(null);
     postRepository.saveAndFlush(post);
     log.info("Filter disabled: post {} is held for admin review", post.getId());

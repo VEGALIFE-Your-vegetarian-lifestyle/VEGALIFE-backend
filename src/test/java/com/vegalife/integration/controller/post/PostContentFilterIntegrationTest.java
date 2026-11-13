@@ -173,7 +173,10 @@ class PostContentFilterIntegrationTest {
     // Held, not unpublished: only an admin may unpublish (ADR-023).
     assertThat(filtered.getStatus()).isEqualTo(PostStatus.processing);
     assertThat(filtered.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
-    assertThat(filtered.getFlagDetail()).contains("score=0.300");
+    assertThat(filtered.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_FAILED");
+    assertThat(filtered.getFlagDetail().path("outcome").asText()).isEqualTo("FAIL");
+    assertThat(filtered.getFlagDetail().path("score").asDouble()).isEqualTo(0.3);
+    assertThat(filtered.getFlagDetail().path("threshold").asDouble()).isEqualTo(0.45);
     assertThat(filtered.getPublishedAt()).isNull();
 
     verify(embeddingModel).embed(anyString());
@@ -393,8 +396,14 @@ class PostContentFilterIntegrationTest {
     entityManager.clear();
   }
 
+  /**
+   * Stubs the scorer with the boundary the real one would report for that band: the accept
+   * threshold for PASS/REVIEW, the reject threshold for REJECT (ADR-024 snapshots it into {@code
+   * flag_detail}).
+   */
   private void stubScore(double score, Band band) {
-    when(relevanceScorer.score(any())).thenReturn(new RelevanceScore(score, band));
+    double threshold = band == Band.REJECT ? 0.45 : 0.70;
+    when(relevanceScorer.score(any())).thenReturn(new RelevanceScore(score, band, threshold));
   }
 
   private UUID createPostWithPublish(String title, String content) throws Exception {

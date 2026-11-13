@@ -45,11 +45,12 @@ public class PostListResponse {
   private String flag;
 
   /**
-   * Detail for {@link #flag}: for {@code SIMILAR_CONTENT} the matched post as {@code
-   * SIMILAR_CONTENT_POST_<postId>}; for {@code FILTER_SKIPPED} a short cause code (for example
-   * {@code FILTER_DISABLED}); for {@code FILTER_FAILED} the band score ({@code score=0.312}).
+   * The blocker's evidence, as a JSON snapshot (ADR-024): {@code kind} plus the fields that blocker
+   * owns — score/outcome/threshold for {@code FILTER_FAILED}, postId/similarity/threshold for
+   * {@code SIMILAR_CONTENT}, cause for {@code FILTER_SKIPPED}. {@code null} when no blocker is
+   * recorded.
    */
-  private String flagDetail;
+  private PostFlagDetailResponse flagDetail;
 
   /**
    * Why an admin rejected this post, or null if no admin rejection reason is recorded.

@@ -86,12 +86,16 @@ public class Post {
   private PostFlag flag;
 
   /**
-   * Structured payload for {@link #flag}: the matched post id for {@code SIMILAR_CONTENT}, or a
-   * short cause code for {@code FILTER_SKIPPED}. Kept out of {@code flag} so the flag stays a
-   * closed, exactly-matchable vocabulary the admin filter can rely on (ADR-023).
+   * JSON snapshot for {@link #flag}, never a free-form caption (ADR-024). One object per blocker,
+   * always carrying {@code kind} so it cannot describe a different blocker than {@code flag}: the
+   * matched post, similarity and threshold for {@code SIMILAR_CONTENT}; the outcome, score and
+   * applied threshold for {@code FILTER_FAILED}; a cause code for {@code FILTER_SKIPPED}. Kept out
+   * of {@code flag} so the flag stays a closed, exactly-matchable vocabulary the admin filter can
+   * rely on (ADR-023).
    */
-  @Column(name = "flag_detail", length = 64)
-  private String flagDetail;
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "flag_detail")
+  private JsonNode flagDetail;
 
   /**
    * Relevance score of {@code title + content} as produced by the content filter. {@code null}

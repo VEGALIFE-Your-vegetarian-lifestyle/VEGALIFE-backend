@@ -1,6 +1,8 @@
 package com.vegalife.dto.mapper.admin;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.vegalife.dto.response.admin.AdminPostListResponse;
+import com.vegalife.dto.response.post.PostFlagDetailResponse;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
@@ -32,5 +34,10 @@ public interface AdminPostMapper {
         .filter(item -> item.getDeletedAt() == null)
         .map(Media::getId)
         .collect(Collectors.toSet());
+  }
+
+  /** The stored {@code flag_detail} snapshot, exposed as a typed object (ADR-024). */
+  default PostFlagDetailResponse flagDetail(JsonNode node) {
+    return PostFlagDetailResponse.from(node);
   }
 }

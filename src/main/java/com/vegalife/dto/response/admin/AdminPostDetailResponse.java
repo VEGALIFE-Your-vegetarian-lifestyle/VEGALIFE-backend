@@ -1,5 +1,6 @@
 package com.vegalife.dto.response.admin;
 
+import com.vegalife.dto.response.post.PostFlagDetailResponse;
 import java.util.List;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
@@ -33,11 +34,12 @@ public class AdminPostDetailResponse {
   private String flag;
 
   /**
-   * Detail for {@link #flag}: for {@code SIMILAR_CONTENT} the matched post as {@code
-   * SIMILAR_CONTENT_POST_<postId>}; for {@code FILTER_SKIPPED} a short cause code; for {@code
-   * FILTER_FAILED} the band score.
+   * The blocker's evidence, as a JSON snapshot (ADR-024): {@code kind} plus the fields that blocker
+   * owns — score/outcome/threshold for {@code FILTER_FAILED}, postId/similarity/threshold for
+   * {@code SIMILAR_CONTENT}, cause for {@code FILTER_SKIPPED}. {@code null} when the post is not
+   * held.
    */
-  private String flagDetail;
+  private PostFlagDetailResponse flagDetail;
 
   /**
    * Why an admin rejected this post; null when no reason is recorded (never rejected, rejected

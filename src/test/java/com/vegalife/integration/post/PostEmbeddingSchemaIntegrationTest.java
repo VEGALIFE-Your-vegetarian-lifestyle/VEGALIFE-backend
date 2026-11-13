@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.user.UserRole;
@@ -12,6 +13,7 @@ import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.filter.PostFlagDetail;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -136,13 +138,41 @@ class PostEmbeddingSchemaIntegrationTest {
     Post post = publishablePost();
     post.setStatus(PostStatus.processing);
     post.setFlag(PostFlag.SIMILAR_CONTENT);
-    post.setFlagDetail("SIMILAR_CONTENT_POST_" + UUID.randomUUID());
+    UUID matched = UUID.randomUUID();
+    post.setFlagDetail(PostFlagDetail.similarContent(matched, 0.9312, 0.85));
 
     postRepository.saveAndFlush(post);
 
     Post reloaded = postRepository.findById(post.getId()).orElseThrow();
     assertThat(reloaded.getFlag()).isEqualTo(PostFlag.SIMILAR_CONTENT);
-    assertThat(reloaded.getFlagDetail()).startsWith("SIMILAR_CONTENT_POST_");
+    assertThat(reloaded.getFlagDetail().path("kind").asText()).isEqualTo("SIMILAR_CONTENT");
+    assertThat(reloaded.getFlagDetail().path("postId").asText()).isEqualTo(matched.toString());
+    assertThat(reloaded.getFlagDetail().path("similarity").asDouble()).isEqualTo(0.9312);
+    assertThat(reloaded.getFlagDetail().path("threshold").asDouble()).isEqualTo(0.85);
+  }
+
+  /** ADR-024: the snapshot describes the blocker it hangs off, so the two cannot disagree. */
+  @Test
+  void aSnapshotWhoseKindDisagreesWithTheFlagIsRejectedByTheDatabase() {
+    Post post = publishablePost();
+    post.setStatus(PostStatus.processing);
+    post.setFlag(PostFlag.FILTER_FAILED);
+    post.setFlagDetail(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
+
+    assertThatThrownBy(() -> postRepository.saveAndFlush(post))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  /** ADR-024: the column holds one object; an array would make {@code ->>} silently return null. */
+  @Test
+  void aNonObjectSnapshotIsRejectedByTheDatabase() {
+    Post post = publishablePost();
+    post.setStatus(PostStatus.processing);
+    post.setFlag(PostFlag.FILTER_SKIPPED);
+    post.setFlagDetail(JsonNodeFactory.instance.arrayNode().add("DISABLED"));
+
+    assertThatThrownBy(() -> postRepository.saveAndFlush(post))
+        .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   /**

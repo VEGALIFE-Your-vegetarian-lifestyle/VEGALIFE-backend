@@ -1,7 +1,6 @@
 package com.vegalife.unit.service.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -16,6 +15,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
@@ -42,7 +42,9 @@ import com.vegalife.service.filter.ContentFilterService.FilterResult;
 import com.vegalife.service.filter.DuplicateDetector;
 import com.vegalife.service.filter.EmbeddingComponentScorer;
 import com.vegalife.service.filter.FilterOutcome;
+import com.vegalife.service.filter.FilterProperties;
 import com.vegalife.service.filter.FilterVerdict;
+import com.vegalife.service.filter.PostFlagDetail;
 import com.vegalife.shared.exception.EmbeddingClientException;
 import com.vegalife.shared.exception.RetryableDeliveryException;
 import java.time.Duration;
@@ -93,6 +95,7 @@ class ContentFilterOutboundAdapterTest {
 
   private ContentFilterOutboundAdapter adapter;
   private final ObjectMapper objectMapper = new ObjectMapper();
+  private final FilterProperties filterProperties = new FilterProperties();
 
   @BeforeEach
   void setUp() {
@@ -107,7 +110,8 @@ class ContentFilterOutboundAdapterTest {
             activeEmbeddingModel,
             objectMapper,
             componentScorerFactory,
-            moderationLogRepository);
+            moderationLogRepository,
+            filterProperties);
     noRecipeAttached();
   }
 
@@ -156,7 +160,7 @@ class ContentFilterOutboundAdapterTest {
   void aRefusalHoldsThePostAtProcessingInsteadOfUnpublishingIt() throws Exception {
     Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(FilterOutcome.FAIL, 0.2, List.of("RELEVANCE_LOW: 0.200")));
+    stubFilter(new FilterVerdict(FilterOutcome.FAIL, 0.2, 0.45, List.of("RELEVANCE_LOW: 0.200")));
     when(activeEmbeddingModel.name()).thenReturn(MODEL);
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -165,7 +169,13 @@ class ContentFilterOutboundAdapterTest {
     // Only an admin may unpublish (ADR-023). The filter's refusal is a blocker, not a decision.
     assertEquals(PostStatus.processing, post.getStatus());
     assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
-    assertTrue(post.getFlagDetail().contains("score=0.200"));
+    // The snapshot keeps the score and the bar it failed, so retuning the filter later cannot
+    // rewrite the reason this post was held (ADR-024).
+    JsonNode detail = post.getFlagDetail();
+    assertEquals("FILTER_FAILED", detail.path("kind").asText());
+    assertEquals("FAIL", detail.path("outcome").asText());
+    assertEquals(0.2, detail.path("score").asDouble(), 1e-9);
+    assertEquals(0.45, detail.path("threshold").asDouble(), 1e-9);
     assertNull(post.getPublishedAt());
     verify(postRepository).save(post);
   }
@@ -210,8 +220,14 @@ class ContentFilterOutboundAdapterTest {
     // The topic verdict was a pass; the duplicate verdict overrides it and parks the post.
     assertEquals(PostStatus.processing, post.getStatus());
     assertEquals(PostFlag.SIMILAR_CONTENT, post.getFlag());
-    // The matched post cannot be recovered later, so it is persisted for the admin to open.
-    assertEquals("SIMILAR_CONTENT_POST_" + originalId, post.getFlagDetail());
+    // The matched post cannot be recovered later, so it is persisted for the admin to open - with
+    // the similarity that triggered the block and the threshold it was measured against.
+    JsonNode detail = post.getFlagDetail();
+    assertEquals("SIMILAR_CONTENT", detail.path("kind").asText());
+    assertEquals(originalId.toString(), detail.path("postId").asText());
+    assertEquals(0.93, detail.path("similarity").asDouble(), 1e-9);
+    assertEquals(
+        filterProperties.getDuplicateThreshold(), detail.path("threshold").asDouble(), 1e-9);
     assertNull(post.getPublishedAt());
   }
 
@@ -391,6 +407,12 @@ class ContentFilterOutboundAdapterTest {
     assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
     assertEquals(0.88, post.getContentScore());
     assertEquals(0.31, recipe.getScore());
+    // The snapshot keeps the content band's own score and accept threshold: a reviewer can see the
+    // prose cleared 0.70 and that something else is what held the post (ADR-024).
+    JsonNode detail = post.getFlagDetail();
+    assertEquals("UNCERTAIN", detail.path("outcome").asText());
+    assertEquals(0.88, detail.path("score").asDouble(), 1e-9);
+    assertEquals(0.7, detail.path("threshold").asDouble(), 1e-9);
   }
 
   @Test
@@ -413,7 +435,8 @@ class ContentFilterOutboundAdapterTest {
     // A recipe no worse than a rejection must not soften it: the refusal keeps its own score line
     // in flag_detail instead of being replaced by an "uncertain" reading.
     assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
-    assertTrue(post.getFlagDetail().contains("score=0.120"));
+    assertEquals("FAIL", post.getFlagDetail().path("outcome").asText());
+    assertEquals(0.12, post.getFlagDetail().path("score").asDouble(), 1e-9);
   }
 
   @Test
@@ -581,8 +604,9 @@ class ContentFilterOutboundAdapterTest {
     // The filter never formed an opinion, so this is FILTER_SKIPPED, not FILTER_FAILED.
     assertEquals(PostStatus.processing, post.getStatus());
     assertEquals(PostFlag.FILTER_SKIPPED, post.getFlag());
-    assertTrue(post.getFlagDetail().startsWith("FILTER_UNAVAILABLE"));
-    assertTrue(post.getFlagDetail().length() <= 64);
+    // The row carries a cause code only; the provider message lives on the moderation log.
+    assertEquals("FILTER_SKIPPED", post.getFlagDetail().path("kind").asText());
+    assertEquals("UNAVAILABLE", post.getFlagDetail().path("cause").asText());
     verify(postRepository).save(post);
 
     ArgumentCaptor<ModerationLog> log = ArgumentCaptor.forClass(ModerationLog.class);
@@ -636,7 +660,7 @@ class ContentFilterOutboundAdapterTest {
 
     assertEquals(PostStatus.processing, post.getStatus());
     assertEquals(PostFlag.FILTER_SKIPPED, post.getFlag());
-    assertTrue(post.getFlagDetail().startsWith("FILTER_UNAVAILABLE"));
+    assertEquals("UNAVAILABLE", post.getFlagDetail().path("cause").asText());
     ArgumentCaptor<ModerationLog> log = ArgumentCaptor.forClass(ModerationLog.class);
     verify(moderationLogRepository).save(log.capture());
     assertEquals("FILTER_UNAVAILABLE", log.getValue().getAction());
@@ -646,15 +670,16 @@ class ContentFilterOutboundAdapterTest {
   @Test
   void abandonedMessageNeverOverwritesAnExistingBlocker() throws Exception {
     Post post = post(PostStatus.processing);
+    JsonNode existing = PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED);
     post.setFlag(PostFlag.FILTER_FAILED);
-    post.setFlagDetail("score=0.100");
+    post.setFlagDetail(existing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
 
     adapter.onDeliveryAbandoned(
         message(new ContentFilterPayload(post.getId())), new IllegalStateException("unavailable"));
 
     assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
-    assertEquals("score=0.100", post.getFlagDetail());
+    assertEquals(existing, post.getFlagDetail());
     verify(postRepository, never()).save(any(Post.class));
     verify(moderationLogRepository, never()).save(any(ModerationLog.class));
   }
@@ -684,27 +709,33 @@ class ContentFilterOutboundAdapterTest {
     verify(postRepository, never()).findById(any());
   }
 
+  /**
+   * A long provider code no longer reaches the row at all, so it can no longer be truncated: the
+   * snapshot is a fixed cause code and the prose stays in {@code moderation_log} (ADR-024).
+   */
   @Test
-  void flagDetailIsTruncatedToTheColumnWidth() throws Exception {
+  void unavailableCauseIsACodeNotProviderProse() throws Exception {
     Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
-    // A long provider code must not overflow the VARCHAR(64) column.
+    String providerCode = "A_VERY_LONG_PROVIDER_ERROR_CODE_THAT_WOULD_NOT_FIT_IN_THE_COLUMN_AT_ALL";
     when(contentFilterService.filter(TITLE + "\n" + CONTENT))
         .thenThrow(
             new EmbeddingClientException(
                 "rejected",
                 EmbeddingClientException.Reason.INVALID_REQUEST,
                 400,
-                "A_VERY_LONG_PROVIDER_ERROR_CODE_THAT_WOULD_NOT_FIT_IN_THE_COLUMN_AT_ALL",
+                providerCode,
                 null,
                 null));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    assertNotNull(post.getFlagDetail());
-    assertEquals(64, post.getFlagDetail().length());
-    assertFalse(post.getFlagDetail().isEmpty());
+    assertEquals("UNAVAILABLE", post.getFlagDetail().path("cause").asText());
+    ArgumentCaptor<ModerationLog> log = ArgumentCaptor.forClass(ModerationLog.class);
+    verify(moderationLogRepository).save(log.capture());
+    // Nothing is lost: the full code is still readable on the append-only log.
+    assertTrue(log.getValue().getReason().contains(providerCode));
   }
 
   private static ComponentScorer.ComponentResult needsReview(
@@ -745,7 +776,7 @@ class ContentFilterOutboundAdapterTest {
   private Post passing(double score) throws JsonProcessingException {
     Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
-    stubFilter(new FilterVerdict(FilterOutcome.PASS, score, List.of()));
+    stubFilter(new FilterVerdict(FilterOutcome.PASS, score, 0.70, List.of()));
     when(duplicateDetector.findDuplicate(any(), eq(post.getId()))).thenReturn(Optional.empty());
     when(activeEmbeddingModel.name()).thenReturn(MODEL);
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
