@@ -29,7 +29,7 @@ The frontend post detail page (and shared links) cannot fetch a single post toda
 - Comments, reactions, or "related posts" in the payload.
 - A global feed or listing other users' posts (that's `GET /api/posts`, a separate feature).
 
-> Note: the original scope (issue #100) required a valid JWT and listed public access as a non-goal. That decision was reversed so a shared/linked post can be opened by a signed-out visitor; this endpoint now follows the same public-read pattern as `GET /api/posts/feed` and `GET /api/users/{userId}/posts`.
+> Note: the original scope (issue #100) required a valid JWT and listed public access as a non-goal. That decision was reversed so a shared/linked post can be opened by a signed-out visitor; this endpoint now follows the same public-read pattern as `GET /api/posts` and `GET /api/users/{userId}/posts`.
 
 ## Requirements
 

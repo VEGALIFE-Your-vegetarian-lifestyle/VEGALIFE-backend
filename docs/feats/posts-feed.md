@@ -14,7 +14,7 @@ Public, paginated feed of every published post on the platform, newest first: `G
 
 ## Problem / motivation
 
-There is no way to browse the community's content as a whole. `GET /api/posts` only returns the caller's own posts, and `GET /api/users/{userId}/posts` only returns one member's posts — discovering other people's content means walking user IDs by hand.
+There was no way to browse the community's content as a whole. Before this endpoint existed, `GET /api/posts` only returned the caller's own posts, and `GET /api/users/{userId}/posts` only returns one member's posts — discovering other people's content meant walking user IDs by hand.
 
 Issue #8 was originally a personalized recommendation feed, but the schema cannot record the per-user signals a recommendation needs: no view-history table exists, the `vote` table has no write path, and there is no member-facing comment endpoint. A global feed delivers the browsing capability now and gives a later recommendation engine a baseline ranking to improve on (see the issue's deferral comment).
 
