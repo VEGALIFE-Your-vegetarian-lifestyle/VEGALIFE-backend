@@ -36,7 +36,12 @@ roles receive `403 Forbidden`.
     "content": "…",
     "status": "processing",
     "flag": "FILTER_FAILED",
-    "flagDetail": "relevance 0.3120 below the 0.45 reject threshold",
+    "flagDetail": {
+      "kind": "FILTER_FAILED",
+      "outcome": "FAIL",
+      "score": 0.312,
+      "threshold": 0.45
+    },
     "rejectionReason": null,
     "contentScore": 0.3120,
     "userId": "9f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
@@ -76,7 +81,7 @@ roles receive `403 Forbidden`.
 | contentScore | number \| null | Relevance score for `title + content`. `null` = never scored. |
 | status | string | `drafted`, `processing`, `published` or `unpublished`. A post awaiting a decision is `processing`. |
 | flag | string \| null | Why the post is being held: `FILTER_FAILED`, `SIMILAR_CONTENT` or `FILTER_SKIPPED`; `null` when no decision is outstanding (ADR-023). |
-| flagDetail | string \| null | Machine-readable detail behind `flag`: the failing score, `SIMILAR_CONTENT_POST_<postId>`, `FILTER_DISABLED` or `FILTER_SWEPT`. |
+| flagDetail | object \| null | The evidence behind `flag` as a JSON snapshot (ADR-024): `kind` (always equal to `flag`) plus the fields that blocker owns — `outcome`/`score`/`threshold` for `FILTER_FAILED`, `postId`/`similarity`/`threshold` for `SIMILAR_CONTENT`, `cause` for `FILTER_SKIPPED`. Absent fields are omitted. |
 | rejectionReason | string \| null | Why an admin rejected this post. Cleared when the post is approved. `null` = no reason recorded. |
 | recipes | array | Recipe bodies the post attaches, each with its own score. Empty when none is attached. |
 | names | array | Every dish and ingredient name the post references. |

@@ -81,7 +81,7 @@ No request body
 | data.content[].mediaIds | uuid[] | Media ids attached to the post |
 | data.content[].status | string | drafted, processing, published, or unpublished |
 | data.content[].flag | string | Blocker of a held post: FILTER_FAILED, SIMILAR_CONTENT, or FILTER_SKIPPED; null when the post is not being held (including every published post) |
-| data.content[].flagDetail | string | Machine-readable detail behind the blocker (failing score, `SIMILAR_CONTENT_POST_<postId>`, `FILTER_DISABLED`, `FILTER_SWEPT`); null with no blocker |
+| data.content[].flagDetail | object | The evidence behind the blocker as a JSON snapshot (ADR-024): `kind` (always equal to `flag`) plus the fields that blocker owns — `outcome`/`score`/`threshold` for `FILTER_FAILED`, `postId`/`similarity`/`threshold` for `SIMILAR_CONTENT`, `cause` for `FILTER_SKIPPED`. Absent fields are omitted; null with no blocker |
 | data.content[].rejectionReason | string | Why an admin rejected the post; null when no reason was recorded |
 | data.content[].viewCount | integer | View counter |
 | data.content[].publishedAt | string | ISO-8601 publish timestamp, nullable |
@@ -136,7 +136,12 @@ curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&status=process
         "mediaIds": [],
         "status": "processing",
         "flag": "SIMILAR_CONTENT",
-        "flagDetail": "SIMILAR_CONTENT_POST_9a1f0d2c-3b4e-4c5d-8e6f-7a8b9c0d1e2f",
+        "flagDetail": {
+          "kind": "SIMILAR_CONTENT",
+          "postId": "9a1f0d2c-3b4e-4c5d-8e6f-7a8b9c0d1e2f",
+          "similarity": 0.9712,
+          "threshold": 0.85
+        },
         "viewCount": 42,
         "publishedAt": null,
         "createdAt": "2026-09-28T08:00:00Z",

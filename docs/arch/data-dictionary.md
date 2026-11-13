@@ -87,7 +87,7 @@ _Description: Manages community blog posts and vegetarian articles._
 | featured_image_url | TEXT | - | Yes | Thumbnail image for feed display |
 | status | VARCHAR(20) | - | No | Post lifecycle: drafted, processing, published, unpublished (ADR-023) |
 | flag | VARCHAR(32) | - | Yes | Why a `processing` post is held: FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED; NULL when nothing is holding it (V56) |
-| flag_detail | VARCHAR(64) | - | Yes | Evidence behind `flag`: `score=<x>`, `SIMILAR_CONTENT_POST_<uuid>`, or a cause code such as FILTER_DISABLED / FILTER_SWEPT (V56) |
+| flag_detail | JSONB | - | Yes | Evidence behind `flag`: one object per blocker, always carrying `kind` = `flag` — `{kind,outcome,score,threshold}` for FILTER_FAILED, `{kind,postId,similarity,threshold}` for SIMILAR_CONTENT, `{kind,cause}` for FILTER_SKIPPED (V57, ADR-024) |
 | content_score | DOUBLE PRECISION | - | Yes | Relevance score of title + content from the last filter run; NULL when never scored |
 | rejection_reason | TEXT | - | Yes | Why an admin rejected the post; cleared on approve |
 | view_count | INT | - | No | Number of views |
@@ -101,6 +101,8 @@ _Description: Manages community blog posts and vegetarian articles._
 - `chk_post_flag`: flag IN ('FILTER_FAILED','SIMILAR_CONTENT','FILTER_SKIPPED')
 - `chk_post_flag_requires_processing`: flag IS NULL OR status = 'processing'
 - `chk_post_flag_detail_requires_flag`: flag_detail IS NULL OR flag IS NOT NULL
+- `chk_post_flag_detail_is_object`: flag_detail IS NULL OR jsonb_typeof(flag_detail) = 'object'
+- `chk_post_flag_detail_kind_matches_flag`: flag_detail IS NULL OR flag_detail->>'kind' = flag (ADR-024)
 - FK: user_id REFERENCES "user"(id) ON DELETE CASCADE
 - FK: restaurant_id REFERENCES restaurant(id) ON DELETE SET NULL
 

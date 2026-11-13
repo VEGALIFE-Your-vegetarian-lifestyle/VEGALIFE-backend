@@ -486,7 +486,7 @@ Active
 
 A post is filtered only when it is submitted for publication or when already-visible content changes. An explicit `publish: true` on create or edit always queues a filter run and moves the post to `processing` with no blocker. Without an explicit `publish` field, a title or plain-`content` change on a post that is `published`, `unpublished` (an admin refusal the author is appealing), or `processing` **with** a blocker re-queues it for filtering; a `rawContent`-only change does not, since filtering never reads `rawContent`. A post merely in flight (`processing`, no blocker) is not queued again — the pending run reads the body at delivery time, so it already sees the edit. A draft — `drafted`, no blocker — is never filtered, and withdrawing with `publish: false` never triggers a filter run.
 
-When the `content_filter_enabled` platform setting is false (a deliberate outage/bypass mode), BR-FILTER-004/006/007 are bypassed for new filter triggers: a post that would have been queued is instead held at `processing` with `flag = FILTER_SKIPPED` and `flagDetail = FILTER_DISABLED` — no outbound row, no embedding call — so an admin can decide it. `FILTER_SKIPPED` rather than `FILTER_FAILED` because the filter never formed an opinion. This only stops *new* filtering; a post already in flight from before the setting was disabled is still settled by the stale-message sweep (BR-FILTER-009), so disabling the filter never leaves a post in flight forever.
+When the `content_filter_enabled` platform setting is false (a deliberate outage/bypass mode), BR-FILTER-004/006/007 are bypassed for new filter triggers: a post that would have been queued is instead held at `processing` with `flag = FILTER_SKIPPED` and `flagDetail = {"kind":"FILTER_SKIPPED","cause":"DISABLED"}` — no outbound row, no embedding call — so an admin can decide it. `FILTER_SKIPPED` rather than `FILTER_FAILED` because the filter never formed an opinion. This only stops *new* filtering; a post already in flight from before the setting was disabled is still settled by the stale-message sweep (BR-FILTER-009), so disabling the filter never leaves a post in flight forever.
 
 ## Rationale
 
@@ -592,10 +592,13 @@ Active
 
 When a filter run refuses or is uncertain, or when it finds the content too similar to a published
 post, the post stays `processing` and receives a blocker in `flag`: `FILTER_FAILED` for a refusal or
-an uncertain score (with the score in `flagDetail`), or `SIMILAR_CONTENT` for a near-duplicate (with
-`SIMILAR_CONTENT_POST_<postId>` naming the post it matched). The filter never unpublishes: only an
-Administrator may set `unpublished`, through `POST /api/admin/posts/{postId}/reject` (BR-POST-012).
-A refusal or uncertainty logs a WARN carrying the out-of-band score.
+an uncertain score, or `SIMILAR_CONTENT` for a near-duplicate. `flagDetail` carries the evidence as
+one JSON object whose `kind` always equals `flag` (ADR-024): `{kind,outcome,score,threshold}` for
+`FILTER_FAILED`, `{kind,postId,similarity,threshold}` for `SIMILAR_CONTENT`, and `{kind,cause}` for
+`FILTER_SKIPPED`. The `threshold` is the accept/reject boundary in force when the run was judged,
+snapshotted because those thresholds are live platform settings. The filter never unpublishes: only
+an Administrator may set `unpublished`, through `POST /api/admin/posts/{postId}/reject`
+(BR-POST-012). A refusal or uncertainty logs a WARN carrying the out-of-band score.
 
 ## Rationale
 
@@ -608,16 +611,18 @@ something no human ever saw.
 ## Scope & Exceptions
 
 Applies to every non-pass verdict and to the stale-message sweep (BR-FILTER-009), which writes
-`FILTER_SKIPPED`. The owner can edit the post again; an edit re-queues it (BR-FILTER-005) and clears
-the blocker, or the owner can withdraw it to `drafted` (BR-POST-007). A duplicate's matched post id
-cannot be recovered later, which is why it is persisted in `flagDetail`.
+`FILTER_SKIPPED` with `cause = SWEPT`. The owner can edit the post again; an edit re-queues it
+(BR-FILTER-005) and clears the blocker, or the owner can withdraw it to `drafted` (BR-POST-007). A
+duplicate's matched post id and its similarity cannot be recovered later, which is why they are
+persisted in `flagDetail`.
 
 ## Enforcement
 
 - `ContentFilterOutboundAdapter` applies a non-pass verdict as `status = processing` plus
   `flag`/`flagDetail`; it never writes `unpublished`.
-- Database: `CHECK (flag IS NULL OR status = 'processing')` and `flag IN ('FILTER_FAILED',
-  'SIMILAR_CONTENT', 'FILTER_SKIPPED')` (migration V56).
+- Database: `CHECK (flag IS NULL OR status = 'processing')`, `flag IN ('FILTER_FAILED',
+  'SIMILAR_CONTENT', 'FILTER_SKIPPED')` (migration V56), and `flag_detail->>'kind' = flag`
+  (migration V57, ADR-024).
 - API: `flag`/`flagDetail` are exposed on the admin post list and detail, and the review queue is
   `GET /api/admin/posts?status=processing`.
 
@@ -643,9 +648,10 @@ Active
 
 A scheduled job finds every `CONTENT_FILTER` recipient whose newest outbound message is older than
 `app.filter.sweep-max-age` (default 24 hours) and, for each such post still at `processing` with no
-blocker, sets `flag = FILTER_SKIPPED` and `flagDetail = FILTER_SWEPT`, logging at ERROR. The post
-stays `processing`, so it is now visible in the admin review queue instead of waiting invisibly. A
-post that is not `processing`, already carries a blocker, or has a fresh outbound message is never
+blocker, sets `flag = FILTER_SKIPPED` and
+`flagDetail = {"kind":"FILTER_SKIPPED","cause":"SWEPT"}`, logging at ERROR. The post stays
+`processing`, so it is now visible in the admin review queue instead of waiting invisibly. A post
+that is not `processing`, already carries a blocker, or has a fresh outbound message is never
 touched.
 
 ## Rationale

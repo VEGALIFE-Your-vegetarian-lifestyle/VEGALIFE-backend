@@ -105,7 +105,11 @@ fixes the withdraw-during-flight republish.
 
 ### 6. The duplicate target and the score are stored
 
-- `post.flag_detail` (new, `VARCHAR(64)`) carries
+> Superseded by [ADR-024](024-post-flag-detail-json-snapshot.md): `flag_detail`
+> is now a `JSONB` snapshot (`kind` plus the blocker's own fields) instead of a
+> `VARCHAR(64)` string carrying `SIMILAR_CONTENT_POST_<uuid>`.
+
+- `post.flag_detail` (new in `V56`) carries
   `SIMILAR_CONTENT_POST_<uuid>` for duplicates.
 - `post.content_score` (ADR-016, `V38`) already carries the relevance score
   and is unchanged.
@@ -170,9 +174,11 @@ its own `FilterOutcome` (`PASS`, `FAIL`, `UNCERTAIN`). Writing
   re-checked disappears from the feed until it passes. Accepted: the
   alternative lets unreviewed changes stay live with no way to tell whether
   a check is pending.
-- **The refuse/unsure distinction is lost.** `FILTER_FAILED` covers both; the
-  reviewer reads `content_score` plus the component detail instead. ADR-016's
-  component escalations still surface as `FILTER_FAILED` on the same post.
+- **The refuse/unsure distinction is lost in `flag`.** `FILTER_FAILED` covers
+  both; the reviewer reads `content_score` plus the component detail instead.
+  ADR-016's component escalations still surface as `FILTER_FAILED` on the same
+  post. (Since ADR-024 the distinction is recoverable from
+  `flag_detail.outcome`, but `flag` itself stays a two-value vocabulary.)
 - **A one-time, irreversible data rewrite.** `V56` maps `hidden` and
   machine-held `unpublished` rows; the mapping is recorded in the migration.
 - **`created` is no longer a status value.** Frontend clients that compared
