@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.profile.ProfileMapper;
 import com.vegalife.dto.request.ai.SendMessageRequest;
+import com.vegalife.enums.user.Gender;
 import com.vegalife.model.user.DietaryPreferences;
 import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.ai.AiConversationRepository;
@@ -26,6 +27,8 @@ import com.vegalife.service.menu.MenuQueryFilterResolver;
 import com.vegalife.service.menu.MenuService;
 import jakarta.validation.Validation;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -186,10 +189,67 @@ class AiChatServicePromptTest {
     assertThat(partial).doesNotContain("Restrictions");
     assertThat(partial).doesNotContain("Health goal");
 
-    // No dietary profile at all: no dietary block.
-    String fresh = systemPromptFor(UserProfile.builder().age(25).build());
+    // No dietary profile and no health metrics: no profile block at all.
+    String fresh =
+        systemPromptFor(
+            UserProfile.builder()
+                .age(25)
+                .gender(Gender.female)
+                .description("vegan runner")
+                .build());
     assertThat(fresh).doesNotContain("Dietary profile");
-    assertThat(fresh).contains("Age: 25");
+    assertThat(fresh).doesNotContain("Health profile");
+    assertThat(fresh)
+        .doesNotContain("Age:")
+        .doesNotContain("Gender:")
+        .doesNotContain("vegan runner");
+  }
+
+  @Test
+  void systemPrompt_sendsOnlyHealthMetricsAndNeverPersonalIdentifiers() {
+    String prompt =
+        systemPromptFor(
+            UserProfile.builder()
+                .age(30)
+                .gender(Gender.female)
+                .description("Jane, marathon runner")
+                .heightCm(new BigDecimal("170.00"))
+                .weightKg(new BigDecimal("70"))
+                .build());
+
+    assertThat(prompt)
+        .contains("Health profile:")
+        .contains("Height: 170.00 cm")
+        .contains("Weight: 70 kg")
+        .contains("BMI: 24.2");
+    assertThat(prompt)
+        .doesNotContain("Member profile")
+        .doesNotContain("Age:")
+        .doesNotContain("Gender:")
+        .doesNotContain("About:")
+        .doesNotContain("Jane")
+        .doesNotContain("marathon");
+  }
+
+  @Test
+  void systemPrompt_statesTheUtcDateAndEveryExposedToolWithItsRealContract() {
+    String prompt = systemPromptFor(null);
+
+    assertThat(prompt).contains("Today's date is " + LocalDate.now(ZoneOffset.UTC) + " (UTC)");
+    assertThat(prompt)
+        .contains("get_menu")
+        .contains("get_meal_plan")
+        .contains("suggest_dishes")
+        .contains("create_menu")
+        .contains("update_menu")
+        .contains("schedule_menu");
+    // The week rules the backend actually enforces, so the model does not have to guess them.
+    assertThat(prompt)
+        .contains("tomorrow or later")
+        .contains("at most 3 times")
+        .contains("at least 5 distinct dishes");
+    // Only get_meal_plan has a current-week default; get_menu's omitted range is unbounded.
+    assertThat(prompt).contains("omitting them means unbounded");
   }
 
   @Test

@@ -17,7 +17,7 @@ describe is now the backend's own `@Tool` methods, not an MCP server.
 | BR-MCP-002 | Exactly six tools are exposed | Active | 2026-10-25 |
 | BR-MCP-003 | Tool calls consume no AI quota | Active | 2026-10-12 |
 | BR-MCP-004 | Credentials are never model-visible or logged | Active | 2026-10-12 |
-| BR-MCP-005 | Chat edits only the caller's current-week draft | Active | 2026-10-12 |
+| BR-MCP-005 | Chat edits only the caller's own upcoming draft | Active | 2026-11-14 |
 | BR-MCP-006 | Scheduling happens only after explicit user confirmation | Active | 2026-10-12 |
 | BR-MCP-007 | Tool failures are model-readable results, not transport errors | Active | 2026-11-06 |
 | BR-MCP-008 | Allergies come from the profile, never from a tool argument | Active | 2026-10-25 |
@@ -163,21 +163,26 @@ result, or log line contains a token.
   or log. Scope widened from "no credential enters a prompt/schema/result" to
   also cover the server-side hop, which no longer carries one.
 
-### BR-MCP-005 — Chat edits only the caller's current-week draft
-`update_menu` refuses any menu that is not the caller's own **and** not in the
-current (UTC, BR-MENU-004) week **and** not in status `drafted` — a stricter
-restriction than the REST API, which allows edits while `scheduled`
-(BR-MENU-006). Rejections happen at the tool layer with a message the model
-can relay; the backend's own checks still run afterwards.
+### BR-MCP-005 — Chat edits only the caller's own upcoming draft
+`update_menu` refuses any menu that is not the caller's own **or** not in status
+`drafted` **or** whose week has already started (`start_date` before tomorrow,
+UTC per BR-MENU-004) — a stricter restriction than the REST API, which allows
+edits while `scheduled` (BR-MENU-006). The window is the same one BR-MENU-005
+applies to creation, so a week the assistant just created is always editable.
+Rejections happen at the tool layer with a message the model can relay; the
+backend's own checks still run afterwards.
 
-- Enforcement: `MenuTools.preCheckCurrentWeekDraft` before the service call
-  (compares the target's membership in the current server-UTC week's drafted
-  set); backend BR-MENU-006 as the backstop
-- Related: BR-MENU-004, BR-MENU-006, FR-005
+- Enforcement: `MenuTools.preCheckUpcomingDraft` before the service call,
+  backed by `MenuService.isUpcomingDraft`; backend BR-MENU-006 as the backstop
+- Related: BR-MENU-004, BR-MENU-005, BR-MENU-006, FR-005
 - Added: 2026-10-12
 - Amended: 2026-10-13 — pre-check moved from `ToolScope` in the `mcp-server`
   module into `MenuTools`; its conditions and its readable refusal message are
   unchanged.
+- Amended: 2026-11-14 — window narrowed from "the current week" to "starts
+  tomorrow or later", because creation now refuses a week that has already
+  begun. The paged current-week lookup (and its first-page-only edge case) is
+  replaced by a direct owned-menu check.
 
 ### BR-MCP-006 — Scheduling happens only after explicit user confirmation
 `schedule_menu` must not be called until the assistant has stated the exact

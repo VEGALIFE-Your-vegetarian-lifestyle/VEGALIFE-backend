@@ -61,14 +61,16 @@ feature measures.
   `ai_conversation.updated_at` is refreshed; new conversations get a title
   derived from the first message (trimmed to 60 chars).
 - [ ] FR-005: Every request builds context as: a system prompt containing the
-  member's `UserProfile` data (age, gender, height, weight, description), a
-  BMI computed at prompt-build time from height/weight (one decimal; omitted
-  when either is missing; never stored), the stored dietary profile from
-  `user_profile.dietary_preferences` (allergies/restrictions as hard
-  constraints, dislikes as avoid-unless-asked, preferences as a lean-in,
+  current server-UTC date, the member's `UserProfile` health data (height,
+  weight), a BMI computed at prompt-build time from height/weight (one
+  decimal; omitted when either is missing; never stored), the stored dietary
+  profile from `user_profile.dietary_preferences` (allergies/restrictions as
+  hard constraints, dislikes as avoid-unless-asked, preferences as a lean-in,
   health goal to shape intent; unset members omitted), plus the last 20
-  messages of the conversation (new message included). The model respects the
-  stored dietary data instead of inferring it from the messages. The persona
+  messages of the conversation (new message included). Personal identifiers —
+  display name, age, gender, and the free-text description — never enter the
+  prompt. The model respects the stored dietary data instead of inferring it
+  from the messages. The persona
   is scoped to vegan/plant-based and platform topics (BR-AI-006); anything
   else gets a brief polite refusal with a redirect.
 - [ ] FR-006: A supplied `conversationId` must reference a conversation owned

@@ -92,15 +92,16 @@ array, not a page object.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| startDate | date `YYYY-MM-DD` | Yes | First day of the week (a Monday by convention). `endDate` is derived as `+6`. |
+| startDate | date `YYYY-MM-DD` | Yes | First day of the week. Must be tomorrow or later in server UTC (a Monday by convention; `next week` means next Monday). `endDate` is derived as `+6`. |
 | days | array | Yes | Exactly 7 day objects, each `{date, meals[]}`; meal = `{mealType, dishId, servings}` with `mealType` ∈ `BREAKFAST`/`LUNCH`/`DINNER`, `servings ≥ 1`. See "Accepted `days` shapes" below. |
 | notes | string | Yes | A short summary of the week and why these meals were chosen (its theme and the member's relevant restrictions honored, e.g. `High-protein week, peanut-free, built around your saved dishes`). The model must always supply one; the REST contract keeps `notes` optional for HTTP callers. |
 
 Calls `MenuService.createMenu`. Always creates `drafted` (BR-MENU-005); all
-structural validation (7 dates, ≤1 meal per type per day, ≥5 distinct dishes,
-no dish >3 times, dishes exist) is the backend's. Response: full menu detail
-with the new `id`. Dietary preferences are not a menu field — they live on the
-member's profile and are already part of the assistant's context.
+structural validation (7 dates, start not in the past, ≤1 meal per type per day,
+≥5 distinct dishes, no dish >3 times, dishes exist) is the backend's. Response:
+full menu detail with the new `id`. Dietary preferences are not a menu field —
+they live on the member's profile and are already part of the assistant's
+context.
 
 #### Accepted `days` shapes
 
@@ -121,17 +122,19 @@ Anything else binds as an empty week, so the member still gets the readable
 rather than a transport failure. Tolerance covers **shape only** — every menu
 rule (BR-MENU-005) is still enforced on the contents.
 
-### `update_menu` — edit the caller's current-week draft
+### `update_menu` — edit the caller's upcoming drafted week
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| menuId | uuid | Yes | The menu to replace. |
+| menuId | uuid | Yes | The menu to replace: the caller's own drafted menu whose week starts tomorrow or later. |
 | days | array | Yes | The complete new week (same shape as `create_menu`); meals are replaced wholesale. |
 | notes | string | Yes | A short summary of the week (same guidance as `create_menu`); it replaces the stored note. The model must always supply one. |
 
 **Tool-layer pre-check (BR-MCP-005):** refused with a readable message unless
-the target is the caller's own menu, in the current UTC week, with status
-`drafted` — stricter than the REST API, which also allows `scheduled`. Then
+the target is the caller's own menu that is still `drafted` **and** has not
+started yet (`start_date >= tomorrow`, server UTC) — stricter than the REST
+API, which also allows `scheduled`. Because `create_menu` refuses a week that
+has already started, every week the assistant creates is editable. Then
 `MenuService.updateMenu` re-validates the whole week (BR-MENU-005) and
 ownership (BR-MENU-001).
 
@@ -178,12 +181,13 @@ BR-MCP-005 pre-check refusal is prefixed `update refused: `.
 | `error: Unknown status 'x'. Use drafted, scheduled, cancelled or completed.` | Bad status filter | `MenuQueryFilterResolver` (shared with REST) |
 | `error: menuId must be a UUID` / `error: menuId is required` | Malformed or missing id | tool layer |
 | `error: startDate must be a date in YYYY-MM-DD format` | Malformed week start | tool layer |
+| `error: startDate must be tomorrow or later` | The week would start today or in the past | backend validation |
 | `error: days must contain exactly the 7 dates...` (or any BR-MENU-005 message) | Structural validation failed | backend validation |
 | `error: Menu not found` | Unknown `menuId` or another user's menu | backend (404-equivalent) |
 | `error: Cannot transition a drafted menu to completed` | Illegal status transition | backend (409-equivalent) |
 | `error: Another scheduled menu already overlaps this week` | Scheduling conflict | backend (V30 GiST, ADR-010) |
 | `error: tool '<name>' could not read its arguments: <cause> (call it again with arguments matching its schema)` | The model's arguments did not match the tool schema at all (binding failed before the tool ran) | `ToolArgumentFailureProcessor` (BR-MCP-007) |
-| `update refused: the target must be the caller's own current-week menu with status drafted` | Tool-layer pre-check failed | BR-MCP-005 |
+| `update refused: the target must be the caller's own drafted menu that starts tomorrow or later` | Tool-layer pre-check failed | BR-MCP-005 |
 
 There is no transport failure mode: the tool cannot be unreachable, and there
 is no credential to expire in the middle of a call. A binding failure is also
@@ -196,7 +200,7 @@ retry the call with a corrected shape inside the same turn (issue #190).
 - BR-MCP-002 — exactly six tools are exposed
 - BR-MCP-003 — tool calls consume no AI quota
 - BR-MCP-004 — credentials are never model-visible or logged
-- BR-MCP-005 — chat edits only the caller's current-week draft
+- BR-MCP-005 — chat edits only the caller's own upcoming draft
 - BR-MCP-006 — scheduling happens only after explicit user confirmation
 - BR-MCP-007 — tool failures are model-readable results
 - BR-MENU-001..007 — all menu domain rules still apply, unchanged

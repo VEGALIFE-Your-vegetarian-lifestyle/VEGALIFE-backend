@@ -364,9 +364,8 @@ class MenuToolsTest {
   }
 
   @Test
-  void updateMenu_reachesTheServiceWhenTheTargetIsTheCurrentWeekDraft() {
-    when(menuService.listMenus(eq(USER), any(), anyInt(), anyInt(), any()))
-        .thenReturn(pageContaining(MENU_ID));
+  void updateMenu_reachesTheServiceWhenTheTargetIsAnUpcomingDraft() {
+    when(menuService.isUpcomingDraft(USER, MENU_ID)).thenReturn(true);
     when(menuService.updateMenu(eq(USER), eq(MENU_ID), any()))
         .thenReturn(MenuDetailResponse.builder().id(MENU_ID).status("drafted").build());
 
@@ -377,15 +376,15 @@ class MenuToolsTest {
   }
 
   @Test
-  void updateMenu_refusesWhenTheTargetIsNotTheCurrentWeekDraft() {
-    when(menuService.listMenus(eq(USER), any(), anyInt(), anyInt(), any())).thenReturn(emptyPage());
+  void updateMenu_refusesWhenTheTargetIsNotAnUpcomingDraft() {
+    when(menuService.isUpcomingDraft(USER, MENU_ID)).thenReturn(false);
 
     String result = menuTools.updateMenu(MENU_ID.toString(), breakfastDay(), "summary", CONTEXT);
 
     assertThat(result)
         .isEqualTo(
-            "update refused: the target must be the caller's own current-week menu with status"
-                + " drafted");
+            "update refused: the target must be the caller's own drafted menu that starts tomorrow"
+                + " or later");
     verify(menuService, never()).updateMenu(any(), any(), any());
   }
 
@@ -556,18 +555,6 @@ class MenuToolsTest {
         .size(20)
         .totalElements(0)
         .totalPages(0)
-        .first(true)
-        .last(true)
-        .build();
-  }
-
-  private static PageResponse<MenuSummaryResponse> pageContaining(UUID menuId) {
-    return PageResponse.<MenuSummaryResponse>builder()
-        .content(List.of(MenuSummaryResponse.builder().id(menuId).build()))
-        .page(0)
-        .size(20)
-        .totalElements(1)
-        .totalPages(1)
         .first(true)
         .last(true)
         .build();
