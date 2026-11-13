@@ -33,8 +33,8 @@ public class RecipeResponse {
    * Why an admin rejected this recipe; null when no reason is recorded — never rejected, or
    * rejected without a reason (the reason is optional, BR-ADMIN-002).
    *
-   * <p>Safe to expose here: every endpoint returning this type is scoped to the caller's own
-   * recipes, so there is no other audience to leak it to.
+   * <p>Author-only: the read endpoints that return this type include public surfaces (BR-RECP-008),
+   * so the service clears it for a non-author viewer rather than trusting the mapper.
    */
   private String rejectionReason;
 

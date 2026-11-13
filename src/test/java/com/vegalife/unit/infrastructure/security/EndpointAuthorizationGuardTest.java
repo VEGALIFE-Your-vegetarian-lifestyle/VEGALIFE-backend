@@ -53,6 +53,8 @@ class EndpointAuthorizationGuardTest {
           "PostController#getPost",
           "PostController#listFeed",
           "PostController#getRelatedPosts",
+          "RecipeController#listRecipes",
+          "RecipeController#getRecipe",
           "SubscriptionController#getAvailablePlans",
           "ProfileController#getProfileByUserId",
           "PaymentWebhookController#ipnGet",
