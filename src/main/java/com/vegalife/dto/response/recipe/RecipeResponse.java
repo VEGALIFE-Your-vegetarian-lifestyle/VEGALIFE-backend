@@ -21,6 +21,12 @@ public class RecipeResponse {
   private String dishName;
 
   /**
+   * The shared dish's representative image, identical for every recipe using that dish. {@code
+   * null} when no image has been set; an admin sets it through the dish endpoints.
+   */
+  private String imageUrl;
+
+  /**
    * The dish's review state. Exposed because a recipe whose dish name is still awaiting approval
    * would otherwise look inexplicably withheld to its own author (BR-DISH-001).
    */
