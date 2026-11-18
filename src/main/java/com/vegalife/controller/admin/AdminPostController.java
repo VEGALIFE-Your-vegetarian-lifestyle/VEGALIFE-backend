@@ -1,6 +1,5 @@
 package com.vegalife.controller.admin;
 
-import com.vegalife.dto.request.admin.PostApprovalRequest;
 import com.vegalife.dto.request.admin.PostListRequest;
 import com.vegalife.dto.request.admin.PostRejectionRequest;
 import com.vegalife.dto.response.admin.AdminPostDetailResponse;
@@ -58,10 +57,8 @@ public class AdminPostController {
 
   @PostMapping("/posts/{postId}/approve")
   public ResponseEntity<ApiResponse<AdminPostDetailResponse>> approvePost(
-      @AuthenticationPrincipal UUID adminId,
-      @PathVariable UUID postId,
-      @Valid @RequestBody(required = false) PostApprovalRequest request) {
-    AdminPostDetailResponse post = adminPostService.approvePost(adminId, postId, reasonOf(request));
+      @AuthenticationPrincipal UUID adminId, @PathVariable UUID postId) {
+    AdminPostDetailResponse post = adminPostService.approvePost(adminId, postId);
     return ResponseEntity.ok(ApiResponse.success(post, "Post approved successfully"));
   }
 
@@ -75,10 +72,6 @@ public class AdminPostController {
   }
 
   /** The reason is optional, so an absent body must not be a 400. */
-  private static String reasonOf(PostApprovalRequest request) {
-    return request == null ? null : request.getReason();
-  }
-
   private static String reasonOf(PostRejectionRequest request) {
     return request == null ? null : request.getReason();
   }

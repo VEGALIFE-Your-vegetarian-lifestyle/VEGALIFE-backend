@@ -8,13 +8,11 @@ import com.vegalife.dto.response.post.PostFlagDetailResponse;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.post.PostSpecifications;
 import com.vegalife.repository.recipe.DishRepository;
@@ -56,7 +54,6 @@ public class AdminPostService {
       "At least one category is required to publish a post";
 
   private final PostRepository postRepository;
-  private final ModerationLogRepository moderationLogRepository;
   private final AdminPostMapper adminPostMapper;
   private final RecipeRepository recipeRepository;
   private final RecipeIngredientRepository recipeIngredientRepository;
@@ -177,7 +174,7 @@ public class AdminPostService {
    * override rather than a filter pass.
    */
   @Transactional
-  public AdminPostDetailResponse approvePost(UUID adminId, UUID postId, String reason) {
+  public AdminPostDetailResponse approvePost(UUID adminId, UUID postId) {
     Post post = requireModeratablePost(postId);
 
     if (post.getCategories().isEmpty()) {
@@ -187,23 +184,14 @@ public class AdminPostService {
     post.setStatus(PostStatus.published);
     post.setPublishedAt(post.getPublishedAt() == null ? Instant.now() : post.getPublishedAt());
     // Current state, not history: once approved again, a stale reason would describe a decision
-    // that no longer holds. The audit trail stays in moderation_log.
+    // that no longer holds.
     post.setRejectionReason(null);
     // The flag is deliberately kept: published + FILTER_FAILED says a human overrode the filter,
     // which is a different fact from published + FILTER_PASSED. Clearing it here would erase the
     // only place that distinction is stored (ADR-025).
     postRepository.saveAndFlush(post);
 
-    approveComponents(postId, adminId, reason);
-
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action("APPROVE_POST")
-            .targetType("POST")
-            .targetId(post.getId())
-            .reason(reason)
-            .build());
+    approveComponents(postId);
 
     log.info("Admin {} approved post {}", adminId, post.getId());
 
@@ -231,16 +219,7 @@ public class AdminPostService {
     // machine saw and what the admin decided on top of it (ADR-025).
     postRepository.saveAndFlush(post);
 
-    rejectPendingComponents(postId, adminId, reason);
-
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action("REJECT_POST")
-            .targetType("POST")
-            .targetId(post.getId())
-            .reason(reason)
-            .build());
+    rejectPendingComponents(postId, reason);
 
     log.info("Admin {} rejected post {}", adminId, post.getId());
 
@@ -274,25 +253,23 @@ public class AdminPostService {
    * <p>The seeding half is what keeps the two approval paths from diverging: a recipe approved via
    * its post contributes exactly what one approved via the recipe queue does.
    */
-  private void approveComponents(UUID postId, UUID adminId, String reason) {
+  private void approveComponents(UUID postId) {
     Components components = componentsOf(postId);
 
     for (Recipe recipe : components.recipes()) {
-      if (approveIfPending(
-          recipe.getModerationStatus(), "RECIPE", recipe.getId(), adminId, reason)) {
+      if (isAwaitingReview(recipe.getModerationStatus())) {
         recipe.setModerationStatus(ModerationStatus.APPROVED);
         recipeRepository.save(recipe);
       }
     }
     for (Dish dish : components.dishes()) {
-      if (approveIfPending(dish.getModerationStatus(), "DISH", dish.getId(), adminId, reason)) {
+      if (isAwaitingReview(dish.getModerationStatus())) {
         dish.setModerationStatus(ModerationStatus.APPROVED);
         dishRepository.save(dish);
       }
     }
     for (Ingredient ingredient : components.ingredients()) {
-      if (approveIfPending(
-          ingredient.getModerationStatus(), "INGREDIENT", ingredient.getId(), adminId, reason)) {
+      if (isAwaitingReview(ingredient.getModerationStatus())) {
         ingredient.setModerationStatus(ModerationStatus.APPROVED);
         ingredientRepository.save(ingredient);
       }
@@ -306,29 +283,26 @@ public class AdminPostService {
   }
 
   /** Reject every component of the post that is still awaiting review. */
-  private void rejectPendingComponents(UUID postId, UUID adminId, String reason) {
+  private void rejectPendingComponents(UUID postId, String reason) {
     Components components = componentsOf(postId);
 
     for (Recipe recipe : components.recipes()) {
-      if (rejectIfPending(
-          recipe.getModerationStatus(), "RECIPE", recipe.getId(), adminId, reason)) {
+      if (isAwaitingReview(recipe.getModerationStatus())) {
         recipe.setModerationStatus(ModerationStatus.REJECTED);
-        // The reason is recorded on the recipe as well as the post, mirroring what the
-        // REJECT_COMPONENT log row already does: the recipe's author reads its own rejection from
-        // its own row, and the decision that refused it is the same decision.
+        // The reason is recorded on the recipe as well as the post: the recipe's author reads its
+        // own rejection from its own row, and the decision that refused it is the same decision.
         recipe.setRejectionReason(reason);
         recipeRepository.save(recipe);
       }
     }
     for (Dish dish : components.dishes()) {
-      if (rejectIfPending(dish.getModerationStatus(), "DISH", dish.getId(), adminId, reason)) {
+      if (isAwaitingReview(dish.getModerationStatus())) {
         dish.setModerationStatus(ModerationStatus.REJECTED);
         dishRepository.save(dish);
       }
     }
     for (Ingredient ingredient : components.ingredients()) {
-      if (rejectIfPending(
-          ingredient.getModerationStatus(), "INGREDIENT", ingredient.getId(), adminId, reason)) {
+      if (isAwaitingReview(ingredient.getModerationStatus())) {
         ingredient.setModerationStatus(ModerationStatus.REJECTED);
         ingredientRepository.save(ingredient);
       }
@@ -390,43 +364,14 @@ public class AdminPostService {
       List<Recipe> recipes, List<Dish> dishes, List<Ingredient> ingredients) {}
 
   /**
-   * Whether a component may be approved.
+   * Whether a component may still be decided: only while it is {@code PENDING}.
    *
-   * <p>A REJECTED name is a permanent block (BR-DISH-001), so approving the post that mentions it
-   * must not undo that. An already-APPROVED name needs no work and no log entry.
+   * <p>A REVIEWED name survives, in both directions. An {@code APPROVED} name was reviewed on its
+   * own merits and an approving post must not re-open it; a {@code REJECTED} name is a permanent
+   * block (BR-DISH-001), so approving the post that mentions it must not undo either.
    */
-  private boolean approveIfPending(
-      ModerationStatus current, String type, UUID id, UUID adminId, String reason) {
-    if (current != ModerationStatus.PENDING) {
-      return false;
-    }
-    logComponentDecision(adminId, "APPROVE_COMPONENT", type, id, reason);
-    return true;
-  }
-
-  /**
-   * Whether a component may be rejected: only while it is still awaiting review. An APPROVED name
-   * was reviewed on its own merits and survives a bad post.
-   */
-  private boolean rejectIfPending(
-      ModerationStatus current, String type, UUID id, UUID adminId, String reason) {
-    if (current != ModerationStatus.PENDING) {
-      return false;
-    }
-    logComponentDecision(adminId, "REJECT_COMPONENT", type, id, reason);
-    return true;
-  }
-
-  private void logComponentDecision(
-      UUID adminId, String action, String type, UUID id, String reason) {
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action(action)
-            .targetType(type)
-            .targetId(id)
-            .reason(reason)
-            .build());
+  private boolean isAwaitingReview(ModerationStatus current) {
+    return current == ModerationStatus.PENDING;
   }
 
   private PostStatus parseStatus(String status) {

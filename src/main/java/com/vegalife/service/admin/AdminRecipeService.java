@@ -6,12 +6,10 @@ import com.vegalife.dto.request.admin.RecipeListRequest;
 import com.vegalife.dto.response.admin.AdminRecipeListResponse;
 import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
@@ -63,7 +61,6 @@ public class AdminRecipeService {
   private final RecipeIngredientRepository recipeIngredientRepository;
   private final DishIngredientService dishIngredientService;
   private final AdminRecipeMapper adminRecipeMapper;
-  private final ModerationLogRepository moderationLogRepository;
 
   /**
    * Lists recipes, optionally narrowed by author, category, date range and review state. The review
@@ -161,7 +158,6 @@ public class AdminRecipeService {
     recipe.setDeletedAt(Instant.now());
     recipeRepository.save(recipe);
 
-    logDecision(adminId, "DELETE_RECIPE", recipe.getId(), null);
     log.info("Admin {} soft-deleted recipe {}", adminId, recipe.getId());
   }
 
@@ -172,14 +168,13 @@ public class AdminRecipeService {
    * <p>The names are approved here because this is the moment a human has read the recipe and
    * accepted it: the dish and ingredients it names are, by that decision, acceptable. Only {@code
    * PENDING} names move — a {@code REJECTED} name is a permanent block and stays blocked, so
-   * approving one recipe cannot launder a name an admin refused. Each changed name gets its own
-   * {@code APPROVE_COMPONENT} log entry, which is what makes the ripple visible in the audit trail.
+   * approving one recipe cannot launder a name an admin refused.
    *
    * <p>Seeding only happens on approval, never on create: a rejected or junk recipe must not be
    * able to pollute the shared per-dish list.
    */
   @Transactional
-  public AdminRecipeListResponse approveRecipe(UUID adminId, UUID recipeId, String reason) {
+  public AdminRecipeListResponse approveRecipe(UUID adminId, UUID recipeId) {
     Recipe recipe = findActive(recipeId);
     if (recipe.getModerationStatus() == ModerationStatus.APPROVED) {
       return toResponse(recipe);
@@ -187,13 +182,12 @@ public class AdminRecipeService {
 
     recipe.setModerationStatus(ModerationStatus.APPROVED);
     // Current state, not history: a reason left over from an earlier rejection would describe a
-    // decision that no longer holds. The audit trail stays in moderation_log.
+    // decision that no longer holds.
     recipe.setRejectionReason(null);
     Recipe saved = recipeRepository.saveAndFlush(recipe);
-    logDecision(adminId, "APPROVE_COMPONENT", saved.getId(), reason);
     log.info("Admin {} approved recipe {}", adminId, saved.getId());
 
-    approvePendingNamesOf(saved, adminId, reason);
+    approvePendingNamesOf(saved);
     dishIngredientService.seedFromApprovedRecipe(saved);
 
     return toResponse(saved);
@@ -203,13 +197,11 @@ public class AdminRecipeService {
    * Approves the recipe's dish and every ingredient it uses, but only where the row is still {@code
    * PENDING}.
    *
-   * <p>Mirrors the component handling of post approval: one log row per changed name, and a name
-   * referenced twice is one decision.
+   * <p>Mirrors the component handling of post approval: a name referenced twice is one decision.
    */
-  private void approvePendingNamesOf(Recipe recipe, UUID adminId, String reason) {
+  private void approvePendingNamesOf(Recipe recipe) {
     Dish dish = recipe.getDish();
-    if (dish != null
-        && approveIfPending(dish.getModerationStatus(), "DISH", dish.getId(), adminId, reason)) {
+    if (dish != null && isAwaitingReview(dish.getModerationStatus())) {
       dish.setModerationStatus(ModerationStatus.APPROVED);
       dishRepository.save(dish);
     }
@@ -220,8 +212,7 @@ public class AdminRecipeService {
       if (ingredient == null || !seen.add(ingredient.getId())) {
         continue;
       }
-      if (approveIfPending(
-          ingredient.getModerationStatus(), "INGREDIENT", ingredient.getId(), adminId, reason)) {
+      if (isAwaitingReview(ingredient.getModerationStatus())) {
         ingredient.setModerationStatus(ModerationStatus.APPROVED);
         ingredientRepository.save(ingredient);
       }
@@ -239,21 +230,12 @@ public class AdminRecipeService {
     return ingredientRepository.findById(line.getIngredientId()).orElse(null);
   }
 
-  /** Whether a name may be approved: only a {@code PENDING} one, and it is logged when it moves. */
-  private boolean approveIfPending(
-      ModerationStatus current, String type, UUID id, UUID adminId, String reason) {
-    if (current != ModerationStatus.PENDING) {
-      return false;
-    }
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action("APPROVE_COMPONENT")
-            .targetType(type)
-            .targetId(id)
-            .reason(reason)
-            .build());
-    return true;
+  /**
+   * Whether a name may still be decided: only a {@code PENDING} one. An already-reviewed name is
+   * left exactly as it is, so approving a recipe never re-opens a refusal or re-approves a pass.
+   */
+  private boolean isAwaitingReview(ModerationStatus current) {
+    return current == ModerationStatus.PENDING;
   }
 
   /** Rejects the recipe row only; nothing is deleted, and it cannot be re-created by a member. */
@@ -267,7 +249,6 @@ public class AdminRecipeService {
     recipe.setModerationStatus(ModerationStatus.REJECTED);
     recipe.setRejectionReason(reason);
     Recipe saved = recipeRepository.saveAndFlush(recipe);
-    logDecision(adminId, "REJECT_COMPONENT", saved.getId(), reason);
     log.info("Admin {} rejected recipe {}", adminId, saved.getId());
 
     return toResponse(saved);
@@ -344,17 +325,6 @@ public class AdminRecipeService {
     } catch (IllegalArgumentException ex) {
       throw new ValidationException("Difficulty must be EASY, MEDIUM, or HARD");
     }
-  }
-
-  private void logDecision(UUID adminId, String action, UUID recipeId, String reason) {
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action(action)
-            .targetType("RECIPE")
-            .targetId(recipeId)
-            .reason(reason)
-            .build());
   }
 
   private Sort parseSort(String sort) {

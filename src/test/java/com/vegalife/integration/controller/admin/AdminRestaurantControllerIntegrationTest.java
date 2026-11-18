@@ -13,7 +13,6 @@ import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.restaurant.Restaurant;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.restaurant.RestaurantRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -68,8 +67,6 @@ class AdminRestaurantControllerIntegrationTest {
   @Autowired private UserRepository userRepository;
 
   @Autowired private RestaurantRepository restaurantRepository;
-
-  @Autowired private ModerationLogRepository moderationLogRepository;
 
   @Autowired private DishRepository dishRepository;
 
@@ -127,10 +124,6 @@ class AdminRestaurantControllerIntegrationTest {
         .andExpect(jsonPath("$.data.name").value("Vegan Garden"))
         .andExpect(jsonPath("$.data.createdAt").isNotEmpty())
         .andExpect(jsonPath("$.data.updatedAt").isNotEmpty());
-
-    assertThat(moderationLogRepository.findAll())
-        .singleElement()
-        .satisfies(log -> assertThat(log.getAction()).isEqualTo("CREATE_RESTAURANT"));
   }
 
   @Test
@@ -326,14 +319,6 @@ class AdminRestaurantControllerIntegrationTest {
         .andExpect(jsonPath("$.message").value("Restaurant updated successfully"))
         .andExpect(jsonPath("$.data.name").value("New Name"))
         .andExpect(jsonPath("$.data.address").value("123 Vegan St"));
-
-    assertThat(moderationLogRepository.findAll())
-        .singleElement()
-        .satisfies(
-            log -> {
-              assertThat(log.getAction()).isEqualTo("UPDATE_RESTAURANT");
-              assertThat(log.getTargetId()).isEqualTo(restaurant.getId());
-            });
   }
 
   @Test
@@ -457,7 +442,7 @@ class AdminRestaurantControllerIntegrationTest {
   }
 
   @Test
-  void deleteRestaurant_asAdmin_softDeletesAndLogsModeration() throws Exception {
+  void deleteRestaurant_asAdmin_softDeletes() throws Exception {
     Restaurant restaurant = createRestaurant("To Delete", new BigDecimal("4.0"));
 
     mockMvc
@@ -470,9 +455,6 @@ class AdminRestaurantControllerIntegrationTest {
 
     assertThat(restaurantRepository.findById(restaurant.getId()).orElseThrow().getDeletedAt())
         .isNotNull();
-    assertThat(moderationLogRepository.findAll())
-        .singleElement()
-        .satisfies(log -> assertThat(log.getAction()).isEqualTo("DELETE_RESTAURANT"));
   }
 
   @Test

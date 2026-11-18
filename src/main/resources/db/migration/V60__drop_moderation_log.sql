@@ -1,0 +1,26 @@
+-- V60__drop_moderation_log.sql
+-- Remove the administrator action audit trail (retires BR-ADMIN-002).
+--
+-- V18 created moderation_log to record who took every admin moderation action, against
+-- what, when, and (from V32) why. It was append-only and deliberately never surfaced:
+-- no endpoint read it, and ModerationLogRepository exposed nothing beyond JpaRepository,
+-- so the only way to reach a row was ad-hoc SQL against the database. The product owner
+-- has decided the platform does not keep an audit trail for now, so the table and its
+-- writers are removed rather than left holding data nothing can read.
+--
+-- What is NOT lost with this table:
+--   * post.rejection_reason / recipe.rejection_reason (V51) stay. Those are current
+--     state, surfaced to the author through the admin and recipe responses, and they
+--     were always a separate answer from the log.
+--   * The moderation *state* columns (moderation_status, status, flag) are untouched.
+--     Approval and rejection remain fully functional; only the event history goes.
+--
+-- What IS lost: the classified cause of a content-filter outage (action
+-- FILTER_UNAVAILABLE), which was written here with a NULL actor and had no other home.
+-- The post still settles at FILTER_SKIPPED with cause UNAVAILABLE, so the review queue
+-- is unaffected; only the provider detail is gone.
+--
+-- Forward-only and irreversible: every row is discarded, not migrated. The table has no
+-- foreign keys pointing at it, so the drop has no cascade side effects.
+
+DROP TABLE IF EXISTS moderation_log;

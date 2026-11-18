@@ -6,9 +6,7 @@ import com.vegalife.dto.request.admin.AdminIngredientUpdateRequest;
 import com.vegalife.dto.response.admin.AdminIngredientResponse;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.enums.recipe.Unit;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Ingredient;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.IngredientSpecifications;
 import com.vegalife.service.recipe.RecipeNutritionService;
@@ -55,7 +53,6 @@ public class AdminIngredientService {
       "Sort property must be one of: name, createdAt, updatedAt, moderationStatus";
 
   private final IngredientRepository ingredientRepository;
-  private final ModerationLogRepository moderationLogRepository;
   private final RecipeNutritionService recipeNutritionService;
 
   /** Every state, including pending and rejected, so the review queue is reachable. */
@@ -124,7 +121,6 @@ public class AdminIngredientService {
                 .moderationStatus(ModerationStatus.APPROVED)
                 .build());
 
-    logDecision(adminId, "CREATE_INGREDIENT", ingredient.getId(), null);
     log.info("Admin {} created ingredient {}", adminId, ingredient.getId());
 
     return toResponse(ingredient);
@@ -228,13 +224,12 @@ public class AdminIngredientService {
     ingredient.setDeletedAt(Instant.now());
     ingredientRepository.save(ingredient);
 
-    logDecision(adminId, "DELETE_INGREDIENT", ingredient.getId(), null);
     log.info("Admin {} soft-deleted ingredient {}", adminId, ingredient.getId());
   }
 
   /** Approves a name outright; the only way back from a rejection, see {@code AdminDishService}. */
   @Transactional
-  public AdminIngredientResponse approveIngredient(UUID adminId, UUID ingredientId, String reason) {
+  public AdminIngredientResponse approveIngredient(UUID adminId, UUID ingredientId) {
     Ingredient ingredient = findActive(ingredientId);
     if (ingredient.getModerationStatus() == ModerationStatus.APPROVED) {
       return toResponse(ingredient);
@@ -242,7 +237,6 @@ public class AdminIngredientService {
 
     ingredient.setModerationStatus(ModerationStatus.APPROVED);
     Ingredient saved = ingredientRepository.saveAndFlush(ingredient);
-    logDecision(adminId, "APPROVE_COMPONENT", saved.getId(), reason);
     log.info("Admin {} approved ingredient {}", adminId, saved.getId());
 
     return toResponse(saved);
@@ -250,7 +244,7 @@ public class AdminIngredientService {
 
   /** Rejects a name outright; nothing is deleted, and re-creation is blocked from now on. */
   @Transactional
-  public AdminIngredientResponse rejectIngredient(UUID adminId, UUID ingredientId, String reason) {
+  public AdminIngredientResponse rejectIngredient(UUID adminId, UUID ingredientId) {
     Ingredient ingredient = findActive(ingredientId);
     if (ingredient.getModerationStatus() == ModerationStatus.REJECTED) {
       return toResponse(ingredient);
@@ -258,7 +252,6 @@ public class AdminIngredientService {
 
     ingredient.setModerationStatus(ModerationStatus.REJECTED);
     Ingredient saved = ingredientRepository.saveAndFlush(ingredient);
-    logDecision(adminId, "REJECT_COMPONENT", saved.getId(), reason);
     log.info("Admin {} rejected ingredient {}", adminId, saved.getId());
 
     return toResponse(saved);
@@ -317,17 +310,6 @@ public class AdminIngredientService {
     if (present != 0 && present != 5) {
       throw new ValidationException(message);
     }
-  }
-
-  private void logDecision(UUID adminId, String action, UUID ingredientId, String reason) {
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action(action)
-            .targetType("INGREDIENT")
-            .targetId(ingredientId)
-            .reason(reason)
-            .build());
   }
 
   private AdminIngredientResponse toResponse(Ingredient ingredient) {

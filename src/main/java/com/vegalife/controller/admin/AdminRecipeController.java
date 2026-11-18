@@ -1,8 +1,8 @@
 package com.vegalife.controller.admin;
 
 import com.vegalife.dto.request.admin.AdminRecipeUpdateRequest;
-import com.vegalife.dto.request.admin.ComponentModerationRequest;
 import com.vegalife.dto.request.admin.RecipeListRequest;
+import com.vegalife.dto.request.admin.RecipeRejectionRequest;
 import com.vegalife.dto.response.admin.AdminRecipeListResponse;
 import com.vegalife.service.admin.AdminRecipeService;
 import com.vegalife.shared.dto.ApiResponse;
@@ -75,11 +75,8 @@ public class AdminRecipeController {
 
   @PostMapping("/recipes/{recipeId}/approve")
   public ResponseEntity<ApiResponse<AdminRecipeListResponse>> approveRecipe(
-      @AuthenticationPrincipal UUID adminId,
-      @PathVariable UUID recipeId,
-      @Valid @RequestBody(required = false) ComponentModerationRequest request) {
-    AdminRecipeListResponse recipe =
-        adminRecipeService.approveRecipe(adminId, recipeId, reasonOf(request));
+      @AuthenticationPrincipal UUID adminId, @PathVariable UUID recipeId) {
+    AdminRecipeListResponse recipe = adminRecipeService.approveRecipe(adminId, recipeId);
     return ResponseEntity.ok(ApiResponse.success(recipe, "Recipe approved successfully"));
   }
 
@@ -87,14 +84,14 @@ public class AdminRecipeController {
   public ResponseEntity<ApiResponse<AdminRecipeListResponse>> rejectRecipe(
       @AuthenticationPrincipal UUID adminId,
       @PathVariable UUID recipeId,
-      @Valid @RequestBody(required = false) ComponentModerationRequest request) {
+      @Valid @RequestBody(required = false) RecipeRejectionRequest request) {
     AdminRecipeListResponse recipe =
         adminRecipeService.rejectRecipe(adminId, recipeId, reasonOf(request));
     return ResponseEntity.ok(ApiResponse.success(recipe, "Recipe rejected successfully"));
   }
 
   /** The reason is optional, so an absent body must not be a 400. */
-  private static String reasonOf(ComponentModerationRequest request) {
+  private static String reasonOf(RecipeRejectionRequest request) {
     return request == null ? null : request.getReason();
   }
 }

@@ -147,9 +147,7 @@ class FilterBypassForwardsToAdminIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/posts/" + postId + "/approve")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"reason\":\"Bypass demo\"}"))
+                .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.status").value("published"))
         // Approving does not relabel the verdict: it stays the record of why the post was held

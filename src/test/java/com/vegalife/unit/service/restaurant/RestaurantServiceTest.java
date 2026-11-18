@@ -17,10 +17,8 @@ import com.vegalife.dto.request.restaurant.RestaurantUpdateRequest;
 import com.vegalife.dto.response.admin.AdminRestaurantResponse;
 import com.vegalife.dto.response.restaurant.RestaurantResponse;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.restaurant.Restaurant;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.restaurant.RestaurantRepository;
 import com.vegalife.service.restaurant.RestaurantService;
@@ -55,8 +53,6 @@ class RestaurantServiceTest {
   @Mock private RestaurantMapper restaurantMapper;
 
   @Mock private AdminRestaurantMapper adminRestaurantMapper;
-
-  @Mock private ModerationLogRepository moderationLogRepository;
 
   @Mock private DishRepository dishRepository;
 
@@ -244,7 +240,7 @@ class RestaurantServiceTest {
   }
 
   @Test
-  void createRestaurant_savesAndRecordsModerationLog() {
+  void createRestaurant_savesTheRestaurant() {
     UUID adminId = UUID.randomUUID();
     RestaurantCreateRequest request =
         RestaurantCreateRequest.builder()
@@ -270,12 +266,6 @@ class RestaurantServiceTest {
     ArgumentCaptor<Restaurant> savedCaptor = ArgumentCaptor.forClass(Restaurant.class);
     verify(restaurantRepository).saveAndFlush(savedCaptor.capture());
     assertThat(savedCaptor.getValue().getName()).isEqualTo("Vegan Garden");
-
-    ArgumentCaptor<ModerationLog> logCaptor = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository).save(logCaptor.capture());
-    assertThat(logCaptor.getValue().getActorId()).isEqualTo(adminId);
-    assertThat(logCaptor.getValue().getAction()).isEqualTo("CREATE_RESTAURANT");
-    assertThat(logCaptor.getValue().getTargetType()).isEqualTo("RESTAURANT");
   }
 
   @Test
@@ -297,10 +287,6 @@ class RestaurantServiceTest {
     assertThat(response.getName()).isEqualTo("New Name");
     assertThat(existing.getName()).isEqualTo("New Name");
     assertThat(existing.getAddress()).isEqualTo("Old Address");
-    verify(moderationLogRepository)
-        .save(
-            org.mockito.ArgumentMatchers.argThat(
-                log -> "UPDATE_RESTAURANT".equals(log.getAction())));
   }
 
   @Test
@@ -320,7 +306,7 @@ class RestaurantServiceTest {
   }
 
   @Test
-  void deleteRestaurant_softDeletesAndRecordsModerationLog() {
+  void deleteRestaurant_softDeletes() {
     UUID adminId = UUID.randomUUID();
     UUID restaurantId = UUID.randomUUID();
     Restaurant existing =
@@ -332,12 +318,6 @@ class RestaurantServiceTest {
     restaurantService.deleteRestaurant(adminId, restaurantId);
 
     assertThat(existing.getDeletedAt()).isNotNull();
-    verify(moderationLogRepository)
-        .save(
-            org.mockito.ArgumentMatchers.argThat(
-                log ->
-                    "DELETE_RESTAURANT".equals(log.getAction())
-                        && adminId.equals(log.getActorId())));
   }
 
   @Test
@@ -395,7 +375,6 @@ class RestaurantServiceTest {
         .hasMessage("One or more dishes are not found or are not approved.");
 
     verify(restaurantRepository, never()).saveAndFlush(any(Restaurant.class));
-    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
   }
 
   @Test

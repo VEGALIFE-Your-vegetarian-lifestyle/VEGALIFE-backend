@@ -13,10 +13,8 @@ import com.vegalife.dto.response.admin.AdminRestaurantResponse;
 import com.vegalife.dto.response.restaurant.RestaurantDishResponse;
 import com.vegalife.dto.response.restaurant.RestaurantResponse;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.restaurant.Restaurant;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.restaurant.RestaurantRepository;
 import com.vegalife.repository.restaurant.RestaurantRepository.RestaurantDishMatch;
@@ -71,7 +69,6 @@ public class RestaurantService {
   private final RestaurantRepository restaurantRepository;
   private final RestaurantMapper restaurantMapper;
   private final AdminRestaurantMapper adminRestaurantMapper;
-  private final ModerationLogRepository moderationLogRepository;
   private final DishRepository dishRepository;
   private final ObjectMapper objectMapper;
 
@@ -238,7 +235,6 @@ public class RestaurantService {
             .build();
 
     Restaurant saved = restaurantRepository.saveAndFlush(restaurant);
-    recordModeration(adminId, "CREATE_RESTAURANT", saved.getId());
     AdminRestaurantResponse response = adminRestaurantMapper.toResponse(saved);
     response.setDishes(toDishResponses(saved.getDishes()));
     return response;
@@ -291,7 +287,6 @@ public class RestaurantService {
     }
 
     Restaurant saved = restaurantRepository.saveAndFlush(restaurant);
-    recordModeration(adminId, "UPDATE_RESTAURANT", saved.getId());
     AdminRestaurantResponse response = adminRestaurantMapper.toResponse(saved);
     response.setDishes(toDishResponses(saved.getDishes()));
     return response;
@@ -314,8 +309,7 @@ public class RestaurantService {
   public void deleteRestaurant(UUID adminId, UUID restaurantId) {
     Restaurant restaurant = findActiveRestaurant(restaurantId);
     restaurant.setDeletedAt(Instant.now());
-    Restaurant saved = restaurantRepository.saveAndFlush(restaurant);
-    recordModeration(adminId, "DELETE_RESTAURANT", saved.getId());
+    restaurantRepository.saveAndFlush(restaurant);
   }
 
   private Restaurant findActiveRestaurant(UUID restaurantId) {
@@ -323,17 +317,6 @@ public class RestaurantService {
         .findById(restaurantId)
         .filter(r -> r.getDeletedAt() == null)
         .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found"));
-  }
-
-  /** BR-ADMIN-002: every admin create/update/delete is recorded in the moderation log. */
-  private void recordModeration(UUID adminId, String action, UUID targetId) {
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action(action)
-            .targetType("RESTAURANT")
-            .targetId(targetId)
-            .build());
   }
 
   /**

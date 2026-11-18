@@ -16,10 +16,8 @@ import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.AdminService;
@@ -56,8 +54,6 @@ class AdminServiceTest {
   @Mock private CommentRepository commentRepository;
 
   @Mock private AdminCommentMapper adminCommentMapper;
-
-  @Mock private ModerationLogRepository moderationLogRepository;
 
   @InjectMocks private AdminService adminService;
 
@@ -437,23 +433,15 @@ class AdminServiceTest {
   }
 
   @Test
-  void moderateComment_softDeletesAndWritesModerationLogWithReason() {
+  void moderateComment_softDeletesTheComment() {
     UUID adminId = UUID.randomUUID();
     when(commentRepository.findByIdAndDeletedAtIsNull(comment.getId()))
         .thenReturn(java.util.Optional.of(comment));
     when(commentRepository.saveAndFlush(comment)).thenReturn(comment);
 
-    adminService.moderateComment(adminId, comment.getId(), "Violates community guidelines");
+    adminService.moderateComment(adminId, comment.getId());
 
     assertThat(comment.getDeletedAt()).isNotNull();
-    org.mockito.ArgumentCaptor<ModerationLog> logCaptor =
-        org.mockito.ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository).save(logCaptor.capture());
-    assertThat(logCaptor.getValue().getActorId()).isEqualTo(adminId);
-    assertThat(logCaptor.getValue().getAction()).isEqualTo("MODERATE_COMMENT");
-    assertThat(logCaptor.getValue().getTargetType()).isEqualTo("COMMENT");
-    assertThat(logCaptor.getValue().getTargetId()).isEqualTo(comment.getId());
-    assertThat(logCaptor.getValue().getReason()).isEqualTo("Violates community guidelines");
   }
 
   @Test
@@ -462,11 +450,10 @@ class AdminServiceTest {
     when(commentRepository.findByIdAndDeletedAtIsNull(commentId))
         .thenReturn(java.util.Optional.empty());
 
-    assertThatThrownBy(() -> adminService.moderateComment(UUID.randomUUID(), commentId, "Spam"))
+    assertThatThrownBy(() -> adminService.moderateComment(UUID.randomUUID(), commentId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Comment not found");
 
     verify(commentRepository, never()).saveAndFlush(any());
-    verify(moderationLogRepository, never()).save(any());
   }
 }

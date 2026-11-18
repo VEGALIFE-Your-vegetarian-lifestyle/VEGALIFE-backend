@@ -8,10 +8,8 @@ import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.CommentSpecifications;
 import com.vegalife.repository.user.UserRepository;
@@ -46,7 +44,6 @@ public class AdminService {
   private final JwtTokenService jwtTokenService;
   private final CommentRepository commentRepository;
   private final AdminCommentMapper adminCommentMapper;
-  private final ModerationLogRepository moderationLogRepository;
 
   @Transactional(readOnly = true)
   public PageResponse<UserListResponse> listUsers(UserListRequest request) {
@@ -118,12 +115,12 @@ public class AdminService {
   }
 
   /**
-   * BR-ADMIN-003/BR-ADMIN-002: only an Administrator may moderate a comment, and every moderation
-   * action is soft-delete plus a required reason recorded on the moderation log (issue #6). Admin
-   * editing and bulk moderation are non-goals — this is the only moderation action.
+   * BR-ADMIN-003: only an Administrator may moderate a comment. The action is a soft-delete, so the
+   * thread keeps its shape and the author retains no edit path. Admin editing and bulk moderation
+   * are non-goals — this is the only moderation action.
    */
   @Transactional
-  public void moderateComment(UUID adminId, UUID commentId, String reason) {
+  public void moderateComment(UUID adminId, UUID commentId) {
     Comment comment =
         commentRepository
             .findByIdAndDeletedAtIsNull(commentId)
@@ -131,15 +128,6 @@ public class AdminService {
 
     comment.setDeletedAt(Instant.now());
     Comment saved = commentRepository.saveAndFlush(comment);
-
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action("MODERATE_COMMENT")
-            .targetType("COMMENT")
-            .targetId(saved.getId())
-            .reason(reason)
-            .build());
 
     log.info("Comment {} moderated by admin {}", saved.getId(), adminId);
   }

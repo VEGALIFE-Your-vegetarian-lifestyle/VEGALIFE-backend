@@ -86,10 +86,10 @@ public class Recipe {
 
   /**
    * The admin-supplied reason for the most recent rejection, cleared when an admin approves the
-   * recipe again. Current state, not history — {@code moderation_log} keeps the audit trail.
+   * recipe again. Current state only: no earlier reason is retained anywhere.
    *
-   * <p>Nullable because the reason is optional and because every row rejected before the column
-   * existed has its reason recorded nowhere but the log.
+   * <p>Nullable because the reason is optional, and because rows rejected before the column existed
+   * never had one recorded.
    */
   @Column(name = "rejection_reason", columnDefinition = "TEXT")
   private String rejectionReason;

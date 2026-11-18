@@ -15,7 +15,6 @@ import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
@@ -83,8 +82,6 @@ class AdminNameCrudIntegrationTest {
 
   @Autowired private MediaRepository mediaRepository;
 
-  @Autowired private ModerationLogRepository moderationLogRepository;
-
   @Autowired private RecipeRepository recipeRepository;
 
   @Autowired private RecipeIngredientRepository recipeIngredientRepository;
@@ -101,7 +98,6 @@ class AdminNameCrudIntegrationTest {
 
   @BeforeEach
   void setUp() {
-    moderationLogRepository.deleteAll();
     recipeIngredientRepository.deleteAll();
     recipeRepository.deleteAll();
     dishRepository.deleteAll();
@@ -279,9 +275,7 @@ class AdminNameCrudIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/dishes/" + dish.getId() + "/approve")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"reason\":\"real dish\"}"))
+                .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.moderationStatus").value("APPROVED"));
 
@@ -296,9 +290,7 @@ class AdminNameCrudIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/dishes/" + dish.getId() + "/reject")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"reason\":\"not vegan\"}"))
+                .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.moderationStatus").value("REJECTED"));
   }

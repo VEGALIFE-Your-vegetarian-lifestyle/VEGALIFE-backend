@@ -18,7 +18,6 @@ import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
@@ -26,7 +25,6 @@ import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
@@ -48,7 +46,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -63,8 +60,6 @@ import org.springframework.data.jpa.domain.Specification;
 class AdminPostServiceTest {
 
   @Mock private PostRepository postRepository;
-
-  @Mock private ModerationLogRepository moderationLogRepository;
 
   @Mock private AdminPostMapper adminPostMapper;
 
@@ -258,7 +253,7 @@ class AdminPostServiceTest {
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId())).thenReturn(List.of());
 
-    adminPostService.approvePost(adminId, post.getId(), "Vegetarian recipe, filter false positive");
+    adminPostService.approvePost(adminId, post.getId());
 
     assertThat(post.getStatus()).isEqualTo(PostStatus.published);
     assertThat(post.getPublishedAt()).isNotNull();
@@ -267,13 +262,6 @@ class AdminPostServiceTest {
     assertThat(post.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
     assertThat(post.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_FAILED");
     assertThat(post.getFlagDetail().path("score").asDouble()).isEqualTo(0.21);
-
-    ModerationLog entry = lastPostLog();
-    assertThat(entry.getActorId()).isEqualTo(adminId);
-    assertThat(entry.getAction()).isEqualTo("APPROVE_POST");
-    assertThat(entry.getTargetType()).isEqualTo("POST");
-    assertThat(entry.getTargetId()).isEqualTo(post.getId());
-    assertThat(entry.getReason()).isEqualTo("Vegetarian recipe, filter false positive");
   }
 
   @Test
@@ -301,7 +289,7 @@ class AdminPostServiceTest {
             .build();
     stubPostWithRecipe(recipe, ingredient);
 
-    adminPostService.approvePost(adminId, post.getId(), null);
+    adminPostService.approvePost(adminId, post.getId());
 
     // Approving the post is the reviewer saying the names it introduced are acceptable.
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
@@ -339,7 +327,7 @@ class AdminPostServiceTest {
             .build();
     stubPostWithRecipe(recipe, approvedIngredient);
 
-    adminPostService.approvePost(adminId, post.getId(), null);
+    adminPostService.approvePost(adminId, post.getId());
 
     // A rejected name is a permanent block (BR-DISH-001); approving a post that mentions it must
     // not undo a decision someone already made.
@@ -392,9 +380,6 @@ class AdminPostServiceTest {
     assertThat(dish.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
     assertThat(ingredient.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
 
-    ModerationLog entry = lastPostLog();
-    assertThat(entry.getAction()).isEqualTo("REJECT_POST");
-    assertThat(entry.getReason()).isEqualTo("not vegan");
     verify(recipeRepository, never()).delete(any(Recipe.class));
   }
 
@@ -409,10 +394,10 @@ class AdminPostServiceTest {
     adminPostService.rejectPost(adminId, post.getId(), "not vegan");
     assertThat(post.getRejectionReason()).isEqualTo("not vegan");
 
-    adminPostService.approvePost(adminId, post.getId(), "looks fine after edit");
+    adminPostService.approvePost(adminId, post.getId());
 
     // Current state, not history: a reason left in place would describe a decision that no longer
-    // holds. The audit trail keeps both decisions in moderation_log.
+    // holds.
     assertThat(post.getRejectionReason()).isNull();
   }
 
@@ -445,9 +430,9 @@ class AdminPostServiceTest {
         .thenReturn(List.of(alreadyApproved));
     when(recipeIngredientRepository.findByRecipeId(alreadyApproved.getId())).thenReturn(List.of());
 
-    adminPostService.approvePost(adminId, post.getId(), null);
+    adminPostService.approvePost(adminId, post.getId());
 
-    // Not rewritten: an already-APPROVED name gets no work and no log entry (approveIfPending).
+    // Not rewritten: an already-APPROVED name gets no work (isAwaitingReview).
     assertThat(alreadyApproved.getRejectionReason())
         .isEqualTo("stale reason from an earlier refusal");
     verify(recipeRepository, never()).save(any(Recipe.class));
@@ -495,11 +480,10 @@ class AdminPostServiceTest {
     post.setCategories(Set.of());
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
-    assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId(), null))
+    assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId()))
         .isInstanceOf(ValidationException.class)
         .hasMessage("At least one category is required to publish a post");
 
-    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
     verify(postRepository, never()).saveAndFlush(any(Post.class));
   }
 
@@ -509,7 +493,7 @@ class AdminPostServiceTest {
     post.setStatus(PostStatus.drafted);
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
-    assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId(), null))
+    assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId()))
         .isInstanceOf(ValidationException.class)
         .hasMessageContaining("has not been submitted");
   }
@@ -531,7 +515,7 @@ class AdminPostServiceTest {
     UUID postId = UUID.randomUUID();
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> adminPostService.approvePost(adminId, postId, null))
+    assertThatThrownBy(() -> adminPostService.approvePost(adminId, postId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
   }
@@ -564,16 +548,6 @@ class AdminPostServiceTest {
     lenient()
         .when(ingredientRepository.findById(ingredient.getId()))
         .thenReturn(Optional.of(ingredient));
-  }
-
-  /** The component log entries are written after the post one, so read them from the end. */
-  private ModerationLog lastPostLog() {
-    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
-    return captor.getAllValues().stream()
-        .filter(entry -> "POST".equals(entry.getTargetType()))
-        .findFirst()
-        .orElseThrow(() -> new AssertionError("no POST moderation log was written"));
   }
 
   @Test

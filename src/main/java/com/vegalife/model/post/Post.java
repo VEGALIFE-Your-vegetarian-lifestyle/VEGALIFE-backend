@@ -107,11 +107,11 @@ public class Post {
 
   /**
    * The admin-supplied reason for the most recent rejection, cleared when an admin approves the
-   * post again. Current state, not history — {@code moderation_log} keeps the audit trail.
+   * post again. Current state only: no earlier reason is retained anywhere.
    *
    * <p>Only a human decision writes this; the content filter records its verdict in {@link #flag}
-   * instead. Nullable because the reason is optional and because every row rejected before the
-   * column existed has its reason recorded nowhere but the log.
+   * instead. Nullable because the reason is optional, and because rows rejected before the column
+   * existed never had one recorded.
    */
   @Column(name = "rejection_reason", columnDefinition = "TEXT")
   private String rejectionReason;

@@ -12,7 +12,6 @@ import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
@@ -20,7 +19,6 @@ import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
@@ -33,7 +31,6 @@ import com.vegalife.service.token.JwtTokenService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -94,8 +91,6 @@ class ModeratePostIntegrationTest {
 
   @Autowired private MediaRepository mediaRepository;
 
-  @Autowired private ModerationLogRepository moderationLogRepository;
-
   @Autowired private RecipeRepository recipeRepository;
 
   @Autowired private RecipeIngredientRepository recipeIngredientRepository;
@@ -114,7 +109,6 @@ class ModeratePostIntegrationTest {
 
   @BeforeEach
   void setUp() {
-    moderationLogRepository.deleteAll();
     recipeIngredientRepository.deleteAll();
     recipeRepository.deleteAll();
     dishRepository.deleteAll();
@@ -137,7 +131,7 @@ class ModeratePostIntegrationTest {
         createPost(
             member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
 
-    approve(post, "{\"reason\":\"Vegan recipe false positive\"}")
+    approve(post)
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Post approved successfully"))
@@ -149,11 +143,6 @@ class ModeratePostIntegrationTest {
     assertThat(reloaded.getPublishedAt()).isNotNull();
     // Published + FILTER_FAILED is how the row says a human overrode the filter (ADR-025).
     assertThat(reloaded.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
-
-    ModerationLog entry = singlePostLog();
-    assertThat(entry.getActorId()).isEqualTo(admin.getId());
-    assertThat(entry.getAction()).isEqualTo("APPROVE_POST");
-    assertThat(entry.getReason()).isEqualTo("Vegan recipe false positive");
   }
 
   @Test
@@ -188,7 +177,7 @@ class ModeratePostIntegrationTest {
     Recipe recipe = saveRecipe(post, dish, ModerationStatus.PENDING);
     linkIngredient(recipe, ingredient);
 
-    approve(post, "{}").andExpect(status().isOk());
+    approve(post).andExpect(status().isOk());
 
     assertThat(recipeRepository.findById(recipe.getId()).orElseThrow().getModerationStatus())
         .isEqualTo(ModerationStatus.APPROVED);
@@ -207,7 +196,7 @@ class ModeratePostIntegrationTest {
     Dish rejected = saveDish("món bị từ chối", ModerationStatus.REJECTED);
     Recipe recipe = saveRecipe(post, rejected, ModerationStatus.PENDING);
 
-    approve(post, "{}").andExpect(status().isOk());
+    approve(post).andExpect(status().isOk());
 
     // A rejected name is a permanent block (BR-DISH-001). Approving a post that mentions it must
     // not quietly undo a decision another admin already made.
@@ -240,7 +229,7 @@ class ModeratePostIntegrationTest {
     assertThat(pendingIngredient.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
     // Rejection never deletes: existing references must keep resolving.
     assertThat(dishRepository.findById(pendingDish.getId())).isPresent();
-    assertThat(singlePostLog().getAction()).isEqualTo("REJECT_POST");
+    assertThat(reloaded.getRejectionReason()).isEqualTo("not vegan");
   }
 
   @Test
@@ -306,22 +295,23 @@ class ModeratePostIntegrationTest {
   }
 
   @Test
-  void approve_withoutCategory_returns400AndNoLog() throws Exception {
+  void approve_withoutCategory_returns400AndPersistsNothing() throws Exception {
     Post post = createPost(member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>());
 
-    approve(post, "{\"reason\":\"trying\"}")
+    approve(post)
         .andExpect(status().isBadRequest())
         .andExpect(
             jsonPath("$.message").value("At least one category is required to publish a post"));
 
-    assertThat(moderationLogRepository.findAll()).isEmpty();
+    assertThat(postRepository.findById(post.getId()).orElseThrow().getStatus())
+        .isEqualTo(PostStatus.processing);
   }
 
   @Test
   void approve_draftedPost_returns400() throws Exception {
     Post post = createPost(member, PostStatus.drafted, null, new HashSet<>(Set.of(category)));
 
-    approve(post, "{}").andExpect(status().isBadRequest());
+    approve(post).andExpect(status().isBadRequest());
   }
 
   @Test
@@ -343,13 +333,12 @@ class ModeratePostIntegrationTest {
         .perform(
             post("/api/admin/posts/00000000-0000-0000-0000-000000000000/approve")
                 .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
+                .contentType(MediaType.APPLICATION_JSON))
         .andExpect(status().isNotFound());
   }
 
   @Test
-  void approve_withoutBody_succeedsBecauseReasonIsOptional() throws Exception {
+  void approve_withoutBody_succeedsBecauseApprovalTakesNoPayload() throws Exception {
     Post post =
         createPost(
             member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
@@ -364,12 +353,20 @@ class ModeratePostIntegrationTest {
   }
 
   @Test
-  void approve_withReasonTooLong_returns400() throws Exception {
+  void approve_ignoresAReasonSentByAnOldClient() throws Exception {
     Post post =
         createPost(
             member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
 
-    approve(post, "{\"reason\":\"" + "x".repeat(1001) + "\"}").andExpect(status().isBadRequest());
+    // Spring Boot disables FAIL_ON_UNKNOWN_PROPERTIES, so a stale client posting a body is not
+    // broken — the field is simply dropped with the audit trail that used to store it.
+    mockMvc
+        .perform(
+            post("/api/admin/posts/" + post.getId() + "/approve")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"" + "x".repeat(1001) + "\"}"))
+        .andExpect(status().isOk());
   }
 
   @Test
@@ -399,11 +396,11 @@ class ModeratePostIntegrationTest {
         .perform(
             post("/api/admin/posts/" + post.getId() + "/approve")
                 .header("Authorization", "Bearer " + userToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
+                .contentType(MediaType.APPLICATION_JSON))
         .andExpect(status().isForbidden());
 
-    assertThat(moderationLogRepository.findAll()).isEmpty();
+    assertThat(postRepository.findById(post.getId()).orElseThrow().getStatus())
+        .isEqualTo(PostStatus.processing);
   }
 
   @Test
@@ -415,27 +412,15 @@ class ModeratePostIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/posts/" + post.getId() + "/approve")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
+                .contentType(MediaType.APPLICATION_JSON))
         .andExpect(status().isUnauthorized());
   }
 
-  private ResultActions approve(Post post, String body) throws Exception {
+  private ResultActions approve(Post post) throws Exception {
     return mockMvc.perform(
         post("/api/admin/posts/" + post.getId() + "/approve")
             .header("Authorization", "Bearer " + adminToken)
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(body));
-  }
-
-  /** The post-level log entry, ignoring the per-component ones written alongside it. */
-  private ModerationLog singlePostLog() {
-    List<ModerationLog> postLogs =
-        moderationLogRepository.findAll().stream()
-            .filter(entry -> "POST".equals(entry.getTargetType()))
-            .toList();
-    assertThat(postLogs).hasSize(1);
-    return postLogs.get(0);
+            .contentType(MediaType.APPLICATION_JSON));
   }
 
   private User createUser(String displayName, String email, UserRole role) {

@@ -30,7 +30,6 @@ import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserProfile;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
@@ -81,8 +80,6 @@ class PostServiceTest {
   @Mock private MediaRepository mediaRepository;
 
   @Mock private RecipeRepository recipeRepository;
-
-  @Mock private ModerationLogRepository moderationLogRepository;
 
   @Mock private OutboundMessageRepository outboundMessageRepository;
 
@@ -808,7 +805,7 @@ class PostServiceTest {
   }
 
   @Test
-  void updatePost_adminEditingAnotherUsersPostIsRecorded() {
+  void updatePost_adminMayEditAnotherUsersPost() {
     UUID postId = UUID.randomUUID();
     UUID adminId = UUID.randomUUID();
     Post existing = ownedPost(postId, PostStatus.drafted);
@@ -822,17 +819,10 @@ class PostServiceTest {
         PostUpdateRequest.builder().title("Moderated").content("Body").build());
 
     assertThat(existing.getTitle()).isEqualTo("Moderated");
-    verify(moderationLogRepository)
-        .save(
-            org.mockito.ArgumentMatchers.argThat(
-                log ->
-                    adminId.equals(log.getActorId())
-                        && postId.equals(log.getTargetId())
-                        && "EDIT_POST".equals(log.getAction())));
   }
 
   @Test
-  void updatePost_adminEditingOwnPostIsNotLogged() {
+  void updatePost_ownerEditsOwnPost() {
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, PostStatus.drafted);
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.of(existing));
@@ -841,7 +831,7 @@ class PostServiceTest {
     postService.updatePost(
         userId, true, postId, PostUpdateRequest.builder().title("Mine").content("Body").build());
 
-    verify(moderationLogRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    assertThat(existing.getTitle()).isEqualTo("Mine");
   }
 
   @Test
@@ -855,7 +845,6 @@ class PostServiceTest {
     postService.deletePost(userId, false, postId);
 
     assertThat(existing.getDeletedAt()).isNotNull();
-    verify(moderationLogRepository, never()).save(org.mockito.ArgumentMatchers.any());
   }
 
   @Test
@@ -871,7 +860,7 @@ class PostServiceTest {
   }
 
   @Test
-  void deletePost_adminDeletingAnotherUsersPostIsRecorded() {
+  void deletePost_adminMayDeleteAnotherUsersPost() {
     UUID postId = UUID.randomUUID();
     UUID adminId = UUID.randomUUID();
     Post existing = ownedPost(postId, PostStatus.published);
@@ -881,13 +870,6 @@ class PostServiceTest {
     postService.deletePost(adminId, true, postId);
 
     assertThat(existing.getDeletedAt()).isNotNull();
-    verify(moderationLogRepository)
-        .save(
-            org.mockito.ArgumentMatchers.argThat(
-                log ->
-                    adminId.equals(log.getActorId())
-                        && postId.equals(log.getTargetId())
-                        && "DELETE_POST".equals(log.getAction())));
   }
 
   @Test

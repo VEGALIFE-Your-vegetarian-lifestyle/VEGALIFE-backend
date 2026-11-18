@@ -23,13 +23,12 @@ import java.util.UUID;
  *       moment an administrator retunes the filter.
  *   <li>{@code SIMILAR_CONTENT} — the post it resembled, how similar (cosine similarity in [0,1]),
  *       and the duplicate threshold that was applied.
- *   <li>{@code FILTER_SKIPPED} — a cause code only. The prose belongs in {@code moderation_log},
- *       which is append-only and already records it; a free-text copy on the row was what used to
- *       be truncated.
+ *   <li>{@code FILTER_SKIPPED} — a cause code only. The provider prose goes to the application log
+ *       and is never stored: a free-text copy on the row was what used to be truncated.
  * </ul>
  *
- * <p>Scores are rounded to four decimals so a snapshot reads the same as the audit log and does not
- * carry floating-point noise into the API.
+ * <p>Scores are rounded to four decimals so a snapshot reads the same in every response and does
+ * not carry floating-point noise into the API.
  */
 public final class PostFlagDetail {
 
