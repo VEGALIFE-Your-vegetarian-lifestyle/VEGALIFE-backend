@@ -47,8 +47,8 @@ class RecipeRecommendationServiceTest {
 
   @Test
   void recommendFor_excludesRecipeWhoseIngredientNameExactlyMatchesAllergy() {
-    Recipe safe = recipe("Safe Pad Thai", 0.9, Instant.parse("2026-01-02T00:00:00Z"));
-    Recipe unsafe = recipe("Classic Pad Thai", 0.99, Instant.parse("2026-01-03T00:00:00Z"));
+    Recipe safe = recipe("Safe Pad Thai", Instant.parse("2026-01-02T00:00:00Z"));
+    Recipe unsafe = recipe("Classic Pad Thai", Instant.parse("2026-01-03T00:00:00Z"));
     givenProfile(List.of("peanut"));
     when(recipeRepository.findApprovedByDishIdIn(any())).thenReturn(List.of(safe, unsafe));
     when(recipeIngredientRepository.findIngredientNamesByRecipeIds(any()))
@@ -62,9 +62,9 @@ class RecipeRecommendationServiceTest {
 
   @Test
   void recommendFor_allergyMatchIsCaseAndWhitespaceInsensitiveButNotSubstring() {
-    Recipe exact = recipe("Exact", 0.5, Instant.parse("2026-01-01T00:00:00Z"));
+    Recipe exact = recipe("Exact", Instant.parse("2026-01-01T00:00:00Z"));
     // "Peanut butter" must NOT match the stored "peanut": matching is exact, not substring.
-    Recipe substring = recipe("Substring", 0.6, Instant.parse("2026-01-01T00:00:00Z"));
+    Recipe substring = recipe("Substring", Instant.parse("2026-01-01T00:00:00Z"));
     givenProfile(List.of("  PeAnUt "));
     when(recipeRepository.findApprovedByDishIdIn(any())).thenReturn(List.of(exact, substring));
     when(recipeIngredientRepository.findIngredientNamesByRecipeIds(any()))
@@ -77,8 +77,8 @@ class RecipeRecommendationServiceTest {
 
   @Test
   void recommendFor_returnsNothingForADishWhoseEveryRecipeIsAllergenic() {
-    Recipe one = recipe("One", 0.5, Instant.parse("2026-01-01T00:00:00Z"));
-    Recipe two = recipe("Two", 0.6, Instant.parse("2026-01-01T00:00:00Z"));
+    Recipe one = recipe("One", Instant.parse("2026-01-01T00:00:00Z"));
+    Recipe two = recipe("Two", Instant.parse("2026-01-01T00:00:00Z"));
     givenProfile(List.of("peanut"));
     when(recipeRepository.findApprovedByDishIdIn(any())).thenReturn(List.of(one, two));
     when(recipeIngredientRepository.findIngredientNamesByRecipeIds(any()))
@@ -90,32 +90,25 @@ class RecipeRecommendationServiceTest {
   }
 
   @Test
-  void recommendFor_ranksByScoreDescNullsLastThenCreatedAtDesc() {
-    Recipe unscored =
-        Recipe.builder()
-            .id(UUID.randomUUID())
-            .name("Unscored")
-            .score(null)
-            .createdAt(Instant.parse("2026-01-09T00:00:00Z"))
-            .moderationStatus(ModerationStatus.APPROVED)
-            .dish(dish())
-            .build();
-    Recipe high = recipe("High", 0.9, Instant.parse("2026-01-01T00:00:00Z"));
-    Recipe older = recipe("Older", 0.9, Instant.parse("2026-01-02T00:00:00Z"));
+  void recommendFor_ranksByCreatedAtDescThenId() {
+    Recipe oldest = recipe("Oldest", Instant.parse("2026-01-01T00:00:00Z"));
+    Recipe newest = recipe("Newest", Instant.parse("2026-01-09T00:00:00Z"));
+    Recipe middle = recipe("Middle", Instant.parse("2026-01-05T00:00:00Z"));
     givenProfile(List.of());
-    when(recipeRepository.findApprovedByDishIdIn(any())).thenReturn(List.of(unscored, high, older));
+    when(recipeRepository.findApprovedByDishIdIn(any()))
+        .thenReturn(List.of(oldest, newest, middle));
 
     Map<UUID, List<Recipe>> result = service.recommendFor(List.of(dishId), userId, null, 3);
 
-    // Same score -> newer first; an unscored recipe sorts last even though it is the newest.
-    assertThat(result.get(dishId)).containsExactly(older, high, unscored);
+    // Recipe bodies are not scored (ADR-026), so recency is the only ranking signal.
+    assertThat(result.get(dishId)).containsExactly(newest, middle, oldest);
   }
 
   @Test
   void recommendFor_capsAtRecipesPerDish() {
-    Recipe a = recipe("A", 0.9, Instant.parse("2026-01-03T00:00:00Z"));
-    Recipe b = recipe("B", 0.8, Instant.parse("2026-01-02T00:00:00Z"));
-    Recipe c = recipe("C", 0.7, Instant.parse("2026-01-01T00:00:00Z"));
+    Recipe a = recipe("A", Instant.parse("2026-01-03T00:00:00Z"));
+    Recipe b = recipe("B", Instant.parse("2026-01-02T00:00:00Z"));
+    Recipe c = recipe("C", Instant.parse("2026-01-01T00:00:00Z"));
     givenProfile(List.of());
     when(recipeRepository.findApprovedByDishIdIn(any())).thenReturn(List.of(a, b, c));
 
@@ -126,9 +119,9 @@ class RecipeRecommendationServiceTest {
 
   @Test
   void recommendFor_unknownNutritionFailsACalorieCeiling() {
-    Recipe known = recipe("Known", 0.5, Instant.parse("2026-01-02T00:00:00Z"));
+    Recipe known = recipe("Known", Instant.parse("2026-01-02T00:00:00Z"));
     known.setCalories(new BigDecimal("400"));
-    Recipe unknown = recipe("Unknown", 0.6, Instant.parse("2026-01-01T00:00:00Z"));
+    Recipe unknown = recipe("Unknown", Instant.parse("2026-01-01T00:00:00Z"));
     unknown.setCalories(null);
     givenProfile(List.of());
     when(recipeRepository.findApprovedByDishIdIn(any())).thenReturn(List.of(known, unknown));
@@ -156,11 +149,10 @@ class RecipeRecommendationServiceTest {
     when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
   }
 
-  private Recipe recipe(String name, Double score, Instant createdAt) {
+  private Recipe recipe(String name, Instant createdAt) {
     return Recipe.builder()
         .id(UUID.randomUUID())
         .name(name)
-        .score(score)
         .createdAt(createdAt)
         .moderationStatus(ModerationStatus.APPROVED)
         .dish(dish())

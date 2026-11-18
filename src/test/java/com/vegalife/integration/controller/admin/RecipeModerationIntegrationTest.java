@@ -291,10 +291,9 @@ class RecipeModerationIntegrationTest {
   }
 
   @Test
-  void adminUpdate_changesTextButKeepsStateAndScore() throws Exception {
+  void adminUpdate_changesTextButKeepsState() throws Exception {
     UUID recipeId = createRecipe();
     Recipe recipe = recipeRepository.findById(recipeId).orElseThrow();
-    recipe.setScore(0.31);
     recipe.setModerationStatus(ModerationStatus.PENDING);
     recipeRepository.saveAndFlush(recipe);
 
@@ -309,8 +308,8 @@ class RecipeModerationIntegrationTest {
         .andExpect(jsonPath("$.data.servings").value(4))
         // The admin is the approver, so an edit is not a re-review...
         .andExpect(jsonPath("$.data.moderationStatus").value("PENDING"))
-        // ...and the score still records why it was queued.
-        .andExpect(jsonPath("$.data.score").value(0.31));
+        // ...and no score is reported, because recipe bodies are not scored (ADR-026).
+        .andExpect(jsonPath("$.data.score").doesNotExist());
   }
 
   @Test

@@ -53,7 +53,7 @@ public class AdminPostDetailResponse {
    */
   private Double contentScore;
 
-  /** Recipe bodies attached to this post, with their own score. Empty when none is attached. */
+  /** Recipe bodies attached to this post. Empty when none is attached. */
   private List<ComponentSummary> recipes;
 
   /**
@@ -68,10 +68,8 @@ public class AdminPostDetailResponse {
   private String email;
 
   /**
-   * One scored or gated component.
-   *
-   * @param score relevance score, null for names (never scored) and for components that failed to
-   *     score
+   * One component of a post: a recipe body it attaches, or a dish/ingredient name it references.
+   * None of them carries a score — only the post body is scored (ADR-026).
    */
   @Data
   @Builder
@@ -86,9 +84,7 @@ public class AdminPostDetailResponse {
 
     private String name;
 
-    /** {@code PENDING}, {@code APPROVED} or {@code REJECTED}; null for a recipe scored only. */
+    /** {@code PENDING}, {@code APPROVED} or {@code REJECTED}. */
     private String moderationStatus;
-
-    private Double score;
   }
 }

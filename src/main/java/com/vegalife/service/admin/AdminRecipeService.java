@@ -52,10 +52,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminRecipeService {
 
   private static final Set<String> SORTABLE_PROPERTIES =
-      Set.of("createdAt", "updatedAt", "name", "moderationStatus", "score");
+      Set.of("createdAt", "updatedAt", "name", "moderationStatus");
 
   private static final String SORTABLE_PROPERTIES_MESSAGE =
-      "Sort property must be one of: createdAt, updatedAt, name, moderationStatus, score";
+      "Sort property must be one of: createdAt, updatedAt, name, moderationStatus";
 
   private final RecipeRepository recipeRepository;
   private final DishRepository dishRepository;
@@ -109,9 +109,8 @@ public class AdminRecipeService {
   /**
    * Partial update; an omitted field keeps its current value.
    *
-   * <p>Neither {@code moderationStatus} nor {@code score} changes. The state is untouched because
-   * the admin is the approver, and the score is left as measured at submission — it records why the
-   * row was queued, and recomputing it here would quietly rewrite that reason.
+   * <p>{@code moderationStatus} is untouched because the admin is the approver. Recipe bodies are
+   * not scored (ADR-026), so there is no score to preserve or recompute.
    */
   @Transactional
   public AdminRecipeListResponse updateRecipe(

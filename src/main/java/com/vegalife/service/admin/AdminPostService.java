@@ -94,8 +94,8 @@ public class AdminPostService {
   }
 
   /**
-   * Admin detail view for one post (ADR-016): the post, its scores, and the state of every dish and
-   * ingredient name it references.
+   * Admin detail view for one post (ADR-016): the post, its content score, and the state of every
+   * dish and ingredient name it references.
    *
    * <p>Component information is queried here rather than stored on the post. Storing it would mean
    * a snapshot that goes stale as soon as another post approves the same name, and the only
@@ -118,7 +118,6 @@ public class AdminPostService {
               .type("RECIPE")
               .name(recipe.getName())
               .moderationStatus(recipe.getModerationStatus().name())
-              .score(recipe.getScore())
               .build());
     }
 

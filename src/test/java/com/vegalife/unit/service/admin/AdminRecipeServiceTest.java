@@ -192,8 +192,7 @@ class AdminRecipeServiceTest {
 
     assertThatThrownBy(() -> adminRecipeService.listRecipes(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage(
-            "Sort property must be one of: createdAt, updatedAt, name, moderationStatus, score");
+        .hasMessage("Sort property must be one of: createdAt, updatedAt, name, moderationStatus");
   }
 
   @Test
@@ -323,9 +322,8 @@ class AdminRecipeServiceTest {
   }
 
   @Test
-  void updateRecipe_changesFieldsButLeavesModerationStateAndScore() {
+  void updateRecipe_changesFieldsButLeavesModerationState() {
     recipe.setModerationStatus(ModerationStatus.PENDING);
-    recipe.setScore(0.42);
     when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
         .thenReturn(Optional.of(recipe));
     when(recipeRepository.saveAndFlush(recipe)).thenReturn(recipe);
@@ -345,10 +343,8 @@ class AdminRecipeServiceTest {
     assertThat(recipe.getInstructions()).isEqualTo("Simmer longer");
     assertThat(recipe.getServings()).isEqualTo(6);
     assertThat(recipe.getDifficulty()).isEqualTo(Difficulty.HARD);
-    // The admin is the approver, so an edit is not a reason to re-queue the recipe...
+    // The admin is the approver, so an edit is not a reason to re-queue the recipe.
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.PENDING);
-    // ...and the score records why it was queued, so editing must not rewrite it.
-    assertThat(recipe.getScore()).isEqualTo(0.42);
     // An omitted field keeps its value.
     assertThat(recipe.getDescription()).isNull();
   }

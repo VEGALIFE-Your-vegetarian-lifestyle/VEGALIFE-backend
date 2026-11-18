@@ -20,8 +20,7 @@ import java.util.List;
  * <p><strong>Completeness is all-or-nothing.</strong> If any line's ingredient has an unresolved
  * unit or missing nutrition, the result is {@code null} rather than the sum of the lines that did
  * resolve. A partial sum would be a plausible, authoritative-looking number that silently omits an
- * ingredient - the same failure mode as treating unknown as zero, which this codebase already
- * rejects for {@code recipe.score} (ADR-016).
+ * ingredient - the same failure mode as treating unknown as zero.
  */
 public final class RecipeNutritionCalculator {
 

@@ -76,14 +76,6 @@ public class Recipe {
   private Difficulty difficulty;
 
   /**
-   * Relevance score of the recipe body ({@code name + description + instructions}). {@code null}
-   * means never scored; distinct from a low score, same convention as {@code Post.contentScore}
-   * (ADR-016).
-   */
-  @Column(name = "score")
-  private Double score;
-
-  /**
    * Review state of this recipe (ADR-016). A recipe created through {@code POST /api/recipes}
    * starts {@link ModerationStatus#PENDING}; existing rows were backfilled to {@code APPROVED}.
    */
