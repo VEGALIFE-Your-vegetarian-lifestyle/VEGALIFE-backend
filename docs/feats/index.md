@@ -65,3 +65,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `saved-items.md`                    | Saved Posts and Recipes                   | Implemented | 2026-11-12 |
 | `public-recipe-browsing.md`         | Public Recipe Browsing and Post Route Alignment | Approved | 2026-11-13 |
 | `post-recipe-list-filters.md`       | Post and Recipe List Filters              | Approved    | 2026-11-13 |
+| `remove-recipe-scoring.md`          | Remove Recipe-Body Scoring                | In progress | 2026-11-19 |
