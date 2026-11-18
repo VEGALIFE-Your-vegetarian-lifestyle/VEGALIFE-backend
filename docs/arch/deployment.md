@@ -7,7 +7,7 @@ after a deploy. Issue: [#64](https://github.com/VEGALIFE-Your-vegetarian-lifesty
 
 | Environment | Render service | URL | Database | Trigger |
 |---|---|---|---|---|
-| Local dev | Docker Compose | `http://localhost:8080` | Dockerized PostgreSQL | `./mvnw spring-boot:run` (profile `dev`) |
+| Local dev | Docker Compose + host JVM | `http://localhost:8080` | Dockerized PostgreSQL | `./mvnw spring-boot:run` (profile `dev`, reads repo-root `.env`) |
 | Staging | `staging-vegalife` | <https://staging-vegalife.onrender.com> | Neon branch `staging` | Push to `main`, or manual dispatch with `environment=staging` |
 | Production | `api-vegalife` | <https://api-vegalife.onrender.com> | Neon branch `main` | Tag `v*`, or manual dispatch with `environment=production` |
 
@@ -69,16 +69,28 @@ Base defaults live in `application.yml`; dev-profile overrides in
 `application-dev.yml`; prod-only overrides and fail-fast requireds in
 `application-prod.yml`.
 
+**Base declares, profiles override.** Every env key is declared as a
+`${...}` placeholder in `application.yml`, even when only one profile
+uses it; a profile-specific file may change a default but must never be
+the only file that declares a key. A key declared only in
+`application-dev.yml` and `application-prod.yml` silently disappears on
+any other profile, and one declared only in `application-prod.yml`
+cannot be set for a local run.
+`ApplicationYamlPlaceholderParityTest` enforces this — it fails the
+build if a profile introduces a placeholder the base file does not
+declare.
+
 | Variable | Local (`.env.example`) | Prod default | Notes |
 |---|---|---|---|
-| `SPRING_PROFILES_ACTIVE` | `dev` | `prod` (set in `render.yaml`) | |
-| `SERVER_PORT` / `PORT` | `SERVER_PORT=8080` | `${PORT:${SERVER_PORT:8080}}` | Render injects `PORT` |
-| `DB_URL`, `DB_USER`, `DB_PASSWORD` | Docker Compose defaults | **required, no default** | Neon pooled URL, `sslmode=require` |
+| `SPRING_PROFILES_ACTIVE` | `dev` | `prod` (set in `render.yaml`) | **Not** settable from `.env`: profiles resolve before config data is read |
+| `SERVER_PORT` / `PORT` | `SERVER_PORT=8080` | `${PORT:${SERVER_PORT:8080}}` | Render injects `PORT`; it wins over `SERVER_PORT` |
+| `DB_URL`, `DB_USER`, `DB_PASSWORD` | `localhost:5432` | **required, no default** | Neon pooled URL, `sslmode=require` |
 | `AUTH_JWT_SECRET` | dev placeholder | **required, no default** | ≥ 32 chars |
 | `MAIL_HOST` / `MAIL_PORT` | `localhost` / `1025` (dev profile) | `smtp-relay.brevo.com` / `2525` | Same keys in every profile; dev default is localhost:1025 (MailHog/mailpit); **port 2525** in prod because Render blocks 25/465/587 |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | empty | **required, no default** | Brevo SMTP key |
-| `MAIL_FROM` | `your-verified-sender@example.com` | **required, no default** | Must be a sender your SMTP relay accepts (e.g. Brevo-verified) |
-| `app.mail.from` → `MAIL_FROM` | default in `application.yml` | required in prod | Used by `SmtpEmailServiceImpl` `setFrom` |
+| `MAIL_FROM` | empty (omits the header) | **required, no default** | Must be a sender your SMTP relay accepts (e.g. Brevo-verified) |
+| `MAIL_SMTP_AUTH` / `MAIL_SMTP_STARTTLS` | `false` (dev) | `true` (base default) | Off for a local catcher; on for a real relay |
+| `VNPAY_ENABLED` / `VNPAY_LOCALE` | `true` / `vn` (dev) | `true` / `vn` | Base default is `enabled=false`, so an unconfigured profile fails closed (FR-019) |
 
 Missing required prod vars make the app **fail fast at startup** (unresolvable
 placeholder) — Render shows the deploy as failed with the placeholder name in
@@ -116,8 +128,45 @@ itself is required for the check.
 ## Local parity
 
 ```bash
+cp .env.example .env        # then fill in the secrets you need
 docker compose up -d        # postgres + mailhog
 ./mvnw spring-boot:run      # dev profile, port 8080, SMTP localhost:1025
 ```
 
 `GET http://localhost:8080/actuator/health` must return `{"status":"UP"}`.
+
+### `.env` loading and precedence
+
+The **dev profile** imports a local `.env` as a properties file
+(`spring.config.import: optional:file:./.env[.properties]` in
+`application-dev.yml`). Nothing else reads it: `docker compose` uses `.env`
+only to interpolate `docker-compose.yml`, never to configure the JVM, and
+the prod profile keeps its own fail-fast requireds.
+
+Resolution order, highest first:
+
+1. real OS environment variables (what Render/CI inject)
+2. system properties
+3. command-line arguments
+4. the repo-root `.env`
+5. `${...:default}` values in `application*.yml`
+
+So `.env` overrides the compiled defaults, and a deploy environment always
+overrides `.env`.
+
+Three things to know:
+
+- **The file is parsed by the JDK properties parser, not a dotenv parser.** Keep
+  plain `KEY=value`: no `export` prefix, no quotes around values, no
+  `${OTHER}` interpolation, no backslashes, no `:` separator.
+- **`.env` cannot choose a profile.** `SPRING_PROFILES_ACTIVE` is inert there
+  because profiles resolve before config data is read; the dev profile comes
+  from `spring.profiles.default` in `application.yml`. Set the profile in the
+  shell or the IDE run configuration.
+- **`DB_URL` must point at a reachable host.** `postgres` is the Compose service
+  name and resolves only inside the Compose network; use `localhost` when the
+  database is a local container or an installed server.
+
+`.env` is gitignored and `.dockerignore`d, so it never reaches a built image.
+That, plus `optional:`, is why CI and Docker boot unchanged without one.
+

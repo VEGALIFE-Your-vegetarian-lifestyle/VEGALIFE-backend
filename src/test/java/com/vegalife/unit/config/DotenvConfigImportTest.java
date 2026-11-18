@@ -84,18 +84,22 @@ class DotenvConfigImportTest {
   }
 
   /**
-   * Pins what an imported {@code .env} does <em>not</em> do, so the limitation is documented in
+   * Pins what an imported {@code .env} cannot do on its own, so the limitation is documented in
    * code rather than only in prose.
    *
    * <p>A {@code .env} entry only takes effect when something asks for that exact property name.
    * {@code SPRING_PROFILES_ACTIVE} is the sharp case: the profile is resolved <em>before</em>
    * config-data is processed, so a {@code .env} entry can never activate a profile — which is also
-   * why importing {@code .env} from a profile-scoped file cannot bootstrap itself. Conversely a
-   * relaxed-binding style name such as {@code LOGGING_LEVEL_ROOT} is not a property key at all;
-   * only a real OS environment variable is translated that way.
+   * why importing {@code .env} from a profile-scoped file cannot bootstrap itself.
+   *
+   * <p>A relaxed-binding style name such as {@code LOGGING_LEVEL_ROOT} is not a property key on its
+   * own; only a real OS environment variable is translated that way. It reaches {@code
+   * logging.level.root} solely because {@code application.yml} declares {@code
+   * ${LOGGING_LEVEL_ROOT}} explicitly, which is asserted here so the two halves of that mechanism
+   * stay pinned together.
    */
   @Test
-  void dotenvCannotActivateAProfileOrFeedRelaxedBindingKeys(@TempDir Path tempDir)
+  void dotenvCannotActivateAProfileButFeedsDeclaredPlaceholders(@TempDir Path tempDir)
       throws IOException {
     Path dotenv = tempDir.resolve(".env");
     Files.writeString(
@@ -124,8 +128,11 @@ class DotenvConfigImportTest {
         .as("... but it must NOT activate a profile: profiles resolve before config data is read")
         .isEqualTo(profilesBefore);
     assertThat(environment.getProperty("logging.level.root"))
-        .as("relaxed binding is an environment-variable feature, not a properties-file one")
-        .isNull();
+        .as(
+            "an env-style name binds only because application.yml declares the"
+                + " ${LOGGING_LEVEL_ROOT} placeholder; without that declaration the file's entry"
+                + " would be an unread property")
+        .isEqualTo("TRACE");
   }
 
   private static String readResource(String path) throws IOException {
