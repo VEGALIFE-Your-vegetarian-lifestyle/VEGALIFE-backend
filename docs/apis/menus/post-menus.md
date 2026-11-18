@@ -86,12 +86,14 @@ Any violation returns 400 and persists nothing.
             "mealType": "BREAKFAST",
             "dishId": "9b4d1e77-1f2a-4c5d-8e6f-3a7b2c9d0e11",
             "dishName": "Tofu Scramble",
+            "imageUrl": "https://cdn.example.com/dishes/tofu-scramble.jpg",
             "servings": 2
           },
           {
             "mealType": "LUNCH",
             "dishId": "2e8c5a10-9b3d-4f7a-8c1e-6d4b0a9f3e22",
             "dishName": "Chickpea Buddha Bowl",
+            "imageUrl": null,
             "servings": 1
           }
         ]
@@ -102,10 +104,10 @@ Any violation returns 400 and persists nothing.
 ```
 
 The `data` payload is the menu-detail shape (`MenuDetailResponse`), whose meals
-identify each dish by `dishId` and `dishName` only. To read a plan back with
-the dishes embedded in full, use `GET /api/menus/details`, which returns a
-richer and deliberately different meal shape. Store the returned id and re-read
-the menu later with either.
+carry each dish's `dishId`, `dishName` and `imageUrl`, but do not embed the rest
+of the dish. To read a plan back with the dishes embedded in full, use
+`GET /api/menus/details`, which returns a richer and deliberately different meal
+shape. Store the returned id and re-read the menu later with either.
 
 ### Error Responses
 

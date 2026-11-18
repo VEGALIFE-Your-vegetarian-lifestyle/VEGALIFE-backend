@@ -60,6 +60,7 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
         "rejectionReason": null,
         "dishId": "6c2d3e4f-5a6b-7c8d-9e0f-1a2b3c4d5e6f",
         "dishName": "phở chay",
+        "imageUrl": "https://cdn.example.com/dishes/pho-chay.jpg",
         "dishModerationStatus": "PENDING",
         "categoryIds": ["…"],
         "ingredients": [
@@ -96,6 +97,7 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
 | `score` | Relevance score at submission time. `null` = never scored. |
 | `rejectionReason` | Why an admin rejected this recipe. Cleared on approval. `null` = no reason recorded. |
 | `dishModerationStatus`, `ingredients[].moderationStatus` | The shared names' own states. |
+| `imageUrl` | The shared dish's image. Read-only here: set it through `PATCH /api/admin/dishes/{dishId}`, never through this endpoint. `null` when the dish has none. |
 | `missingRequiredIngredients` | Names of the dish's `required` ingredients this recipe omits (BR-DISH-002). Advisory: it never changes `moderationStatus` and never blocks approve/reject. Empty array when nothing is missing. |
 
 ## PATCH /api/admin/recipes/{recipeId}
@@ -108,8 +110,10 @@ Partial: an omitted field keeps its current value. Accepted: `name`, `descriptio
 `instructions`, `prepTimeMinutes`, `cookTimeMinutes`, `servings`, `difficulty`.
 
 Not accepted: `dishName` (the dish is a shared name with its own endpoint),
-ingredient lines (adding or removing rows is an ingredient operation, not a field
-change), and `moderationStatus`.
+`imageUrl` (it belongs to that shared dish, so it is changed through the dish
+endpoint and affects every recipe using the dish), ingredient lines (adding or
+removing ingredients is an ingredient operation, not a field change), and
+`moderationStatus`.
 
 Neither `moderationStatus` nor `score` changes:
 

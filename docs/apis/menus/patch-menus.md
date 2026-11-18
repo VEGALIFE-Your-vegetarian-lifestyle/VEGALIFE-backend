@@ -68,6 +68,7 @@ meals — an update that would produce an invalid week is rejected whole.
             "mealType": "BREAKFAST",
             "dishId": "9b4d1e77-1f2a-4c5d-8e6f-3a7b2c9d0e11",
             "dishName": "Tofu Scramble",
+            "imageUrl": null,
             "servings": 3
           }
         ]
@@ -78,9 +79,9 @@ meals — an update that would produce an invalid week is rejected whole.
 ```
 
 The `data` payload is the menu-detail shape (`MenuDetailResponse`), the same as
-`POST /api/menus`; meals identify each dish by `dishId` and `dishName` only.
-Read the plan back with dishes embedded via `GET /api/menus/details`, which
-returns a richer and deliberately different meal shape.
+`POST /api/menus`; meals carry each dish's `dishId`, `dishName` and `imageUrl`
+only. Read the plan back with dishes embedded via `GET /api/menus/details`,
+which returns a richer and deliberately different meal shape.
 
 ### Error Responses
 
