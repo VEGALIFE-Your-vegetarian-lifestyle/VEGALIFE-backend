@@ -1,6 +1,7 @@
 package com.vegalife.integration.controller.admin;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -363,8 +364,20 @@ class AdminRecipeControllerIntegrationTest {
         .andExpect(
             jsonPath("$.message")
                 .value(
-                    "Sort property must be one of: createdAt, updatedAt, name, moderationStatus,"
-                        + " score"));
+                    "Sort property must be one of: createdAt, updatedAt, name, moderationStatus"));
+  }
+
+  @Test
+  void listRecipes_sortingByScore_isRejected() throws Exception {
+    // The score column and its sort property are gone (ADR-026); a client still sending it gets a
+    // validation error rather than a silently different order.
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("sort", "score,desc"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value(containsString("Sort property must be one of")));
   }
 
   @Test
