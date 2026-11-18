@@ -19,7 +19,7 @@ Users need to remove their own comments, and Administrators need to moderate abu
 ## Goals
 
 - Let the comment's owner soft-delete their own comment.
-- Let an Administrator soft-delete any comment, with the override recorded in `moderation_log` (`BR-ADMIN-002`).
+- Let an Administrator soft-delete any comment.
 - Preserve thread structure: a deleted comment's replies are untouched and keep pointing at it.
 
 ## Non-goals
@@ -35,18 +35,18 @@ Users need to remove their own comments, and Administrators need to moderate abu
 - [ ] FR-001: `DELETE /api/posts/{postId}/comments/{commentId}` requires an authenticated user and soft-deletes (`deleted_at = now()`) the comment identified by `commentId` under post `postId`.
 - [ ] FR-002: A non-admin may only delete their own comment; a comment owned by someone else, already deleted, or not found is reported as `404` (ownership is not disclosed to a non-owner, matching `BR-POST-006`'s pattern for posts).
 - [ ] FR-003: An Administrator may delete any non-deleted comment under the given post.
-- [ ] FR-004: Deleting someone else's comment as an Administrator writes one `moderation_log` row (`action = DELETE_COMMENT`, `target_type = COMMENT`, `target_id` = the comment's id, `actor_id` = the admin). Deleting your own comment, admin or not, is not logged.
+- [ ] FR-004: Deleting someone else's comment as an Administrator follows the same path as deleting your own — only `deleted_at` changes, and no record of who acted is kept (ADR-027 superseded the original logging requirement).
 - [ ] FR-005: Deletion never touches other rows: a deleted comment's replies keep their `parentId` unchanged, so the thread shape survives.
 - [ ] FR-006: Success returns `200 OK` with no data payload.
 
 ### Non-Functional Requirements
 
 - [ ] NFR-SEC-001: Requests without a valid JWT are rejected with `401 Unauthorized`.
-- [ ] NFR-MAINT-001: Reuses the existing `comment.deleted_at` column (already present since `V8`) and the existing `moderation_log` table; no new migration is required.
+- [ ] NFR-MAINT-001: Reuses the existing `comment.deleted_at` column (already present since `V8`); no new migration is required.
 
 ## Design overview
 
-Add `DELETE /api/posts/{postId}/comments/{commentId}` to `CommentController`, mirroring `PostController.deletePost`'s `isAdmin(authentication)` helper. `CommentService.deleteComment` loads the comment scoped by ownership (admin: any non-deleted comment on the post; non-admin: only their own non-deleted comment on the post) via a new `CommentRepository.findByIdAndPostIdAndUserIdAndDeletedAtIsNull` query, sets `deletedAt`, saves, and — only when an Administrator deletes someone else's comment — records a `moderation_log` entry, the same pattern `PostService.recordModerationIfAdminOverride` uses for posts.
+Add `DELETE /api/posts/{postId}/comments/{commentId}` to `CommentController`, mirroring `PostController.deletePost`'s `isAdmin(authentication)` helper. `CommentService.deleteComment` loads the comment scoped by ownership (admin: any non-deleted comment on the post; non-admin: only their own non-deleted comment on the post) via a new `CommentRepository.findByIdAndPostIdAndUserIdAndDeletedAtIsNull` query, sets `deletedAt`, and saves.
 
 ## Success metrics
 
@@ -56,9 +56,9 @@ All acceptance scenarios below pass in automated tests before merge.
 
 **As** a comment owner or an Administrator, **I want to** remove a comment, **so that** I can take down my own mistake or moderate abusive content, without breaking the thread for other participants.
 
-- [ ] Given the comment owner, when they delete their own comment, then it is soft-deleted (`200 OK`) and no moderation log entry is written.
-- [ ] Given an Administrator who is not the comment's owner, when they delete it, then it is soft-deleted (`200 OK`) and a `DELETE_COMMENT` moderation log entry is written for that admin and comment.
-- [ ] Given an Administrator deleting their own comment, then it is soft-deleted and no moderation log entry is written (not an override).
+- [ ] Given the comment owner, when they delete their own comment, then it is soft-deleted (`200 OK`).
+- [ ] Given an Administrator who is not the comment's owner, when they delete it, then it is soft-deleted (`200 OK`) on the same path as an owner's own delete.
+- [ ] Given an Administrator deleting their own comment, then it is soft-deleted identically.
 - [ ] Given an authenticated non-admin who is not the comment's owner, when they attempt to delete it, then `404 Not Found` is returned and the comment is unchanged.
 - [ ] Given a missing or invalid JWT, when the endpoint is called, then `401 Unauthorized` is returned and no comment is deleted.
 - [ ] Given a comment that is already deleted, belongs to a different `postId`, or does not exist, when the endpoint is called, then `404 Not Found` is returned.

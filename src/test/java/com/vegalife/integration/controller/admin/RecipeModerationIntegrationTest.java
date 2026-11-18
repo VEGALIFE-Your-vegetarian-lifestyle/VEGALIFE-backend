@@ -16,7 +16,6 @@ import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
@@ -87,8 +86,6 @@ class RecipeModerationIntegrationTest {
 
   @Autowired private MediaRepository mediaRepository;
 
-  @Autowired private ModerationLogRepository moderationLogRepository;
-
   @Autowired private RecipeRepository recipeRepository;
 
   @Autowired private RecipeIngredientRepository recipeIngredientRepository;
@@ -105,7 +102,6 @@ class RecipeModerationIntegrationTest {
 
   @BeforeEach
   void setUp() {
-    moderationLogRepository.deleteAll();
     recipeIngredientRepository.deleteAll();
     recipeRepository.deleteAll();
     dishRepository.deleteAll();
@@ -255,9 +251,7 @@ class RecipeModerationIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/recipes/" + recipeId + "/approve")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
+                .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk());
   }
 
@@ -278,9 +272,7 @@ class RecipeModerationIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/recipes/" + recipeId + "/approve")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
+                .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.moderationStatus").value("APPROVED"));
 

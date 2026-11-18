@@ -6,12 +6,10 @@ import com.vegalife.dto.request.post.CommentUpdateRequest;
 import com.vegalife.dto.response.post.CommentResponse;
 import com.vegalife.dto.response.post.CommentThreadResponse;
 import com.vegalife.enums.post.PostStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserProfile;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserProfileRepository;
@@ -37,7 +35,6 @@ public class CommentService {
 
   private final CommentRepository commentRepository;
   private final PostRepository postRepository;
-  private final ModerationLogRepository moderationLogRepository;
   private final UserRepository userRepository;
   private final UserProfileRepository userProfileRepository;
 
@@ -94,8 +91,8 @@ public class CommentService {
 
   /**
    * BR-COMMENT-003: the owner may soft-delete their own comment; an Administrator may soft-delete
-   * any comment and that override is recorded in the moderation log (BR-ADMIN-002). Deletion only
-   * sets {@code deletedAt}; replies keep their {@code parentId}, so the thread shape survives.
+   * any comment. Deletion only sets {@code deletedAt}; replies keep their {@code parentId}, so the
+   * thread shape survives.
    */
   @Transactional
   public void deleteComment(UUID actorId, boolean isAdmin, UUID postId, UUID commentId) {
@@ -107,17 +104,7 @@ public class CommentService {
             .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
 
     comment.setDeletedAt(Instant.now());
-    Comment saved = commentRepository.saveAndFlush(comment);
-
-    if (isAdmin && !saved.getUserId().equals(actorId)) {
-      moderationLogRepository.save(
-          ModerationLog.builder()
-              .actorId(actorId)
-              .action("DELETE_COMMENT")
-              .targetType("COMMENT")
-              .targetId(saved.getId())
-              .build());
-    }
+    commentRepository.saveAndFlush(comment);
   }
 
   /**

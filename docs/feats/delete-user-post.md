@@ -10,7 +10,7 @@ Vegalife backend team
 
 ## Summary
 
-Allow the owner of a post, or an Administrator, to delete it (soft delete), following BR-CONTENT-001 and BR-ADMIN-002.
+Allow the owner of a post, or an Administrator, to delete it (soft delete), following BR-CONTENT-001 and BR-POST-008.
 
 ## Problem / motivation
 
@@ -35,7 +35,7 @@ Users can create, list, and edit posts but cannot remove content they no longer 
 - [x] FR-002: The owner can delete their post; a non-admin receives `404` for missing, already-deleted, or other users' posts.
 - [x] FR-003: An Administrator can delete any non-deleted post.
 - [x] FR-004: Deletion sets `deleted_at`; the post disappears from the owner's list and cannot be edited or deleted again.
-- [x] FR-005: An Administrator deleting another user's post writes a `moderation_log` entry (`DELETE_POST`, actor, target, time).
+- [x] FR-005: An Administrator deleting another user's post sets `deleted_at` and leaves no trace of who acted (ADR-027 superseded the original logging requirement).
 
 ### Non-Functional Requirements
 

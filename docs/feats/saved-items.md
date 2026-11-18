@@ -87,9 +87,9 @@ disappearance and a cascading delete.
 existing mappers. `SavedItemController` is a thin, class-level-authenticated controller under
 `/api/saved`.
 
-A polymorphic `target_type`/`target_id` table (the `moderation_log` shape) was considered and rejected:
-it cannot carry a foreign key, so a hard-deleted recipe would leave an orphan save with nothing to
-clean it up.
+A polymorphic `target_type`/`target_id` table (the shape `moderation_log` used) was considered and
+rejected: it cannot carry a foreign key, so a hard-deleted recipe would leave an orphan save with
+nothing to clean it up.
 
 ## Success metrics
 

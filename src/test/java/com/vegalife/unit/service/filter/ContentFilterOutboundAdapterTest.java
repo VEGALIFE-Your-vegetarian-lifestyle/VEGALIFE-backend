@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -21,14 +20,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
@@ -54,7 +51,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.InvalidDataAccessResourceUsageException;
@@ -88,7 +84,6 @@ class ContentFilterOutboundAdapterTest {
   @Mock private PostEmbeddingRepository postEmbeddingRepository;
   @Mock private DuplicateDetector duplicateDetector;
   @Mock private ActiveEmbeddingModel activeEmbeddingModel;
-  @Mock private ModerationLogRepository moderationLogRepository;
 
   private ContentFilterOutboundAdapter adapter;
   private final ObjectMapper objectMapper = new ObjectMapper();
@@ -106,7 +101,6 @@ class ContentFilterOutboundAdapterTest {
             duplicateDetector,
             activeEmbeddingModel,
             objectMapper,
-            moderationLogRepository,
             filterProperties);
     noRecipeAttached();
   }
@@ -523,20 +517,10 @@ class ContentFilterOutboundAdapterTest {
     // The filter never formed an opinion, so this is FILTER_SKIPPED, not FILTER_FAILED.
     assertEquals(PostStatus.processing, post.getStatus());
     assertEquals(PostFlag.FILTER_SKIPPED, post.getFlag());
-    // The row carries a cause code only; the provider message lives on the moderation log.
+    // The row carries a cause code only; the provider detail goes to the application log.
     assertEquals("FILTER_SKIPPED", post.getFlagDetail().path("kind").asText());
     assertEquals("UNAVAILABLE", post.getFlagDetail().path("cause").asText());
     verify(postRepository).save(post);
-
-    ArgumentCaptor<ModerationLog> log = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository).save(log.capture());
-    assertEquals("FILTER_UNAVAILABLE", log.getValue().getAction());
-    assertEquals("POST", log.getValue().getTargetType());
-    assertEquals(post.getId(), log.getValue().getTargetId());
-    // An operator must be able to tell a lapsed key from a bad request without the raw body.
-    assertTrue(log.getValue().getReason().contains("AUTH"));
-    assertTrue(log.getValue().getReason().contains("HTTP 400"));
-    assertTrue(log.getValue().getReason().contains("API_KEY_INVALID"));
   }
 
   /** A quota is transient: the post must stay untouched and the provider's hint must survive. */
@@ -564,7 +548,6 @@ class ContentFilterOutboundAdapterTest {
     assertEquals(PostStatus.processing, post.getStatus());
     assertNull(post.getFlag());
     verify(postRepository, never()).save(any(Post.class));
-    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
   }
 
   /** A message abandoned before delivery still owes the post a terminal state. */
@@ -580,9 +563,6 @@ class ContentFilterOutboundAdapterTest {
     assertEquals(PostStatus.processing, post.getStatus());
     assertEquals(PostFlag.FILTER_SKIPPED, post.getFlag());
     assertEquals("UNAVAILABLE", post.getFlagDetail().path("cause").asText());
-    ArgumentCaptor<ModerationLog> log = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository).save(log.capture());
-    assertEquals("FILTER_UNAVAILABLE", log.getValue().getAction());
   }
 
   /** Never let an abandonment overwrite a verdict that already ran. */
@@ -600,7 +580,6 @@ class ContentFilterOutboundAdapterTest {
     assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
     assertEquals(existing, post.getFlagDetail());
     verify(postRepository, never()).save(any(Post.class));
-    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
   }
 
   /** Never let an abandonment resurrect a post the author already took down. */
@@ -630,7 +609,7 @@ class ContentFilterOutboundAdapterTest {
 
   /**
    * A long provider code no longer reaches the row at all, so it can no longer be truncated: the
-   * snapshot is a fixed cause code and the prose stays in {@code moderation_log} (ADR-024).
+   * snapshot is a fixed cause code and the prose goes to the application log (ADR-024).
    */
   @Test
   void unavailableCauseIsACodeNotProviderProse() throws Exception {
@@ -650,11 +629,8 @@ class ContentFilterOutboundAdapterTest {
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
+    // The row keeps a fixed code only; no provider prose is stored anywhere durable.
     assertEquals("UNAVAILABLE", post.getFlagDetail().path("cause").asText());
-    ArgumentCaptor<ModerationLog> log = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository).save(log.capture());
-    // Nothing is lost: the full code is still readable on the append-only log.
-    assertTrue(log.getValue().getReason().contains(providerCode));
   }
 
   private static Recipe recipe() {

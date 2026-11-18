@@ -23,7 +23,6 @@ import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
@@ -91,8 +90,6 @@ class PostControllerIntegrationTest {
   @Autowired private RecipeRepository recipeRepository;
 
   @Autowired private DishRepository dishRepository;
-
-  @Autowired private ModerationLogRepository moderationLogRepository;
 
   @Autowired private OutboundMessageRepository outboundMessageRepository;
 
@@ -820,7 +817,7 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  void updatePost_adminCanEditAnotherUsersPostAndActionIsLogged() throws Exception {
+  void updatePost_adminCanEditAnotherUsersPost() throws Exception {
     User admin = createUser("adminuser", "admin@example.com", UserRole.ADMIN);
     Post otherUsersPost = createPost(otherUser, "Other title", PostStatus.drafted, null);
 
@@ -835,14 +832,8 @@ class PostControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.title").value("Moderated title"));
 
-    assertThat(moderationLogRepository.findAll())
-        .singleElement()
-        .satisfies(
-            log -> {
-              assertThat(log.getActorId()).isEqualTo(admin.getId());
-              assertThat(log.getTargetId()).isEqualTo(otherUsersPost.getId());
-              assertThat(log.getAction()).isEqualTo("EDIT_POST");
-            });
+    assertThat(postRepository.findById(otherUsersPost.getId()).orElseThrow().getTitle())
+        .isEqualTo("Moderated title");
   }
 
   @Test
@@ -895,7 +886,7 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  void deletePost_adminCanDeleteAnotherUsersPostAndActionIsLogged() throws Exception {
+  void deletePost_adminCanDeleteAnotherUsersPost() throws Exception {
     User admin = createUser("adminuser", "admin@example.com", UserRole.ADMIN);
     Post otherUsersPost = createPost(otherUser, "Other title", PostStatus.published, null);
 
@@ -907,14 +898,6 @@ class PostControllerIntegrationTest {
 
     assertThat(postRepository.findById(otherUsersPost.getId()).orElseThrow().getDeletedAt())
         .isNotNull();
-    assertThat(moderationLogRepository.findAll())
-        .singleElement()
-        .satisfies(
-            log -> {
-              assertThat(log.getActorId()).isEqualTo(admin.getId());
-              assertThat(log.getAction()).isEqualTo("DELETE_POST");
-              assertThat(log.getTargetId()).isEqualTo(otherUsersPost.getId());
-            });
   }
 
   @Test

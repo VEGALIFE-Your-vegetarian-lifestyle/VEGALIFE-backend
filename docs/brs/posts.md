@@ -233,7 +233,7 @@ Active
 
 ## Statement
 
-An authenticated user may edit a post only when the post is owned by that user and `deleted_at` is null; an Administrator may edit any non-deleted post (BR-CONTENT-001). For a non-admin, a missing post, soft-deleted post, or post owned by another user is reported as not found. Every edit an Administrator makes to another user's post is recorded in `moderation_log` (actor, action, target, time) per BR-ADMIN-002.
+An authenticated user may edit a post only when the post is owned by that user and `deleted_at` is null; an Administrator may edit any non-deleted post (BR-CONTENT-001). For a non-admin, a missing post, soft-deleted post, or post owned by another user is reported as not found. An Administrator's edit of another user's post leaves no trace of who made it (ADR-027).
 
 ## Rationale
 
@@ -303,11 +303,11 @@ Active
 
 ## Statement
 
-A post may be deleted only by its owner or an Administrator (BR-CONTENT-001). Deletion is soft: `deleted_at` is set and the row is kept, so the post disappears from user lists and can no longer be edited or deleted. For a non-admin, a missing, already-deleted, or other user's post is reported as not found. Every deletion an Administrator makes to another user's post is recorded in `moderation_log` (BR-ADMIN-002).
+A post may be deleted only by its owner or an Administrator (BR-CONTENT-001). Deletion is soft: `deleted_at` is set and the row is kept, so the post disappears from user lists and can no longer be edited or deleted. For a non-admin, a missing, already-deleted, or other user's post is reported as not found. An Administrator's deletion of another user's post leaves no trace of who made it (ADR-027).
 
 ## Rationale
 
-Ownership boundaries protect user content, soft deletion preserves data for moderation and recovery, and the moderation log keeps administrator actions reviewable.
+Ownership boundaries protect user content, and soft deletion preserves data for recovery.
 
 ## Scope & Exceptions
 
@@ -340,7 +340,7 @@ Retired by [ADR-023](../adrs/023-post-processing-status-and-flag-blocker.md) on 
 *(Historical.)* Only an Administrator could hide a post or lift a hide. Hiding set
 `status = hidden` and cleared the publication timestamp; lifting returned the post to a private
 draft. While a post was hidden, only an Administrator could change its publish state. Every hide and
-unhide was recorded in `moderation_log`.
+unhide was recorded in `moderation_log` (that table has since been removed by ADR-027).
 
 ## Why it was retired
 
@@ -757,8 +757,8 @@ record pairs what the machine saw with what the human decided (ADR-025), stores 
 `rejectionReason` for the author, and
 rejects every still-`PENDING` component.
 
-Every real decision is recorded in `moderation_log` as `APPROVE_POST` / `REJECT_POST` with the
-optional reason (BR-ADMIN-002).
+Approval takes no payload: there is nothing to record about a decision that removes a reason. The
+rejection reason is current state on the post, not audited history (ADR-027).
 
 ## Rationale
 
@@ -780,8 +780,8 @@ chosen so no blocker is silently hidden, not a rule about which posts exist.
 - Security: `AdminPostController` carries `@PreAuthorize("hasRole('ADMIN')")` (ADR-009); no
   `SecurityConfig` path rule grants `/api/admin/**`.
 - Service: `AdminPostService.approvePost()` / `rejectPost()` load a non-deleted post, refuse
-  `drafted`, validate categories on approve, keep `flag`/`flagDetail` untouched, cascade to
-  components, and write the log row.
+  `drafted`, validate categories on approve, keep `flag`/`flagDetail` untouched, and cascade to
+  components.
 - Database: `CHECK (flag IS NULL OR status <> 'drafted')` (V58) allows a blocker on `published` and
   `unpublished` by design and still forbids one on a draft.
 - API reference: `docs/apis/admin/post-posts-postid-approve.md`.
@@ -800,9 +800,11 @@ chosen so no blocker is silently hidden, not a rule about which posts exist.
 
 ## Status
 
-Active
+Retired by ADR-027 (2026-11-19). The `moderation_log` table was dropped and no administrator action
+is recorded anywhere. The rule is kept here for history: it never had a read API, so nothing that
+was once observable through the product stops working.
 
-## Statement
+## Statement (as it stood)
 
 Every administrator action that changes another user's content — editing (`EDIT_POST`), deleting
 (`DELETE_POST`), approving (`APPROVE_POST`), and rejecting (`REJECT_POST`) — is written to
@@ -811,35 +813,32 @@ Every administrator action that changes another user's content — editing (`EDI
 changes nothing is never logged. The log is append-only; entries are never edited or deleted by
 application code.
 
-## Rationale
+## Rationale (historical)
 
 Moderation is an administrator power over content they do not own; a durable, attributable record is
-what makes those actions auditable and reviewable after the fact, including the stated justification.
+what made those actions auditable and reviewable after the fact, including the stated justification.
+The team has since decided the platform does not need that record for now (ADR-027): the table had no
+reader, so it cost a write on every moderation action and returned nothing.
 
-## Scope & Exceptions
+## Scope & Exceptions (historical)
 
-Applies to post and comment moderation. Category creation, edit, and retirement are deliberately
-**not** logged — BR-ADMIN-002 scopes the log to content/comment moderation, not category management
-(the decision recorded in `create-category-api.md`, `edit-category-api.md`, `delete-category-api.md`).
-`reason` is optional today; a required-reason contract would be a separate validation change.
+Applied to post and comment moderation. Category creation, edit, and retirement were deliberately
+**not** logged — the rule scoped the log to content/comment moderation, not category management.
 
-The log is the audit trail, not the current state. A rejection reason is also stored on the
+The log was an audit trail, never the current state. A rejection reason is still stored on the
 rejected row itself (`post.rejection_reason`, `recipe.rejection_reason`, migration `V51`) so the
-author can be told why, and that column is cleared when the row is approved again. The two are
-complementary: the column answers "why is this rejected right now", the log preserves every
-decision in order, including reasons that were later superseded.
+author can be told why, and that column is cleared when the row is approved again.
 
-## Enforcement
+## Enforcement (historical)
 
-- Table: `moderation_log` (migration `V18`); `V32` adds the nullable `reason` column.
-- Service: every writer builds a `ModerationLog` through `ModerationLogRepository` in the same
-  transaction as the change (`PostService`, `AdminPostService`).
-- API references: `docs/apis/post/patch-posts-postid.md`, `docs/apis/post/delete-posts-postid.md`,
-  `docs/apis/admin/post-posts-postid-approve.md`.
+- Table: `moderation_log` (migration `V18`); `V32` added the nullable `reason` column. Both were
+  dropped by `V60__drop_moderation_log.sql` (ADR-027).
+- Service: every writer built a `ModerationLog` through `ModerationLogRepository` in the same
+  transaction as the change. Those writes and that repository are gone.
 
 ## Last Reviewed
 
-2026-10-10, by Vegalife backend team
+2026-11-19, by Vegalife backend team (retired by ADR-027)
 
 ---
 

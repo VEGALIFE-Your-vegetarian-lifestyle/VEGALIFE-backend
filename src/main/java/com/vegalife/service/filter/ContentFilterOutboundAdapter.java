@@ -7,14 +7,12 @@ import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
@@ -50,7 +48,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>A transient failure is rethrown as retryable so the queue waits the provider out; a permanent
  * rejection cannot be retried into success, so the post is settled at {@code processing} with
- * {@code FILTER_SKIPPED} and the cause recorded in {@code moderation_log} (ADR-020).
+ * {@code FILTER_SKIPPED} and the cause written to the application log (ADR-020).
  *
  * <p>The verdict is applied only while the post is still {@code processing} and not soft-deleted. A
  * post withdrawn or deleted while its message was in flight keeps its new state; the late result is
@@ -61,11 +59,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
 
-  /** Recorded when the filter itself could not run, as distinct from a verdict (ADR-020). */
-  private static final String FILTER_UNAVAILABLE = "FILTER_UNAVAILABLE";
-
-  private static final String POST_TARGET = "POST";
-
   private final PostRepository postRepository;
   private final ContentFilterService contentFilterService;
   private final RecipeRepository recipeRepository;
@@ -74,7 +67,6 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   private final DuplicateDetector duplicateDetector;
   private final ActiveEmbeddingModel activeEmbeddingModel;
   private final ObjectMapper objectMapper;
-  private final ModerationLogRepository moderationLogRepository;
   private final FilterProperties filterProperties;
 
   @Override
@@ -190,22 +182,16 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
 
   /**
    * Applies the "filter unavailable" outcome: never visible, never attributed to the model's
-   * judgement. Recorded as a system action ({@code actor_id} null) with the classified cause.
+   * judgement.
    *
    * <p>The post is held with {@code FILTER_SKIPPED} rather than {@code FILTER_FAILED} or a new flag
    * value, so an operator can tell "the filter could not run" from "the filter judged this" without
-   * widening the blocker vocabulary (ADR-020, ADR-023). The classified cause stays on the
-   * moderation log; the row carries only {@code cause = UNAVAILABLE} (ADR-024).
+   * widening the blocker vocabulary (ADR-020, ADR-023). The row carries only {@code cause =
+   * UNAVAILABLE} (ADR-024); the classified cause goes to the application log.
    */
   private void applyFilterUnavailable(Post post, EmbeddingClientException e) {
     block(post, PostFlag.FILTER_SKIPPED, PostFlagDetail.skipped(PostFlagDetail.CAUSE_UNAVAILABLE));
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .action(FILTER_UNAVAILABLE)
-            .targetType(POST_TARGET)
-            .targetId(post.getId())
-            .reason(describeFailure(e))
-            .build());
+    log.warn("Content filter unavailable for post {}: {}", post.getId(), describeFailure(e));
   }
 
   /** Stable, log-ready cause: reason code plus upstream status, never the provider's full body. */
@@ -245,13 +231,6 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
             : "FILTER_UNAVAILABLE: " + cause.getMessage();
     block(post, PostFlag.FILTER_SKIPPED, PostFlagDetail.skipped(PostFlagDetail.CAUSE_UNAVAILABLE));
     postRepository.save(post);
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .action(FILTER_UNAVAILABLE)
-            .targetType(POST_TARGET)
-            .targetId(post.getId())
-            .reason(reason)
-            .build());
     log.error(
         "Outbound message {} was abandoned; post {} is held as FILTER_SKIPPED: {}",
         message.getId(),

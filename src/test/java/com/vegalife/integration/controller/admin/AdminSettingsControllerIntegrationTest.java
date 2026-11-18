@@ -9,7 +9,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.admin.PlatformSettingRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
@@ -59,8 +58,6 @@ class AdminSettingsControllerIntegrationTest {
   @Autowired private UserRepository userRepository;
 
   @Autowired private PlatformSettingRepository platformSettingRepository;
-
-  @Autowired private ModerationLogRepository moderationLogRepository;
 
   @Autowired private JwtTokenService jwtTokenService;
 
@@ -115,7 +112,7 @@ class AdminSettingsControllerIntegrationTest {
   }
 
   @Test
-  void updateSettings_asAdmin_appliesChangeRecordsAuditAndSetsUpdatedBy() throws Exception {
+  void updateSettings_asAdmin_appliesChangeAndSetsUpdatedBy() throws Exception {
     mockMvc
         .perform(
             patch("/api/admin/settings")
@@ -127,8 +124,6 @@ class AdminSettingsControllerIntegrationTest {
 
     assertThat(platformSettingRepository.findByKey("max_image_upload_mb").orElseThrow().getValue())
         .isEqualTo("10");
-    assertThat(moderationLogRepository.findAll())
-        .anySatisfy(log -> assertThat(log.getAction()).isEqualTo("UPDATE_SETTING"));
   }
 
   @Test

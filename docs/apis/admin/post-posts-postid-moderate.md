@@ -23,8 +23,8 @@ names stranded in `PENDING` forever.
 There is no separate unpublish endpoint: reject subsumes it. An admin who only wants
 a post off the feed has no reason to leave its names pending.
 
-The request body lost its `action` field; both new endpoints accept an optional
-`reason` and nothing else.
+The request body lost its `action` field. `/approve` now takes no body at all; `/reject`
+accepts an optional `reason` and nothing else (ADR-027).
 
 **Breaking change for clients:** this is a removal, not a deprecation. A frontend
 still calling `/moderate` must ship the new paths in the same release.
@@ -37,8 +37,7 @@ still calling `/moderate` must ship the new paths in the same release.
   `PATCH /api/posts/{postId}/visibility`.
 - `flag` is never touched: an approval does not rewrite the filter's verdict
   (ADR-011).
-- Every real change writes a `moderation_log` row, now `APPROVE_POST` /
-  `REJECT_POST`, with actor, target and reason (BR-ADMIN-002).
+- No audit row is written: the moderation log itself has since been removed (ADR-027).
 
 One behaviour deliberately did **not** carry over: a repeat approval or rejection is
 no longer a silent no-op returning the post. It still returns `200`, but the

@@ -3,7 +3,6 @@ package com.vegalife.unit.service.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -18,7 +17,6 @@ import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserProfile;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserProfileRepository;
@@ -45,8 +43,6 @@ class CommentServiceTest {
   @Mock private CommentRepository commentRepository;
 
   @Mock private PostRepository postRepository;
-
-  @Mock private ModerationLogRepository moderationLogRepository;
 
   @Mock private UserRepository userRepository;
 
@@ -242,7 +238,6 @@ class CommentServiceTest {
     commentService.deleteComment(userId, false, postId, commentId);
 
     assertThat(existing.getDeletedAt()).isNotNull();
-    verify(moderationLogRepository, never()).save(any());
   }
 
   @Test
@@ -257,7 +252,7 @@ class CommentServiceTest {
   }
 
   @Test
-  void deleteComment_adminDeletingAnotherUsersCommentIsLogged() {
+  void deleteComment_adminMayDeleteAnotherUsersComment() {
     UUID commentId = UUID.randomUUID();
     UUID ownerId = UUID.randomUUID();
     UUID adminId = UUID.randomUUID();
@@ -270,18 +265,10 @@ class CommentServiceTest {
     commentService.deleteComment(adminId, true, postId, commentId);
 
     assertThat(existing.getDeletedAt()).isNotNull();
-    verify(moderationLogRepository)
-        .save(
-            argThat(
-                log ->
-                    adminId.equals(log.getActorId())
-                        && commentId.equals(log.getTargetId())
-                        && "DELETE_COMMENT".equals(log.getAction())
-                        && "COMMENT".equals(log.getTargetType())));
   }
 
   @Test
-  void deleteComment_adminDeletingOwnCommentIsNotLogged() {
+  void deleteComment_adminDeletingOwnCommentAlsoSoftDeletes() {
     UUID commentId = UUID.randomUUID();
     Comment existing =
         Comment.builder().id(commentId).userId(userId).postId(postId).content("Mine").build();
@@ -291,7 +278,7 @@ class CommentServiceTest {
 
     commentService.deleteComment(userId, true, postId, commentId);
 
-    verify(moderationLogRepository, never()).save(any());
+    assertThat(existing.getDeletedAt()).isNotNull();
   }
 
   @Test

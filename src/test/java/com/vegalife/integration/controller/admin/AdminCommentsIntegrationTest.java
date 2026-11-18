@@ -15,7 +15,6 @@ import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
@@ -75,8 +74,6 @@ class AdminCommentsIntegrationTest {
   @Autowired private PostRepository postRepository;
 
   @Autowired private CommentRepository commentRepository;
-
-  @Autowired private ModerationLogRepository moderationLogRepository;
 
   @Autowired private JwtTokenService jwtTokenService;
 
@@ -334,37 +331,33 @@ class AdminCommentsIntegrationTest {
   }
 
   @Test
-  void moderateComment_asAdmin_softDeletesAndWritesModerationLogWithReason() throws Exception {
+  void moderateComment_asAdmin_softDeletesTheComment() throws Exception {
     mockMvc
         .perform(
             post("/api/admin/comments/{commentId}/moderate", activeCommentId)
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"reason\": \"Violates community guidelines\"}"))
+                .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.message").value("Comment moderated successfully"));
 
     assertThat(commentRepository.findById(activeCommentId).orElseThrow().getDeletedAt())
         .isNotNull();
-    assertThat(moderationLogRepository.findAll())
-        .anySatisfy(
-            logEntry -> {
-              assertThat(logEntry.getAction()).isEqualTo("MODERATE_COMMENT");
-              assertThat(logEntry.getTargetId()).isEqualTo(activeCommentId);
-              assertThat(logEntry.getReason()).isEqualTo("Violates community guidelines");
-            });
   }
 
   @Test
-  void moderateComment_missingReason_returns400() throws Exception {
+  void moderateComment_withoutBody_softDeletesTheComment() throws Exception {
+    // The endpoint takes no payload; a stale client's {"reason": "..."} is ignored rather than
+    // rejected, because the audit row it fed was removed (ADR-027).
     mockMvc
         .perform(
             post("/api/admin/comments/{commentId}/moderate", activeCommentId)
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
-        .andExpect(status().isBadRequest());
+                .content("{\"reason\": \"Spam\"}"))
+        .andExpect(status().isOk());
+
+    assertThat(commentRepository.findById(activeCommentId).orElseThrow().getDeletedAt())
+        .isNotNull();
   }
 
   @Test
@@ -372,9 +365,7 @@ class AdminCommentsIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/comments/{commentId}/moderate", removedCommentId)
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"reason\": \"Spam\"}"))
+                .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isNotFound());
   }
 
@@ -383,9 +374,7 @@ class AdminCommentsIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/comments/{commentId}/moderate", activeCommentId)
-                .header("Authorization", "Bearer " + userToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"reason\": \"Spam\"}"))
+                .header("Authorization", "Bearer " + userToken))
         .andExpect(status().isForbidden());
   }
 

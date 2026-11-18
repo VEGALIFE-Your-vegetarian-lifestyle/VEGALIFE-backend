@@ -3,9 +3,7 @@ package com.vegalife.service.admin;
 import com.vegalife.dto.request.admin.SettingsUpdateRequest;
 import com.vegalife.dto.response.admin.SettingGroupResponse;
 import com.vegalife.dto.response.admin.SettingItemResponse;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.admin.PlatformSetting;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.admin.PlatformSettingRepository;
 import com.vegalife.shared.exception.ValidationException;
 import java.util.ArrayList;
@@ -18,16 +16,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Admin-configurable platform settings, grouped by category (issue #13). Every change is recorded
- * in {@code moderation_log} (who, what, when) — BR-ADMIN-002's audit convention, reused here rather
- * than inventing a parallel audit trail.
+ * Admin-configurable platform settings, grouped by category (issue #13). The row records who last
+ * changed it ({@code platform_setting.updated_by}); no history of changes is kept.
  */
 @Service
 @RequiredArgsConstructor
 public class AdminSettingsService {
 
   private final PlatformSettingRepository platformSettingRepository;
-  private final ModerationLogRepository moderationLogRepository;
 
   @Transactional(readOnly = true)
   public List<SettingGroupResponse> getSettings() {
@@ -78,20 +74,11 @@ public class AdminSettingsService {
 
     for (Map.Entry<String, PlatformSetting> entry : targets.entrySet()) {
       PlatformSetting setting = entry.getValue();
-      String oldValue = setting.getValue();
       String newValue = changes.get(entry.getKey());
       setting.setValue(newValue);
+      // updated_by is the record of who last changed the row; nothing keeps a history of changes.
       setting.setUpdatedBy(adminId);
       platformSettingRepository.saveAndFlush(setting);
-
-      moderationLogRepository.save(
-          ModerationLog.builder()
-              .actorId(adminId)
-              .action("UPDATE_SETTING")
-              .targetType("SETTING")
-              .targetId(setting.getId())
-              .reason(setting.getKey() + ": '" + oldValue + "' -> '" + newValue + "'")
-              .build());
     }
     return getSettings();
   }

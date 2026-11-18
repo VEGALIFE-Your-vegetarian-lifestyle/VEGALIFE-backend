@@ -9,9 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.request.admin.SettingsUpdateRequest;
 import com.vegalife.dto.response.admin.SettingGroupResponse;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.admin.PlatformSetting;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.admin.PlatformSettingRepository;
 import com.vegalife.service.admin.AdminSettingsService;
 import com.vegalife.shared.exception.ValidationException;
@@ -30,8 +28,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AdminSettingsServiceTest {
 
   @Mock private PlatformSettingRepository platformSettingRepository;
-
-  @Mock private ModerationLogRepository moderationLogRepository;
 
   @InjectMocks private AdminSettingsService adminSettingsService;
 
@@ -61,7 +57,7 @@ class AdminSettingsServiceTest {
   }
 
   @Test
-  void updateSettingsAppliesChangeRecordsModerationLogAndSetsUpdatedBy() {
+  void updateSettingsAppliesChangeAndSetsUpdatedBy() {
     UUID adminId = UUID.randomUUID();
     UUID settingId = UUID.randomUUID();
     PlatformSetting setting =
@@ -86,12 +82,6 @@ class AdminSettingsServiceTest {
     verify(platformSettingRepository).saveAndFlush(settingCaptor.capture());
     assertThat(settingCaptor.getValue().getValue()).isEqualTo("10");
     assertThat(settingCaptor.getValue().getUpdatedBy()).isEqualTo(adminId);
-
-    ArgumentCaptor<ModerationLog> logCaptor = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository).save(logCaptor.capture());
-    assertThat(logCaptor.getValue().getActorId()).isEqualTo(adminId);
-    assertThat(logCaptor.getValue().getAction()).isEqualTo("UPDATE_SETTING");
-    assertThat(logCaptor.getValue().getTargetId()).isEqualTo(settingId);
   }
 
   @Test
@@ -104,7 +94,6 @@ class AdminSettingsServiceTest {
         .isInstanceOf(ValidationException.class);
 
     verify(platformSettingRepository, never()).saveAndFlush(any());
-    verify(moderationLogRepository, never()).save(any());
   }
 
   @Test
@@ -119,7 +108,6 @@ class AdminSettingsServiceTest {
         .isInstanceOf(ValidationException.class);
 
     verify(platformSettingRepository, never()).saveAndFlush(any());
-    verify(moderationLogRepository, never()).save(any());
   }
 
   @Test
@@ -144,6 +132,5 @@ class AdminSettingsServiceTest {
         .isInstanceOf(ValidationException.class);
 
     verify(platformSettingRepository, never()).saveAndFlush(any());
-    verify(moderationLogRepository, never()).save(any());
   }
 }

@@ -44,8 +44,12 @@ Four problems follow from that:
    recorded which threshold was in force for that run.
 
 The free text was the aggravating factor, not the evidence: the full classified
-cause is already written to `moderation_log.reason` (append-only, unbounded),
+cause was also written to `moderation_log.reason` (append-only, unbounded),
 so the copy on the post row only duplicated it badly.
+
+> **Superseded in part by [ADR-027](027-remove-moderation-log.md):** with `moderation_log` gone, the
+> structured copy on the post row is the only record of the blocker, which strengthens rather than
+> weakens this decision — a truncated free-text field would have left nothing usable.
 
 ## Decision
 
@@ -72,8 +76,8 @@ FILTER_SKIPPED   {"kind":"FILTER_SKIPPED","cause":"DISABLED"|"SWEPT"|"UNAVAILABL
 3. **`similarity` is stored.** It is already computed by the duplicate lookup
    (`1 - (embedding <=> ?::vector)`); keeping it costs nothing and turns "this
    is a duplicate" into "this is a 97% duplicate".
-4. **`FILTER_SKIPPED` keeps only a cause code.** The prose lands in
-   `moderation_log.reason`, which is where an operator already looks.
+4. **`FILTER_SKIPPED` keeps only a cause code.** The prose goes to the application log; with
+   `moderation_log` gone ([ADR-027](027-remove-moderation-log.md)) it is not stored anywhere.
 5. **The API exposes the object, not the raw text** (`PostFlagDetailResponse`);
    absent fields are omitted rather than sent as `null`.
 6. **`content_score` is unchanged** and remains the canonical last relevance
@@ -94,8 +98,10 @@ FILTER_SKIPPED   {"kind":"FILTER_SKIPPED","cause":"DISABLED"|"SWEPT"|"UNAVAILABL
   migration, but leaves the truncated free text in place and keeps three
   unparseable shapes in the row.
 - **Option D — drop `flag_detail` and rely on `moderation_log` alone.** No
-  admin API exposes the log, so a reviewer would have to query the database to
-  answer "what blocked this post". Rejected as a regression in moderation UX.
+  admin API exposed the log, so a reviewer would have had to query the database to
+  answer "what blocked this post". Rejected as a regression in moderation UX — and the
+  log itself was later removed ([ADR-027](027-remove-moderation-log.md)), leaving this the only
+  record of the blocker.
 
 ## Consequences
 
@@ -119,8 +125,8 @@ FILTER_SKIPPED   {"kind":"FILTER_SKIPPED","cause":"DISABLED"|"SWEPT"|"UNAVAILABL
   be written together; the `CHECK` turns a mistake into a failed write rather
   than a silent inconsistency.
 - **The free text is no longer on the post row.** An operator who only looks at
-  the post sees `UNAVAILABLE`; the provider detail requires reading
-  `moderation_log`, which no admin API exposes yet.
+  the post sees `UNAVAILABLE`; the provider detail lives only in the application log, since
+  `moderation_log` was dropped ([ADR-027](027-remove-moderation-log.md)).
 
 ## Verification
 
@@ -135,5 +141,6 @@ FILTER_SKIPPED   {"kind":"FILTER_SKIPPED","cause":"DISABLED"|"SWEPT"|"UNAVAILABL
   disagrees with `flag`, and a non-object snapshot, are both rejected by the
   database.
 - Revisit this decision if a blocker needs a queryable field in a hot predicate
-  (then promote that field to a column) or if an admin API starts exposing
-  `moderation_log`, which would make the post-row copy redundant again.
+  (then promote that field to a column), or if a durable moderation record is
+  reinstated ([ADR-027](027-remove-moderation-log.md)) — that would make the
+  post-row copy redundant again.

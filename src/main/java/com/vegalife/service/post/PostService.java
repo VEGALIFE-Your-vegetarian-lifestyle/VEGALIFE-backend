@@ -17,14 +17,12 @@ import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.UserProfile;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
@@ -76,7 +74,6 @@ public class PostService {
   private final CategoryRepository categoryRepository;
   private final MediaRepository mediaRepository;
   private final RecipeRepository recipeRepository;
-  private final ModerationLogRepository moderationLogRepository;
   private final OutboundMessageRepository outboundMessageRepository;
   private final PostMapper postMapper;
   private final ObjectMapper objectMapper;
@@ -124,8 +121,8 @@ public class PostService {
 
   /**
    * BR-CONTENT-001: only the owner or an administrator may edit a post. A non-admin sees other
-   * users' posts as not found. BR-ADMIN-002: an administrator's edit of someone else's post is
-   * recorded in the moderation log.
+   * users' posts as not found. An administrator's edit of someone else's post is not attributed
+   * anywhere: the platform keeps no moderation audit trail.
    */
   @Transactional
   public PostListResponse updatePost(
@@ -169,21 +166,18 @@ public class PostService {
         markForAdminReview(saved);
       }
     }
-    recordModerationIfAdminOverride(actorId, isAdmin, saved, "EDIT_POST");
     return toResponse(saved, actorId);
   }
 
   /**
    * BR-CONTENT-001: only the owner or an Administrator may delete a post. Deletion is soft ({@code
-   * deletedAt}) so the row is kept. BR-ADMIN-002: an Administrator removing someone else's post is
-   * recorded in the moderation log.
+   * deletedAt}) so the row is kept.
    */
   @Transactional
   public void deletePost(UUID actorId, boolean isAdmin, UUID postId) {
     Post post = findManageablePost(actorId, isAdmin, postId);
     post.setDeletedAt(Instant.now());
-    Post saved = postRepository.saveAndFlush(post);
-    recordModerationIfAdminOverride(actorId, isAdmin, saved, "DELETE_POST");
+    postRepository.saveAndFlush(post);
   }
 
   /**
@@ -335,19 +329,6 @@ public class PostService {
             ? postRepository.findByIdAndDeletedAtIsNull(postId)
             : postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, actorId))
         .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-  }
-
-  private void recordModerationIfAdminOverride(
-      UUID actorId, boolean isAdmin, Post post, String action) {
-    if (isAdmin && !post.getUser().getId().equals(actorId)) {
-      moderationLogRepository.save(
-          ModerationLog.builder()
-              .actorId(actorId)
-              .action(action)
-              .targetType("POST")
-              .targetId(post.getId())
-              .build());
-    }
   }
 
   /**

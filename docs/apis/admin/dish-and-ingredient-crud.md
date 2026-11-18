@@ -209,7 +209,7 @@ the same answer as before deletion. Resurrection is not on the table.
 
 ## POST /api/admin/dishes/{dishId}/approve
 
-Body (optional): `{ "reason": "real dish" }`
+No request body.
 
 Approves the name outright, **including one previously rejected**. This is the only
 way back from `REJECTED`, and it is deliberately narrow: post approval cannot do it
@@ -219,7 +219,7 @@ legitimate name forever.
 
 ## POST /api/admin/dishes/{dishId}/reject
 
-Body (optional): `{ "reason": "not food" }`
+No request body.
 
 Rejects the name outright, including one currently approved — an admin acting on the
 name itself is the authority that approved it. Nothing is deleted: existing recipes
@@ -232,9 +232,8 @@ and menus keep resolving, members simply cannot introduce the name again.
 - Approving a **post** approves every `PENDING` name it references; rejecting a post
   rejects only the ones still pending. These per-name endpoints are the direct route.
 - Rejection is permanent for members and non-destructive for content.
-- Every write is recorded in `moderation_log` with actor, target and reason
-  (`CREATE_DISH`, `DELETE_DISH`, `APPROVE_COMPONENT`, `REJECT_COMPONENT`, and the
-  ingredient equivalents).
+- No audit trail is kept: no administrator action is recorded anywhere (ADR-027). These
+  endpoints accept no `reason`, since there is nowhere to store it.
 
 ## Related
 

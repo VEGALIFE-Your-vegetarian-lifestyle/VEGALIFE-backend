@@ -64,14 +64,14 @@ Returns the updated post using `PostListResponse` (`id`, `userId`, `displayName`
 ## Business Rules
 
 - Only the owner or an Administrator can edit a post; a non-admin gets `404` for others' posts.
-- Every edit an Administrator makes to another user's post is written to `moderation_log` (BR-ADMIN-002).
+- An Administrator's edit of another user's post leaves no trace of who did it (ADR-027).
 - Publishing requires at least one active category; a published post cannot lose its last category.
 - `publish: true` does not publish: the post moves to `processing` with no flag and waits for the content filter, or for an admin when filtering is disabled (BR-POST-004, BR-FILTER-005).
 - `publish: false` withdraws the post immediately: `status = drafted`, `publishedAt` cleared, and any `flag`/`flagDetail` cleared. Withdrawal works from every state except `drafted` (where it is a no-op) — including `processing`, so an author can take back a post nobody has decided on yet (BR-POST-007).
 - A title or content change to a `published`, `unpublished`, or held (`processing` + flag) post re-queues semantic filtering and moves it to `processing` with no flag (BR-POST-007). A post that is merely in flight (`processing` + no flag) is not queued a second time — the pending run already reads the edited body. `rawContent` is never read by the filter and a `rawContent`-only change does not re-queue.
 - The filter never unpublishes: a `FAIL`/`UNCERTAIN` verdict, or a near-duplicate, holds the post at `processing` with a `flag` for an admin to decide (BR-FILTER-008). Only an admin rejection produces `unpublished` (BR-POST-012).
 - Filtering itself is never triggered synchronously by this endpoint; it runs through the async outbox (BR-FILTER-006).
-- Schema: migration `V18__create_moderation_log.sql` adds `moderation_log`; migration `V19__add_post_filtering.sql` adds the `flag` column; `V27__add_post_raw_content_drop_type_video_url.sql` adds `raw_content` and drops `type`/`video_url`; `V31__drop_post_status_flagged.sql` removes the `flagged` status value; `V56__post_processing_status_and_flag_blocker.sql` reshapes `status`/`flag` per ADR-023 and adds `flag_detail`; `V57__store_post_flag_detail_as_json.sql` converts `flag_detail` to `JSONB` and enforces `flag_detail->>'kind' = flag` (ADR-024); `V58__keep_post_flag_after_publication.sql` adds `FILTER_PASSED` and permits a flag on any status except `drafted` (ADR-025).
+- Schema: migration `V19__add_post_filtering.sql` adds the `flag` column; `V27__add_post_raw_content_drop_type_video_url.sql` adds `raw_content` and drops `type`/`video_url`; `V31__drop_post_status_flagged.sql` removes the `flagged` status value; `V56__post_processing_status_and_flag_blocker.sql` reshapes `status`/`flag` per ADR-023 and adds `flag_detail`; `V57__store_post_flag_detail_as_json.sql` converts `flag_detail` to `JSONB` and enforces `flag_detail->>'kind' = flag` (ADR-024); `V58__keep_post_flag_after_publication.sql` adds `FILTER_PASSED` and permits a flag on any status except `drafted` (ADR-025); `V60__drop_moderation_log.sql` drops the retired audit table (ADR-027).
 
 ## Example
 

@@ -36,7 +36,7 @@ public class AdminRecipeListResponse {
 
   /**
    * Why an admin rejected this recipe; null when no reason is recorded — never rejected, or
-   * rejected without a reason (the reason is optional, BR-ADMIN-002).
+   * rejected without a reason (the reason is optional).
    */
   private String rejectionReason;
 

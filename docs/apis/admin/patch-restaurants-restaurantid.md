@@ -70,7 +70,7 @@ Nothing changes on a 400 or a 404 — including the restaurant's existing attach
 ## Business Rules
 
 - Only an Administrator may edit a restaurant (BR-ADMIN-003).
-- Every successful edit writes a `moderation_log` row: `action = UPDATE_RESTAURANT`, `targetType = RESTAURANT` — BR-ADMIN-002.
+- No audit row is written: the moderation log is gone (ADR-027).
 - `dishIds` follows the same omitted/null-vs-empty-vs-non-empty convention as `imageUrls` (issue #159), extended to replace-the-whole-set semantics: omitted/null never touches attached dishes, `[]` detaches all of them, a non-empty array replaces the set after validating every id (issue #195).
 
 ## Example

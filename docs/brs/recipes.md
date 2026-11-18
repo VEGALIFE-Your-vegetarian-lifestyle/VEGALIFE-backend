@@ -596,7 +596,7 @@ to change.
 
 - Applies to `DELETE /api/recipes/{recipeId}`.
 - `DELETE /api/admin/recipes/{recipeId}` is outside this rule; an admin may
-  remove any recipe there and the action is recorded in the moderation log.
+  remove any recipe there, and no record of who did it is kept (ADR-027).
 - Dish and ingredient rows are not deleted, and an attached recipe is not
   detached from a post.
 - There is no member-facing restore route.

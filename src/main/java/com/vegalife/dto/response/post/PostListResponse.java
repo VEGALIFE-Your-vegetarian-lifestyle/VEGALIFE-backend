@@ -45,9 +45,9 @@ public class PostListResponse {
    * PostService} fills it in for the author alone.
    *
    * <p>Null is ambiguous on purpose: it means "no reason recorded", which covers never-rejected,
-   * rejected without a reason (the reason is optional, BR-ADMIN-002), and withheld by the content
-   * filter rather than an admin. The filter's own verdict is not part of this response: the flag
-   * and its snapshot are exposed on the admin endpoints only (ADR-025).
+   * rejected without a reason (the reason is optional), and withheld by the content filter rather
+   * than an admin. The filter's own verdict is not part of this response: the flag and its snapshot
+   * are exposed on the admin endpoints only (ADR-025).
    */
   private String rejectionReason;
 

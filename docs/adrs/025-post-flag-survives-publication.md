@@ -27,9 +27,12 @@ when it turned `flag_detail` into a JSON snapshot. Concretely:
 
 That erased the one thing a reviewer asks later: *was this post cleared by the
 filter, or did a human override the filter?* `published` answers neither. The
-audit trail in `moderation_log` records the human decision but not the verdict it
-overrode, and no admin API exposes the log, so the question could only be
+audit trail in `moderation_log` recorded the human decision but not the verdict it
+overrode, and no admin API exposed the log, so the question could only be
 answered by a database query.
+
+> **Superseded in part by [ADR-027](027-remove-moderation-log.md):** `moderation_log` no longer
+> exists, so keeping the flag on the row is now the *only* way to ask that question at all.
 
 The gap is visible in the review workflow: an admin looking at two published
 posts cannot tell a genuine pass from a false positive they approved by hand, so
@@ -112,7 +115,8 @@ unpublished + <any blocker>       an admin rejected a held post
   admin queue can surface false positives and the filter can be tuned against
   real overrides.
 - The final state of every submitted post is stored once, where a reviewer
-  already looks, without a join to `moderation_log`.
+  already looks, without a join to `moderation_log` — which no longer exists
+  ([ADR-027](027-remove-moderation-log.md)).
 - The passing verdict has a name, so absence of data stops ambiguously meaning
   both "never judged" and "passed".
 

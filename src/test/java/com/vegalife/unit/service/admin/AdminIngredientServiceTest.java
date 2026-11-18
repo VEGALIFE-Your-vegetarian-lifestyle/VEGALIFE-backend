@@ -3,7 +3,6 @@ package com.vegalife.unit.service.admin;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,9 +12,7 @@ import com.vegalife.dto.request.admin.AdminIngredientUpdateRequest;
 import com.vegalife.dto.response.admin.AdminIngredientResponse;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.enums.recipe.Unit;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Ingredient;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.service.admin.AdminIngredientService;
 import com.vegalife.service.recipe.RecipeNutritionService;
@@ -28,7 +25,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,8 +33,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AdminIngredientServiceTest {
 
   @Mock private IngredientRepository ingredientRepository;
-
-  @Mock private ModerationLogRepository moderationLogRepository;
 
   @Mock private RecipeNutritionService recipeNutritionService;
 
@@ -73,7 +67,6 @@ class AdminIngredientServiceTest {
     // A name with no nutrition yet is unresolved, not zero-calorie.
     assertThat(response.isNutritionResolved()).isFalse();
     assertThat(response.getCalories()).isNull();
-    assertThat(lastLog().getAction()).isEqualTo("CREATE_INGREDIENT");
   }
 
   @Test
@@ -321,7 +314,7 @@ class AdminIngredientServiceTest {
   }
 
   @Test
-  void deleteIngredient_softDeletesAndLogs() {
+  void deleteIngredient_softDeletes() {
     when(ingredientRepository.findByIdAndDeletedAtIsNull(ingredient.getId()))
         .thenReturn(Optional.of(ingredient));
 
@@ -329,7 +322,6 @@ class AdminIngredientServiceTest {
 
     assertThat(ingredient.getDeletedAt()).isNotNull();
     verify(ingredientRepository, never()).delete(any(Ingredient.class));
-    assertThat(lastLog().getAction()).isEqualTo("DELETE_INGREDIENT");
   }
 
   @Test
@@ -340,12 +332,12 @@ class AdminIngredientServiceTest {
 
     assertThat(
             adminIngredientService
-                .approveIngredient(adminId, ingredient.getId(), null)
+                .approveIngredient(adminId, ingredient.getId())
                 .getModerationStatus())
         .isEqualTo("APPROVED");
     assertThat(
             adminIngredientService
-                .rejectIngredient(adminId, ingredient.getId(), "not food")
+                .rejectIngredient(adminId, ingredient.getId())
                 .getModerationStatus())
         .isEqualTo("REJECTED");
   }
@@ -359,11 +351,5 @@ class AdminIngredientServiceTest {
     assertThatThrownBy(() -> adminIngredientService.getIngredient(ingredientId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Ingredient not found");
-  }
-
-  private ModerationLog lastLog() {
-    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository, atLeastOnce()).save(captor.capture());
-    return captor.getAllValues().get(captor.getAllValues().size() - 1);
   }
 }
