@@ -75,9 +75,11 @@ would do.
       recipes including zero.
 - [ ] FR-002: `GET /api/admin/recipes` items carry no `score` property.
 - [ ] FR-003: `GET /api/admin/recipes/{recipeId}` carries no `score` property.
-- [ ] FR-004: `GET /api/admin/posts/{postId}` keeps `data.contentScore` and
-      `data.names[]` unchanged, and its `data.recipes[]` entries carry no `score`
-      property.
+- [ ] FR-004: `GET /api/admin/posts/{postId}` keeps `data.contentScore` and every
+      field of `data.names[]` except its score. Neither `data.recipes[]` nor
+      `data.names[]` carries a `score` property any more: the property is gone
+      from `ComponentSummary`, which both lists share, and names only ever had
+      `score: null`.
 - [ ] FR-005: `GET /api/admin/recipes?sort=score` is rejected with `400` and the
       accepted set is exactly `createdAt`, `updatedAt`, `name`,
       `moderationStatus`.

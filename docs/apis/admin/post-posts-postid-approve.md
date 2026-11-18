@@ -8,7 +8,7 @@ including the dishes, ingredients and recipe the post carries.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/admin/posts/{postId}` | Full detail: scores and referenced component states |
+| `GET /api/admin/posts/{postId}` | Full detail: the content score and referenced component states |
 | `POST /api/admin/posts/{postId}/approve` | Publish the post and approve pending components |
 | `POST /api/admin/posts/{postId}/reject` | Unpublish the post and reject pending components |
 
