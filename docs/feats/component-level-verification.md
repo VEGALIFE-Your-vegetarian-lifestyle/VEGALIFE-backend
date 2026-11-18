@@ -45,6 +45,11 @@ ingredient names behind admin approval before they are visible.
 
 ## Requirements
 
+> **Amended 2026-11-19 by [ADR-026](../adrs/026-remove-recipe-scoring.md):** R3, R4, R7 and R8
+> below describe scoring the recipe body and storing `recipe.score`. That component was removed —
+> only the post body is scored, and `recipe.score` no longer exists. See
+> [Remove Recipe-Body Scoring](remove-recipe-scoring.md) for what holds now.
+
 | ID | Requirement |
 |---|---|
 | R1 | `dish`, `ingredient` and `recipe` carry `moderation_status` ∈ `PENDING`/`APPROVED`/`REJECTED`. |

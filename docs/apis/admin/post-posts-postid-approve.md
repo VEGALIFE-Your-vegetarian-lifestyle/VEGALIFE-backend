@@ -52,8 +52,7 @@ roles receive `403 Forbidden`.
         "id": "0b0f8c1e-1f2a-4c3d-9e8f-7a6b5c4d3e2f",
         "type": "RECIPE",
         "name": "Phở chay",
-        "moderationStatus": "PENDING",
-        "score": 0.6104
+        "moderationStatus": "PENDING"
       }
     ],
     "names": [
@@ -61,15 +60,13 @@ roles receive `403 Forbidden`.
         "id": "6c2d3e4f-5a6b-7c8d-9e0f-1a2b3c4d5e6f",
         "type": "DISH",
         "name": "phở chay",
-        "moderationStatus": "PENDING",
-        "score": null
+        "moderationStatus": "PENDING"
       },
       {
         "id": "7d3e4f5a-6b7c-8d9e-0f1a-2b3c4d5e6f70",
         "type": "INGREDIENT",
         "name": "cocain",
-        "moderationStatus": "PENDING",
-        "score": null
+        "moderationStatus": "PENDING"
       }
     ]
   }
@@ -83,11 +80,11 @@ roles receive `403 Forbidden`.
 | flag | string \| null | The post's last verdict: `FILTER_PASSED` (the filter cleared it), or `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` (held, or approved/rejected over the blocker). `null` on a draft, on a run still in flight, and on rows published before V58 (ADR-025). |
 | flagDetail | object \| null | The evidence behind `flag` as a JSON snapshot (ADR-024, ADR-025): `kind` (always equal to `flag`) plus the fields that verdict owns — `score`/`threshold` for `FILTER_PASSED`, `outcome`/`score`/`threshold` for `FILTER_FAILED`, `postId`/`similarity`/`threshold` for `SIMILAR_CONTENT`, `cause` for `FILTER_SKIPPED`. Absent fields are omitted. |
 | rejectionReason | string \| null | Why an admin rejected this post. Cleared when the post is approved. `null` = no reason recorded. |
-| recipes | array | Recipe bodies the post attaches, each with its own score. Empty when none is attached. |
+| recipes | array | Recipe bodies the post attaches. Empty when none is attached. |
 | names | array | Every dish and ingredient name the post references. |
 | recipes[].type / names[].type | string | `RECIPE`, `DISH` or `INGREDIENT`. |
 | recipes[].moderationStatus, names[].moderationStatus | string | `PENDING`, `APPROVED` or `REJECTED`. |
-| recipes[].score | number \| null | The recipe's score; `null` for dish and ingredient names, which are not scored. |
+| recipes[].score / names[].score | — | Removed by ADR-026. No component carries a score; the property is absent from both arrays. |
 
 Components are assembled at read time from the recipe, dish and ingredient rows
 the post references. They are not stored.
