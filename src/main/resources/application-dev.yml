@@ -2,6 +2,12 @@ spring:
   config:
     activate:
       on-profile: dev
+    # Local `.env` (gitignored, not baked into images) answers the ${VAR:default}
+    # placeholders in this file and in application.yml. `optional:` keeps a missing
+    # file a no-op, and config-data ranks below real OS variables, so a deploy
+    # environment still wins. `[.properties]` is required because the filename has
+    # no suffix Boot can infer; .env.example is written in properties syntax.
+    import: optional:file:./.env[.properties]
 
   ai:
     openai:

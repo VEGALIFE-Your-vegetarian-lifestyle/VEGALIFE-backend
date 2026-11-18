@@ -83,6 +83,51 @@ class DotenvConfigImportTest {
         .isEqualTo("from-os-env");
   }
 
+  /**
+   * Pins what an imported {@code .env} does <em>not</em> do, so the limitation is documented in
+   * code rather than only in prose.
+   *
+   * <p>A {@code .env} entry only takes effect when something asks for that exact property name.
+   * {@code SPRING_PROFILES_ACTIVE} is the sharp case: the profile is resolved <em>before</em>
+   * config-data is processed, so a {@code .env} entry can never activate a profile — which is also
+   * why importing {@code .env} from a profile-scoped file cannot bootstrap itself. Conversely a
+   * relaxed-binding style name such as {@code LOGGING_LEVEL_ROOT} is not a property key at all;
+   * only a real OS environment variable is translated that way.
+   */
+  @Test
+  void dotenvCannotActivateAProfileOrFeedRelaxedBindingKeys(@TempDir Path tempDir)
+      throws IOException {
+    Path dotenv = tempDir.resolve(".env");
+    Files.writeString(
+        dotenv,
+        """
+        SPRING_PROFILES_ACTIVE=prod
+        LOGGING_LEVEL_ROOT=TRACE
+        VEGALIFE_DOTENV_CONTROL=from-dotenv
+        """,
+        StandardCharsets.UTF_8);
+
+    MockEnvironment environment = new MockEnvironment();
+    environment.setProperty(
+        "spring.config.import", "optional:file:" + dotenv.toAbsolutePath() + "[.properties]");
+
+    String profilesBefore = String.join(",", environment.getActiveProfiles());
+    ConfigDataEnvironmentPostProcessor.applyTo(environment);
+
+    assertThat(environment.getProperty("VEGALIFE_DOTENV_CONTROL"))
+        .as("control: the file really was imported")
+        .isEqualTo("from-dotenv");
+    assertThat(environment.getProperty("SPRING_PROFILES_ACTIVE"))
+        .as("the value lands as an ordinary property ...")
+        .isEqualTo("prod");
+    assertThat(String.join(",", environment.getActiveProfiles()))
+        .as("... but it must NOT activate a profile: profiles resolve before config data is read")
+        .isEqualTo(profilesBefore);
+    assertThat(environment.getProperty("logging.level.root"))
+        .as("relaxed binding is an environment-variable feature, not a properties-file one")
+        .isNull();
+  }
+
   private static String readResource(String path) throws IOException {
     try (InputStream in = DotenvConfigImportTest.class.getResourceAsStream(path)) {
       if (in == null) {
