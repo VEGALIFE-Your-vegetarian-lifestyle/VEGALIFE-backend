@@ -46,6 +46,12 @@ public class AdminRecipeListResponse {
   private UUID dishId;
   private String dishName;
 
+  /**
+   * The shared dish's representative image. Read-only for this surface: it is set through the dish
+   * endpoints, so a recipe edit cannot change it. {@code null} when the dish has no image.
+   */
+  private String imageUrl;
+
   /** The shared dish name's own review state; approving this recipe does not change it. */
   private String dishModerationStatus;
 

@@ -360,6 +360,28 @@ class RecipeControllerIntegrationTest {
   }
 
   @Test
+  void getRecipe_returnsTheDishImageUrl() throws Exception {
+    Recipe recipe = createApprovedRecipe("Pho with image", "Image Dish", List.of());
+    recipe.getDish().setImageUrl("https://cdn.example.com/pho.jpg");
+    dishRepository.saveAndFlush(recipe.getDish());
+
+    mockMvc
+        .perform(get("/api/recipes/{recipeId}", recipe.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.imageUrl").value("https://cdn.example.com/pho.jpg"));
+  }
+
+  @Test
+  void getRecipe_imageIsNullWhenTheDishHasNone() throws Exception {
+    Recipe recipe = createApprovedRecipe("Pho without image", "Plain Dish", List.of());
+
+    mockMvc
+        .perform(get("/api/recipes/{recipeId}", recipe.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.imageUrl").value(nullValue()));
+  }
+
+  @Test
   void getRecipe_returnsTheRejectionReasonToItsOwner() throws Exception {
     Recipe recipe = createRejectedRecipe("Rainbow Bowl", "instructions are off-topic");
 

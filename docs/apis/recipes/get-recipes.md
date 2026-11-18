@@ -56,6 +56,7 @@ Standard pagination envelope (`ApiResponse<PageResponse<RecipeResponse>>`), mess
         "userId": "6c1f1a3e-1f0a-4f6e-9a4a-6d2d5e77aa11",
         "dishId": "9b2d8e11-2c33-4f5a-8f1d-0a1b2c3d4e5f",
         "dishName": "tofu stir-fry",
+        "imageUrl": "https://cdn.example.com/tofu-stir-fry.jpg",
         "dishModerationStatus": "APPROVED",
         "moderationStatus": "APPROVED",
         "rejectionReason": null,
@@ -110,6 +111,7 @@ Each `data.content[]` item is the same `RecipeResponse` shape returned by `GET /
 - BR-RECP-008: only `moderationStatus = APPROVED`, non-deleted recipes are listed. A `PENDING` or `REJECTED` recipe is visible only to its author through `GET /api/recipes/me` and `GET /api/recipes/{recipeId}`.
 - Soft-deleted recipes (`deleted_at IS NOT NULL`) are never returned.
 - `rejectionReason` is always `null` here: a non-author list must not reveal an administrative message.
+- `imageUrl` is the shared dish's image, so every recipe using the same dish reports the same value; `null` when the dish has no image. It is set by an admin through the dish endpoints, not by the recipe author.
 - Ordering is `created_at` descending — newest recipe first.
 - BR-RECP-006 / BR-RECP-007 apply: nutrition totals and per-line values are derived, and a recipe reports `nutritionResolved = false` when any ingredient is unresolved.
 - Pagination is bounded: page `0`, size `20` by default, `size` 1–100.

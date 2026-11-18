@@ -40,6 +40,7 @@ belongs to the caller; no member id is accepted.
         "userId": "6f1c2b1a-9a1e-4f5a-8f3e-2b4c9d8e7f10",
         "dishId": "3b1f5c8e-2a4d-4c6b-9f7e-1d2c3b4a5e60",
         "dishName": "phở chay",
+        "imageUrl": "https://cdn.example.com/pho-chay.jpg",
         "dishModerationStatus": "APPROVED",
         "moderationStatus": "APPROVED",
         "rejectionReason": null,

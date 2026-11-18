@@ -2,9 +2,7 @@ package com.vegalife.service.recipe;
 
 import com.vegalife.dto.mapper.recipe.RecipeSummaryMapper;
 import com.vegalife.dto.request.recipe.DishSuggestionRequest;
-import com.vegalife.dto.response.menu.RecipeSummaryResponse;
 import com.vegalife.dto.response.recipe.DishSuggestionResponse;
-import com.vegalife.model.recipe.Recipe;
 import com.vegalife.shared.dto.PageResponse;
 import java.util.List;
 import java.util.UUID;
@@ -47,7 +45,10 @@ public class DishSuggestionFacade {
                         .cuisineType(suggestion.dish().getCuisineType())
                         .recommendedRecipes(
                             suggestion.recipes().stream()
-                                .map(RecipeSummaryMapper::toSummary)
+                                .map(
+                                    recipe ->
+                                        RecipeSummaryMapper.toSummary(
+                                            recipe, suggestion.dish().getImageUrl()))
                                 .toList())
                         .build())
             .toList();
@@ -80,9 +81,5 @@ public class DishSuggestionFacade {
         .minFiberG(request.getMinFiber())
         .maxFiberG(request.getMaxFiber())
         .build();
-  }
-
-  private static RecipeSummaryResponse toRecipeSummary(Recipe recipe) {
-    return RecipeSummaryMapper.toSummary(recipe);
   }
 }

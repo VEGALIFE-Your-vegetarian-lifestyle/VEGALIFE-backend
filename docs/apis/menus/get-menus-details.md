@@ -90,7 +90,25 @@ No request body.
                 "description": "Crumbed firm tofu with turmeric and black salt",
                 "imageUrl": "https://cdn.example.com/dishes/tofu-scramble.jpg",
                 "cuisineType": "Asian"
-              }
+              },
+              "recommendedRecipes": [
+                {
+                  "id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+                  "name": "Turmeric tofu scramble",
+                  "description": "Black salt and firm tofu",
+                  "imageUrl": "https://cdn.example.com/dishes/tofu-scramble.jpg",
+                  "prepTimeMinutes": 10,
+                  "cookTimeMinutes": 15,
+                  "servings": 2,
+                  "difficulty": "EASY",
+                  "calories": 240.00,
+                  "proteinG": 22.40,
+                  "carbohydrateG": 9.10,
+                  "fatG": 12.80,
+                  "fiberG": 3.20,
+                  "nutritionResolved": true
+                }
+              ]
             }
           ]
         }
@@ -123,6 +141,7 @@ No request body.
 | data[].days[].meals[].dish.description | string or null | Free-text description. |
 | data[].days[].meals[].dish.imageUrl | string or null | Image URL. |
 | data[].days[].meals[].dish.cuisineType | string or null | Free-text cuisine type. |
+| data[].days[].meals[].recommendedRecipes | array | Approved recipes for this dish, best first; empty when none qualify. Field-by-field, this is the recommendation shape documented in `docs/apis/recipes/get-dishes-suggestions.md`. Its `imageUrl` is the same shared dish image as `meals[].dish.imageUrl`. |
 
 `data` is a plain array, not a page object — this endpoint is not paginated.
 `GET /api/menus` remains the paginated, summary-only read.
@@ -192,7 +211,25 @@ curl "/api/menus/details?menuId=3f0a9d21-5f6e-4c11-9a8b-1d2e3f4a5b6c" \
                 "description": "Crumbed firm tofu with turmeric and black salt",
                 "imageUrl": "https://cdn.example.com/dishes/tofu-scramble.jpg",
                 "cuisineType": "Asian"
-              }
+              },
+              "recommendedRecipes": [
+                {
+                  "id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+                  "name": "Turmeric tofu scramble",
+                  "description": "Black salt and firm tofu",
+                  "imageUrl": "https://cdn.example.com/dishes/tofu-scramble.jpg",
+                  "prepTimeMinutes": 10,
+                  "cookTimeMinutes": 15,
+                  "servings": 2,
+                  "difficulty": "EASY",
+                  "calories": 240.00,
+                  "proteinG": 22.40,
+                  "carbohydrateG": 9.10,
+                  "fatG": 12.80,
+                  "fiberG": 3.20,
+                  "nutritionResolved": true
+                }
+              ]
             },
             {
               "mealType": "LUNCH",
@@ -203,7 +240,8 @@ curl "/api/menus/details?menuId=3f0a9d21-5f6e-4c11-9a8b-1d2e3f4a5b6c" \
                 "description": "Chickpeas, cucumber, lemon and dill",
                 "imageUrl": null,
                 "cuisineType": "Mediterranean"
-              }
+              },
+              "recommendedRecipes": []
             }
           ]
         }

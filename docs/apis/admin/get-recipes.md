@@ -52,6 +52,7 @@ No request body
         "rejectionReason": null,
         "dishId": "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
         "dishName": "Pho",
+        "imageUrl": "https://cdn.example.com/dishes/pho.jpg",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "ingredients": [
           {
@@ -108,6 +109,7 @@ No request body
 | data.content[].rejectionReason | string \| null | Why an admin rejected this recipe; `null` when no reason was recorded. Cleared when the recipe is approved again (current state — the audit trail is `moderation_log`) |
 | data.content[].dishId | uuid | Parent dish id |
 | data.content[].dishName | string | Parent dish name, nullable |
+| data.content[].imageUrl | string \| null | The shared dish's image. Read-only here: set it through the dish endpoints, so it is the same on every recipe using that dish. `null` when the dish has none |
 | data.content[].categoryIds | uuid[] | Category ids via the recipe's linked posts; empty when not linked |
 | data.content[].ingredients | array | Ingredients with amounts; empty when none |
 | data.content[].ingredients[].ingredientId | uuid | Ingredient id |
@@ -176,6 +178,7 @@ curl -X GET "http://localhost:8080/api/admin/recipes?page=0&size=20&userId=550e8
         "rejectionReason": null,
         "dishId": "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
         "dishName": "Pho",
+        "imageUrl": "https://cdn.example.com/dishes/pho.jpg",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "ingredients": [
           {

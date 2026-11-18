@@ -93,6 +93,7 @@ Behaviour of the recipe filters:
             "id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
             "name": "Pho chay with tofu",
             "description": "Brothy noodle soup",
+            "imageUrl": null,
             "prepTimeMinutes": 20,
             "cookTimeMinutes": 40,
             "servings": 2,
@@ -131,6 +132,7 @@ Behaviour of the recipe filters:
 | data.content[].recommendedRecipes[].id | uuid | Recipe id |
 | data.content[].recommendedRecipes[].name | string | Recipe name |
 | data.content[].recommendedRecipes[].description | string \| null | Recipe description |
+| data.content[].recommendedRecipes[].imageUrl | string \| null | The shared dish's image, repeated on each recommendation so a recipe card can render without resolving the dish. `null` when the dish has none. |
 | data.content[].recommendedRecipes[].prepTimeMinutes | integer \| null | Prep time |
 | data.content[].recommendedRecipes[].cookTimeMinutes | integer \| null | Cook time |
 | data.content[].recommendedRecipes[].servings | integer \| null | Servings the totals below describe |

@@ -14,15 +14,18 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.menu.MealType;
 import com.vegalife.enums.menu.MenuStatus;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.menu.Menu;
 import com.vegalife.model.menu.MenuDetail;
 import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.menu.MenuDetailRepository;
 import com.vegalife.repository.menu.MenuRepository;
 import com.vegalife.repository.recipe.DishRepository;
+import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
 import java.time.DayOfWeek;
@@ -96,6 +99,8 @@ class MenuControllerIntegrationTest {
   @Autowired private MenuDetailRepository menuDetailRepository;
 
   @Autowired private DishRepository dishRepository;
+
+  @Autowired private RecipeRepository recipeRepository;
 
   @Autowired private JwtTokenService jwtTokenService;
 
@@ -404,6 +409,15 @@ class MenuControllerIntegrationTest {
             .mealType(MealType.BREAKFAST)
             .servings(2)
             .build());
+    recipeRepository.saveAndFlush(
+        Recipe.builder()
+            .user(user)
+            .dish(dish)
+            .name("Tofu scramble bowl")
+            .instructions("Crumble and cook")
+            .servings(2)
+            .moderationStatus(ModerationStatus.APPROVED)
+            .build());
 
     mockMvc
         .perform(
@@ -429,7 +443,12 @@ class MenuControllerIntegrationTest {
         .andExpect(
             jsonPath("$.data[0].days[0].meals[0].dish.imageUrl")
                 .value("https://example.com/tofu-scramble.jpg"))
-        .andExpect(jsonPath("$.data[0].days[0].meals[0].dish.cuisineType").value("American"));
+        .andExpect(jsonPath("$.data[0].days[0].meals[0].dish.cuisineType").value("American"))
+        // A recommended recipe reports the same dish image, so a recommendation card can render
+        // without resolving the dish separately.
+        .andExpect(
+            jsonPath("$.data[0].days[0].meals[0].recommendedRecipes[0].imageUrl")
+                .value("https://example.com/tofu-scramble.jpg"));
   }
 
   @Test
@@ -692,6 +711,27 @@ class MenuControllerIntegrationTest {
     Menu created = menuRepository.findAll().get(0);
     assertThat(created.getUserId()).isEqualTo(user.getId());
     assertThat(created.getUserId()).isNotEqualTo(otherUser.getId());
+  }
+
+  @Test
+  void createMenu_carriesTheDishImageOnEachMeal() throws Exception {
+    List<UUID> dishes = createDishes(7);
+    Dish imaged = dishRepository.findById(dishes.get(0)).orElseThrow();
+    imaged.setImageUrl("https://cdn.example.com/menu-dish.jpg");
+    dishRepository.saveAndFlush(imaged);
+
+    mockMvc
+        .perform(
+            post("/api/menus")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(createMenuJson(CREATE_START, oneBreakfastPerDayForCreate(dishes))))
+        .andExpect(status().isCreated())
+        // The meal row carries the dish image so a plan can be rendered without a second call.
+        .andExpect(
+            jsonPath("$.data.days[0].meals[0].imageUrl")
+                .value("https://cdn.example.com/menu-dish.jpg"))
+        .andExpect(jsonPath("$.data.days[1].meals[0].imageUrl").value(nullValue()));
   }
 
   @Test

@@ -27,6 +27,13 @@ public class RecipeSummaryResponse {
   private UUID id;
   private String name;
   private String description;
+
+  /**
+   * The shared dish's representative image, identical for every recipe of that dish. {@code null}
+   * when no image has been set; an admin sets it through the dish endpoints.
+   */
+  private String imageUrl;
+
   private Integer prepTimeMinutes;
   private Integer cookTimeMinutes;
 

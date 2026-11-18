@@ -13,6 +13,7 @@ import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CategoryRepository;
@@ -96,6 +97,7 @@ class AdminNameCrudIntegrationTest {
 
   private String adminToken;
   private String memberToken;
+  private User memberUser;
 
   @BeforeEach
   void setUp() {
@@ -112,9 +114,8 @@ class AdminNameCrudIntegrationTest {
     adminToken =
         jwtTokenService.generateAccessToken(
             createUser("adminnames", "admin.names@example.com", UserRole.ADMIN));
-    memberToken =
-        jwtTokenService.generateAccessToken(
-            createUser("membernames", "member.names@example.com", UserRole.USER));
+    memberUser = createUser("membernames", "member.names@example.com", UserRole.USER);
+    memberToken = jwtTokenService.generateAccessToken(memberUser);
   }
 
   @Test
@@ -190,6 +191,42 @@ class AdminNameCrudIntegrationTest {
         .andExpect(jsonPath("$.data.description").value("Noodle soup"))
         // An edit is itself an approval; it must not re-queue the name.
         .andExpect(jsonPath("$.data.moderationStatus").value("APPROVED"));
+  }
+
+  @Test
+  void updateDish_imageUrlIsReturnedOnBothDishAndRecipeResponses() throws Exception {
+    Dish dish =
+        dishRepository.saveAndFlush(
+            Dish.builder()
+                .name("bánh mì chay")
+                .moderationStatus(ModerationStatus.APPROVED)
+                .build());
+    Recipe recipe =
+        recipeRepository.saveAndFlush(
+            Recipe.builder()
+                .user(memberUser)
+                .dish(dish)
+                .name("Bánh mì")
+                .instructions("Assemble")
+                .servings(1)
+                .moderationStatus(ModerationStatus.APPROVED)
+                .build());
+
+    mockMvc
+        .perform(
+            patch("/api/admin/dishes/" + dish.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"imageUrl\":\"https://cdn.example.com/banh-mi.jpg\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.imageUrl").value("https://cdn.example.com/banh-mi.jpg"));
+
+    // The image lives on the shared dish, so the recipe read returns it without a column of its
+    // own.
+    mockMvc
+        .perform(get("/api/recipes/{recipeId}", recipe.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.imageUrl").value("https://cdn.example.com/banh-mi.jpg"));
   }
 
   @Test

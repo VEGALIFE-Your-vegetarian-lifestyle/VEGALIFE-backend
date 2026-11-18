@@ -36,6 +36,7 @@ No request body
     "userId": "6c1f1a3e-1f0a-4f6e-9a4a-6d2d5e77aa11",
     "dishId": "9b2d8e11-2c33-4f5a-8f1d-0a1b2c3d4e5f",
     "dishName": "tofu stir-fry",
+    "imageUrl": "https://cdn.example.com/tofu-stir-fry.jpg",
     "dishModerationStatus": "APPROVED",
     "moderationStatus": "APPROVED",
     "rejectionReason": null,
@@ -81,6 +82,7 @@ No request body
 | data.userId | uuid | Owner of the recipe; not necessarily the caller |
 | data.dishId | uuid | Resolved shared dish row; never null |
 | data.dishName | string | Dish name after lowercasing (e.g. request `Tofu Stir-Fry` → `tofu stir-fry`) |
+| data.imageUrl | string \| null | The shared dish's representative image. Identical for every recipe using that dish; `null` when no image has been set. Set by an admin through `POST`/`PATCH /api/admin/dishes`, never by the recipe author. |
 | data.dishModerationStatus | string | Review state of the linked dish name: `PENDING`, `APPROVED`, or `REJECTED` |
 | data.moderationStatus | string | Review state of this recipe: `PENDING`, `APPROVED`, or `REJECTED` |
 | data.rejectionReason | string or null | Why an admin rejected this recipe. Returned only to the author; always `null` for a non-author or guest read. |
@@ -115,6 +117,7 @@ No request body
 - BR-RECP-008: visibility is decided by moderation state plus authorship, not by who is asking. A recipe with `moderationStatus = APPROVED` and `deleted_at IS NULL` resolves for every caller, including a guest. A `PENDING` or `REJECTED` recipe resolves only when the caller is its author.
 - An ineligible read is reported as 404, not 403: answering "exists but is not approved" would confirm the id to a non-author.
 - Review state never hides the recipe from its own author. `moderationStatus` and `dishModerationStatus` are returned as-is, so an author can still read a `PENDING` recipe or a recipe whose dish name is still awaiting approval — with the state attached — instead of looking inexplicably withheld (BR-DISH-001).
+- `imageUrl` is the shared dish's image, not the recipe's: every recipe using the same dish reports the same value, and an admin changes it through the dish endpoints rather than the recipe.
 - `rejectionReason` is author-only. It is returned when the caller authored the recipe and cleared to `null` for every other caller, because this payload is now also a public read.
 - Nutrition is derived from the recipe's ingredients and stored, never authored (BR-RECP-004, ADR-022). `nutritionResolved` distinguishes "all ingredients curated" from "cannot be priced yet"; a `null` total is never a `0` (BR-RECP-006).
 - Each line reports its own contribution (`amount × per-unit value`, rounded to 2 decimals) so a member can see which ingredient drives the total. Line values are rounded individually while the total is rounded once over the exact sum, so the visible lines need not add up exactly to the visible total (BR-RECP-007).
@@ -138,6 +141,7 @@ curl -X GET "http://localhost:8080/api/recipes/550e8400-e29b-41d4-a716-446655440
     "userId": "6c1f1a3e-1f0a-4f6e-9a4a-6d2d5e77aa11",
     "dishId": "9b2d8e11-2c33-4f5a-8f1d-0a1b2c3d4e5f",
     "dishName": "tofu stir-fry",
+    "imageUrl": null,
     "dishModerationStatus": "APPROVED",
     "moderationStatus": "APPROVED",
     "name": "Spicy tofu stir-fry",
