@@ -83,6 +83,7 @@ with no unit and the recipe is uncomputable until an admin resolves it.
     "userId": "6c1f1a3e-1f0a-4f6e-9a4a-6d2d5e77aa11",
     "dishId": "9b2d8e11-2c33-4f5a-8f1d-0a1b2c3d4e5f",
     "dishName": "tofu stir-fry",
+    "imageUrl": null,
     "name": "Spicy tofu stir-fry",
     "description": "A quick weeknight dinner.",
     "instructions": "Press the tofu. Stir-fry with vegetables and sauce.",
@@ -136,6 +137,7 @@ with no unit and the recipe is uncomputable until an admin resolves it.
 | data.userId | uuid | Owner, taken from the authenticated JWT. |
 | data.dishId | uuid | Resolved shared dish row; never null. |
 | data.dishName | string | Dish name after lowercasing (e.g. request `Tofu Stir-Fry` → `tofu stir-fry`). |
+| data.imageUrl | string \| null | The resolved dish's image. `null` for a dish created by this request (a new dish has no image) or one an admin has not illustrated yet; never set from the request body. |
 | data.name | string | Recipe name as submitted. |
 | data.description | string or null | Optional description, if supplied. |
 | data.instructions | string | Cooking instructions. |

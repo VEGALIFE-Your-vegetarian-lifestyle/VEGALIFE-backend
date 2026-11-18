@@ -46,6 +46,7 @@ No request body
         "userId": "6c1f1a3e-1f0a-4f6e-9a4a-6d2d5e77aa11",
         "dishId": "9b2d8e11-2c33-4f5a-8f1d-0a1b2c3d4e5f",
         "dishName": "tofu stir-fry",
+        "imageUrl": "https://cdn.example.com/tofu-stir-fry.jpg",
         "dishModerationStatus": "APPROVED",
         "moderationStatus": "APPROVED",
         "rejectionReason": null,
@@ -99,6 +100,7 @@ No request body
 | data.content[].userId | uuid | Owner, always the authenticated caller |
 | data.content[].dishId | uuid | Resolved shared dish row; never null |
 | data.content[].dishName | string | Dish name after lowercasing (e.g. request `Tofu Stir-Fry` → `tofu stir-fry`) |
+| data.content[].imageUrl | string \| null | The shared dish's representative image. Identical for every recipe using that dish; `null` when no image has been set. Set by an admin through `POST`/`PATCH /api/admin/dishes`, never by the recipe author. |
 | data.content[].dishModerationStatus | string | Review state of the linked dish name: `PENDING`, `APPROVED`, or `REJECTED` |
 | data.content[].moderationStatus | string | Review state of this recipe: `PENDING`, `APPROVED`, or `REJECTED` |
 | data.content[].rejectionReason | string or null | Why an admin rejected this recipe. Always populated for the author when a reason exists; `null` otherwise. |
@@ -139,6 +141,7 @@ No request body
 - Soft-deleted recipes (`deleted_at IS NOT NULL`) are never included.
 - Ordering is `created_at DESC` — newest recipe first.
 - No moderation filter is applied unless `moderationStatus` is supplied: recipes whose dish name is still `PENDING`, or that are themselves unapproved, stay in the list with their state attached, so a withheld recipe is not a mystery to its author (BR-DISH-001).
+- `imageUrl` is the shared dish's image, not the recipe's: every recipe using the same dish reports the same value, and an admin changes it through the dish endpoints rather than the recipe.
 - `moderationStatus`, `dishId`, `difficulty`, and `maxTotalTimeMinutes` only narrow the caller's own list; they never widen visibility.
 - Pagination is bounded: page `0`, size `20` by default, `size` 1–100. This response is a `PageResponse`, like `GET /api/posts/me`; it changed from a bare array in the list-filters release.
 - Nutrition is derived from the recipe's ingredients and stored, never authored (BR-RECP-004, ADR-022). `nutritionResolved` distinguishes "all ingredients curated" from "cannot be priced yet"; a `null` total is never a `0`.
