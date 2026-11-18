@@ -170,6 +170,32 @@ class AdminRecipeControllerIntegrationTest {
   }
 
   @Test
+  void getRecipe_reportsTheDishImage() throws Exception {
+    Dish dish =
+        dishRepository.saveAndFlush(
+            Dish.builder()
+                .name("Imaged bowl")
+                .imageUrl("https://cdn.example.com/imaged-bowl.jpg")
+                .build());
+    Recipe recipe =
+        recipeRepository.saveAndFlush(
+            Recipe.builder()
+                .dish(dish)
+                .user(member)
+                .name("Imaged recipe")
+                .instructions("Stir and serve")
+                .servings(2)
+                .build());
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes/{recipeId}", recipe.getId())
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.imageUrl").value("https://cdn.example.com/imaged-bowl.jpg"));
+  }
+
+  @Test
   void listRecipes_returnsAllAuthorsAndSoftDeletedRecipes() throws Exception {
     createRecipe(member, "Member active", null, Set.of(), false);
     createRecipe(author2, "Author active", null, Set.of(), false);

@@ -19,6 +19,7 @@ public interface AdminRecipeMapper {
   @Mapping(target = "dishId", source = "dish.id")
   @Mapping(target = "dishName", source = "dish.name")
   @Mapping(target = "dishModerationStatus", source = "dish.moderationStatus")
+  @Mapping(target = "imageUrl", source = "dish.imageUrl")
   @Mapping(target = "categoryIds", source = "posts")
   @Mapping(target = "userId", source = "user.id")
   @Mapping(target = "displayName", source = "user.displayName")

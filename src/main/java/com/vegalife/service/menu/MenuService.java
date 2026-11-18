@@ -392,6 +392,7 @@ public class MenuService {
         .mealType(detail.getMealType().name())
         .dishId(detail.getDish().getId())
         .dishName(detail.getDish().getName())
+        .imageUrl(detail.getDish().getImageUrl())
         .servings(detail.getServings())
         .build();
   }
@@ -458,7 +459,7 @@ public class MenuService {
                 .build())
         .recommendedRecipes(
             recommendations.getOrDefault(dish.getId(), List.of()).stream()
-                .map(RecipeSummaryMapper::toSummary)
+                .map(recipe -> RecipeSummaryMapper.toSummary(recipe, dish.getImageUrl()))
                 .toList())
         .build();
   }
