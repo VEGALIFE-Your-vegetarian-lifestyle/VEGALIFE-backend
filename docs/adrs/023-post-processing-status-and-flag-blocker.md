@@ -125,8 +125,10 @@ fixes the withdraw-during-flight republish.
   and is unchanged.
 
 `flag` stays a closed, exactly-matchable vocabulary, so the admin
-`?flag=` filter remains an equality predicate over an enum. `moderation_log`
-is unchanged and keeps the audit trail.
+`?flag=` filter remains an equality predicate over an enum.
+
+> **Superseded in part by [ADR-027](027-remove-moderation-log.md):** the audit trail is gone, so
+> `flag`/`flag_detail` on the row are now the only record of what the filter decided.
 
 ### 7. Admin approval and rejection are the only visibility decisions
 

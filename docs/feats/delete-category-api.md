@@ -24,7 +24,7 @@ BR-ADMIN-003 states: "A category that is still used by existing content must not
 - Un-retiring / restoring a category (no Sprint item for this yet).
 - List categories (Sprint item 34.0).
 - Blocking retirement based on whether the category is currently in use — retirement is always allowed and is always non-destructive to existing content, so no usage check is needed before allowing it.
-- Recording category retirement in `moderation_log` (BR-ADMIN-002 scopes moderation logging to content/comment moderation; same decision made for create/edit category APIs).
+- Recording category retirement in an audit log — no administrator action is audited anywhere (ADR-027).
 
 ## Requirements
 

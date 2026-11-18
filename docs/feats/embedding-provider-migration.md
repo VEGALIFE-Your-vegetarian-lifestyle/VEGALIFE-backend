@@ -122,8 +122,12 @@ fail in a way operators can see rather than silently doing nothing.
 > into one unqualified message. [ADR-020](../adrs/020-embedding-failure-terminal-vs-retryable.md)
 > closes that gap — failures are now classified (reason, upstream status,
 > retry hint), permanent rejections reach the review state immediately
-> with a `moderation_log` row instead of retrying to `FAILED@24h`, and
+> instead of retrying to `FAILED@24h`, and
 > retryable ones honour the provider's `Retry-After`.
+>
+> **Amended:** ADR-020 wrote a `moderation_log` row for that case; the table
+> was removed by [ADR-027](../adrs/027-remove-moderation-log.md), so the
+> classification now reaches the application log only.
 
 ### Calibration
 
@@ -268,8 +272,9 @@ Not yet done, deliberately:
   [ADR-020](../adrs/020-embedding-failure-terminal-vs-retryable.md):
   `EmbeddingClientException` carries the reason, upstream status, the
   provider's error code and its retry hint; permanent rejections settle
-  the post at `NEEDS_REVIEW` with a `moderation_log` `FILTER_UNAVAILABLE`
-  row, and retryable ones are retried no earlier than the provider's
+  the post at `NEEDS_REVIEW` (the `moderation_log` `FILTER_UNAVAILABLE`
+  row ADR-020 added was removed by [ADR-027](../adrs/027-remove-moderation-log.md)),
+  and retryable ones are retried no earlier than the provider's
   `Retry-After`.
 
 ## Risks / open questions

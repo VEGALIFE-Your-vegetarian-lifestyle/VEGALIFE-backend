@@ -22,7 +22,7 @@ Allow an Administrator to edit an existing content category's name and/or descri
 - Retire/delete categories (Sprint item 33.0).
 - List categories (Sprint item 34.0).
 - Clearing `description` back to `null` via an explicit null in the request body — mirrors the existing post-edit convention that a field cannot be nulled out through partial update; only a non-blank value changes it.
-- Recording category edits in `moderation_log` (BR-ADMIN-002 scopes moderation logging to content/comment moderation, not category management, matching the decision made for `create-category-api.md`).
+- Recording category edits in an audit log — no administrator action is audited anywhere (ADR-027).
 
 ## Requirements
 

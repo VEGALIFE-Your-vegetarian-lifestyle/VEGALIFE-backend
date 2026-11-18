@@ -106,7 +106,7 @@ No request body
 | data.content[].servings | integer | Number of servings |
 | data.content[].difficulty | string | `EASY`, `MEDIUM`, `HARD`, or null |
 | data.content[].status | string | Derived from `deletedAt`: `ACTIVE` or `DELETED` (no stored column, not filterable) |
-| data.content[].rejectionReason | string \| null | Why an admin rejected this recipe; `null` when no reason was recorded. Cleared when the recipe is approved again (current state — the audit trail is `moderation_log`) |
+| data.content[].rejectionReason | string \| null | Why an admin rejected this recipe; `null` when no reason was recorded. Cleared when the recipe is approved again (current state only — no earlier reason is kept, ADR-027) |
 | data.content[].dishId | uuid | Parent dish id |
 | data.content[].dishName | string | Parent dish name, nullable |
 | data.content[].imageUrl | string \| null | The shared dish's image. Read-only here: set it through the dish endpoints, so it is the same on every recipe using that dish. `null` when the dish has none |

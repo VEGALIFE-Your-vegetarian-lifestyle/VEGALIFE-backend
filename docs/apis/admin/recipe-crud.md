@@ -130,7 +130,7 @@ listed or readable. Returns `200`; `404` if it is already gone.
 
 ## POST /api/admin/recipes/{recipeId}/approve
 
-Body (optional): `{ "reason": "instructions verified" }`
+No request body.
 
 Approves the recipe and, in the same transaction, every `PENDING` dish and ingredient
 name it references. Approving a recipe is a review of that recipe, dish and ingredients
@@ -141,11 +141,10 @@ included, so the reviewer should not have to hunt down each pending name afterwa
   `POST /api/admin/dishes/{dishId}/approve` endpoint remains the only way back.
 - This matches what approving a **post** already does to its components, so the two
   approval paths cannot disagree about what "approved" means.
-- Each name actually changed writes its own `APPROVE_COMPONENT` `moderation_log` row,
-  plus the recipe's own row.
 - Seeded `dish_ingredient` entries land in the same transaction (BR-DISH-003).
+- Takes no request body: approval removes a reason, it does not record one (ADR-027).
 
-An already-approved recipe is a no-op — no state change, no log entry, no name approval.
+An already-approved recipe is a no-op — no state change, no name approval.
 
 ## POST /api/admin/recipes/{recipeId}/reject
 
@@ -160,8 +159,8 @@ bad recipe.
 
 The supplied `reason` is stored in the recipe's `rejection_reason`, which the recipe's
 author reads back on `GET /api/recipes/me` and `GET /api/recipes/{recipeId}`. Approving the
-recipe again clears it: the column holds the current state, not a history, and the sequence
-of decisions stays in `moderation_log`.
+recipe again clears it: the column holds the current state, and no earlier reason is retained
+(ADR-027).
 
 ## Business Rules
 
@@ -172,8 +171,7 @@ of decisions stays in `moderation_log`.
 - A publish is held only on its own body score or on a `PENDING` dish/ingredient name.
   Recipe bodies are not embedded or scored, so an attached recipe never changes a
   post's verdict (ADR-026).
-- Every real change writes a `moderation_log` row (`DELETE_RECIPE`,
-  `APPROVE_COMPONENT`, `REJECT_COMPONENT`).
+- No audit trail is kept: no administrator action is recorded anywhere (ADR-027).
 
 ## Related
 

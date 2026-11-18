@@ -51,7 +51,7 @@ No request body.
 
 - Only an Administrator may delete a restaurant (BR-ADMIN-003).
 - Deletion is soft (`deletedAt`); the row is kept, not hard-deleted, and cannot be restored through this API (issue #144 non-goals).
-- Every successful delete writes a `moderation_log` row: `action = DELETE_RESTAURANT`, `targetType = RESTAURANT` — BR-ADMIN-002.
+- No audit row is written: the moderation log is gone (ADR-027).
 
 ## Example
 

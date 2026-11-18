@@ -105,7 +105,7 @@ Nothing is persisted on a 400 or a 404.
 ## Business Rules
 
 - Only an Administrator may create a restaurant (BR-ADMIN-003).
-- Every successful create writes a `moderation_log` row: `actorId` (the admin), `action = CREATE_RESTAURANT`, `targetType = RESTAURANT`, `targetId` (the new restaurant's id) — BR-ADMIN-002.
+- No audit row is written: the moderation log is gone (ADR-027).
 - Importing data from external providers and user-submitted restaurants are out of scope (issue #144 non-goals).
 - Attaching dishes validates every `dishIds` entry before anything is written: an unknown, soft-deleted, or not-yet-approved dish id fails the whole request with 404, and nothing is persisted (issue #195). Duplicate ids in the request are collapsed before counting.
 

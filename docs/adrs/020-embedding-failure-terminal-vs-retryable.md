@@ -114,6 +114,10 @@ already provides `actor_id`, `reason` and both indexes, so no schema change is
 needed. The message then completes instead of being marked `FAILED`, because its
 business purpose — "get this post judged" — was discharged by the review queue.
 
+> **Superseded in part by [ADR-027](027-remove-moderation-log.md):** the `moderation_log` row is
+> gone, so the classified cause now exists only in the application log. The post still reaches the
+> review queue as described; only the durable record of *why* the provider was unavailable is gone.
+
 **6. The queue learns about consequences without importing them.** The drainer
 does not know what a `CONTENT_FILTER` row means. A channel adapter may implement
 an optional hook invoked when its message is abandoned; the default is a no-op.
@@ -177,6 +181,10 @@ revisiting if queue volume grows.
   cannot tell from `post.flag` alone; they need the `moderation_log` row. This
   satisfies D9 by recording, not by widening the flag enum — which matters
   because ADR-011 keeps the verdict axis narrow.
+
+> **Superseded in part by [ADR-027](027-remove-moderation-log.md):** that row no longer exists, so an
+> admin sees only that the filter was skipped, not why. The trade-off was accepted when the table was
+> dropped.
 - An operator can no longer distinguish "filtered and reviewed" from "failed and
   queued" by counting `FAILED` queue rows; that count drops.
 - Free-tier daily-quota exhaustion still holds a post for up to 24 hours if the
@@ -189,8 +197,8 @@ revisiting if queue volume grows.
 - A drainer test asserts a declared permanent failure produces no retry and invokes
   the abandonment hook, that a retry never precedes the provider's hint, and that
   an undeclared failure still retries (the EMAIL and MEDIA_PURGE contract).
-- An adapter test asserts the post lands `NEEDS_REVIEW` / `unpublished` with a
-  `moderation_log` row naming the cause, and that the message completes.
+- An adapter test asserts the post lands `NEEDS_REVIEW` / `unpublished` and that the message
+  completes (it asserted the `moderation_log` row before ADR-027 removed the table).
 - Live shapes recorded 2026-11-02: invalid key `400 API_KEY_INVALID`, no key
   `403 PERMISSION_DENIED`, unknown model `404 NOT_FOUND`, over-limit input `200`
   (truncated), `gemini-embedding-2` with `task_type` `200`.

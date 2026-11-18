@@ -2,7 +2,7 @@
 
 ## Overview
 
-Admin-configurable platform settings, grouped by category (issue #13; follow-up revision). Eight keys in three categories — `media`, `content`, `ai` — each backed by a real business rule and read live by its consumer on every request/decision (no cache, no snapshot at startup). Every change is audited via the existing `moderation_log` table, and the row itself records who last changed it.
+Admin-configurable platform settings, grouped by category (issue #13; follow-up revision). Eight keys in three categories — `media`, `content`, `ai` — each backed by a real business rule and read live by its consumer on every request/decision (no cache, no snapshot at startup). No audit trail is kept (ADR-027); the row itself records who last changed it.
 
 ## Endpoints
 
@@ -92,7 +92,7 @@ The category set is `media` / `content` / `ai` — the `auth` and `limits` categ
 ## Business Rules
 
 - Only an Administrator may view or change settings.
-- Every successful change writes a `moderation_log` row: `action = UPDATE_SETTING`, `targetType = SETTING`, `targetId` (the setting's id), `reason` (`"<key>: '<old>' -> '<new>'"`) — who/what/when (BR-ADMIN-002's audit convention). The `platform_setting.updated_by` column additionally names the admin on the row itself.
+- No audit row is written: the moderation log is gone (ADR-027). The `platform_setting.updated_by` column still names the admin who last changed the row, which is the only attribution left.
 - Every consumer reads its setting(s) live, per request or per scheduled decision — never cached, never snapshotted at startup — so a PATCH takes effect on the very next request. A missing row, a blank value, or a value that fails validation falls back to the registry default with a WARN log rather than failing the request; only a write (PATCH) rejects an invalid value.
 - Defaults are byte-identical to the `application.yml` values they replace, so a deployment with every setting at its default behaves exactly as it did before this table existed.
 

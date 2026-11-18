@@ -124,8 +124,8 @@ knowledge exists**, so neither the member nor the reviewer has anything to work 
   name that recipe references, in the same transaction. Names already `APPROVED` are untouched;
   names `REJECTED` are **left rejected** — rejection stays permanent (BR-DISH-001) and the
   explicit per-name approve endpoint remains the only way back.
-- [x] FR-020: Each name approved by FR-019 writes its own `APPROVE_COMPONENT` `moderation_log` row
-  naming the dish or ingredient as the target, alongside the recipe's own row.
+- [x] FR-020: Each name approved by FR-019 is written in the same transaction as the recipe's own
+  approval. No audit row is kept (ADR-027).
 - [x] FR-021: Rejecting a recipe does **not** change the review state of its dish or ingredient
   names, including ones still `PENDING`. Approval publishes names; rejection never unpublishes
   them, matching post rejection.

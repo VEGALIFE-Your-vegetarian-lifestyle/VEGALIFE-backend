@@ -93,13 +93,9 @@ the post references. They are not stored.
 
 ### Request Body
 
-```json
-{ "reason": "Confirmed vegan recipe, ingredient names valid" }
-```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| reason | string | No | Stored on the moderation log. Max 1000 chars. |
+None. Approval records no rationale — it only removes a reason (ADR-027). A client that still
+sends a body is not broken: Spring Boot disables `FAIL_ON_UNKNOWN_PROPERTIES`, so an unknown
+`reason` field is ignored.
 
 ### Behaviour
 
@@ -158,16 +154,16 @@ the post references. They are not stored.
 - A `drafted` post is refused — nobody submitted it. A `published` post stays
   moderatable, because approve/reject is also how the dish and ingredient names it
   introduced are decided (ADR-016).
-- Every real change writes a `moderation_log` row (`APPROVE_POST` /
-  `REJECT_POST`) with actor, target and reason (BR-ADMIN-002).
+- No audit trail is kept: no administrator action is recorded anywhere (ADR-027).
 - Approving approves the referenced names; rejecting rejects only the pending
   ones (BR-DISH-001).
 - Both endpoints **keep** `flag`/`flagDetail` untouched: the verdict is history the admin
   decided on, not state belonging to the decision. `published` + `FILTER_FAILED` therefore
   means "a human overrode the filter", which clearing the columns used to hide (ADR-025).
 - `rejection_reason` is current state, not history: rejection stores the reason
-  and approval clears it. The full sequence of decisions stays in
-  `moderation_log`, which this change does not alter.
+  and approval clears it. No earlier reason survives (ADR-027).
+- Approval takes no payload; rejection accepts an optional `reason` (max 1000 chars) stored
+  on `post.rejection_reason`.
 
 ## Related
 

@@ -21,7 +21,7 @@ Categories already exist as a data model (`Category` entity, `category` table) a
 - Edit, retire/delete, or list categories (separate Sprint items 32.0–34.0).
 - Category hierarchy/parent-child relationships.
 - Bulk create.
-- Recording category creation in `moderation_log` (BR-ADMIN-002 scopes moderation logging to content/comment moderation, not category management).
+- Recording category creation in an audit log — no administrator action is audited anywhere (ADR-027).
 
 ## Requirements
 
