@@ -179,6 +179,11 @@ and the whole committed-artefact design would fail. It does not.
 
 ## Recipe body calibration (issue #160, ADR-016)
 
+> **Retired 2026-11-19 by [ADR-026](../adrs/026-remove-recipe-scoring.md).** Recipe bodies are no
+> longer embedded or scored: the recipe centroid pair, its thresholds, both seed corpora, and the
+> code that read them were deleted. The measurements below are kept as history for the decision
+> record, not as a description of live configuration.
+
 The recipe body — `name + description + instructions` — is scored against a
 **second** centroid pair, because its distribution is not post prose: mostly
 imperative steps, quantities and timings. Measured with the same model

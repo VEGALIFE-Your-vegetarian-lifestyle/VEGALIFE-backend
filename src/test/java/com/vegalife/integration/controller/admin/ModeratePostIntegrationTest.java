@@ -263,7 +263,7 @@ class ModeratePostIntegrationTest {
   }
 
   @Test
-  void getPostDetail_returnsScoresAndComponentStates() throws Exception {
+  void getPostDetail_returnsContentScoreAndComponentStates() throws Exception {
     Post post =
         createPost(
             member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
@@ -272,8 +272,6 @@ class ModeratePostIntegrationTest {
     Dish dish = saveDish("bún chả chay", ModerationStatus.PENDING);
     Ingredient ingredient = saveIngredient("đậu hũ", ModerationStatus.APPROVED);
     Recipe recipe = saveRecipe(post, dish, ModerationStatus.PENDING);
-    recipe.setScore(0.79);
-    recipeRepository.saveAndFlush(recipe);
     linkIngredient(recipe, ingredient);
 
     mockMvc
@@ -281,7 +279,9 @@ class ModeratePostIntegrationTest {
             get("/api/admin/posts/" + post.getId()).header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.contentScore").value(0.64))
-        .andExpect(jsonPath("$.data.recipes[0].score").value(0.79))
+        // Recipe bodies are not scored (ADR-026), so a component carries no score property at all.
+        .andExpect(jsonPath("$.data.recipes[0].score").doesNotExist())
+        .andExpect(jsonPath("$.data.names[0].score").doesNotExist())
         .andExpect(jsonPath("$.data.recipes[0].type").value("RECIPE"))
         .andExpect(jsonPath("$.data.names.length()").value(2))
         .andExpect(jsonPath("$.data.names[0].moderationStatus").value("PENDING"))

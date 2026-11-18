@@ -63,7 +63,8 @@ unit, and the recipe total derived from the lines.)
   to each meal in `GET /api/menus/details` and to each suggestion.
 - FR-005: a recipe is recommended only when `moderation_status = APPROVED` and
   `deleted_at IS NULL`.
-- FR-006: recipes are ranked `score DESC NULLS LAST, createdAt DESC, id ASC`.
+- FR-006: recipes are ranked `createdAt DESC, id ASC`. Recipe bodies are not
+  scored (ADR-026), so recency is the only ranking signal.
 - FR-007: allergies are read from the caller's profile on every call; no
   parameter supplies them.
 - FR-008: `recipe` carries total nutrition (`calories`, `protein_g`,

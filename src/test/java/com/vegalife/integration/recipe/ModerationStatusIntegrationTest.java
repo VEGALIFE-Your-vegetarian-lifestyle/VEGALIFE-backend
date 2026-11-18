@@ -168,7 +168,7 @@ class ModerationStatusIntegrationTest {
   }
 
   @Test
-  void aPendingRecipeIsNotScoredAndKeepsANullScore() {
+  void aNewRecipeStartsPending() {
     Dish dish = saveDish("bánh xèo", ModerationStatus.APPROVED);
     Recipe recipe =
         recipeRepository.saveAndFlush(
@@ -183,8 +183,6 @@ class ModerationStatusIntegrationTest {
     Recipe reloaded = recipeRepository.findById(recipe.getId()).orElseThrow();
 
     assertThat(reloaded.getModerationStatus()).isEqualTo(ModerationStatus.PENDING);
-    // NULL means never scored, which is distinct from "scored badly" (ADR-016).
-    assertThat(reloaded.getScore()).isNull();
   }
 
   private Dish saveDish(String name, ModerationStatus status) {

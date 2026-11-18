@@ -577,7 +577,7 @@ class AdminPostServiceTest {
   }
 
   @Test
-  void getPostDetail_returnsScoresAndReferencedNames() {
+  void getPostDetail_returnsContentScoreAndReferencedNames() {
     UUID recipeId = UUID.randomUUID();
     Dish dish =
         Dish.builder()
@@ -590,7 +590,6 @@ class AdminPostServiceTest {
             .id(recipeId)
             .name("bún chả chay")
             .dish(dish)
-            .score(0.81)
             .moderationStatus(ModerationStatus.PENDING)
             .build();
     Ingredient tofu =
@@ -626,7 +625,6 @@ class AdminPostServiceTest {
     assertThat(detail.getFlagDetail().getScore()).isEqualTo(0.58);
     assertThat(detail.getFlagDetail().getThreshold()).isEqualTo(0.7);
     assertThat(detail.getRecipes()).hasSize(1);
-    assertThat(detail.getRecipes().get(0).getScore()).isEqualTo(0.81);
     assertThat(detail.getRecipes().get(0).getType()).isEqualTo("RECIPE");
     assertThat(detail.getNames())
         .extracting(AdminPostDetailResponse.ComponentSummary::getType)

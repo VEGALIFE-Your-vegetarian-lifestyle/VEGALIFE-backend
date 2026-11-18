@@ -179,9 +179,9 @@ that flag rather than on field absence, which never happens here.
   authored (BR-RECP-004). It is `null` unless every ingredient is curated
   (BR-RECP-006), and a `null` fails every nutrition bound rather than passing as
   zero.
-- Recommendations are ranked `score DESC NULLS LAST, createdAt DESC, id ASC`
-  and capped at `recipesPerDish`. `score` is a relevance score of the recipe
-  text, not a nutrition or popularity ranking.
+- Recommendations are ranked `createdAt DESC, id ASC` and capped at
+  `recipesPerDish`. Recipe bodies are not scored (ADR-026), so recency within the
+  dish is the only ordering signal.
 - Retired (soft-deleted) dishes never appear.
 - Read-only: the endpoint never writes.
 

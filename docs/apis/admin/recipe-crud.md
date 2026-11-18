@@ -34,7 +34,7 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
 | Parameter | Notes |
 |---|---|
 | `moderationStatus` | `PENDING`, `APPROVED` or `REJECTED`. Absent = every state. `PENDING` is the review queue. |
-| `sort` | One of `createdAt`, `updatedAt`, `name`, `moderationStatus`, `score`. Default `createdAt,desc`. |
+| `sort` | One of `createdAt`, `updatedAt`, `name`, `moderationStatus`. Default `createdAt,desc`. `score` is no longer accepted (ADR-026). |
 | `createdFrom` / `createdTo` | ISO-8601 instants; `400` if `createdFrom` is after `createdTo`. |
 
 ### Response (200 OK)
@@ -56,7 +56,6 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
         "difficulty": "MEDIUM",
         "status": "ACTIVE",
         "moderationStatus": "PENDING",
-        "score": 0.6104,
         "rejectionReason": null,
         "dishId": "6c2d3e4f-5a6b-7c8d-9e0f-1a2b3c4d5e6f",
         "dishName": "phở chay",
@@ -94,7 +93,6 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
 |---|---|
 | `status` | `ACTIVE` or `DELETED`, derived from `deletedAt`. |
 | `moderationStatus` | Review state. A recipe can be `ACTIVE` and still `PENDING`. |
-| `score` | Relevance score at submission time. `null` = never scored. |
 | `rejectionReason` | Why an admin rejected this recipe. Cleared on approval. `null` = no reason recorded. |
 | `dishModerationStatus`, `ingredients[].moderationStatus` | The shared names' own states. |
 | `imageUrl` | The shared dish's image. Read-only here: set it through `PATCH /api/admin/dishes/{dishId}`, never through this endpoint. `null` when the dish has none. |
@@ -115,11 +113,9 @@ endpoint and affects every recipe using the dish), ingredient lines (adding or
 removing ingredients is an ingredient operation, not a field change), and
 `moderationStatus`.
 
-Neither `moderationStatus` nor `score` changes:
-
-- The state stays put because the admin's edit is itself an approval decision.
-- The score stays as measured at submission — it records why the row was queued,
-  and recomputing it here would quietly rewrite that reason.
+`moderationStatus` does not change: the state stays put because the admin's edit is
+itself an approval decision. There is no recipe score to preserve or recompute —
+recipe bodies are not scored (ADR-026).
 
 | Status | Condition |
 |---|---|
@@ -173,8 +169,9 @@ of decisions stays in `moderation_log`.
   (BR-DISH-001, ADR-016).
 - Approving a recipe approves its pending dish and ingredient names, but never resurrects
   a rejected one.
-- A recipe score below its threshold holds an otherwise-passing post at `processing` with
-  `flag = FILTER_FAILED` for an admin, but never downgrades a post the filter already refused.
+- A publish is held only on its own body score or on a `PENDING` dish/ingredient name.
+  Recipe bodies are not embedded or scored, so an attached recipe never changes a
+  post's verdict (ADR-026).
 - Every real change writes a `moderation_log` row (`DELETE_RECIPE`,
   `APPROVE_COMPONENT`, `REJECT_COMPONENT`).
 

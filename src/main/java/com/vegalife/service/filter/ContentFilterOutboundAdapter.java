@@ -27,7 +27,6 @@ import com.vegalife.shared.exception.RetryableDeliveryException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -75,7 +74,6 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   private final DuplicateDetector duplicateDetector;
   private final ActiveEmbeddingModel activeEmbeddingModel;
   private final ObjectMapper objectMapper;
-  private final EmbeddingComponentScorer.Factory componentScorerFactory;
   private final ModerationLogRepository moderationLogRepository;
   private final FilterProperties filterProperties;
 
@@ -138,17 +136,11 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
     FilterVerdict verdict = result.verdict();
     post.setContentScore(verdict.score());
 
-    // Component-level verification (ADR-016). The content verdict above stays authoritative for
-    // the refusal band and for duplicate detection; the recipe body and the referenced names are
-    // additional, independent checks. A component that needs review escalates the post, but never
-    // downgrades a refusal.
-    ComponentOutcome recipe = scoreAttachedRecipes(post);
-    if (recipe.needsReview() && verdict.outcome() != FilterOutcome.FAIL) {
-      verdict = escalateToReview(verdict, recipe);
-    }
-
-    // Dish and ingredient names carry no score: an unreviewed name is forwarded on its state
-    // alone, because a member introduced it and no admin has approved it yet (BR-DISH-001).
+    // The post body is the only thing scored (ADR-026). The referenced dish and ingredient names
+    // are
+    // an additional, independent state check: an unreviewed name is forwarded on its state alone,
+    // because a member introduced it and no admin has approved it yet (BR-DISH-001). Either check
+    // escalates the post, but never downgrades a refusal.
     List<String> pendingNames = pendingComponentNames(post);
     if (!pendingNames.isEmpty() && verdict.outcome() != FilterOutcome.FAIL) {
       verdict = escalateToReview(verdict, new ComponentOutcome(true, pendingNames));
@@ -342,38 +334,6 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   }
 
   /**
-   * Scores every recipe attached to the post and stores each score. A post may attach more than one
-   * recipe ({@code post_recipe} is many-to-many); the post needs review if <em>any</em> of them
-   * does.
-   *
-   * <p>No recipe attached means no recipe rows and no embedding call — absence is meaningful, not
-   * an error.
-   */
-  private ComponentOutcome scoreAttachedRecipes(Post post) {
-    List<Recipe> recipes = recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId());
-    if (recipes.isEmpty()) {
-      return ComponentOutcome.none();
-    }
-    ComponentScorer scorer = componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE);
-    boolean needsReview = false;
-    List<String> reasons = new ArrayList<>();
-    for (Recipe recipe : recipes) {
-      ComponentScorer.ComponentResult result =
-          scorer.score(ComponentScorer.Component.RECIPE, recipeBody(recipe));
-      recipe.setScore(result.score().orElse(null));
-      if (result.needsReview()) {
-        needsReview = true;
-        reasons.add(
-            result
-                .score()
-                .map(score -> formatReason("RECIPE_RELEVANCE_REVIEW", score))
-                .orElse("RECIPE_NOT_SCORED"));
-      }
-    }
-    return new ComponentOutcome(needsReview, reasons);
-  }
-
-  /**
    * Names the post references that no admin has approved yet, as log-ready reason codes.
    *
    * <p>Dishes and ingredients are global and unowned, so this is a state check, not a score: a
@@ -403,20 +363,6 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
     return reasons;
   }
 
-  /**
-   * The recipe body handed to the model: name, description and instructions in one string. Scored
-   * as a single unit rather than per field, so one weak description cannot outvote a long set of
-   * clean instructions (ADR-016).
-   */
-  static String recipeBody(Recipe recipe) {
-    StringBuilder body = new StringBuilder(recipe.getName());
-    if (recipe.getDescription() != null && !recipe.getDescription().isBlank()) {
-      body.append('\n').append(recipe.getDescription());
-    }
-    body.append('\n').append(recipe.getInstructions());
-    return body.toString();
-  }
-
   /** Keeps the original reasons and adds the component's, so the log explains every check. */
   private static FilterVerdict escalateToReview(FilterVerdict verdict, ComponentOutcome component) {
     List<String> reasons = new ArrayList<>(verdict.reasons());
@@ -427,19 +373,11 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
         FilterOutcome.UNCERTAIN, verdict.score(), verdict.threshold(), reasons);
   }
 
-  private static String formatReason(String code, double score) {
-    return String.format(Locale.ROOT, "%s: %.3f", code, score);
-  }
-
   /**
-   * Outcome of one component check.
+   * Outcome of the name check.
    *
-   * @param needsReview true when the component scored below its threshold or could not be scored
+   * @param needsReview true when a referenced dish or ingredient name is awaiting approval
    * @param reasons reason codes for the log, empty when nothing needs review
    */
-  private record ComponentOutcome(boolean needsReview, List<String> reasons) {
-    static ComponentOutcome none() {
-      return new ComponentOutcome(false, List.of());
-    }
-  }
+  private record ComponentOutcome(boolean needsReview, List<String> reasons) {}
 }

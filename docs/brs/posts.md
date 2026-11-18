@@ -869,10 +869,11 @@ of attaching it.
 
 A recipe body is moderated as a unit, and `PENDING` recipes are invisible in every public listing. If
 a post could carry one, publishing the post would be a way to show an unreviewed dish, ingredients,
-and instructions to everyone — bypassing the queue the recipe was placed in (ADR-016) and giving the
-content filter a component it cannot vouch for. Rejecting with `404` rather than `400` also keeps the
-endpoint from acting as an oracle for "this recipe id exists but is unreviewed", matching how a
-missing or another user's post is reported.
+and instructions to everyone — bypassing the queue the recipe was placed in (ADR-016). Approval in
+that queue is therefore the only thing that makes a recipe attachable; the post filter neither
+re-checks the recipe's text nor consults its approval state (ADR-026). Rejecting with `404` rather
+than `400` also keeps the endpoint from acting as an oracle for "this recipe id exists but is
+unreviewed", matching how a missing or another user's post is reported.
 
 Validating already-attached ids, not just newly added ones, closes the re-send loophole: a post that
 somehow holds a now-unapproved recipe cannot keep it by echoing the same set back, and a recipe that

@@ -35,13 +35,11 @@ import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
-import com.vegalife.service.filter.ComponentScorer;
 import com.vegalife.service.filter.ContentFilterOutboundAdapter;
 import com.vegalife.service.filter.ContentFilterPayload;
 import com.vegalife.service.filter.ContentFilterService;
 import com.vegalife.service.filter.ContentFilterService.FilterResult;
 import com.vegalife.service.filter.DuplicateDetector;
-import com.vegalife.service.filter.EmbeddingComponentScorer;
 import com.vegalife.service.filter.FilterOutcome;
 import com.vegalife.service.filter.FilterProperties;
 import com.vegalife.service.filter.FilterVerdict;
@@ -90,8 +88,6 @@ class ContentFilterOutboundAdapterTest {
   @Mock private PostEmbeddingRepository postEmbeddingRepository;
   @Mock private DuplicateDetector duplicateDetector;
   @Mock private ActiveEmbeddingModel activeEmbeddingModel;
-  @Mock private EmbeddingComponentScorer.Factory componentScorerFactory;
-  @Mock private ComponentScorer recipeScorer;
   @Mock private ModerationLogRepository moderationLogRepository;
 
   private ContentFilterOutboundAdapter adapter;
@@ -110,15 +106,14 @@ class ContentFilterOutboundAdapterTest {
             duplicateDetector,
             activeEmbeddingModel,
             objectMapper,
-            componentScorerFactory,
             moderationLogRepository,
             filterProperties);
     noRecipeAttached();
   }
 
   /**
-   * Default for every existing test: the post has no recipe attached, so the recipe component is
-   * never consulted. Tests that do attach a recipe override this.
+   * Default for every existing test: the post has no recipe attached, so no name is looked up.
+   * Tests that do attach a recipe override this.
    *
    * <p>Lenient because tests that fail before scoring — a blank payload, a missing post, a filter
    * that throws — never reach the recipe lookup, and that is the behaviour they assert.
@@ -395,38 +390,30 @@ class ContentFilterOutboundAdapterTest {
     assertThrows(IllegalStateException.class, () -> adapter.deliver(message));
   }
 
-  // --- Component-level verification (ADR-016): the recipe body is a second, independent score ---
+  // --- ADR-026: recipe bodies are not scored; the post body is the only embedding ---
 
   @Test
-  void recipeThatNeedsReviewHoldsAnOtherwisePassingPost() throws Exception {
+  void attachedRecipesDoNotAddAComponentScore() throws Exception {
     Post post = passing(0.88);
-    Recipe recipe = recipe();
-    approvedComponents(recipe);
+    Recipe first = recipe();
+    approvedComponents(first);
+    Recipe second = recipe();
+    approvedComponents(second);
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
-        .thenReturn(List.of(recipe));
-    when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
-        .thenReturn(recipeScorer);
-    when(recipeScorer.score(any(), anyString()))
-        .thenReturn(needsReview(ComponentScorer.Component.RECIPE, 0.31));
+        .thenReturn(List.of(first, second));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    // The post's own prose passed. It is withheld because its recipe did not — that is the whole
-    // point of scoring the recipe at all.
-    assertEquals(PostStatus.processing, post.getStatus());
-    assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
+    // The only embedding a publish makes is the post body's, however many recipes are attached.
+    // A recipe can still hold a post on a pending name, but never on its text.
+    verify(contentFilterService).filter(TITLE + "\n" + CONTENT);
+    assertEquals(PostStatus.published, post.getStatus());
+    assertEquals(PostFlag.FILTER_PASSED, post.getFlag());
     assertEquals(0.88, post.getContentScore());
-    assertEquals(0.31, recipe.getScore());
-    // The snapshot keeps the content band's own score and accept threshold: a reviewer can see the
-    // prose cleared 0.70 and that something else is what held the post (ADR-024).
-    JsonNode detail = post.getFlagDetail();
-    assertEquals("UNCERTAIN", detail.path("outcome").asText());
-    assertEquals(0.88, detail.path("score").asDouble(), 1e-9);
-    assertEquals(0.7, detail.path("threshold").asDouble(), 1e-9);
   }
 
   @Test
-  void contentRejectionOutranksARecipeThatNeedsReview() throws Exception {
+  void rejectionIsNotSoftenedByAnAttachedRecipe() throws Exception {
     Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
     stubFilter(new FilterVerdict(FilterOutcome.FAIL, 0.12, List.of("OFF_TOPIC")));
@@ -434,66 +421,15 @@ class ContentFilterOutboundAdapterTest {
     approvedComponents(recipe);
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));
-    when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
-        .thenReturn(recipeScorer);
-    when(recipeScorer.score(any(), anyString()))
-        .thenReturn(needsReview(ComponentScorer.Component.RECIPE, 0.40));
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    // A recipe no worse than a rejection must not soften it: the refusal keeps its own score line
-    // in flag_detail instead of being replaced by an "uncertain" reading.
+    // The refusal keeps its own score line in flag_detail, and nothing about the recipe can
+    // rewrite it.
     assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
     assertEquals("FAIL", post.getFlagDetail().path("outcome").asText());
     assertEquals(0.12, post.getFlagDetail().path("score").asDouble(), 1e-9);
-  }
-
-  @Test
-  void recipeThatPassesDoesNotAffectTheVerdict() throws Exception {
-    Post post = passing(0.90);
-    Recipe recipe = recipe();
-    approvedComponents(recipe);
-    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
-        .thenReturn(List.of(recipe));
-    when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
-        .thenReturn(recipeScorer);
-    when(recipeScorer.score(any(), anyString()))
-        .thenReturn(
-            new ComponentScorer.ComponentResult(
-                ComponentScorer.Component.RECIPE,
-                false,
-                Optional.of(0.84),
-                Optional.of(EMBEDDING)));
-
-    adapter.deliver(message(new ContentFilterPayload(post.getId())));
-
-    assertEquals(PostStatus.published, post.getStatus());
-    assertEquals(PostFlag.FILTER_PASSED, post.getFlag());
-    assertEquals(0.90, post.getContentScore());
-    assertEquals(0.84, recipe.getScore());
-  }
-
-  @Test
-  void unscorableRecipeHoldsThePost() throws Exception {
-    Post post = passing(0.91);
-    Recipe recipe = recipe();
-    approvedComponents(recipe);
-    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
-        .thenReturn(List.of(recipe));
-    when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
-        .thenReturn(recipeScorer);
-    when(recipeScorer.score(any(), anyString()))
-        .thenReturn(ComponentScorer.ComponentResult.failed(ComponentScorer.Component.RECIPE));
-
-    adapter.deliver(message(new ContentFilterPayload(post.getId())));
-
-    // The post is held for review. The score column stays null, which is how "never scored" is
-    // distinguished from "scored badly".
-    assertEquals(PostStatus.processing, post.getStatus());
-    assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
-    assertNull(recipe.getScore());
-    verify(postRepository).save(post);
   }
 
   // --- Dish and ingredient approval (BR-DISH-001): state, not score, decides ---
@@ -506,20 +442,11 @@ class ContentFilterOutboundAdapterTest {
     lenient().when(recipeIngredientRepository.findByRecipeId(recipe.getId())).thenReturn(List.of());
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));
-    when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
-        .thenReturn(recipeScorer);
-    when(recipeScorer.score(any(), anyString()))
-        .thenReturn(
-            new ComponentScorer.ComponentResult(
-                ComponentScorer.Component.RECIPE,
-                false,
-                Optional.of(0.88),
-                Optional.of(EMBEDDING)));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    // The text passed on every scored component. The post still waits, because it introduces a
-    // name no admin has approved: that is the guarantee a score cannot provide.
+    // The text passed. The post still waits, because it introduces a name no admin has approved:
+    // that is the guarantee a score cannot provide.
     assertEquals(PostStatus.processing, post.getStatus());
     assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
   }
@@ -545,15 +472,6 @@ class ContentFilterOutboundAdapterTest {
                     .build()));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));
-    when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
-        .thenReturn(recipeScorer);
-    when(recipeScorer.score(any(), anyString()))
-        .thenReturn(
-            new ComponentScorer.ComponentResult(
-                ComponentScorer.Component.RECIPE,
-                false,
-                Optional.of(0.90),
-                Optional.of(EMBEDDING)));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
@@ -571,15 +489,6 @@ class ContentFilterOutboundAdapterTest {
     lenient().when(recipeIngredientRepository.findByRecipeId(recipe.getId())).thenReturn(List.of());
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));
-    when(componentScorerFactory.forComponent(ComponentScorer.Component.RECIPE))
-        .thenReturn(recipeScorer);
-    when(recipeScorer.score(any(), anyString()))
-        .thenReturn(
-            new ComponentScorer.ComponentResult(
-                ComponentScorer.Component.RECIPE,
-                false,
-                Optional.of(0.80),
-                Optional.of(EMBEDDING)));
     when(postRepository.save(any(Post.class))).thenAnswer(inv -> inv.getArgument(0));
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
@@ -748,12 +657,6 @@ class ContentFilterOutboundAdapterTest {
     assertTrue(log.getValue().getReason().contains(providerCode));
   }
 
-  private static ComponentScorer.ComponentResult needsReview(
-      ComponentScorer.Component component, double score) {
-    return new ComponentScorer.ComponentResult(
-        component, true, Optional.of(score), Optional.of(EMBEDDING));
-  }
-
   private static Recipe recipe() {
     return Recipe.builder()
         .id(UUID.randomUUID())
@@ -767,7 +670,7 @@ class ContentFilterOutboundAdapterTest {
 
   /**
    * An approved dish and no ingredient lines: the default component state for tests that are about
-   * the recipe score rather than about approval.
+   * the post's verdict rather than about approval.
    */
   private void approvedComponents(Recipe recipe) {
     recipe.setDish(approvedDish("Phở chay"));

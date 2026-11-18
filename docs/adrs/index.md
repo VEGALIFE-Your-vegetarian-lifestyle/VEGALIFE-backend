@@ -29,3 +29,4 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [023-post-processing-status-and-flag-blocker.md](023-post-processing-status-and-flag-blocker.md) | Model Post Moderation as Four Statuses Plus One Held-State Blocker, Drop Admin Hide | Accepted | 2026-11-13 |
 | [024-post-flag-detail-json-snapshot.md](024-post-flag-detail-json-snapshot.md) | Store the Post Blocker Detail as a Typed JSON Snapshot | Accepted | 2026-11-13 |
 | [025-post-flag-survives-publication.md](025-post-flag-survives-publication.md) | Keep the Post Verdict After Publication and Name the Passing One | Accepted | 2026-11-13 |
+| [026-remove-recipe-scoring.md](026-remove-recipe-scoring.md) | Embed Only the Post Body and Drop `recipe.score` | Accepted | 2026-11-19 |

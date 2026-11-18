@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>A recipe qualifies when it is approved and not deleted, none of its ingredient names equals
  * one of the caller's stored allergies, and it satisfies the caller's {@link RecipeFilter}. The
- * result is ordered {@code score DESC NULLS LAST, createdAt DESC, id ASC} and capped.
+ * result is ordered {@code createdAt DESC, id ASC} and capped.
  *
  * <p>Allergy matching is <strong>exact</strong> (case-insensitive, trimmed) on the ingredient name.
  * There is no substring or synonym matching: the stored allergy strings are the member's own words,
@@ -49,13 +49,11 @@ public class RecipeRecommendationService {
   public static final int MAX_RECIPES_PER_DISH = 10;
 
   /**
-   * Quality signal first (platform relevance, ADR-016), then recency, then id so the same dish
-   * never yields a different triple across identical calls. NULL sorts last: an unscored recipe is
-   * unvetted, not good.
+   * Recency first, then id so the same dish never yields a different triple across identical calls.
+   * Recipe bodies are not scored (ADR-026), so there is no quality signal to rank on.
    */
   private static final Comparator<Recipe> RANKING =
-      Comparator.comparing(Recipe::getScore, Comparator.nullsLast(Comparator.reverseOrder()))
-          .thenComparing(Recipe::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+      Comparator.comparing(Recipe::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
           .thenComparing(Recipe::getId);
 
   private final RecipeRepository recipeRepository;
