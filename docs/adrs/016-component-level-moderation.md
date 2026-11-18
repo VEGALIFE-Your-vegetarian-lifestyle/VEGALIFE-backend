@@ -72,6 +72,12 @@ to police.
    any referenced name is `PENDING`.
 5. Admin component detail is derived at read time, never stored.
 
+> **Amended 2026-11-19 by [ADR-026](026-remove-recipe-scoring.md).** Decision 2's
+> `RECIPE` half is withdrawn: recipe bodies are no longer embedded or scored, and
+> `recipe.score` is dropped. Decisions 1 and 3–5 stand unchanged. The
+> "two embedding calls per publish with a recipe" cost noted under Consequences no
+> longer holds; a publish makes one call regardless of how many recipes it attaches.
+
 ## Consequences
 
 **Positive.**
