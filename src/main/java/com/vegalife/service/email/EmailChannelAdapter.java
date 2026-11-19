@@ -1,24 +1,23 @@
-package com.vegalife.infrastructure.email;
+package com.vegalife.service.email;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
-import com.vegalife.service.email.EmailPayload;
-import com.vegalife.service.email.EmailService;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * EMAIL channel adapter: parses the queue payload and delegates to the SMTP template sender.
+ * EMAIL channel adapter: parses the queue payload and delegates to the {@link EmailService} port.
  *
- * <p>Depends on the {@link EmailService} port, not the SMTP implementation, so this adapter and the
- * sender can sit on opposite sides of the infrastructure boundary (ADR-018). Injecting the port is
- * only safe because the queue no longer implements it: while the outbox was an {@code EmailService}
- * bean, resolving this dependency would have handed the drainer the enqueuer and looped row ->
- * adapter -> new row forever (ADR-005).
+ * <p>Lives beside the payload and the port rather than in {@code infrastructure/}, matching {@code
+ * ContentFilterOutboundAdapter} and {@code MediaPurgeOutboundAdapter}: it touches no vendor SDK. It
+ * can depend on the port rather than the SMTP class only because the queue no longer implements
+ * {@code EmailService}; while the outbox was an {@code EmailService} bean, resolving this
+ * dependency would have handed the drainer the enqueuer and looped row -> adapter -> new row
+ * forever (ADR-005).
  */
 @Service
 @RequiredArgsConstructor
