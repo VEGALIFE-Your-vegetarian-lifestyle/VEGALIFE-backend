@@ -27,8 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * VNPay IPN fulfilment (FR-007..FR-017; BR-PAY-001..BR-PAY-008; ADR-008): checksum first, then
- * reference, amount, and a pessimistic lock before any transition â€” the notification is the
- * single source of truth for whether a payment succeeded (BR-PAY-001).
+ * reference, amount, and a pessimistic lock before any transition — the notification is the single
+ * source of truth for whether a payment succeeded (BR-PAY-001).
  *
  * <p>Returns the raw {@code {"RspCode","Message"}} acknowledgement; the caller must keep it off
  * {@code ApiResponse} and inside HTTP 200 (FR-020). A blank gateway secret degrades to {@code 97}
