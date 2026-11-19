@@ -84,48 +84,40 @@ class AdminDashboardControllerIntegrationTest {
     userToken = jwtTokenService.generateAccessToken(regular);
   }
 
+  // ---------------------------------------------------------------------
+  // Summary: lifetime snapshot, no time filter
+  // ---------------------------------------------------------------------
+
   @Test
-  void getDashboard_asAdmin_returns200WithDefaultWeekRange() throws Exception {
+  void getDashboard_asAdmin_returnsLifetimeSnapshot() throws Exception {
     mockMvc
         .perform(get("/api/admin/dashboard").header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.data.range.type").value("week"))
         .andExpect(jsonPath("$.data.users.total").isNumber())
-        .andExpect(jsonPath("$.data.moderationQueue.pendingPosts").value(0));
+        .andExpect(jsonPath("$.data.content.totalPosts").isNumber())
+        .andExpect(jsonPath("$.data.moderationQueue.pendingPosts").value(0))
+        .andExpect(jsonPath("$.data.money.revenueTotal").value(0))
+        .andExpect(jsonPath("$.data.meta.generatedAt").exists());
   }
 
   @Test
-  void getDashboard_withCustomRange_returns200() throws Exception {
+  void getDashboard_hasNoRangeFieldBecauseItTakesNoTimeFilter() throws Exception {
     mockMvc
-        .perform(
-            get("/api/admin/dashboard")
-                .param("range", "custom")
-                .param("from", "2026-01-01")
-                .param("to", "2026-01-31")
-                .header("Authorization", "Bearer " + adminToken))
+        .perform(get("/api/admin/dashboard").header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.range.type").value("custom"));
+        .andExpect(jsonPath("$.data.range").doesNotExist());
   }
 
   @Test
-  void getDashboard_customRangeMissingDates_returns400() throws Exception {
-    mockMvc
-        .perform(
-            get("/api/admin/dashboard")
-                .param("range", "custom")
-                .header("Authorization", "Bearer " + adminToken))
-        .andExpect(status().isBadRequest());
-  }
-
-  @Test
-  void getDashboard_invalidRange_returns400() throws Exception {
+  void getDashboard_ignoresAnyRangeParameterBecauseItHasNone() throws Exception {
     mockMvc
         .perform(
             get("/api/admin/dashboard")
                 .param("range", "year")
+                .param("from", "2026-01-01")
                 .header("Authorization", "Bearer " + adminToken))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isOk());
   }
 
   @Test
@@ -138,5 +130,81 @@ class AdminDashboardControllerIntegrationTest {
   @Test
   void getDashboard_anonymous_returns401() throws Exception {
     mockMvc.perform(get("/api/admin/dashboard")).andExpect(status().isUnauthorized());
+  }
+
+  // ---------------------------------------------------------------------
+  // Charts: the only time-filtered surface
+  // ---------------------------------------------------------------------
+
+  @Test
+  void getCharts_defaultsToWeekWithDailyBuckets() throws Exception {
+    mockMvc
+        .perform(get("/api/admin/dashboard/charts").header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.meta.range").value("week"))
+        .andExpect(jsonPath("$.data.meta.interval").value("day"))
+        .andExpect(jsonPath("$.data.meta.boundary").value("inclusiveStartExclusiveEnd"))
+        .andExpect(jsonPath("$.data.revenueTrend.points.length()").value(7))
+        .andExpect(jsonPath("$.data.paymentHealth.points.length()").value(7))
+        .andExpect(jsonPath("$.data.growth.points.length()").value(7));
+  }
+
+  @Test
+  void getCharts_dayRangeUsesHourlyBuckets() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/dashboard/charts")
+                .param("range", "day")
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.meta.interval").value("hour"))
+        .andExpect(jsonPath("$.data.revenueTrend.points.length()").value(24));
+  }
+
+  @Test
+  void getCharts_monthRangeUsesDailyBuckets() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/dashboard/charts")
+                .param("range", "month")
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.meta.interval").value("day"))
+        .andExpect(jsonPath("$.data.revenueTrend.points").isArray())
+        .andExpect(jsonPath("$.data.revenueTrend.points[0].bucketStart").exists());
+  }
+
+  @Test
+  void getCharts_customRangeIsRejected() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/dashboard/charts")
+                .param("range", "custom")
+                .param("from", "2026-01-01")
+                .param("to", "2026-01-31")
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void getCharts_invalidRange_returns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/dashboard/charts")
+                .param("range", "year")
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void getCharts_asMember_returns403() throws Exception {
+    mockMvc
+        .perform(get("/api/admin/dashboard/charts").header("Authorization", "Bearer " + userToken))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void getCharts_anonymous_returns401() throws Exception {
+    mockMvc.perform(get("/api/admin/dashboard/charts")).andExpect(status().isUnauthorized());
   }
 }
