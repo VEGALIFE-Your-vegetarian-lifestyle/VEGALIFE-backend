@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Daily retention purge for the outbound queue (ADR-005): deletes rows that reached a terminal
- * status before the {@code app.outbound.retention} cutoff, bounding how long even cleared payload
- * metadata stays in the table.
+ * status before the {@code app.outbound.retention} cutoff. This is now the only thing that removes
+ * payload material, since settled rows keep it until they are purged.
  */
 @Component
 @Slf4j

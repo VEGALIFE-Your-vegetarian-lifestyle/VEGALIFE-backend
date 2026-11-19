@@ -29,7 +29,7 @@ public class OutboundMessage {
   @Column(name = "recipient", length = 255, nullable = false)
   private String recipient;
 
-  /** JSON message body; cleared when the row reaches a terminal status. */
+  /** JSON message body; kept until the retention purge removes the whole row. */
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(name = "payload")
   private String payload;

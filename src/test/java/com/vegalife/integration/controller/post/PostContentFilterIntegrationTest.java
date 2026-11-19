@@ -157,7 +157,7 @@ class PostContentFilterIntegrationTest {
 
     OutboundMessage message = contentFilterQueue().getFirst();
     assertThat(message.getStatus()).isEqualTo(OutboundStatus.COMPLETED);
-    assertThat(message.getPayload()).isNull();
+    assertThat(message.getPayload()).isNotBlank();
   }
 
   @Test

@@ -182,8 +182,8 @@ Issue #16 requires a receipt on successful payment, but the moment of payment is
 Applies to the purchase receipt only (plan name, amount, currency, paid-at, reference). It does not cover renewal reminders, dunning, or refunds — none of which exist. The outbound queue's own at-least-once delivery and deduplication behaviour is unchanged and documented in `docs/feats/outbound-message-queue.md`.
 
 ## Enforcement
-- `PaymentWebhookService` calls `EmailService.sendPaymentReceipt(...)` (the `OutboxEmailService` implementation) inside the fulfilment transaction
-- `OutboundEmailPayload.Type.RECEIPT` carries plan name, amount, currency, paid-at, and reference to the renderer `email/payment-receipt.html`
+- `PaymentWebhookService` builds and saves the `outbound_message` row itself, inside the fulfilment transaction (ADR-028)
+- `EmailPayload.Type.RECEIPT` carries plan name, amount, currency, paid-at, and reference to the renderer `email/payment-receipt.html`
 - Rendering and transport happen later on the queue consumer thread via `EmailChannelAdapter`
 
 ## Last Reviewed

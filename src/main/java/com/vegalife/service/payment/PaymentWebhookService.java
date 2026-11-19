@@ -1,16 +1,21 @@
 package com.vegalife.service.payment;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
-import com.vegalife.service.email.EmailService;
-import com.vegalife.service.outbound.OutboundEmailPayload;
+import com.vegalife.service.email.EmailPayload;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -51,7 +56,8 @@ public class PaymentWebhookService {
   private final AiSubscriptionRepository subscriptionRepository;
   private final AiPlanRepository planRepository;
   private final UserRepository userRepository;
-  private final EmailService emailService;
+  private final OutboundMessageRepository outboundMessageRepository;
+  private final ObjectMapper objectMapper;
 
   /**
    * Processes one IPN notification. Handled outcomes always acknowledge; only exceptions escape
@@ -157,10 +163,10 @@ public class PaymentWebhookService {
         userRepository
             .findById(ledger.getUserId())
             .orElseThrow(() -> missingRow("user", ledger.getUserId(), ledger.getTxnRef()));
-    emailService.sendPaymentReceipt(
+    enqueueReceipt(
         user.getEmail(),
         user.getDisplayName(),
-        new OutboundEmailPayload.Receipt(
+        new EmailPayload.Receipt(
             plan.getName(), ledger.getAmount(), ledger.getCurrency(), paidAt, ledger.getTxnRef()));
 
     log.info(
@@ -170,6 +176,32 @@ public class PaymentWebhookService {
         plan.getCode(),
         ledger.getAmount(),
         ledger.getCurrency());
+  }
+
+  /**
+   * ADR-005 outbox: enqueue the receipt row in the fulfilment transaction. A receipt has no
+   * OTP-style business deadline, so it carries no {@code expiresAt} and stays deliverable until the
+   * queue's max-age guard (BR-PAY-007).
+   */
+  private void enqueueReceipt(String to, String displayName, EmailPayload.Receipt receipt) {
+    try {
+      OutboundMessage message =
+          OutboundMessage.builder()
+              .channel(OutboundChannel.EMAIL)
+              .recipient(to)
+              .payload(
+                  objectMapper.writeValueAsString(
+                      new EmailPayload(
+                          EmailPayload.Type.RECEIPT, displayName, null, null, receipt)))
+              .status(OutboundStatus.PENDING)
+              .attempts(0)
+              .nextAttemptAt(Instant.now())
+              .build();
+      outboundMessageRepository.save(message);
+      log.info("Queued receipt email for {} on outbound queue", to);
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Failed to serialize outbound email payload", e);
+    }
   }
 
   /** FR-012/FR-015: ledger recorded as failed, subscription and email untouched. */

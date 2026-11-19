@@ -1,5 +1,7 @@
 package com.vegalife.service.auth;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.auth.AuthMapper;
 import com.vegalife.dto.mapper.auth.LoginMapper;
 import com.vegalife.dto.request.auth.ForgotPasswordRequest;
@@ -11,13 +13,17 @@ import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.request.auth.VerifyPasswordResetRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.enums.token.OtpPurpose;
 import com.vegalife.enums.user.UserStatus;
+import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.token.OtpCode;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.user.UserRepository;
-import com.vegalife.service.email.EmailService;
+import com.vegalife.service.email.EmailPayload;
 import com.vegalife.service.token.JwtTokenService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ExpiredTokenException;
@@ -55,8 +61,9 @@ public class AuthService {
   private final LoginMapper loginMapper;
   private final PasswordEncoder passwordEncoder;
   private final JwtTokenService jwtTokenService;
-  private final EmailService emailService;
   private final OtpCodeRepository otpCodeRepository;
+  private final OutboundMessageRepository outboundMessageRepository;
+  private final ObjectMapper objectMapper;
 
   @Value("${app.password-reset.otp-expiry-minutes:10}")
   private int otpExpiryMinutes;
@@ -154,7 +161,14 @@ public class AuthService {
             .expiresAt(Instant.now().plusSeconds(emailVerificationOtpExpiryMinutes * 60L))
             .build());
 
-    emailService.sendVerificationOtp(user.getEmail(), user.getDisplayName(), otp);
+    enqueueEmail(
+        new EmailPayload(
+            EmailPayload.Type.EMAIL_VERIFICATION,
+            user.getDisplayName(),
+            otp,
+            emailVerificationOtpExpiryMinutes),
+        user.getEmail(),
+        emailVerificationOtpExpiryMinutes);
   }
 
   @Transactional
@@ -272,9 +286,39 @@ public class AuthService {
             .expiresAt(Instant.now().plusSeconds(otpExpiryMinutes * 60L))
             .build());
 
-    emailService.sendPasswordResetOtp(user.getEmail(), user.getDisplayName(), otp);
+    enqueueEmail(
+        new EmailPayload(
+            EmailPayload.Type.PASSWORD_RESET, user.getDisplayName(), otp, otpExpiryMinutes),
+        user.getEmail(),
+        otpExpiryMinutes);
 
     log.info("Password reset OTP issued for user: {}", user.getDisplayName());
+  }
+
+  /**
+   * ADR-005 outbox: enqueue an EMAIL row in the caller's transaction instead of talking to SMTP, so
+   * registration and password reset succeed even when the mail server is unavailable. The drainer
+   * delivers the row afterwards; the payload carries the OTP because {@code otp_code} stores only
+   * its hash (BR-AUTH-019).
+   */
+  private void enqueueEmail(EmailPayload payload, String to, int ttlMinutes) {
+    try {
+      Instant now = Instant.now();
+      OutboundMessage message =
+          OutboundMessage.builder()
+              .channel(OutboundChannel.EMAIL)
+              .recipient(to)
+              .payload(objectMapper.writeValueAsString(payload))
+              .status(OutboundStatus.PENDING)
+              .attempts(0)
+              .nextAttemptAt(now)
+              .expiresAt(now.plusSeconds(ttlMinutes * 60L))
+              .build();
+      outboundMessageRepository.save(message);
+      log.info("Queued {} email for {} on outbound queue", payload.type(), to);
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Failed to serialize outbound email payload", e);
+    }
   }
 
   @Transactional

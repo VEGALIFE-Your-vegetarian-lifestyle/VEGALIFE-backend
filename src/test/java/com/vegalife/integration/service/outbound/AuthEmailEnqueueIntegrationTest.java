@@ -2,7 +2,6 @@ package com.vegalife.integration.service.outbound;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.request.auth.ForgotPasswordRequest;
@@ -12,14 +11,13 @@ import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.infrastructure.email.SmtpEmailServiceImpl;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.auth.AuthService;
-import com.vegalife.service.outbound.OutboundEmailPayload;
+import com.vegalife.service.email.EmailPayload;
 import com.vegalife.shared.exception.InvalidTokenException;
 import java.time.Duration;
 import java.time.Instant;
@@ -29,7 +27,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -39,14 +36,16 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * Phase 3 seam test: auth flows enqueue OUTBOUND_MESSAGE rows via {@code OutboxEmailService}
- * instead of talking to SMTP. Scheduling is disabled so the drainer cannot consume rows mid-test.
+ * The auth service enqueues OUTBOUND_MESSAGE rows in the caller's transaction instead of talking to
+ * SMTP (ADR-005); the drainer delivers them afterwards. Scheduling is disabled so the drainer
+ * cannot consume rows mid-test, and no mail mock is registered, so a row on the queue is the only
+ * possible outcome.
  */
 @Testcontainers
 @SpringBootTest(properties = "app.scheduling.enabled=false")
 @ActiveProfiles("integration")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
-class OutboxEmailServiceIntegrationTest {
+class AuthEmailEnqueueIntegrationTest {
 
   @Container
   @SuppressWarnings("resource")
@@ -64,8 +63,6 @@ class OutboxEmailServiceIntegrationTest {
     registry.add("spring.datasource.password", postgres::getPassword);
     registry.add("spring.datasource.driver-class-name", postgres::getDriverClassName);
   }
-
-  @MockBean private SmtpEmailServiceImpl smtpEmailService;
 
   @Autowired private AuthService authService;
   @Autowired private OutboundMessageRepository outboundMessageRepository;
@@ -117,24 +114,21 @@ class OutboxEmailServiceIntegrationTest {
   }
 
   @Test
-  void register_enqueuesPendingVerificationRow_andNeverTouchesSmtp() throws Exception {
+  void register_enqueuesPendingVerificationRow() throws Exception {
     authService.register(registerRequest());
 
     OutboundMessage row = singleRow();
     assertRowEnvelope(row);
 
-    OutboundEmailPayload payload =
-        objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
-    assertThat(payload.type()).isEqualTo(OutboundEmailPayload.Type.EMAIL_VERIFICATION);
+    EmailPayload payload = objectMapper.readValue(row.getPayload(), EmailPayload.class);
+    assertThat(payload.type()).isEqualTo(EmailPayload.Type.EMAIL_VERIFICATION);
     assertThat(payload.displayName()).isEqualTo(displayName);
     assertThat(payload.otp()).matches("\\d{6}");
     assertThat(payload.expiryMinutes()).isEqualTo(10);
-
-    verifyNoInteractions(smtpEmailService);
   }
 
   @Test
-  void forgotPassword_enqueuesPendingResetRow_andNeverTouchesSmtp() throws Exception {
+  void forgotPassword_enqueuesPendingResetRow() throws Exception {
     authService.register(registerRequest());
     outboundMessageRepository.deleteAll();
 
@@ -145,18 +139,15 @@ class OutboxEmailServiceIntegrationTest {
     OutboundMessage row = singleRow();
     assertRowEnvelope(row);
 
-    OutboundEmailPayload payload =
-        objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
-    assertThat(payload.type()).isEqualTo(OutboundEmailPayload.Type.PASSWORD_RESET);
+    EmailPayload payload = objectMapper.readValue(row.getPayload(), EmailPayload.class);
+    assertThat(payload.type()).isEqualTo(EmailPayload.Type.PASSWORD_RESET);
     assertThat(payload.displayName()).isEqualTo(displayName);
     assertThat(payload.otp()).matches("\\d{6}");
     assertThat(payload.expiryMinutes()).isEqualTo(10);
-
-    verifyNoInteractions(smtpEmailService);
   }
 
   @Test
-  void resendVerificationOtp_enqueuesPendingRow_andNeverTouchesSmtp() throws Exception {
+  void resendVerificationOtp_enqueuesPendingRow() throws Exception {
     authService.register(registerRequest());
     outboundMessageRepository.deleteAll();
 
@@ -167,11 +158,8 @@ class OutboxEmailServiceIntegrationTest {
     OutboundMessage row = singleRow();
     assertRowEnvelope(row);
 
-    OutboundEmailPayload payload =
-        objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
-    assertThat(payload.type()).isEqualTo(OutboundEmailPayload.Type.EMAIL_VERIFICATION);
-
-    verifyNoInteractions(smtpEmailService);
+    EmailPayload payload = objectMapper.readValue(row.getPayload(), EmailPayload.class);
+    assertThat(payload.type()).isEqualTo(EmailPayload.Type.EMAIL_VERIFICATION);
   }
 
   @Test
@@ -203,8 +191,8 @@ class OutboxEmailServiceIntegrationTest {
     assertThat(verified.getStatus()).isEqualTo(UserStatus.activated);
   }
 
-  private OutboundEmailPayload parsePayload(OutboundMessage row) throws Exception {
-    return objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
+  private EmailPayload parsePayload(OutboundMessage row) throws Exception {
+    return objectMapper.readValue(row.getPayload(), EmailPayload.class);
   }
 
   private VerifyEmailRequest verifyRequest(String target, String otp) {

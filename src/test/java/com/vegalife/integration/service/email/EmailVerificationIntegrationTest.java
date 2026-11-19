@@ -1,29 +1,25 @@
 package com.vegalife.integration.service.email;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.verify;
 
 import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.response.auth.RegisterResponse;
 import com.vegalife.enums.token.OtpPurpose;
 import com.vegalife.enums.user.UserStatus;
+import com.vegalife.integration.outbound.QueuedEmailOtp;
 import com.vegalife.model.token.OtpCode;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.auth.AuthService;
-import com.vegalife.service.email.EmailService;
+import com.vegalife.service.email.EmailPayload;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -33,7 +29,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
-@SpringBootTest
+@SpringBootTest(properties = "app.scheduling.enabled=false")
 @ActiveProfiles("integration")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class EmailVerificationIntegrationTest {
@@ -55,11 +51,13 @@ class EmailVerificationIntegrationTest {
     registry.add("spring.datasource.driver-class-name", postgres::getDriverClassName);
   }
 
-  @MockBean private EmailService emailService;
-
   @Autowired private UserRepository userRepository;
 
   @Autowired private OtpCodeRepository otpCodeRepository;
+
+  @Autowired private OutboundMessageRepository outboundMessageRepository;
+
+  @Autowired private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
   @Autowired private AuthService authService;
 
@@ -67,10 +65,10 @@ class EmailVerificationIntegrationTest {
 
   @BeforeEach
   void setUp() {
+    outboundMessageRepository.deleteAll();
     otpCodeRepository.deleteAll();
     userRepository.deleteAll();
     uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
-    doNothing().when(emailService).sendVerificationOtp(anyString(), anyString(), anyString());
   }
 
   private RegisterRequest registerRequest() {
@@ -83,9 +81,8 @@ class EmailVerificationIntegrationTest {
   }
 
   private String captureVerificationOtp(String email) {
-    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-    verify(emailService).sendVerificationOtp(eq(email), anyString(), captor.capture());
-    return captor.getValue();
+    return QueuedEmailOtp.latest(
+        outboundMessageRepository, objectMapper, email, EmailPayload.Type.EMAIL_VERIFICATION);
   }
 
   private VerifyEmailRequest verifyRequest(String email, String otp) {

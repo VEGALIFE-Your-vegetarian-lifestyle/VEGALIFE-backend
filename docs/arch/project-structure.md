@@ -160,16 +160,25 @@ consumed by a service is a *port* and lives in `service/`, so the dependency poi
 
 | Port (rank 5) | Adapter (rank 6) |
 |---|---|
-| `service/outbound/OutboundChannelAdapter` | `infrastructure/email/EmailChannelAdapter` |
 | `service/email/EmailService` | `infrastructure/email/SmtpEmailServiceImpl` |
 | `service/auth/GoogleIdentityProvider` | `infrastructure/google/GoogleIdentityProviderAdapter` |
 | `service/media/PresignedUploadProvider` | `infrastructure/media/CloudinaryUploadProvider` |
 | `service/payment/PaymentGateway` | `infrastructure/payment/vnpay/VnpayClient` |
 
+`service/outbound/OutboundChannelAdapter` is a port consumed by the drainer whose implementations
+are themselves rank 5 (`service/filter/ContentFilterOutboundAdapter`,
+`service/media/MediaPurgeOutboundAdapter`, `service/email/EmailChannelAdapter`), so it has no rank-6
+adapter of its own.
+
 The adapter suffix alone does not decide the rank — dependency direction does. A class that
 implements a rank-5 port using only repositories and other rank-5 services stays at rank 5 (e.g.
-`service/outbound/ContentFilterOutboundAdapter`); one that imports a vendor SDK goes to rank 6. The
-same port may legitimately have implementations at both ranks.
+`service/filter/ContentFilterOutboundAdapter`, `service/media/MediaPurgeOutboundAdapter`,
+`service/email/EmailChannelAdapter`); one that imports a vendor SDK goes to rank 6. The same port may
+legitimately have implementations at both ranks.
+
+That is why all three `OutboundChannelAdapter` implementations sit in `service/`: each reaches the
+vendor through a port (`EmailService`, `PresignedUploadProvider`) or not at all, rather than naming
+an `infrastructure/` class directly.
 
 A third-party interface the service consumes directly (for example Spring AI's
 `org.springframework.ai.embedding.EmbeddingModel`) is not a project port: it stays as-is and the
