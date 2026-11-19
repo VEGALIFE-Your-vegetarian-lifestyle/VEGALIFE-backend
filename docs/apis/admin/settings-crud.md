@@ -82,7 +82,7 @@ Nothing is persisted for a batch if any key or value in it is invalid (the whole
 | media | upload_allowed_video_types | comma list | `video/mp4,video/webm` | non-empty, subset of known video types | Accepted video content types for upload. | same |
 | media | max_image_upload_mb | int | `5` | 1–100 | Maximum accepted image upload size, in megabytes. | same |
 | media | max_video_upload_mb | int | `50` | 1–1024 | Maximum accepted video upload size, in megabytes. | same |
-| content | content_filter_enabled | boolean | `true` | — | When false, a published post skips the semantic filter and lands directly in the admin review queue. | `PostService`, `PendingFilterSweepJob` |
+| content | content_filter_enabled | boolean | `true` | — | When false, a submitted post skips the semantic filter and lands directly in the admin review queue at `pending` with `flag = FILTER_SKIPPED`. | `PostService`, `PendingFilterSweepJob` |
 | content | content_filter_accept_threshold | decimal | `0.70` | 0.0–1.0 | Relevance score at or above which a post passes the filter. | `EmbeddingRelevanceScorer` |
 | content | content_filter_reject_threshold | decimal | `0.45` | 0.0–1.0, must be less than the accept threshold | Relevance score below which a post is rejected. | same |
 | ai | ai_chat_enabled | boolean | `true` | — | When false, AI chat turns (send/stream) are refused with 503; reading existing conversations is unaffected. | `AiChatService` |

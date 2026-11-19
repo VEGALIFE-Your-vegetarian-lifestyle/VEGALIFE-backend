@@ -2,7 +2,7 @@
 
 ## Overview
 
-Return a single post by id, using the same response shape as the post list endpoints. Visibility depends only on the post not being soft-deleted, never on status or ownership — a `drafted`, `processing`, or `unpublished` post is returned to any caller just like a published one.
+Return a single post by id, using the same response shape as the post list endpoints. Visibility depends only on the post not being soft-deleted, never on status or ownership — a `drafted`, `processing`, `pending`, or `unpublished` post is returned to any caller just like a published one.
 
 ## Endpoint
 

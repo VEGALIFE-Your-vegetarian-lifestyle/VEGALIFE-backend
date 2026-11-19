@@ -3,7 +3,10 @@
 ## Status
 
 Accepted (supersedes ADR-011 decisions 2, 4 and 5; ADR-011's "one axis per
-concern" principle is kept and strengthened)
+concern" principle is kept and strengthened). Decision 4 is superseded by
+[ADR-029](029-post-pending-status-and-media-review.md) — the review queue is
+`status=pending`, and `processing` means only "a verdict is outstanding". The
+text below is the record of the decision as made.
 
 ## Date
 

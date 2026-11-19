@@ -26,7 +26,7 @@ No path parameters. `me` is a literal segment, so it is never read as a post id.
 |------|------|----------|-------------|
 | page | integer | No | Zero-based page index. Defaults to `0`; must be zero or greater. |
 | size | integer | No | Number of posts per page. Defaults to `20`; must be between `1` and `100`. |
-| status | string | No | Only posts in this state: `drafted`, `processing`, `published`, or `unpublished`. Absent means every state. Any other value is `400 Validation failed`. |
+| status | string | No | Only posts in this state: `drafted`, `processing`, `pending`, `published`, or `unpublished`. Absent means every state. Any other value is `400 Validation failed`. |
 | categoryId | UUID | No | Only posts assigned that category. |
 | createdFrom | instant | No | Inclusive lower bound on `createdAt`, ISO-8601. |
 | createdTo | instant | No | Inclusive upper bound on `createdAt`, ISO-8601. |
@@ -89,7 +89,7 @@ No request body.
 | data.content[].categoryIds | array of UUID | Assigned categories. |
 | data.content[].mediaIds | array of UUID | Attached uploaded media. |
 | data.content[].recipeIds | array of UUID | Always empty on this list endpoint and on create/edit — recipes are only resolved on `GET /api/posts/{postId}` and the two attach endpoints, to avoid a query per row on a paginated list (issue #137). |
-| data.content[].status | string | Post status: `drafted`, `processing`, `published`, or `unpublished`. `processing` means a filter verdict or an admin decision is outstanding; `unpublished` means an admin rejected it (BR-POST-010, BR-FILTER-008). |
+| data.content[].status | string | Post status: `drafted`, `processing`, `pending`, `published`, or `unpublished`. `processing` means a filter run is still outstanding; `pending` means a verdict is recorded and an admin decision is outstanding; `unpublished` means an admin rejected it (BR-POST-010, BR-FILTER-008, BR-POST-015). |
 | data.content[].rejectionReason | string or null | Why an admin rejected this post. Always populated on this endpoint — these are the caller's own posts. `null` when no reason was recorded. |
 | data.content[].viewCount | integer | Number of recorded views. |
 | data.content[].publishedAt | string | ISO-8601 publication timestamp. |
@@ -113,7 +113,7 @@ No request body.
 
 - Only posts owned by the authenticated user are included. The owner ID comes from the JWT; there is no user ID query parameter.
 - All post statuses are included so the owner can manage drafts, posts awaiting a decision, and rejected posts. Soft-deleted posts are excluded.
-- The post's `flag`/`flagDetail` verdict is not part of this response: it is exposed on the admin post endpoints only (ADR-025). Owners see `status` — `processing` means a verdict is outstanding.
+- The post's `flag`/`flagDetail` verdict is not part of this response: it is exposed on the admin post endpoints only (ADR-025). Owners see `status` — `processing` means a filter run is outstanding, `pending` means the verdict is in and an admin decision is outstanding.
 - A valid JWT is required by the existing security configuration.
 - Every item carries its author summary (`userId`, `displayName`, `avatarUrl`), resolved with one batched avatar lookup per page — never one query per post.
 - Results use zero-based pagination and are ordered by creation time, newest first.

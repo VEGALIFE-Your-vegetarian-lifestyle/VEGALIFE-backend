@@ -34,7 +34,7 @@ roles receive `403 Forbidden`.
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "title": "Vegan pho at home",
     "content": "…",
-    "status": "processing",
+    "status": "pending",
     "flag": "FILTER_FAILED",
     "flagDetail": {
       "kind": "FILTER_FAILED",
@@ -76,8 +76,8 @@ roles receive `403 Forbidden`.
 | Field | Type | Description |
 |---|---|---|
 | contentScore | number \| null | Relevance score for `title + content`. `null` = never scored. |
-| status | string | `drafted`, `processing`, `published` or `unpublished`. A post awaiting a decision is `processing`. |
-| flag | string \| null | The post's last verdict: `FILTER_PASSED` (the filter cleared it), or `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` (held, or approved/rejected over the blocker). `null` on a draft, on a run still in flight, and on rows published before V58 (ADR-025). |
+| status | string | `drafted`, `processing`, `pending`, `published` or `unpublished`. A post whose verdict is recorded and whose admin decision is outstanding is `pending`; `processing` means the filter run is still in flight. |
+| flag | string \| null | The post's last verdict: `FILTER_PASSED` (the filter cleared the text), or `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` (held, or approved/rejected over the blocker). `null` on a draft, on a run still in flight, and on rows published before V58 (ADR-025, ADR-029). |
 | flagDetail | object \| null | The evidence behind `flag` as a JSON snapshot (ADR-024, ADR-025): `kind` (always equal to `flag`) plus the fields that verdict owns — `score`/`threshold` for `FILTER_PASSED`, `outcome`/`score`/`threshold` for `FILTER_FAILED`, `postId`/`similarity`/`threshold` for `SIMILAR_CONTENT`, `cause` for `FILTER_SKIPPED`. Absent fields are omitted. |
 | rejectionReason | string \| null | Why an admin rejected this post. Cleared when the post is approved. `null` = no reason recorded. |
 | recipes | array | Recipe bodies the post attaches. Empty when none is attached. |
@@ -150,10 +150,11 @@ sends a body is not broken: Spring Boot disables `FAIL_ON_UNKNOWN_PROPERTIES`, s
 
 - Approval and rejection are Admin-only (BR-POST-012).
 - Both endpoints are how a held post is decided: the filter and the sweep only ever
-  park a post at `processing` with a blocker, they never unpublish it (ADR-023).
-- A `drafted` post is refused — nobody submitted it. A `published` post stays
-  moderatable, because approve/reject is also how the dish and ingredient names it
-  introduced are decided (ADR-016).
+  park a post at `pending` with a blocker, they never unpublish it (ADR-023, ADR-029).
+- A `drafted` post is refused — nobody submitted it. A `pending` post is the normal
+  case; `processing`, `published`, and `unpublished` posts stay moderatable, because
+  approve/reject is also how the dish and ingredient names they introduced are decided
+  (ADR-016).
 - No audit trail is kept: no administrator action is recorded anywhere (ADR-027).
 - Approving approves the referenced names; rejecting rejects only the pending
   ones (BR-DISH-001).

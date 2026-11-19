@@ -83,7 +83,7 @@ The client must not send `userId`, `status`, `flag`, `viewCount`, `type`, `video
 | data.title | string | Post title. |
 | data.rawContent | object | Rich-text document produced by the frontend editor. |
 | data.featuredImageUrl | string or null | Featured image URL, if supplied. |
-| data.status | string | `drafted` without `publish: true` (a private draft), or `processing` with it — the post is not `published` until the filter passes or an admin approves (BR-POST-004, BR-FILTER-007). |
+| data.status | string | `drafted` without `publish: true` (a private draft), or `processing` with it — the post is not `published` until the filter passes or an admin approves; a media-bearing post that passes the text filter waits at `pending` for an admin (BR-POST-004, BR-FILTER-007, BR-POST-015). |
 | data.rejectionReason | string or null | Always `null` here: a freshly created post has never been reviewed by an admin. Included because this endpoint returns the same `PostListResponse` shape. |
 | data.viewCount | integer | Starts at `0`. |
 | data.publishedAt | string or null | `null` until the post is published. |
@@ -102,11 +102,11 @@ The client must not send `userId`, `status`, `flag`, `viewCount`, `type`, `video
 
 - The author is always the user identified by the authenticated JWT.
 - A new post is persisted with view count `0`, no publication timestamp, and status `drafted` (no `publish`) or `processing` (with `publish: true`).
-- `publish: true` does not publish immediately: the post is stored as `processing` with no `flag` and an entry on the outbound outbox (`CONTENT_FILTER` channel); it becomes `published` only when the filter passes or an admin approves it (BR-POST-004, BR-FILTER-004, BR-FILTER-005, BR-FILTER-007).
+- `publish: true` does not publish immediately: the post is stored as `processing` with no `flag` and an entry on the outbound outbox (`CONTENT_FILTER` channel); it becomes `published` only when the filter passes or an admin approves it (BR-POST-004, BR-FILTER-004, BR-FILTER-005, BR-FILTER-007). If the submitted post already carries media (a featured image, or media attached later through the media endpoint), a passing text filter records `FILTER_PASSED` but leaves the post at `pending`, because media is never filtered and still needs an admin (BR-POST-015, ADR-029).
 - The post's `flag`/`flagDetail` verdict is **not** part of this member-facing response — it is exposed on the admin post endpoints only (ADR-025). Readers answer "can I see it?" from `status`.
 - Filtering runs asynchronously; this endpoint never blocks on the embedding service (BR-FILTER-006).
 - `content` stays the semantic-filtering input; `rawContent` is never read by the filter (BR-FILTER-005).
-- Schema: the `flag` column is added by migration `V19__add_post_filtering.sql`; `raw_content` is added and `type`/`video_url` are dropped by migration `V27__add_post_raw_content_drop_type_video_url.sql`; `V56__post_processing_status_and_flag_blocker.sql` reshapes `status`/`flag` and adds `flag_detail`; `V57__store_post_flag_detail_as_json.sql` converts `flag_detail` to `JSONB` and enforces `flag_detail->>'kind' = flag` (ADR-024); `V58__keep_post_flag_after_publication.sql` adds `FILTER_PASSED` and allows a flag on any status except `drafted` (ADR-025).
+- Schema: the `flag` column is added by migration `V19__add_post_filtering.sql`; `raw_content` is added and `type`/`video_url` are dropped by migration `V27__add_post_raw_content_drop_type_video_url.sql`; `V56__post_processing_status_and_flag_blocker.sql` reshapes `status`/`flag` and adds `flag_detail`; `V57__store_post_flag_detail_as_json.sql` converts `flag_detail` to `JSONB` and enforces `flag_detail->>'kind' = flag` (ADR-024); `V58__keep_post_flag_after_publication.sql` adds `FILTER_PASSED` and allows a flag on any status except `drafted` (ADR-025); `V61__add_post_pending_status.sql` adds the `pending` status and `CHECK (status <> 'processing' OR flag IS NULL)` (ADR-029).
 
 ## Example
 

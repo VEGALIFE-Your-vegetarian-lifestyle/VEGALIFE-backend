@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted
+Accepted (the state table is amended by
+[ADR-029](029-post-pending-status-and-media-review.md): `pending` now means "a verdict
+is recorded, an admin decision is outstanding", and the review queue is
+`status=pending` rather than `status=processing`. The text below is the record of the
+decision as made.)
 
 ## Date
 
