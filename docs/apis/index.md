@@ -108,3 +108,4 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `subscriptions/get-history.md` | `GET /api/subscriptions/me/history` | Paginated acquisition history — purchases and claims — newest first (authenticated) |
 | `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts, filterable by category and date (public: published only; owner/Admin: all) |
 | `mcp/post-mcp.md` | In-process `@Tool` methods (no HTTP endpoint) | Six menu tools — get_menu, get_meal_plan, create_menu, update_menu, schedule_menu, suggest_dishes — served by the backend's own tool layer for the AI chat (ADR-013) |
+| `admin/fe-dashboard-migration.md` | No endpoint (frontend migration guide) | **Breaking change** — what the frontend must change for the dashboard split, every field explained, and the known traps |
