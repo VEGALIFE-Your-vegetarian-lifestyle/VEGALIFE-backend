@@ -6,8 +6,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Lifetime money metrics. Every amount is in whole currency units, matching {@code
- * payment_ledger.amount}; {@link DashboardMetaResponse#getCurrency()} says which currency.
+ * Lifetime money metrics. Every amount is in whole dong (VND), matching {@code
+ * payment_ledger.amount}; {@link DashboardMetaResponse#getCurrency()} names that currency. The
+ * gateway notifies hundredths, but the ledger and this payload are already whole dong.
  *
  * <p>Only {@code status = succeeded} counts as revenue. There is no refund write path in this
  * codebase, so {@code refunded} rows never exist and the total is <em>gross</em> — it is

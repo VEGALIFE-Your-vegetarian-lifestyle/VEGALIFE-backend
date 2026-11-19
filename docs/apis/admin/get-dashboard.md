@@ -7,6 +7,10 @@ engagement totals, the moderation backlog, and lifetime money figures. This endp
 time filter** — every value is either a lifetime total or the state of the platform right now.
 Anything that moves over time is served by `GET /api/admin/dashboard/charts`.
 
+Every money amount is in whole dong (VND), and `meta.currency` says so. The platform settles in VND
+only; the gateway notifies hundredths, but `payment_ledger.amount` — and therefore every amount here
+— is already whole dong.
+
 ## Endpoint
 
 ```text
@@ -36,7 +40,7 @@ No request body.
   "success": true,
   "message": "Dashboard retrieved successfully",
   "data": {
-    "meta": { "generatedAt": "2026-11-20T09:14:03Z", "currency": "VND", "currencyExponent": 0 },
+    "meta": { "generatedAt": "2026-11-20T09:14:03Z", "currency": "VND" },
     "users": {
       "total": 1024, "emailVerified": 870, "activatedEver": 410,
       "suspended": 6, "deactivated": 31, "activationRate": 0.8496
@@ -64,8 +68,7 @@ No request body.
 | Field | Type | Description |
 |-------|------|-------------|
 | data.meta.generatedAt | timestamp | When the payload was produced. The response is cached, so this — not any window boundary — is the only freshness claim a client may render. |
-| data.meta.currency | string \| null | Currency of `money.revenueTotal`, or `null` when the ledger holds no succeeded payment or holds more than one. A total summed across currencies is meaningless, so the mixed case is signalled rather than hidden. |
-| data.meta.currencyExponent | integer | Decimal exponent of `currency` (0 for VND). `payment_ledger.amount` is stored in whole currency units while the gateway notifies hundredths. |
+| data.meta.currency | string | Currency of every amount in `money`. Always `VND`: the platform settles in VND only. |
 | data.users.total | integer | Non-deleted registered accounts. |
 | data.users.emailVerified | integer | Accounts with `email_verified = true`. Set once, so it never reverts. |
 | data.users.activatedEver | integer | Accounts that have ever consumed an AI request (`ai_usage.request_count > 0`). The only monotonic activation signal — `user.status = activated` is current state and is overwritten by a suspend or deactivate. |
@@ -81,7 +84,7 @@ No request body.
 | data.moderationQueue.reportedComments | integer | Non-deleted comments with `reportCount > 0`. |
 | data.moderationQueue.oldestPendingAgeHours | integer | Age in whole hours of the single oldest item across all three queues; `0` when nothing is waiting. More actionable than the counts: three items waiting six days is worse than thirty waiting an hour. |
 | data.moderationQueue.filterSkippedPosts | integer | Posts with `flag = FILTER_SKIPPED` — the content filter never produced a verdict. |
-| data.money.revenueTotal | integer | Sum of `payment_ledger.amount` where `status = succeeded`. Whole currency units. Gross, not net: there is no refund write path in this codebase, so `refunded` rows never exist. |
+| data.money.revenueTotal | integer | Sum of `payment_ledger.amount` where `status = succeeded`, in whole dong (VND). Gross, not net: there is no refund write path in this codebase, so `refunded` rows never exist. |
 | data.money.transactionsTotal | integer | Count of succeeded payments. |
 | data.money.payingUsersTotal | integer | Distinct members with at least one succeeded payment. |
 | data.money.averageOrderValue | number | `revenueTotal / transactionsTotal`. `0` when nothing succeeded. |

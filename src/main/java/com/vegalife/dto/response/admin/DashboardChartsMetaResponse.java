@@ -38,9 +38,9 @@ public class DashboardChartsMetaResponse {
   private String boundary;
 
   /**
-   * Currency of every amount in {@link RevenueTrendResponse} and {@link RevenueByPlanResponse}, or
-   * {@code null} when the ledger holds none or more than one — a total summed across currencies
-   * would be meaningless, so the mixed case is signalled rather than hidden.
+   * Currency of every amount in {@link RevenueTrendResponse} and {@link RevenueByPlanResponse}.
+   * Always {@code VND}: the platform settles in VND only, and every amount is in whole dong even
+   * though the gateway notifies hundredths.
    */
   private String currency;
 

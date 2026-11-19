@@ -94,8 +94,6 @@ class AdminDashboardServiceTest {
     when(paymentLedgerRepository.countByStatusAndCreatedAtBefore(
             eq(PaymentLedgerStatus.pending), any()))
         .thenReturn(3L);
-    when(paymentLedgerRepository.findDistinctCurrencyByStatus(PaymentLedgerStatus.succeeded))
-        .thenReturn(List.of("VND"));
 
     DashboardResponse response = adminDashboardService.getSummary();
 
@@ -131,9 +129,8 @@ class AdminDashboardServiceTest {
     assertThat(response.getMoney().getPayerConversionRate()).isEqualTo(0.04);
     assertThat(response.getMoney().getPendingStaleCount()).isEqualTo(3L);
 
-    assertThat(response.getMeta().getCurrency()).isEqualTo("VND");
-    assertThat(response.getMeta().getCurrencyExponent()).isZero();
     assertThat(response.getMeta().getGeneratedAt()).isNotNull();
+    assertThat(response.getMeta().getCurrency()).isEqualTo("VND");
   }
 
   @Test
@@ -144,16 +141,6 @@ class AdminDashboardServiceTest {
     assertThat(response.getMoney().getAverageOrderValue()).isZero();
     assertThat(response.getMoney().getArpu()).isZero();
     assertThat(response.getMoney().getPayerConversionRate()).isZero();
-  }
-
-  @Test
-  void getSummarySignalsMixedCurrencyAsNull() {
-    when(paymentLedgerRepository.findDistinctCurrencyByStatus(PaymentLedgerStatus.succeeded))
-        .thenReturn(List.of("VND", "USD"));
-
-    DashboardResponse response = adminDashboardService.getSummary();
-
-    assertThat(response.getMeta().getCurrency()).isNull();
   }
 
   @Test
@@ -190,6 +177,7 @@ class AdminDashboardServiceTest {
     assertThat(response.getMeta().getRange()).isEqualTo("week");
     assertThat(response.getMeta().getInterval()).isEqualTo("day");
     assertThat(response.getMeta().getBoundary()).isEqualTo("inclusiveStartExclusiveEnd");
+    assertThat(response.getMeta().getCurrency()).isEqualTo("VND");
     assertThat(response.getRevenueTrend().getPoints()).hasSize(7);
     assertThat(response.getPaymentHealth().getPoints()).hasSize(7);
     assertThat(response.getGrowth().getPoints()).hasSize(7);

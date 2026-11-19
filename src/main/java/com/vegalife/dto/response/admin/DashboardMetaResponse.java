@@ -7,8 +7,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Provenance for a dashboard payload. The response is cached, so {@code generatedAt} — not the
- * window boundaries — is the only freshness claim a caller may render.
+ * Provenance and units for a dashboard payload. The response is cached, so {@code generatedAt} —
+ * not the window boundaries — is the only freshness claim a caller may render.
  */
 @Data
 @Builder
@@ -16,19 +16,13 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class DashboardMetaResponse {
 
+  /** When this payload was produced. The response is cached, so this is the freshness signal. */
   private Instant generatedAt;
 
   /**
-   * Currency of {@link DashboardMoneyMetrics#getRevenueTotal()}, or {@code null} when the ledger
-   * holds no succeeded payment or holds more than one currency — a total summed across currencies
-   * would be meaningless, so the mixed case is signalled rather than hidden.
+   * Currency of every amount in {@link DashboardMoneyMetrics}. Always {@code VND}: the platform
+   * settles in VND only, and every amount is in whole dong even though the gateway notifies
+   * hundredths.
    */
   private String currency;
-
-  /**
-   * Decimal exponent of {@link #currency} (0 for VND). {@code payment_ledger.amount} is stored in
-   * whole currency units while the gateway notifies hundredths, so a client that assumes 2 would
-   * misplace the decimal.
-   */
-  private int currencyExponent;
 }

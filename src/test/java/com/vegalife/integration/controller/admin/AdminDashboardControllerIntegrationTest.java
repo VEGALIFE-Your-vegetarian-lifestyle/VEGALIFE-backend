@@ -98,6 +98,7 @@ class AdminDashboardControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content.totalPosts").isNumber())
         .andExpect(jsonPath("$.data.moderationQueue.pendingPosts").value(0))
         .andExpect(jsonPath("$.data.money.revenueTotal").value(0))
+        .andExpect(jsonPath("$.data.meta.currency").value("VND"))
         .andExpect(jsonPath("$.data.meta.generatedAt").exists());
   }
 
@@ -144,6 +145,7 @@ class AdminDashboardControllerIntegrationTest {
         .andExpect(jsonPath("$.data.meta.range").value("week"))
         .andExpect(jsonPath("$.data.meta.interval").value("day"))
         .andExpect(jsonPath("$.data.meta.boundary").value("inclusiveStartExclusiveEnd"))
+        .andExpect(jsonPath("$.data.meta.currency").value("VND"))
         .andExpect(jsonPath("$.data.revenueTrend.points.length()").value(7))
         .andExpect(jsonPath("$.data.paymentHealth.points.length()").value(7))
         .andExpect(jsonPath("$.data.growth.points.length()").value(7));

@@ -60,10 +60,14 @@ public class AdminDashboardService {
   /** A pending payment older than this is treated as money that never arrived. */
   private static final Duration STALE_PAYMENT_AGE = Duration.ofHours(24);
 
-  /** VND has no minor unit; {@code payment_ledger.amount} is stored in whole dong. */
-  private static final int VND_CURRENCY_EXPONENT = 0;
-
   private static final String BOUNDARY_INCLUSIVE_START_EXCLUSIVE_END = "inclusiveStartExclusiveEnd";
+
+  /**
+   * The only currency the platform settles in, so it is a constant rather than something read back
+   * from the ledger. Every amount in the dashboard is in whole dong: {@code payment_ledger.amount}
+   * already is, even though the gateway notifies hundredths.
+   */
+  private static final String SETTLEMENT_CURRENCY = "VND";
 
   private final UserRepository userRepository;
   private final PostRepository postRepository;
@@ -105,7 +109,6 @@ public class AdminDashboardService {
     String interval = intervalFor(request.getRange());
     Instant from = fromFor(request.getRange(), to, interval);
     List<Instant> buckets = bucketStarts(from, interval, to);
-    String currency = resolveCurrency();
 
     return DashboardChartsResponse.builder()
         .meta(
@@ -115,7 +118,7 @@ public class AdminDashboardService {
                 .from(from)
                 .to(to)
                 .boundary(BOUNDARY_INCLUSIVE_START_EXCLUSIVE_END)
-                .currency(currency)
+                .currency(SETTLEMENT_CURRENCY)
                 .generatedAt(to)
                 .build())
         .revenueTrend(revenueTrend(from, to, interval, buckets))
@@ -126,22 +129,7 @@ public class AdminDashboardService {
   }
 
   private DashboardMetaResponse meta(Instant now) {
-    return DashboardMetaResponse.builder()
-        .generatedAt(now)
-        .currency(resolveCurrency())
-        .currencyExponent(VND_CURRENCY_EXPONENT)
-        .build();
-  }
-
-  /**
-   * The ledger's single currency, or {@code null} when it holds none or several. Returning null for
-   * the mixed case keeps a meaningless cross-currency total from being presented as if it were one
-   * amount.
-   */
-  private String resolveCurrency() {
-    List<String> currencies =
-        paymentLedgerRepository.findDistinctCurrencyByStatus(PaymentLedgerStatus.succeeded);
-    return currencies.size() == 1 ? currencies.get(0) : null;
+    return DashboardMetaResponse.builder().generatedAt(now).currency(SETTLEMENT_CURRENCY).build();
   }
 
   private DashboardUserMetrics userMetrics() {

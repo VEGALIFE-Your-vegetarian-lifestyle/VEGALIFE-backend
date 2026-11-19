@@ -4,7 +4,6 @@ import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.model.subscription.PaymentLedger;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -52,11 +51,4 @@ public interface PaymentLedgerRepository
    * arrived. Nothing expires or reconciles them, so this only grows.
    */
   long countByStatusAndCreatedAtBefore(PaymentLedgerStatus status, Instant cutoff);
-
-  /**
-   * Admin dashboard: the currencies present among succeeded payments, so a total is never silently
-   * summed across currencies.
-   */
-  @Query("select distinct l.currency from PaymentLedger l where l.status = :status")
-  List<String> findDistinctCurrencyByStatus(@Param("status") PaymentLedgerStatus status);
 }

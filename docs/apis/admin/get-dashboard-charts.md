@@ -6,6 +6,10 @@ Bucketed time series for the admin console. This is the **only** dashboard surfa
 time filter: four series — revenue trend, revenue by plan, payment health, and growth — all sharing
 one bucket size so their x-axes line up.
 
+Every money amount is in whole dong (VND), and `meta.currency` says so. The platform settles in VND
+only; the gateway notifies hundredths, but `payment_ledger.amount` — and therefore every amount here
+— is already whole dong.
+
 ## Endpoint
 
 ```text
@@ -97,10 +101,10 @@ No request body.
 | data.meta.from | timestamp | Window start, inclusive. |
 | data.meta.to | timestamp | Window end, exclusive. |
 | data.meta.boundary | string | Always `inclusiveStartExclusiveEnd`, stated so a client labels the axis correctly. |
-| data.meta.currency | string \| null | Currency of every amount in `revenueTrend` and `revenueByPlan`, or `null` when the ledger holds none or more than one. |
+| data.meta.currency | string | Currency of every amount in `revenueTrend` and `revenueByPlan`. Always `VND`: the platform settles in VND only. |
 | data.meta.generatedAt | timestamp | When the payload was produced. The response is cached, so this is the freshness signal. |
-| data.revenueTrend.points[] | array | One point per bucket. `amount` is succeeded revenue in whole currency units; `transactions` is how many payments produced it, so a hover can tell one large payment from several ordinary ones. Draw as a line or area. |
-| data.revenueByPlan.items[] | array | Succeeded revenue per plan, ranked by `amount` descending. `amount` is what was actually charged, read from the ledger — never the catalogue price multiplied by a count, or a price change would rewrite history. `active` is the plan's current state, kept so a deactivated plan that still earned in the window is visible. Draw as horizontal bars. |
+| data.revenueTrend.points[] | array | One point per bucket. `amount` is succeeded revenue in whole dong (VND); `transactions` is how many payments produced it, so a hover can tell one large payment from several ordinary ones. Draw as a line or area. |
+| data.revenueByPlan.items[] | array | Succeeded revenue per plan, ranked by `amount` descending. `amount` is what was actually charged, in whole dong (VND), read from the ledger — never the catalogue price multiplied by a count, or a price change would rewrite history. `active` is the plan's current state, kept so a deactivated plan that still earned in the window is visible. Draw as horizontal bars. |
 | data.paymentHealth.points[] | array | One point per bucket. `succeeded` is bucketed by `paid_at`; `failed` by `updated_at` (the ledger has no `failed_at`, so this is a documented proxy); pending by `created_at`. `pendingFresh` / `pendingStale` split at 24 hours of age. Draw as a stacked bar — the four values partition the attempts that started in the bucket. |
 | data.paymentHealth.totals | object | Window totals computed from the rows themselves, plus `successRate = succeeded / (succeeded + failed)`. `pending` is excluded from the denominator: a healthy day with payments still in flight would otherwise look bad. |
 | data.growth.points[] | array | New non-deleted accounts and distinct new paying accounts per bucket, both counting people, so one axis serves both. `conversionRate = newPayingUsers / newUsers`, `0` when nobody signed up. Noisy per bucket — smooth before drawing a trend. |
