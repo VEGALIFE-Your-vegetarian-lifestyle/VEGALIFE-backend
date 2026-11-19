@@ -331,6 +331,60 @@ class PostServiceTest {
     assertThatThrownBy(() -> postService.getPost(null, postId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
+
+    verify(postRepository, never()).incrementViewCount(any());
+  }
+
+  @Test
+  void getPost_guestViewOfPublishedPostIncrementsTheCount() {
+    UUID postId = UUID.randomUUID();
+    Post published = publishedPostWithViews(postId, 12);
+    PostListResponse expectedResponse = PostListResponse.builder().id(postId).viewCount(12).build();
+    stubDetail(published, expectedResponse);
+
+    PostListResponse response = postService.getPost(null, postId);
+
+    verify(postRepository).incrementViewCount(postId);
+    assertThat(response.getViewCount()).isEqualTo(13);
+  }
+
+  @Test
+  void getPost_anotherMembersViewOfPublishedPostIncrementsTheCount() {
+    UUID postId = UUID.randomUUID();
+    Post published = publishedPostWithViews(postId, 12);
+    PostListResponse expectedResponse = PostListResponse.builder().id(postId).viewCount(12).build();
+    stubDetail(published, expectedResponse);
+
+    PostListResponse response = postService.getPost(UUID.randomUUID(), postId);
+
+    verify(postRepository).incrementViewCount(postId);
+    assertThat(response.getViewCount()).isEqualTo(13);
+  }
+
+  @Test
+  void getPost_authorsOwnViewIsNotCounted() {
+    UUID postId = UUID.randomUUID();
+    Post published = publishedPostWithViews(postId, 12);
+    PostListResponse expectedResponse = PostListResponse.builder().id(postId).viewCount(12).build();
+    stubDetail(published, expectedResponse);
+
+    PostListResponse response = postService.getPost(userId, postId);
+
+    verify(postRepository, never()).incrementViewCount(any());
+    assertThat(response.getViewCount()).isEqualTo(12);
+  }
+
+  @Test
+  void getPost_viewOfNonPublishedPostIsNotCounted() {
+    UUID postId = UUID.randomUUID();
+    Post draft = ownedPost(postId, PostStatus.drafted);
+    PostListResponse expectedResponse = PostListResponse.builder().id(postId).viewCount(0).build();
+    stubDetail(draft, expectedResponse);
+
+    PostListResponse response = postService.getPost(null, postId);
+
+    verify(postRepository, never()).incrementViewCount(any());
+    assertThat(response.getViewCount()).isZero();
   }
 
   @Test
@@ -416,6 +470,18 @@ class PostServiceTest {
         .viewCount(0)
         .categories(new java.util.HashSet<>(Set.of(category)))
         .build();
+  }
+
+  private Post publishedPostWithViews(UUID postId, int views) {
+    Post published = ownedPost(postId, PostStatus.published);
+    published.setViewCount(views);
+    return published;
+  }
+
+  private void stubDetail(Post existing, PostListResponse expectedResponse) {
+    when(postRepository.findDetailById(existing.getId())).thenReturn(Optional.of(existing));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(existing.getId())).thenReturn(List.of());
+    when(postMapper.toListResponse(existing, Set.of())).thenReturn(expectedResponse);
   }
 
   @Test

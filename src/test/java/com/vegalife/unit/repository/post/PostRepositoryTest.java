@@ -11,6 +11,7 @@ import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.post.PostSpecifications;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -61,6 +62,28 @@ class PostRepositoryTest {
     assertThat(result.getTotalElements()).isZero();
   }
 
+  @Test
+  void incrementViewCount_addsOneWithoutTouchingUpdatedAt() {
+    User owner = createUser("counter", "counter@example.com");
+    Post post = createPost(owner, "Viewed post", PostStatus.published, null);
+    entityManager.flush();
+    entityManager.clear();
+    Instant updatedAtBefore = postRepository.findById(post.getId()).orElseThrow().getUpdatedAt();
+
+    int updated = postRepository.incrementViewCount(post.getId());
+
+    assertThat(updated).isEqualTo(1);
+    entityManager.clear();
+    Post reloaded = postRepository.findById(post.getId()).orElseThrow();
+    assertThat(reloaded.getViewCount()).isEqualTo(1);
+    assertThat(reloaded.getUpdatedAt()).isEqualTo(updatedAtBefore);
+  }
+
+  @Test
+  void incrementViewCount_unknownPostUpdatesNothing() {
+    assertThat(postRepository.incrementViewCount(UUID.randomUUID())).isZero();
+  }
+
   private User createUser(String displayName, String email) {
     User user =
         User.builder()
@@ -75,8 +98,8 @@ class PostRepositoryTest {
     return user;
   }
 
-  private void createPost(User owner, String title, PostStatus status, Instant deletedAt) {
-    entityManager.persist(
+  private Post createPost(User owner, String title, PostStatus status, Instant deletedAt) {
+    Post post =
         Post.builder()
             .user(owner)
             .title(title)
@@ -85,6 +108,8 @@ class PostRepositoryTest {
             .status(status)
             .viewCount(0)
             .deletedAt(deletedAt)
-            .build());
+            .build();
+    entityManager.persist(post);
+    return post;
   }
 }
