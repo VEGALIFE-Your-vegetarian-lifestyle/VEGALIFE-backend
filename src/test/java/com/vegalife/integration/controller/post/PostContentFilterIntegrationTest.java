@@ -60,8 +60,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * on the post itself and their exposure in API responses.
  *
  * <p>Under ADR-023 a submitted post is {@code processing} with no flag while the verdict is
- * outstanding, and the adapter only ever writes {@code published} (pass) or {@code processing} with
- * one of the three blockers. The filter never unpublishes.
+ * outstanding; the adapter only ever writes {@code published} (pass) or {@code pending} with one of
+ * the three blockers (ADR-029). The filter never unpublishes.
  *
  * <p>Only the two AI-facing collaborators are replaced ({@link EmbeddingModel}, {@link
  * RelevanceScorer}); everything else — service, adapter, repositories, drainer — runs for real
@@ -174,7 +174,7 @@ class PostContentFilterIntegrationTest {
 
     Post filtered = postById(postId);
     // Held, not unpublished: only an admin may unpublish (ADR-023).
-    assertThat(filtered.getStatus()).isEqualTo(PostStatus.processing);
+    assertThat(filtered.getStatus()).isEqualTo(PostStatus.pending);
     assertThat(filtered.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
     assertThat(filtered.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_FAILED");
     assertThat(filtered.getFlagDetail().path("outcome").asText()).isEqualTo("FAIL");
@@ -197,7 +197,7 @@ class PostContentFilterIntegrationTest {
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(PostStatus.processing);
+    assertThat(filtered.getStatus()).isEqualTo(PostStatus.pending);
     assertThat(filtered.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
     assertThat(filtered.getPublishedAt()).isNull();
   }
@@ -268,7 +268,7 @@ class PostContentFilterIntegrationTest {
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(PostStatus.processing);
+    assertThat(filtered.getStatus()).isEqualTo(PostStatus.pending);
     assertThat(filtered.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
   }
 
@@ -279,7 +279,7 @@ class PostContentFilterIntegrationTest {
         createPostWithPublish("Held post edit", "A body that initially lands in the reject band.");
 
     drainFilterQueue();
-    assertThat(postById(postId).getStatus()).isEqualTo(PostStatus.processing);
+    assertThat(postById(postId).getStatus()).isEqualTo(PostStatus.pending);
     assertThat(postById(postId).getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
 
     stubScore(0.9, Band.PASS);

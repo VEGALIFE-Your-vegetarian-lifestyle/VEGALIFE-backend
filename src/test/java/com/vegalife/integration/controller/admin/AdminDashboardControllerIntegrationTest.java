@@ -92,7 +92,7 @@ class AdminDashboardControllerIntegrationTest {
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.data.range.type").value("week"))
         .andExpect(jsonPath("$.data.users.total").isNumber())
-        .andExpect(jsonPath("$.data.moderationQueue.pendingPosts").isNumber());
+        .andExpect(jsonPath("$.data.moderationQueue.pendingPosts").value(0));
   }
 
   @Test

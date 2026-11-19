@@ -102,9 +102,10 @@ public class PostService {
     // filter enabled (the default) it is queued for content filtering (BR-FILTER-005) and the
     // filter callback publishes it once it passes; without it the post stays a private draft that
     // is never filtered. A submitted post is `processing` from the moment it is queued, so
-    // "waiting for a verdict" lives on the lifecycle axis, not in `flag` (ADR-023). Only when the
-    // content_filter_enabled platform setting is false (deliberate outage mode) does a submitted
-    // post skip the filter and land directly in the admin review queue with flag=FILTER_SKIPPED.
+    // "waiting for a verdict" lives on the lifecycle axis, not in `flag` (ADR-023, ADR-029). Only
+    // when the content_filter_enabled platform setting is false (deliberate outage mode) does a
+    // submitted post skip the filter and land directly in the admin review queue at `pending` with
+    // flag=FILTER_SKIPPED.
     post.setStatus(request.isPublish() ? PostStatus.processing : PostStatus.drafted);
     boolean filterEnabled = platformSettingsProvider.isContentFilterEnabled();
 
@@ -131,6 +132,12 @@ public class PostService {
 
     // FR-003: detected before the fields below are overwritten.
     boolean contentChanged = isContentChanged(post, request);
+    // Only gaining an image is new unreviewed content. Clearing it is the media analogue of
+    // detaching media and changes nothing (ADR-029).
+    boolean featuredImageChanged =
+        request.getFeaturedImageUrl() != null
+            && !request.getFeaturedImageUrl().isBlank()
+            && !request.getFeaturedImageUrl().equals(post.getFeaturedImageUrl());
 
     if (request.getTitle() != null) {
       post.setTitle(request.getTitle());
@@ -154,6 +161,12 @@ public class PostService {
       post.setStatus(PostStatus.processing);
       post.setFlag(null);
       post.setFlagDetail(null);
+    } else if (featuredImageChanged && post.getStatus() == PostStatus.published) {
+      // The filter only judges text (ADR-026), so a new image is content no run has seen. The
+      // verdict and the score still describe the text, so the flag is kept and only the status
+      // changes; an admin decides whether the image belongs (ADR-029).
+      post.setStatus(PostStatus.pending);
+      log.info("Post {} gained a featured image; held for admin review", post.getId());
     }
 
     boolean filterEnabled = platformSettingsProvider.isContentFilterEnabled();
@@ -251,12 +264,23 @@ public class PostService {
    * Replaces the post's whole media set (issue #137). Only media that exists, is not soft-deleted,
    * and has {@code status = succeed} may be attached; any other id fails the whole call with a 400
    * and nothing is written. An empty {@code mediaIds} detaches every attached media.
+   *
+   * <p>The filter never sees media (ADR-026), so a {@code published} post that gains a non-empty,
+   * changed media set is moved to {@code pending} and keeps its flag: the text verdict still holds,
+   * but the new media has not been reviewed by anyone (ADR-029). Detaching media, or re-sending the
+   * same set, changes nothing.
    */
   @Transactional
   public PostListResponse attachMedia(
       UUID actorId, boolean isAdmin, UUID postId, Set<UUID> mediaIds) {
     Post post = findManageablePost(actorId, isAdmin, postId);
-    post.setMedia(resolveMedia(mediaIds));
+    Set<Media> resolved = resolveMedia(mediaIds);
+    boolean mediaChanged = !nonDeletedMediaIds(post).equals(mediaIdsOf(resolved));
+    post.setMedia(resolved);
+    if (mediaChanged && !resolved.isEmpty() && post.getStatus() == PostStatus.published) {
+      post.setStatus(PostStatus.pending);
+      log.info("Post {} gained attached media; held for admin review", post.getId());
+    }
     Post saved = postRepository.saveAndFlush(post);
     return toResponse(saved, attachedRecipeIds(postId), actorId);
   }
@@ -334,9 +358,9 @@ public class PostService {
   /**
    * BR-CONTENT-003: a post may be published only when it has at least one active category;
    * withdrawing returns it to a private draft from any state it can be in — including {@code
-   * processing}, so a post nobody has decided on yet can still be taken back. Nothing is ever
-   * flipped to {@code published} here; that happens only when the content filter passes or an admin
-   * approves (FR-007, ADR-023).
+   * processing} or {@code pending}, so a post nobody has decided on yet can still be taken back.
+   * Nothing is ever flipped to {@code published} here; that happens only when the content filter
+   * passes or an admin approves (FR-007, ADR-023, ADR-029).
    *
    * @param willRequeue whether this update also re-queues the post for content filtering, so a
    *     not-yet-published post being re-checked is validated as if it were published
@@ -364,7 +388,7 @@ public class PostService {
    * BR-FILTER-005: an explicit {@code publish: true} always queues (and re-queues) for content
    * filtering; a content change re-queues a post that is still meant to be visible — {@code
    * published}, {@code unpublished} (an admin refusal the author is appealing by editing), or a
-   * {@code processing} post that is being held. A post that is merely in flight is not queued
+   * {@code pending} post that is waiting for a human. A post that is merely in flight is not queued
    * again: the pending run reads the body at delivery time, so it already sees the edit. A
    * withdrawn post (draft) never re-queues implicitly.
    */
@@ -377,7 +401,7 @@ public class PostService {
     }
     return post.getStatus() == PostStatus.published
         || post.getStatus() == PostStatus.unpublished
-        || (post.getStatus() == PostStatus.processing && post.getFlag() != null);
+        || post.getStatus() == PostStatus.pending;
   }
 
   /** FR-003: only a title or content change counts as a content change. */
@@ -390,13 +414,13 @@ public class PostService {
 
   /**
    * Filter bypass ({@code content_filter_enabled} platform setting off): hold a post that would
-   * have been queued for content filtering at {@code processing} with {@code flag=FILTER_SKIPPED},
+   * have been queued for content filtering at {@code pending} with {@code flag=FILTER_SKIPPED},
    * instead of sending it to the provider — no publication timestamp and no outbound row. An admin
    * resolves it through the moderation endpoint. {@code FILTER_SKIPPED} rather than {@code
    * FILTER_FAILED}: the filter never formed an opinion (ADR-023).
    */
   private void markForAdminReview(Post post) {
-    post.setStatus(PostStatus.processing);
+    post.setStatus(PostStatus.pending);
     post.setFlag(PostFlag.FILTER_SKIPPED);
     post.setFlagDetail(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
     post.setPublishedAt(null);
@@ -516,7 +540,7 @@ public class PostService {
       return PostStatus.valueOf(status);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException(
-          "Status must be one of: drafted, processing, published, unpublished");
+          "Status must be one of: drafted, processing, pending, published, unpublished");
     }
   }
 
@@ -634,6 +658,18 @@ public class PostService {
           "One or more media do not exist, are deleted, or have not finished uploading");
     }
     return new HashSet<>(found);
+  }
+
+  /** Ids of the post's attached media that are not soft-deleted — the set a reader can see. */
+  private static Set<UUID> nonDeletedMediaIds(Post post) {
+    return post.getMedia().stream()
+        .filter(media -> media.getDeletedAt() == null)
+        .map(Media::getId)
+        .collect(Collectors.toSet());
+  }
+
+  private static Set<UUID> mediaIdsOf(Set<Media> media) {
+    return media.stream().map(Media::getId).collect(Collectors.toSet());
   }
 
   /**

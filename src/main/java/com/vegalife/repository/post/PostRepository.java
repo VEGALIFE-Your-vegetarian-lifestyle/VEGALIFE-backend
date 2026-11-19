@@ -62,8 +62,12 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
   /** Admin dashboard (issue #12): posts created within a time range. */
   long countByCreatedAtBetweenAndDeletedAtIsNull(Instant from, Instant to);
 
-  /** Admin dashboard (issue #12): posts held for human review (blocked, not merely in flight). */
-  long countByStatusAndFlagIsNotNullAndDeletedAtIsNull(PostStatus status);
+  /**
+   * Admin dashboard (issue #12): posts waiting for an admin decision. One predicate, the same one
+   * the review queue uses ({@code status=pending}), so the metric and the queue cannot disagree
+   * (ADR-029).
+   */
+  long countByStatusAndDeletedAtIsNull(PostStatus status);
 
   /** Admin dashboard (issue #12): distinct authors who posted within a time range. */
   @Query(

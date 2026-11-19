@@ -93,8 +93,7 @@ public class AdminDashboardService {
 
   private DashboardModerationQueueMetrics moderationQueueMetrics() {
     return DashboardModerationQueueMetrics.builder()
-        .pendingPosts(
-            postRepository.countByStatusAndFlagIsNotNullAndDeletedAtIsNull(PostStatus.processing))
+        .pendingPosts(postRepository.countByStatusAndDeletedAtIsNull(PostStatus.pending))
         .pendingRecipes(
             recipeRepository.countByModerationStatusAndDeletedAtIsNull(ModerationStatus.PENDING))
         .reportedComments(commentRepository.countByReportCountGreaterThanAndDeletedAtIsNull(0))

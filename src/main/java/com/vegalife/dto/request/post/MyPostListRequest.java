@@ -26,8 +26,8 @@ public class MyPostListRequest {
   private Integer size;
 
   @Pattern(
-      regexp = "^(drafted|processing|published|unpublished)$",
-      message = "Status must be one of: drafted, processing, published, unpublished")
+      regexp = "^(drafted|processing|pending|published|unpublished)$",
+      message = "Status must be one of: drafted, processing, pending, published, unpublished")
   private String status;
 
   private UUID categoryId;

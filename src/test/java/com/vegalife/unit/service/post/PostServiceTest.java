@@ -194,7 +194,7 @@ class PostServiceTest {
 
     postService.createPost(userId, request);
 
-    assertThat(post.getStatus()).isEqualTo(PostStatus.processing);
+    assertThat(post.getStatus()).isEqualTo(PostStatus.pending);
     assertThat(post.getFlag()).isEqualTo(PostFlag.FILTER_SKIPPED);
     assertThat(post.getFlagDetail())
         .isEqualTo(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
@@ -645,6 +645,77 @@ class PostServiceTest {
   }
 
   @Test
+  void updatePost_featuredImageChangeOnPublishedPostHoldsItForAdminReview() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, PostStatus.published);
+    existing.setFeaturedImageUrl("https://example.com/old.jpg");
+    existing.setFlag(PostFlag.FILTER_PASSED);
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.updatePost(
+        userId,
+        false,
+        postId,
+        PostUpdateRequest.builder()
+            .content("Body")
+            .featuredImageUrl("https://example.com/new.jpg")
+            .build());
+
+    assertThat(existing.getFeaturedImageUrl()).isEqualTo("https://example.com/new.jpg");
+    // The text verdict still describes the text, so the flag is kept; the image is new (ADR-029).
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.pending);
+    assertThat(existing.getFlag()).isEqualTo(PostFlag.FILTER_PASSED);
+    verifyContentFilterNotQueued();
+  }
+
+  @Test
+  void updatePost_clearingFeaturedImageOnPublishedPostLeavesItPublished() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, PostStatus.published);
+    existing.setFeaturedImageUrl("https://example.com/old.jpg");
+    existing.setFlag(PostFlag.FILTER_PASSED);
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.updatePost(
+        userId,
+        false,
+        postId,
+        PostUpdateRequest.builder().content("Body").featuredImageUrl(" ").build());
+
+    // Clearing the image removes media; it does not add content a run has not seen (ADR-029).
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.published);
+    assertThat(existing.getFlag()).isEqualTo(PostFlag.FILTER_PASSED);
+    verifyContentFilterNotQueued();
+  }
+
+  @Test
+  void updatePost_featuredImageChangeOnDraftDoesNotHoldForReview() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, PostStatus.drafted);
+    existing.setFeaturedImageUrl("https://example.com/old.jpg");
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+
+    postService.updatePost(
+        userId,
+        false,
+        postId,
+        PostUpdateRequest.builder()
+            .content("Body")
+            .featuredImageUrl("https://example.com/new.jpg")
+            .build());
+
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.drafted);
+    assertThat(existing.getFlag()).isNull();
+    verifyContentFilterNotQueued();
+  }
+
+  @Test
   void updatePost_contentChangeOnUnpublishedPostRequeuesForFiltering() {
     UUID postId = UUID.randomUUID();
     Post existing = ownedPost(postId, PostStatus.unpublished);
@@ -672,7 +743,7 @@ class PostServiceTest {
     postService.updatePost(
         userId, false, postId, PostUpdateRequest.builder().content("Body").publish(true).build());
 
-    assertThat(existing.getStatus()).isEqualTo(PostStatus.processing);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.pending);
     assertThat(existing.getFlag()).isEqualTo(PostFlag.FILTER_SKIPPED);
     assertThat(existing.getFlagDetail())
         .isEqualTo(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
@@ -683,7 +754,7 @@ class PostServiceTest {
   @Test
   void updatePost_contentChangeOnHeldPostRequeuesForFiltering() {
     UUID postId = UUID.randomUUID();
-    Post existing = ownedPost(postId, PostStatus.processing);
+    Post existing = ownedPost(postId, PostStatus.pending);
     existing.setFlag(PostFlag.FILTER_FAILED);
     existing.setFlagDetail(
         PostFlagDetail.filterFailed(new FilterVerdict(FilterOutcome.FAIL, 0.21, 0.45, List.of())));
@@ -1028,6 +1099,111 @@ class PostServiceTest {
     assertThatThrownBy(() -> postService.attachMedia(userId, false, postId, Set.of()))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
+  }
+
+  @Test
+  void attachMedia_addingMediaToPublishedPostHoldsItForAdminReview() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, PostStatus.published);
+    existing.setFlag(PostFlag.FILTER_PASSED);
+    UUID mediaId = UUID.randomUUID();
+    Media media = Media.builder().id(mediaId).status(MediaStatus.succeed).build();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(mediaRepository.findByIdInAndDeletedAtIsNull(Set.of(mediaId))).thenReturn(List.of(media));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(existing, Set.of()))
+        .thenReturn(PostListResponse.builder().id(postId).build());
+
+    postService.attachMedia(userId, false, postId, Set.of(mediaId));
+
+    assertThat(existing.getMedia()).containsExactly(media);
+    // The filter never sees media (ADR-026), so the new set is unreviewed: keep the text verdict
+    // and wait for an admin (ADR-029).
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.pending);
+    assertThat(existing.getFlag()).isEqualTo(PostFlag.FILTER_PASSED);
+    verifyContentFilterNotQueued();
+  }
+
+  @Test
+  void attachMedia_resendingTheSameSetOnPublishedPostKeepsItPublished() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, PostStatus.published);
+    UUID mediaId = UUID.randomUUID();
+    Media media = Media.builder().id(mediaId).status(MediaStatus.succeed).build();
+    existing.setMedia(new java.util.HashSet<>(Set.of(media)));
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(mediaRepository.findByIdInAndDeletedAtIsNull(Set.of(mediaId))).thenReturn(List.of(media));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(existing, Set.of()))
+        .thenReturn(PostListResponse.builder().id(postId).build());
+
+    postService.attachMedia(userId, false, postId, Set.of(mediaId));
+
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.published);
+  }
+
+  @Test
+  void attachMedia_detachingMediaFromPublishedPostKeepsItPublished() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, PostStatus.published);
+    Media attached = Media.builder().id(UUID.randomUUID()).status(MediaStatus.succeed).build();
+    existing.setMedia(new java.util.HashSet<>(Set.of(attached)));
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(existing, Set.of()))
+        .thenReturn(PostListResponse.builder().id(postId).build());
+
+    postService.attachMedia(userId, false, postId, Set.of());
+
+    assertThat(existing.getMedia()).isEmpty();
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.published);
+  }
+
+  @Test
+  void attachMedia_addingMediaToDraftKeepsItDraft() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, PostStatus.drafted);
+    UUID mediaId = UUID.randomUUID();
+    Media media = Media.builder().id(mediaId).status(MediaStatus.succeed).build();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(mediaRepository.findByIdInAndDeletedAtIsNull(Set.of(mediaId))).thenReturn(List.of(media));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(existing, Set.of()))
+        .thenReturn(PostListResponse.builder().id(postId).build());
+
+    postService.attachMedia(userId, false, postId, Set.of(mediaId));
+
+    assertThat(existing.getMedia()).containsExactly(media);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.drafted);
+  }
+
+  @Test
+  void attachMedia_addingMediaToInFlightPostLeavesItProcessing() {
+    UUID postId = UUID.randomUUID();
+    Post existing = ownedPost(postId, PostStatus.processing);
+    UUID mediaId = UUID.randomUUID();
+    Media media = Media.builder().id(mediaId).status(MediaStatus.succeed).build();
+    when(postRepository.findByIdAndUser_IdAndDeletedAtIsNull(postId, userId))
+        .thenReturn(Optional.of(existing));
+    when(mediaRepository.findByIdInAndDeletedAtIsNull(Set.of(mediaId))).thenReturn(List.of(media));
+    when(postRepository.saveAndFlush(existing)).thenReturn(existing);
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(postId)).thenReturn(List.of());
+    when(postMapper.toListResponse(existing, Set.of()))
+        .thenReturn(PostListResponse.builder().id(postId).build());
+
+    postService.attachMedia(userId, false, postId, Set.of(mediaId));
+
+    // The run in flight reads the media set at delivery time, so there is nothing to re-hold.
+    assertThat(existing.getMedia()).containsExactly(media);
+    assertThat(existing.getStatus()).isEqualTo(PostStatus.processing);
   }
 
   @Test

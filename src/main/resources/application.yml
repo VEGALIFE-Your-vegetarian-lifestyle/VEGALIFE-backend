@@ -147,10 +147,11 @@ app:
     from: ${MAIL_FROM:}
 
   filter:
-    # When true (the default), a published post is queued for semantic filtering and is only
-    # published by the filter callback if it passes. When false, it skips the filter and lands
-    # directly in the admin review queue (flag=NEEDS_REVIEW, status=unpublished) with no embedding
-    # call — intended for a deliberate outage mode, not as the normal path.
+    # Fallback for the content_filter_enabled platform setting. When filtering is on (the default),
+    # a submitted post is queued for semantic filtering and is only published by the filter callback
+    # if it passes. When off, it skips the filter and is parked directly in the admin review queue
+    # (status=pending, flag=FILTER_SKIPPED) with no embedding call — intended for a deliberate
+    # outage mode, not as the normal path (ADR-023, ADR-029).
     enabled: ${FILTER_ENABLED:true}
     # Calibrated for gemini-embedding-001 at 768 dims over the seed corpus; see
     # docs/feats/filter-calibration-gemini.md for the measured L/H separation and

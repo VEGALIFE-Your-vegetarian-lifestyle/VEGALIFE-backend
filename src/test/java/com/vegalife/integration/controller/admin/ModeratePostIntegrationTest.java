@@ -129,7 +129,7 @@ class ModeratePostIntegrationTest {
   void approve_publishesAndKeepsTheBlocker() throws Exception {
     Post post =
         createPost(
-            member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
+            member, PostStatus.pending, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
 
     approve(post)
         .andExpect(status().isOk())
@@ -149,7 +149,7 @@ class ModeratePostIntegrationTest {
   void reject_keepsTheBlockerAsPartOfTheDecisionRecord() throws Exception {
     Post post =
         createPost(
-            member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
+            member, PostStatus.pending, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
 
     mockMvc
         .perform(
@@ -171,7 +171,7 @@ class ModeratePostIntegrationTest {
   void approve_approvesEveryPendingComponentOfThePost() throws Exception {
     Post post =
         createPost(
-            member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
+            member, PostStatus.pending, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
     Dish dish = saveDish("bún chả chay", ModerationStatus.PENDING);
     Ingredient ingredient = saveIngredient("đậu hũ", ModerationStatus.PENDING);
     Recipe recipe = saveRecipe(post, dish, ModerationStatus.PENDING);
@@ -192,7 +192,7 @@ class ModeratePostIntegrationTest {
   void approve_doesNotResurrectARejectedName() throws Exception {
     Post post =
         createPost(
-            member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
+            member, PostStatus.pending, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
     Dish rejected = saveDish("món bị từ chối", ModerationStatus.REJECTED);
     Recipe recipe = saveRecipe(post, rejected, ModerationStatus.PENDING);
 
@@ -255,7 +255,7 @@ class ModeratePostIntegrationTest {
   void getPostDetail_returnsContentScoreAndComponentStates() throws Exception {
     Post post =
         createPost(
-            member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
+            member, PostStatus.pending, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
     post.setContentScore(0.64);
     postRepository.saveAndFlush(post);
     Dish dish = saveDish("bún chả chay", ModerationStatus.PENDING);
@@ -296,7 +296,7 @@ class ModeratePostIntegrationTest {
 
   @Test
   void approve_withoutCategory_returns400AndPersistsNothing() throws Exception {
-    Post post = createPost(member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>());
+    Post post = createPost(member, PostStatus.pending, PostFlag.FILTER_FAILED, new HashSet<>());
 
     approve(post)
         .andExpect(status().isBadRequest())
@@ -304,7 +304,7 @@ class ModeratePostIntegrationTest {
             jsonPath("$.message").value("At least one category is required to publish a post"));
 
     assertThat(postRepository.findById(post.getId()).orElseThrow().getStatus())
-        .isEqualTo(PostStatus.processing);
+        .isEqualTo(PostStatus.pending);
   }
 
   @Test
@@ -341,7 +341,7 @@ class ModeratePostIntegrationTest {
   void approve_withoutBody_succeedsBecauseApprovalTakesNoPayload() throws Exception {
     Post post =
         createPost(
-            member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
+            member, PostStatus.pending, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
 
     mockMvc
         .perform(
@@ -356,7 +356,7 @@ class ModeratePostIntegrationTest {
   void approve_ignoresAReasonSentByAnOldClient() throws Exception {
     Post post =
         createPost(
-            member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
+            member, PostStatus.pending, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
 
     // Spring Boot disables FAIL_ON_UNKNOWN_PROPERTIES, so a stale client posting a body is not
     // broken — the field is simply dropped with the audit trail that used to store it.
@@ -373,7 +373,7 @@ class ModeratePostIntegrationTest {
   void moderateEndpointNoLongerExists() throws Exception {
     Post post =
         createPost(
-            member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
+            member, PostStatus.pending, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
 
     // Removed outright rather than deprecated: leaving it would let a client keep publishing
     // without ever deciding on the components (ADR-016).
@@ -390,7 +390,7 @@ class ModeratePostIntegrationTest {
   void approve_withNonAdminJwt_returns403() throws Exception {
     Post post =
         createPost(
-            member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
+            member, PostStatus.pending, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
 
     mockMvc
         .perform(
@@ -400,14 +400,14 @@ class ModeratePostIntegrationTest {
         .andExpect(status().isForbidden());
 
     assertThat(postRepository.findById(post.getId()).orElseThrow().getStatus())
-        .isEqualTo(PostStatus.processing);
+        .isEqualTo(PostStatus.pending);
   }
 
   @Test
   void approve_withoutJwt_returns401() throws Exception {
     Post post =
         createPost(
-            member, PostStatus.processing, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
+            member, PostStatus.pending, PostFlag.FILTER_FAILED, new HashSet<>(Set.of(category)));
 
     mockMvc
         .perform(
