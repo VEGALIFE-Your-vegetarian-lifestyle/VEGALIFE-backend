@@ -82,7 +82,7 @@ Item fields follow the existing `PostListResponse` shape used by `GET /api/posts
 
 ## Business Rules
 
-- BR-POST-010: only `published`, non-deleted posts are public; `drafted`, `processing` (the post is awaiting a filter verdict or an admin decision), and `unpublished` posts never appear (BR-CONTENT-003 keeps them private to owner and Administrators). The content filter never unpublishes a post; it holds it at `processing` with a blocker for an admin (BR-FILTER-008).
+- BR-POST-010: only `published`, non-deleted posts are public; `drafted`, `processing` (a filter run is outstanding), `pending` (a verdict is in, an admin decision is outstanding), and `unpublished` posts never appear (BR-CONTENT-003 keeps them private to owner and Administrators). The content filter never unpublishes a post; it holds it at `pending` with a blocker for an admin (BR-FILTER-008), and a media-bearing post that passes the text filter also waits there (BR-POST-015).
 - BR-POST-003 pagination bounds apply: page `0`, size `20`, `size` 1–100.
 - `keyword` matches the title or the plain-text `content` only — not `rawContent`, the author, or attached recipes. Matching is a whole trimmed phrase, case-insensitive, with no tokenization or ranking (BR-POST-014).
 - `categoryId`, `createdFrom`, and `createdTo` only narrow the published feed; they never widen visibility.

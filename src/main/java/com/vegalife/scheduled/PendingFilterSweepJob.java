@@ -21,15 +21,15 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Stale-pending sweep (FR-011, BR-FILTER-009): any post still at {@code processing} with no blocker
  * whose latest CONTENT_FILTER queue row is older than {@code app.filter.sweep-max-age} is settled
- * as {@code flag=FILTER_SKIPPED} with an ERROR log, covering queue messages that were lost or
- * exhausted their retries.
+ * as {@code pending} with {@code flag=FILTER_SKIPPED} and an ERROR log, covering queue messages
+ * that were lost or exhausted their retries.
  *
- * <p>Under ADR-023 the predicate is the lifecycle, not a flag: a post is in flight when it is
- * {@code processing} and carries no blocker, and a post already held for review ({@code
- * FILTER_FAILED} / {@code SIMILAR_CONTENT}) is never touched. The queue row's creation time is the
- * enqueue clock — the message and the {@code processing} status are written in one transaction
- * (ADR-005) — and terminal rows outlive the sweep window, so a stuck post is always observable.
- * Drafted and published posts are never touched.
+ * <p>The predicate is the lifecycle: a post is in flight when it is {@code processing}, which by
+ * ADR-029 means it carries no verdict. A post already waiting for a human is {@code pending} and is
+ * never touched. The queue row's creation time is the enqueue clock — the message and the {@code
+ * processing} status are written in one transaction (ADR-005) — and terminal rows outlive the sweep
+ * window, so a stuck post is always observable. Drafted, pending and published posts are never
+ * touched.
  */
 @Component
 @Slf4j
@@ -70,12 +70,13 @@ public class PendingFilterSweepJob {
             .filter(post -> post.getDeletedAt() == null)
             .toList();
     for (Post post : stalePosts) {
+      post.setStatus(PostStatus.pending);
       post.setFlag(PostFlag.FILTER_SKIPPED);
       post.setFlagDetail(PostFlagDetail.skipped(PostFlagDetail.CAUSE_SWEPT));
       postRepository.save(post);
       log.error(
           "Post {} is still processing while its content-filter queue row is older than {} —"
-              + " settled as FILTER_SKIPPED for manual review",
+              + " settled as pending/FILTER_SKIPPED for manual review",
           post.getId(),
           filterProperties.getSweepMaxAge());
     }

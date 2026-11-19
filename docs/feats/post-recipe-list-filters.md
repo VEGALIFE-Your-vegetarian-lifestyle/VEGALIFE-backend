@@ -83,10 +83,11 @@ the two author-scoped lists behave differently.
 - [ ] FR-010: `categoryId` matches a post that carries that category; a post is
       never returned twice. Recipes have no category filter — a recipe has no
       category of its own, only categories reached through attached posts.
-- [ ] FR-011: `status` accepts `drafted`, `processing`, `published`, and
-      `unpublished`. `moderationStatus` accepts `PENDING`, `APPROVED`, and
-      `REJECTED`. `difficulty` accepts `EASY`, `MEDIUM`, and `HARD`. Any other
-      value is `400 Validation failed`.
+- [ ] FR-011: `status` accepts `drafted`, `processing`, `pending`, `published`, and
+      `unpublished` (`pending` added by
+      [ADR-029](../adrs/029-post-pending-status-and-media-review.md)). `moderationStatus` accepts
+      `PENDING`, `APPROVED`, and `REJECTED`. `difficulty` accepts `EASY`, `MEDIUM`, and `HARD`. Any
+      other value is `400 Validation failed`.
 - [ ] FR-012: `maxTotalTimeMinutes` matches a recipe whose
       `prepTimeMinutes + cookTimeMinutes` is at most the supplied value. A recipe
       missing either time does not match (unknown is not "short enough").

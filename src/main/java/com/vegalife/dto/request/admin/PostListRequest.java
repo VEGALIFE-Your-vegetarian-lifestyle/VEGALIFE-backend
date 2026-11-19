@@ -27,8 +27,8 @@ public class PostListRequest {
   private String sort;
 
   @Pattern(
-      regexp = "^(drafted|processing|published|unpublished)$",
-      message = "Status must be one of: drafted, processing, published, unpublished")
+      regexp = "^(drafted|processing|pending|published|unpublished)$",
+      message = "Status must be one of: drafted, processing, pending, published, unpublished")
   private String status;
 
   @Pattern(
@@ -61,10 +61,10 @@ public class PostListRequest {
 
   /**
    * No flag filter by default: a post can carry any of the four verdicts, so preselecting one would
-   * silently hide the others. The review queue itself is {@code status=processing}, which lists
-   * every post still awaiting a decision (ADR-023). {@code FILTER_PASSED} is most useful combined
-   * with {@code status=published}: it separates a post the filter cleared from one an admin
-   * approved over a blocker (ADR-025).
+   * silently hide the others. The review queue itself is {@code status=pending}, which lists every
+   * post with a recorded verdict that no admin has decided (ADR-029). {@code FILTER_PASSED} is most
+   * useful combined with {@code status=published}: it separates a post the filter cleared from one
+   * an admin approved over a blocker (ADR-025).
    */
   public String getFlag() {
     return flag == null || flag.isBlank() ? "all" : flag;

@@ -231,8 +231,10 @@ public class AdminPostService {
    *
    * <p>A {@code drafted} post is refused: nobody submitted it, so there is nothing to moderate —
    * approving it would publish content its author never asked to publish (ADR-023). A {@code
+   * pending} post is the normal case: a verdict was recorded and a human must decide. A {@code
    * published} post stays moderatable because approve/reject is also how the dish and ingredient
-   * names it introduced are decided (ADR-016).
+   * names it introduced are decided (ADR-016). A {@code processing} post is allowed too — an admin
+   * may decide before the filter finishes, and the late verdict is then discarded.
    */
   private Post requireModeratablePost(UUID postId) {
     Post post =
@@ -382,7 +384,7 @@ public class AdminPostService {
       return PostStatus.valueOf(status);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException(
-          "Status must be one of: drafted, processing, published, unpublished");
+          "Status must be one of: drafted, processing, pending, published, unpublished");
     }
   }
 

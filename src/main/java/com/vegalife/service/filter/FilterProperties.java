@@ -33,9 +33,10 @@ public class FilterProperties {
   private boolean duplicateEnabled = true;
 
   /**
-   * When false, a published post skips the semantic filter entirely and lands directly in the admin
-   * review queue ({@code flag=NEEDS_REVIEW}, {@code status=unpublished}) with no embedding call.
-   * True by default so the filter is the normal path; false is a deliberate outage mode.
+   * Fallback for the {@code content_filter_enabled} platform setting. When filtering is off, a
+   * submitted post skips the semantic filter and is parked directly in the admin review queue
+   * ({@code status=pending}, {@code flag=FILTER_SKIPPED}) with no embedding call (ADR-023,
+   * ADR-029). True by default so the filter is the normal path; false is a deliberate outage mode.
    */
   private boolean enabled = true;
 }

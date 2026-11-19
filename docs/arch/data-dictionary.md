@@ -85,8 +85,8 @@ _Description: Manages community blog posts and vegetarian articles._
 | content | TEXT | - | No | Plain-text content body, used as the semantic-filtering input |
 | raw_content | JSONB | - | No | Rich-text document produced by the frontend editor (V27) |
 | featured_image_url | TEXT | - | Yes | Thumbnail image for feed display |
-| status | VARCHAR(20) | - | No | Post lifecycle: drafted, processing, published, unpublished (ADR-023) |
-| flag | VARCHAR(32) | - | Yes | Last verdict, kept after publication: FILTER_PASSED (filter cleared it), FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED; NULL only on a drafted post or one that was never decided (V56, V58, ADR-025) |
+| status | VARCHAR(20) | - | No | Post lifecycle: drafted, processing, pending, published, unpublished (ADR-023, ADR-029) |
+| flag | VARCHAR(32) | - | Yes | Last verdict, kept after publication: FILTER_PASSED (filter cleared the text), FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED; NULL on a drafted post, on a post still `processing` (verdict outstanding), and on a row published before verdicts were stored (V56, V58, V61, ADR-025, ADR-029) |
 | flag_detail | JSONB | - | Yes | Evidence behind `flag`: one object per verdict, always carrying `kind` = `flag` — `{kind,score,threshold}` for FILTER_PASSED, `{kind,outcome,score,threshold}` for FILTER_FAILED, `{kind,postId,similarity,threshold}` for SIMILAR_CONTENT, `{kind,cause}` for FILTER_SKIPPED (V57, ADR-024, ADR-025) |
 | content_score | DOUBLE PRECISION | - | Yes | Relevance score of title + content from the last filter run; NULL when never scored |
 | rejection_reason | TEXT | - | Yes | Why an admin rejected the post; cleared on approve |
@@ -97,7 +97,8 @@ _Description: Manages community blog posts and vegetarian articles._
 | deleted_at | TIMESTAMPTZ | - | Yes | Soft delete timestamp |
 
 **Constraints:**
-- `chk_post_status`: status IN ('drafted','processing','published','unpublished')
+- `chk_post_status`: status IN ('drafted','processing','pending','published','unpublished') (V61)
+- `chk_post_processing_has_no_flag`: status <> 'processing' OR flag IS NULL (V61, ADR-029)
 - `chk_post_flag`: flag IN ('FILTER_PASSED','FILTER_FAILED','SIMILAR_CONTENT','FILTER_SKIPPED') (V58)
 - `chk_post_flag_absent_on_draft`: flag IS NULL OR status <> 'drafted' (V58, ADR-025; replaced `chk_post_flag_requires_processing`)
 - `chk_post_flag_detail_requires_flag`: flag_detail IS NULL OR flag IS NOT NULL

@@ -2,7 +2,9 @@
 
 ## Overview
 
-Replace the whole set of media attached to a post with the given set (issue #137).
+Replace the whole set of media attached to a post with the given set (issue #137). Media is never
+judged by the content filter, so a published post that gains a non-empty, changed media set is moved
+to `pending` for admin review (ADR-029).
 
 ## Endpoint
 
@@ -51,7 +53,7 @@ Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, 
     "avatarUrl": "https://res.cloudinary.com/vegalife/avatar/john.jpg",
     "mediaIds": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
     "recipeIds": [],
-    "status": "created"
+    "status": "pending"
   }
 }
 ```
@@ -69,8 +71,11 @@ Returns the updated post using `PostListResponse` (`id`, `title`, `rawContent`, 
 
 - Only the owner or an Administrator can attach media to a post, reusing the ownership rule from `PATCH /api/posts/{postId}` (`BR-POST-006`); a non-admin gets `404` for another user's post, same as edit.
 - Replace-the-full-set semantics: re-calling with the same set is idempotent, and a smaller set detaches the rest. Nothing is written if validation fails for any id in the request.
-- Attaching media never changes the post's `status`, publication state (`publishedAt`), or its filter
-  verdict — this is a pure association change.
+- Attaching media changes the post's `status` only in one case: a `published` post whose media set
+  actually changes and is non-empty moves to `pending`, keeping its `flag`, because the filter only
+  judges text and the new media has not been reviewed (BR-POST-015, ADR-029). Detaching media, or
+  re-sending the identical set, changes nothing. Publication state (`publishedAt`) and the filter
+  verdict are never rewritten by this endpoint, and no filter run is started.
 - Creating media, hard-deleting media, media ordering, cover images, and captions are out of scope for this endpoint (issue #137 non-goals); media is created separately via `POST /api/media/upload` and `POST /api/media/{mediaId}/confirm`.
 - Deleting the post or the media later cascades the `post_media` row automatically (`ON DELETE CASCADE`); this endpoint never needs to clean that up.
 

@@ -38,8 +38,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * Filter bypass: with the {@code content_filter_enabled} platform setting off (issue #13 follow-up
  * — this used to be the static {@code app.filter.enabled} property), a submitted post is held at
- * {@code processing} with {@code flag=FILTER_SKIPPED} (the filter never ran) and no outbound row,
- * and an admin can then publish it through the moderation endpoint.
+ * {@code pending} with {@code flag=FILTER_SKIPPED} (the filter never ran) and no outbound row, and
+ * an admin can then publish it through the moderation endpoint.
  *
  * <p>{@code FILTER_SKIPPED} rather than {@code FILTER_FAILED}: the filter never formed an opinion,
  * so calling it a failure would misreport what happened (ADR-023).
@@ -126,7 +126,7 @@ class FilterBypassForwardsToAdminIntegrationTest {
                     """
                         .formatted(category.getId())))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.data.status").value("processing"))
+        .andExpect(jsonPath("$.data.status").value("pending"))
         // The member-facing response does not carry the verdict; the admin list below does.
         .andExpect(jsonPath("$.data.flag").doesNotExist());
 

@@ -17,10 +17,12 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.outbound.OutboundMessage;
+import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
@@ -47,6 +49,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,11 +61,12 @@ import org.springframework.dao.InvalidDataAccessResourceUsageException;
 /**
  * Verdict-matrix tests for the CONTENT_FILTER queue adapter.
  *
- * <p>Under ADR-023 the adapter writes one decision and nothing else: {@code status} plus the
- * verdict in {@code flag} + {@code flag_detail}. A {@code PASS} publishes with {@code
- * FILTER_PASSED}; a {@code FAIL} or {@code UNCERTAIN} holds the post at {@code processing} with
- * {@code FILTER_FAILED}; a near-duplicate holds it with {@code SIMILAR_CONTENT} and the matched
- * post id in {@code flag_detail}. The filter never unpublishes — only an admin does.
+ * <p>Under ADR-023 and ADR-029 the adapter writes one decision and nothing else: {@code status}
+ * plus the verdict in {@code flag} + {@code flag_detail}. A {@code PASS} publishes with {@code
+ * FILTER_PASSED}, unless the post carries media — then it waits at {@code pending} for a human. A
+ * {@code FAIL} or {@code UNCERTAIN} holds the post at {@code pending} with {@code FILTER_FAILED}; a
+ * near-duplicate holds it with {@code SIMILAR_CONTENT} and the matched post id in {@code
+ * flag_detail}. The filter never unpublishes — only an admin does.
  *
  * <p>Two more obligations these tests pin: a verdict is discarded unless the post is still {@code
  * processing} and not deleted (otherwise a withdrawn post would be republished), and the vector is
@@ -156,7 +160,47 @@ class ContentFilterOutboundAdapterTest {
   }
 
   @Test
-  void aRefusalHoldsThePostAtProcessingInsteadOfUnpublishingIt() throws Exception {
+  void passWithAFeaturedImageWaitsForAdminReview() throws Exception {
+    Post post = passing(0.91);
+    post.setFeaturedImageUrl("https://cdn.example.com/off-topic.jpg");
+
+    adapter.deliver(message(new ContentFilterPayload(post.getId())));
+
+    // The filter only judged the text; the image is content no run has seen (ADR-029).
+    assertEquals(PostStatus.pending, post.getStatus());
+    assertEquals(PostFlag.FILTER_PASSED, post.getFlag());
+    assertEquals("FILTER_PASSED", post.getFlagDetail().path("kind").asText());
+    assertEquals(0.91, post.getFlagDetail().path("score").asDouble(), 1e-9);
+    assertNull(post.getPublishedAt());
+    verify(postRepository).save(post);
+  }
+
+  @Test
+  void passWithAttachedMediaWaitsForAdminReview() throws Exception {
+    Post post = passing(0.91);
+    post.setMedia(Set.of(media(null)));
+
+    adapter.deliver(message(new ContentFilterPayload(post.getId())));
+
+    assertEquals(PostStatus.pending, post.getStatus());
+    assertEquals(PostFlag.FILTER_PASSED, post.getFlag());
+    assertNull(post.getPublishedAt());
+  }
+
+  @Test
+  void softDeletedMediaDoesNotHoldAPassingPost() throws Exception {
+    Post post = passing(0.91);
+    post.setMedia(Set.of(media(Instant.now())));
+
+    adapter.deliver(message(new ContentFilterPayload(post.getId())));
+
+    // A deleted row never reaches a reader, so it cannot be unreviewed content either.
+    assertEquals(PostStatus.published, post.getStatus());
+    assertNotNull(post.getPublishedAt());
+  }
+
+  @Test
+  void aRefusalHoldsThePostAtPendingInsteadOfUnpublishingIt() throws Exception {
     Post post = post(PostStatus.processing);
     when(postRepository.findById(post.getId())).thenReturn(Optional.of(post));
     stubFilter(new FilterVerdict(FilterOutcome.FAIL, 0.2, 0.45, List.of("RELEVANCE_LOW: 0.200")));
@@ -166,7 +210,7 @@ class ContentFilterOutboundAdapterTest {
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
     // Only an admin may unpublish (ADR-023). The filter's refusal is a blocker, not a decision.
-    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostStatus.pending, post.getStatus());
     assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
     // The snapshot keeps the score and the bar it failed, so retuning the filter later cannot
     // rewrite the reason this post was held (ADR-024).
@@ -190,7 +234,7 @@ class ContentFilterOutboundAdapterTest {
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostStatus.pending, post.getStatus());
     assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
     verify(postRepository).save(post);
   }
@@ -217,7 +261,7 @@ class ContentFilterOutboundAdapterTest {
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
     // The topic verdict was a pass; the duplicate verdict overrides it and parks the post.
-    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostStatus.pending, post.getStatus());
     assertEquals(PostFlag.SIMILAR_CONTENT, post.getFlag());
     // The matched post cannot be recovered later, so it is persisted for the admin to open - with
     // the similarity that triggered the block and the threshold it was measured against.
@@ -441,7 +485,7 @@ class ContentFilterOutboundAdapterTest {
 
     // The text passed. The post still waits, because it introduces a name no admin has approved:
     // that is the guarantee a score cannot provide.
-    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostStatus.pending, post.getStatus());
     assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
   }
 
@@ -469,7 +513,7 @@ class ContentFilterOutboundAdapterTest {
 
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
-    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostStatus.pending, post.getStatus());
     assertEquals(PostFlag.FILTER_FAILED, post.getFlag());
   }
 
@@ -515,7 +559,7 @@ class ContentFilterOutboundAdapterTest {
     adapter.deliver(message(new ContentFilterPayload(post.getId())));
 
     // The filter never formed an opinion, so this is FILTER_SKIPPED, not FILTER_FAILED.
-    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostStatus.pending, post.getStatus());
     assertEquals(PostFlag.FILTER_SKIPPED, post.getFlag());
     // The row carries a cause code only; the provider detail goes to the application log.
     assertEquals("FILTER_SKIPPED", post.getFlagDetail().path("kind").asText());
@@ -560,7 +604,7 @@ class ContentFilterOutboundAdapterTest {
     adapter.onDeliveryAbandoned(
         message(new ContentFilterPayload(post.getId())), new IllegalStateException("unavailable"));
 
-    assertEquals(PostStatus.processing, post.getStatus());
+    assertEquals(PostStatus.pending, post.getStatus());
     assertEquals(PostFlag.FILTER_SKIPPED, post.getFlag());
     assertEquals("UNAVAILABLE", post.getFlagDetail().path("cause").asText());
   }
@@ -568,7 +612,7 @@ class ContentFilterOutboundAdapterTest {
   /** Never let an abandonment overwrite a verdict that already ran. */
   @Test
   void abandonedMessageNeverOverwritesAnExistingBlocker() throws Exception {
-    Post post = post(PostStatus.processing);
+    Post post = post(PostStatus.pending);
     JsonNode existing = PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED);
     post.setFlag(PostFlag.FILTER_FAILED);
     post.setFlagDetail(existing);
@@ -692,6 +736,15 @@ class ContentFilterOutboundAdapterTest {
         .content(CONTENT)
         .status(status)
         .viewCount(0)
+        .build();
+  }
+
+  private static Media media(Instant deletedAt) {
+    return Media.builder()
+        .id(UUID.randomUUID())
+        .mediaUrl("https://cdn.example.com/clip.mp4")
+        .status(MediaStatus.succeed)
+        .deletedAt(deletedAt)
         .build();
   }
 }

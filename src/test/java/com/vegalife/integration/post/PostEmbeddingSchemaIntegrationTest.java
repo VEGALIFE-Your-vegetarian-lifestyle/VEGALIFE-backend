@@ -140,7 +140,7 @@ class PostEmbeddingSchemaIntegrationTest {
   @Test
   void heldPostAdmitsTheBlockerVocabulary() {
     Post post = publishablePost();
-    post.setStatus(PostStatus.processing);
+    post.setStatus(PostStatus.pending);
     post.setFlag(PostFlag.SIMILAR_CONTENT);
     UUID matched = UUID.randomUUID();
     post.setFlagDetail(PostFlagDetail.similarContent(matched, 0.9312, 0.85));
@@ -159,7 +159,7 @@ class PostEmbeddingSchemaIntegrationTest {
   @Test
   void aSnapshotWhoseKindDisagreesWithTheFlagIsRejectedByTheDatabase() {
     Post post = publishablePost();
-    post.setStatus(PostStatus.processing);
+    post.setStatus(PostStatus.pending);
     post.setFlag(PostFlag.FILTER_FAILED);
     post.setFlagDetail(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
 
@@ -171,7 +171,7 @@ class PostEmbeddingSchemaIntegrationTest {
   @Test
   void aNonObjectSnapshotIsRejectedByTheDatabase() {
     Post post = publishablePost();
-    post.setStatus(PostStatus.processing);
+    post.setStatus(PostStatus.pending);
     post.setFlag(PostFlag.FILTER_SKIPPED);
     post.setFlagDetail(JsonNodeFactory.instance.arrayNode().add("DISABLED"));
 
@@ -190,6 +190,35 @@ class PostEmbeddingSchemaIntegrationTest {
 
     assertThatThrownBy(() -> postRepository.saveAndFlush(post))
         .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  /**
+   * ADR-029: {@code processing} means the verdict is still outstanding, so the schema refuses a
+   * verdict recorded next to it — that state is {@code pending}.
+   */
+  @Test
+  void aFlagOnAProcessingPostIsRejectedByTheDatabase() {
+    Post post = publishablePost();
+    post.setStatus(PostStatus.processing);
+    post.setFlag(PostFlag.FILTER_FAILED);
+
+    assertThatThrownBy(() -> postRepository.saveAndFlush(post))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  /** ADR-029: a post waiting for an admin carries a verdict and is a legal, persisted state. */
+  @Test
+  void aPendingPostKeepsItsVerdict() {
+    Post post = publishablePost();
+    post.setStatus(PostStatus.pending);
+    post.setFlag(PostFlag.FILTER_SKIPPED);
+    post.setFlagDetail(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
+
+    postRepository.saveAndFlush(post);
+
+    Post reloaded = postRepository.findById(post.getId()).orElseThrow();
+    assertThat(reloaded.getStatus()).isEqualTo(PostStatus.pending);
+    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.FILTER_SKIPPED);
   }
 
   /**

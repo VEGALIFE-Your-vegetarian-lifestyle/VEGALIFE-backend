@@ -12,10 +12,14 @@ package com.vegalife.enums.post;
  * <p>Publishing does not erase the verdict. A published post carries {@link #FILTER_PASSED} when
  * the filter cleared it, or the blocker it was held by when an admin overrode the filter — the two
  * are different facts and the API reports them as such. Rejection keeps the blocker too. Only a
- * {@code drafted} post has none, which is what the database enforces.
+ * {@code drafted} post has none, and a {@code processing} post has none because its run has not
+ * reached a verdict yet.
  */
 public enum PostFlag {
-  /** The filter cleared the content and published it. */
+  /**
+   * The filter cleared the text. It published the post unless the post carried media, in which case
+   * the post waits at {@code pending} for a human to look at the media (ADR-029).
+   */
   FILTER_PASSED,
   /** The filter refused the content, or was unsure. Either way a human decides. */
   FILTER_FAILED,

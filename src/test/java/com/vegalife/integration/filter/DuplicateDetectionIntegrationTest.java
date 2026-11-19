@@ -122,7 +122,7 @@ class DuplicateDetectionIntegrationTest {
     // similarity to the original is well above the 0.8 threshold.
     deliver(copy, nearly(axis(0), 0.1));
 
-    assertThat(state(copy)).isEqualTo("processing/SIMILAR_CONTENT");
+    assertThat(state(copy)).isEqualTo("pending/SIMILAR_CONTENT");
     JsonNode detail = flagDetail(copy);
     assertThat(detail.path("kind").asText()).isEqualTo("SIMILAR_CONTENT");
     assertThat(detail.path("postId").asText()).isEqualTo(original.getId().toString());
@@ -173,7 +173,7 @@ class DuplicateDetectionIntegrationTest {
     Post secondCopy = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội!!");
     deliver(secondCopy, nearly(axis(0), 0.1));
 
-    assertThat(state(secondCopy)).isEqualTo("processing/SIMILAR_CONTENT");
+    assertThat(state(secondCopy)).isEqualTo("pending/SIMILAR_CONTENT");
     assertThat(flagDetail(secondCopy).path("postId").asText())
         .isEqualTo(original.getId().toString());
   }
@@ -212,8 +212,11 @@ class DuplicateDetectionIntegrationTest {
     Post post = queued("Phở chay", "Công thức phở chay truyền thống Hà Nội.");
     deliver(post, axis(0));
 
-    // A re-check takes the post back to processing, so the second delivery is applied again.
-    jdbcTemplate.update("UPDATE post SET status = 'processing' WHERE id = ?", post.getId());
+    // A re-check takes the post back to processing with no verdict (ADR-029), so the second
+    // delivery is applied again.
+    jdbcTemplate.update(
+        "UPDATE post SET status = 'processing', flag = NULL, flag_detail = NULL WHERE id = ?",
+        post.getId());
     deliver(post, axis(0));
 
     // A second row would fail on the primary key rather than pass; this pins the upsert path.

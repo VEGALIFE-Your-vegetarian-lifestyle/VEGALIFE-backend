@@ -61,8 +61,8 @@ class PendingFilterSweepJobTest {
     assertThat(cutoffCaptor.getValue())
         .isBetween(expectedCutoff.minusSeconds(5), expectedCutoff.plusSeconds(5));
     // The filter never formed an opinion, so the post is FILTER_SKIPPED, not FILTER_FAILED, and it
-    // stays where it was: processing, waiting for a human.
-    assertThat(stalePost.getStatus()).isEqualTo(PostStatus.processing);
+    // moves out of processing into pending, waiting for a human.
+    assertThat(stalePost.getStatus()).isEqualTo(PostStatus.pending);
     assertThat(stalePost.getFlag()).isEqualTo(PostFlag.FILTER_SKIPPED);
     assertThat(stalePost.getFlagDetail())
         .isEqualTo(PostFlagDetail.skipped(PostFlagDetail.CAUSE_SWEPT));
@@ -77,11 +77,7 @@ class PendingFilterSweepJobTest {
     UUID deletedId = UUID.randomUUID();
     Post alreadyPublished = Post.builder().id(publishedId).status(PostStatus.published).build();
     Post alreadyHeld =
-        Post.builder()
-            .id(heldId)
-            .status(PostStatus.processing)
-            .flag(PostFlag.FILTER_FAILED)
-            .build();
+        Post.builder().id(heldId).status(PostStatus.pending).flag(PostFlag.FILTER_FAILED).build();
     Post drafted = Post.builder().id(draftedId).status(PostStatus.drafted).build();
     Post deleted =
         Post.builder().id(deletedId).status(PostStatus.processing).deletedAt(Instant.now()).build();

@@ -32,3 +32,4 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [026-remove-recipe-scoring.md](026-remove-recipe-scoring.md) | Embed Only the Post Body and Drop `recipe.score` | Accepted | 2026-11-19 |
 | [027-remove-moderation-log.md](027-remove-moderation-log.md) | Remove the `moderation_log` Audit Table | Accepted | 2026-11-19 |
 | [028-enqueue-email-from-sending-services.md](028-enqueue-email-from-sending-services.md) | Enqueue Outbound Email From the Sending Services, Not Through a Port Implementation | Accepted | 2026-11-19 |
+| [029-post-pending-status-and-media-review.md](029-post-pending-status-and-media-review.md) | Split `pending` Out of `processing`, and Hold Every Post That Carries Media | Accepted | 2026-11-19 |

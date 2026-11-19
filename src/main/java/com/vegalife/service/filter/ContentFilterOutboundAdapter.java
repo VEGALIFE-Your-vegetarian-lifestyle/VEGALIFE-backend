@@ -39,16 +39,21 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>A {@code PASS} publishes the post and records {@code FILTER_PASSED}: publication and the
  * verdict are two facts, and the row keeps both (ADR-025). A {@code FAIL} or {@code UNCERTAIN}
- * leaves it at {@code processing} with {@code flag = FILTER_FAILED}; the post never leaves the
- * public feed on the filter's authority alone — only an admin can unpublish. A duplicate leaves it
- * at {@code processing} with {@code flag = SIMILAR_CONTENT} and a JSON snapshot of the matched
- * post, its similarity and the threshold applied in {@code flag_detail} (ADR-024). Every one of
- * those states is visible on the admin review queue ({@code status=processing}), which is what
- * replaces the old terminal {@code unpublished} the filter used to write itself.
+ * leaves it at {@code pending} with {@code flag = FILTER_FAILED}; the post never leaves the public
+ * feed on the filter's authority alone — only an admin can unpublish. A duplicate leaves it at
+ * {@code pending} with {@code flag = SIMILAR_CONTENT} and a JSON snapshot of the matched post, its
+ * similarity and the threshold applied in {@code flag_detail} (ADR-024). Every one of those states
+ * is visible on the admin review queue ({@code status=pending}), which is what replaces the old
+ * terminal {@code unpublished} the filter used to write itself.
+ *
+ * <p>The filter only reads text (ADR-026), so a pass does not publish a post that carries media: a
+ * non-blank featured image or any attached media is unreviewed content the run never saw, and the
+ * post waits at {@code pending} with {@code FILTER_PASSED} for a human (ADR-029). The score and the
+ * snapshot are recorded exactly as for an ordinary pass.
  *
  * <p>A transient failure is rethrown as retryable so the queue waits the provider out; a permanent
- * rejection cannot be retried into success, so the post is settled at {@code processing} with
- * {@code FILTER_SKIPPED} and the cause written to the application log (ADR-020).
+ * rejection cannot be retried into success, so the post is settled at {@code pending} with {@code
+ * FILTER_SKIPPED} and the cause written to the application log (ADR-020).
  *
  * <p>The verdict is applied only while the post is still {@code processing} and not soft-deleted. A
  * post withdrawn or deleted while its message was in flight keeps its new state; the late result is
@@ -239,14 +244,25 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   }
 
   /**
-   * Applies one outcome: a pass publishes and records the verdict, anything else holds the post.
+   * Applies one outcome: a pass publishes and records the verdict, unless the post carries media —
+   * the filter only judged the text, so the media still needs a human. Anything else holds the post
+   * for an admin.
    */
   private static void apply(Post post, FilterVerdict verdict) {
     switch (verdict.outcome()) {
       case PASS -> {
-        post.setStatus(PostStatus.published);
         post.setFlag(PostFlag.FILTER_PASSED);
         post.setFlagDetail(PostFlagDetail.passed(verdict));
+        if (carriesMedia(post)) {
+          post.setStatus(PostStatus.pending);
+          log.info(
+              "Content filter passed the text of post {} (score {}) but it carries media; held for"
+                  + " admin review",
+              post.getId(),
+              verdict.score());
+          return;
+        }
+        post.setStatus(PostStatus.published);
         if (post.getPublishedAt() == null) {
           post.setPublishedAt(Instant.now());
         }
@@ -262,6 +278,18 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
             verdict.reasons());
       }
     }
+  }
+
+  /**
+   * Whether the post carries content the filter never saw (ADR-029): a featured image, or any
+   * attached media that has not been soft-deleted. Soft-deleted rows are ignored because the public
+   * post shape already hides them ({@code PostMapper.mediaIds}), so they cannot reach a reader.
+   */
+  private static boolean carriesMedia(Post post) {
+    if (post.getFeaturedImageUrl() != null && !post.getFeaturedImageUrl().isBlank()) {
+      return true;
+    }
+    return post.getMedia().stream().anyMatch(media -> media.getDeletedAt() == null);
   }
 
   /**
@@ -284,7 +312,7 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
 
   /** Records the blocker and keeps the post in the review queue. */
   private static void block(Post post, PostFlag flag, JsonNode detail) {
-    post.setStatus(PostStatus.processing);
+    post.setStatus(PostStatus.pending);
     post.setFlag(flag);
     post.setFlagDetail(detail);
   }

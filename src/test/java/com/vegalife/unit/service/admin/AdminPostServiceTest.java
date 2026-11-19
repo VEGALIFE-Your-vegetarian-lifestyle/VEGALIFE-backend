@@ -184,7 +184,7 @@ class AdminPostServiceTest {
 
     assertThatThrownBy(() -> adminPostService.listPosts(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage("Status must be one of: drafted, processing, published, unpublished");
+        .hasMessage("Status must be one of: drafted, processing, pending, published, unpublished");
   }
 
   @Test

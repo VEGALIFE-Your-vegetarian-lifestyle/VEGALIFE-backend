@@ -57,7 +57,7 @@ Same envelope and item shape as `GET /api/posts/me` (`PageResponse<PostListRespo
 
 ## Business Rules
 
-- Only `published` posts are listed for anyone other than the creator; drafts, posts awaiting a decision (`processing`), and rejected (`unpublished`) posts are visible only to the creator and Administrators (BR-CONTENT-003).
+- Only `published` posts are listed for anyone other than the creator; drafts, posts with a filter run outstanding (`processing`), posts awaiting an admin decision (`pending`), and rejected (`unpublished`) posts are visible only to the creator and Administrators (BR-CONTENT-003).
 - Soft-deleted posts are never returned.
 - `categoryId`, `createdFrom`, and `createdTo` only narrow the visible list; they never widen what a caller may see (BR-POST-014).
 - `rejectionReason` is populated only for the post's author. An Administrator browsing another member's profile sees the payload without it — the admin post surfaces carry the reason instead.

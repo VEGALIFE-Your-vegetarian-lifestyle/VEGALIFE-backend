@@ -151,7 +151,7 @@ class AdminPostControllerIntegrationTest {
   @Test
   void listPosts_returnsAllAuthorsAndAllStatuses() throws Exception {
     createPost(member, "P1", PostStatus.drafted, null, null);
-    createPost(member, "P2", PostStatus.processing, PostFlag.FILTER_FAILED, null);
+    createPost(member, "P2", PostStatus.pending, PostFlag.FILTER_FAILED, null);
     createPost(member, "P3", PostStatus.published, null, null);
     createPost(author2, "P4", PostStatus.unpublished, null, null);
     createPost(author2, "P5", PostStatus.processing, null, null);
@@ -170,7 +170,7 @@ class AdminPostControllerIntegrationTest {
                 .value(
                     containsInAnyOrder(
                         "drafted",
-                        "processing",
+                        "pending",
                         "published",
                         "unpublished",
                         "processing",
@@ -208,32 +208,30 @@ class AdminPostControllerIntegrationTest {
   }
 
   @Test
-  void listPosts_filterByStatusProcessing_returnsTheReviewQueue() throws Exception {
+  void listPosts_filterByStatusPending_returnsTheReviewQueue() throws Exception {
     createPost(member, "Draft", PostStatus.drafted, null, null);
     createPost(member, "In flight", PostStatus.processing, null, null);
-    createPost(member, "Filter failed", PostStatus.processing, PostFlag.FILTER_FAILED, null);
+    createPost(member, "Filter failed", PostStatus.pending, PostFlag.FILTER_FAILED, null);
     createPost(member, "Live", PostStatus.published, null, null);
 
     mockMvc
         .perform(
             get("/api/admin/posts")
                 .header("Authorization", "Bearer " + adminToken)
-                .param("status", "processing")
+                .param("status", "pending")
                 .param("flag", "all"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.totalElements").value(2))
-        .andExpect(jsonPath("$.data.content.length()").value(2))
-        .andExpect(
-            jsonPath("$.data.content[*].title")
-                .value(containsInAnyOrder("In flight", "Filter failed")));
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content.length()").value(1))
+        .andExpect(jsonPath("$.data.content[0].title").value("Filter failed"));
   }
 
   @Test
   void listPosts_filterByFlag_returnsOnlyMatchingPosts() throws Exception {
     createPost(member, "Draft", PostStatus.drafted, null, null);
     createPost(member, "Rejected", PostStatus.unpublished, null, null);
-    createPost(member, "Failed", PostStatus.processing, PostFlag.FILTER_FAILED, null);
-    createPost(member, "Duplicate", PostStatus.processing, PostFlag.SIMILAR_CONTENT, null);
+    createPost(member, "Failed", PostStatus.pending, PostFlag.FILTER_FAILED, null);
+    createPost(member, "Duplicate", PostStatus.pending, PostFlag.SIMILAR_CONTENT, null);
     createPost(member, "Live", PostStatus.published, null, null);
 
     mockMvc
@@ -271,7 +269,7 @@ class AdminPostControllerIntegrationTest {
   void listPosts_withoutFlagParam_doesNotFilterByFlag() throws Exception {
     createPost(member, "Draft", PostStatus.drafted, null, null);
     createPost(member, "Rejected", PostStatus.unpublished, null, null);
-    createPost(member, "Failed", PostStatus.processing, PostFlag.FILTER_FAILED, null);
+    createPost(member, "Failed", PostStatus.pending, PostFlag.FILTER_FAILED, null);
     createPost(member, "Live", PostStatus.published, null, null);
 
     // The default is `all`: a post can carry any of the four verdicts, so preselecting one would

@@ -43,8 +43,7 @@ class AdminDashboardServiceTest {
     when(userRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(5L);
     when(postRepository.countByDeletedAtIsNull()).thenReturn(50L);
     when(postRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(3L);
-    when(postRepository.countByStatusAndFlagIsNotNullAndDeletedAtIsNull(PostStatus.processing))
-        .thenReturn(2L);
+    when(postRepository.countByStatusAndDeletedAtIsNull(PostStatus.pending)).thenReturn(2L);
     when(postRepository.findDistinctAuthorIdsInRange(any(), any()))
         .thenReturn(List.of(UUID.randomUUID(), UUID.randomUUID()));
     when(recipeRepository.countByDeletedAtIsNull()).thenReturn(20L);
@@ -108,7 +107,7 @@ class AdminDashboardServiceTest {
     when(userRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(0L);
     when(postRepository.countByDeletedAtIsNull()).thenReturn(0L);
     when(postRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(0L);
-    when(postRepository.countByStatusAndFlagIsNotNullAndDeletedAtIsNull(any())).thenReturn(0L);
+    when(postRepository.countByStatusAndDeletedAtIsNull(any())).thenReturn(0L);
     when(postRepository.findDistinctAuthorIdsInRange(any(), any())).thenReturn(List.of());
     when(recipeRepository.countByDeletedAtIsNull()).thenReturn(0L);
     when(recipeRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(0L);
