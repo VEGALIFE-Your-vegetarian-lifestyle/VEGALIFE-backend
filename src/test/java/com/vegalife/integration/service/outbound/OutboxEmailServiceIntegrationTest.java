@@ -19,7 +19,7 @@ import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.auth.AuthService;
-import com.vegalife.service.outbound.OutboundEmailPayload;
+import com.vegalife.service.email.EmailPayload;
 import com.vegalife.shared.exception.InvalidTokenException;
 import java.time.Duration;
 import java.time.Instant;
@@ -123,9 +123,8 @@ class OutboxEmailServiceIntegrationTest {
     OutboundMessage row = singleRow();
     assertRowEnvelope(row);
 
-    OutboundEmailPayload payload =
-        objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
-    assertThat(payload.type()).isEqualTo(OutboundEmailPayload.Type.EMAIL_VERIFICATION);
+    EmailPayload payload = objectMapper.readValue(row.getPayload(), EmailPayload.class);
+    assertThat(payload.type()).isEqualTo(EmailPayload.Type.EMAIL_VERIFICATION);
     assertThat(payload.displayName()).isEqualTo(displayName);
     assertThat(payload.otp()).matches("\\d{6}");
     assertThat(payload.expiryMinutes()).isEqualTo(10);
@@ -145,9 +144,8 @@ class OutboxEmailServiceIntegrationTest {
     OutboundMessage row = singleRow();
     assertRowEnvelope(row);
 
-    OutboundEmailPayload payload =
-        objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
-    assertThat(payload.type()).isEqualTo(OutboundEmailPayload.Type.PASSWORD_RESET);
+    EmailPayload payload = objectMapper.readValue(row.getPayload(), EmailPayload.class);
+    assertThat(payload.type()).isEqualTo(EmailPayload.Type.PASSWORD_RESET);
     assertThat(payload.displayName()).isEqualTo(displayName);
     assertThat(payload.otp()).matches("\\d{6}");
     assertThat(payload.expiryMinutes()).isEqualTo(10);
@@ -167,9 +165,8 @@ class OutboxEmailServiceIntegrationTest {
     OutboundMessage row = singleRow();
     assertRowEnvelope(row);
 
-    OutboundEmailPayload payload =
-        objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
-    assertThat(payload.type()).isEqualTo(OutboundEmailPayload.Type.EMAIL_VERIFICATION);
+    EmailPayload payload = objectMapper.readValue(row.getPayload(), EmailPayload.class);
+    assertThat(payload.type()).isEqualTo(EmailPayload.Type.EMAIL_VERIFICATION);
 
     verifyNoInteractions(smtpEmailService);
   }
@@ -203,8 +200,8 @@ class OutboxEmailServiceIntegrationTest {
     assertThat(verified.getStatus()).isEqualTo(UserStatus.activated);
   }
 
-  private OutboundEmailPayload parsePayload(OutboundMessage row) throws Exception {
-    return objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
+  private EmailPayload parsePayload(OutboundMessage row) throws Exception {
+    return objectMapper.readValue(row.getPayload(), EmailPayload.class);
   }
 
   private VerifyEmailRequest verifyRequest(String target, String otp) {

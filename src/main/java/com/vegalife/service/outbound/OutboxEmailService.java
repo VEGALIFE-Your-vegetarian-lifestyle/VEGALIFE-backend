@@ -6,6 +6,7 @@ import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
+import com.vegalife.service.email.EmailPayload;
 import com.vegalife.service.email.EmailService;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +38,7 @@ public class OutboxEmailService implements EmailService {
   @Override
   public void sendVerificationOtp(String to, String displayName, String otp) {
     enqueue(
-        OutboundEmailPayload.Type.EMAIL_VERIFICATION,
+        EmailPayload.Type.EMAIL_VERIFICATION,
         to,
         displayName,
         otp,
@@ -46,32 +47,23 @@ public class OutboxEmailService implements EmailService {
 
   @Override
   public void sendPasswordResetOtp(String to, String displayName, String otp) {
-    enqueue(OutboundEmailPayload.Type.PASSWORD_RESET, to, displayName, otp, otpExpiryMinutes);
+    enqueue(EmailPayload.Type.PASSWORD_RESET, to, displayName, otp, otpExpiryMinutes);
   }
 
   @Override
-  public void sendPaymentReceipt(
-      String to, String displayName, OutboundEmailPayload.Receipt receipt) {
+  public void sendPaymentReceipt(String to, String displayName, EmailPayload.Receipt receipt) {
     // A receipt has no OTP-style business deadline: it stays deliverable
     // until the queue's max-age guard (BR-PAY-007).
     enqueue(
-        new OutboundEmailPayload(
-            OutboundEmailPayload.Type.RECEIPT, displayName, null, null, receipt),
-        to,
-        null);
+        new EmailPayload(EmailPayload.Type.RECEIPT, displayName, null, null, receipt), to, null);
   }
 
   private void enqueue(
-      OutboundEmailPayload.Type type,
-      String to,
-      String displayName,
-      String otp,
-      int expiryMinutes) {
-    enqueue(
-        new OutboundEmailPayload(type, displayName, otp, expiryMinutes), to, expiryMinutes * 60L);
+      EmailPayload.Type type, String to, String displayName, String otp, int expiryMinutes) {
+    enqueue(new EmailPayload(type, displayName, otp, expiryMinutes), to, expiryMinutes * 60L);
   }
 
-  private void enqueue(OutboundEmailPayload payload, String to, Long ttlSeconds) {
+  private void enqueue(EmailPayload payload, String to, Long ttlSeconds) {
     try {
       Instant now = Instant.now();
       OutboundMessage message =

@@ -16,7 +16,7 @@ import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.scheduled.OutboundMessageDrainer;
 import com.vegalife.service.auth.AuthService;
-import com.vegalife.service.outbound.OutboundEmailPayload;
+import com.vegalife.service.email.EmailPayload;
 import jakarta.mail.Multipart;
 import jakarta.mail.Part;
 import jakarta.mail.internet.InternetAddress;
@@ -180,7 +180,7 @@ class OutboundMessageDeliveryIntegrationTest {
     return rows.get(0);
   }
 
-  private OutboundEmailPayload payloadOf(OutboundMessage row) throws Exception {
-    return objectMapper.readValue(row.getPayload(), OutboundEmailPayload.class);
+  private EmailPayload payloadOf(OutboundMessage row) throws Exception {
+    return objectMapper.readValue(row.getPayload(), EmailPayload.class);
   }
 }

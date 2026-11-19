@@ -4,8 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.model.outbound.OutboundMessage;
+import com.vegalife.service.email.EmailPayload;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
-import com.vegalife.service.outbound.OutboundEmailPayload;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,7 +30,7 @@ public class EmailChannelAdapter implements OutboundChannelAdapter {
 
   @Override
   public void deliver(OutboundMessage message) {
-    OutboundEmailPayload payload = parse(message);
+    EmailPayload payload = parse(message);
     switch (payload.type()) {
       case EMAIL_VERIFICATION ->
           smtpEmailService.sendVerificationOtp(
@@ -51,14 +51,14 @@ public class EmailChannelAdapter implements OutboundChannelAdapter {
     }
   }
 
-  private OutboundEmailPayload parse(OutboundMessage message) {
+  private EmailPayload parse(OutboundMessage message) {
     String json = message.getPayload();
     if (json == null || json.isBlank()) {
       throw new IllegalStateException(
           "Outbound message " + message.getId() + " has no payload to deliver");
     }
     try {
-      OutboundEmailPayload payload = objectMapper.readValue(json, OutboundEmailPayload.class);
+      EmailPayload payload = objectMapper.readValue(json, EmailPayload.class);
       if (payload.type() == null) {
         throw new IllegalStateException(
             "Outbound message " + message.getId() + " payload is missing a type");
