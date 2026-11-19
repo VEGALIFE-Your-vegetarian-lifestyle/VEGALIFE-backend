@@ -1,5 +1,6 @@
 package com.vegalife.repository.post;
 
+import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.model.post.Post;
 import java.time.Instant;
@@ -56,22 +57,26 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
           + " where m.id in :mediaIds and p.deletedAt is null")
   List<MediaPostRow> findPostRowsByMediaIdsIn(@Param("mediaIds") Collection<UUID> mediaIds);
 
-  /** Admin dashboard (issue #12): total non-deleted posts. */
+  /** Admin dashboard: total non-deleted posts. */
   long countByDeletedAtIsNull();
 
-  /** Admin dashboard (issue #12): posts created within a time range. */
-  long countByCreatedAtBetweenAndDeletedAtIsNull(Instant from, Instant to);
-
   /**
-   * Admin dashboard (issue #12): posts waiting for an admin decision. One predicate, the same one
-   * the review queue uses ({@code status=pending}), so the metric and the queue cannot disagree
-   * (ADR-029).
+   * Admin dashboard: posts waiting for an admin decision. One predicate, the same one the review
+   * queue uses ({@code status=pending}), so the metric and the queue cannot disagree (ADR-029).
    */
   long countByStatusAndDeletedAtIsNull(PostStatus status);
 
-  /** Admin dashboard (issue #12): distinct authors who posted within a time range. */
+  /**
+   * Admin dashboard: posts carrying a given filter verdict, e.g. {@code FILTER_SKIPPED} — content
+   * the filter never scored, which no other surface reports.
+   */
+  long countByFlagAndDeletedAtIsNull(PostFlag flag);
+
+  /**
+   * Admin dashboard: when the oldest post awaiting a decision was created, so the queue can report
+   * age rather than only size. Empty when nothing is waiting.
+   */
   @Query(
-      "select distinct p.user.id from Post p"
-          + " where p.createdAt between :from and :to and p.deletedAt is null")
-  List<UUID> findDistinctAuthorIdsInRange(@Param("from") Instant from, @Param("to") Instant to);
+      "select min(p.createdAt) from Post p" + " where p.status = :status and p.deletedAt is null")
+  Optional<Instant> findOldestCreatedAtByStatus(@Param("status") PostStatus status);
 }

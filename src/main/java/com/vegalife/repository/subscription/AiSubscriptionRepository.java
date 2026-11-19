@@ -58,6 +58,12 @@ public interface AiSubscriptionRepository extends JpaRepository<AiSubscription, 
   long sumGrantedQuota(@Param("userId") UUID userId);
 
   /**
+   * Admin dashboard: lifetime free grants. {@code payment_id is null} is what marks a claim, so
+   * these are allowances handed out with no money behind them.
+   */
+  long countByPaymentIdIsNullAndGrantedAtIsNotNull();
+
+  /**
    * Claims a free plan exactly once. Returns 1 when the row was created, 0 when the member already
    * holds it.
    *

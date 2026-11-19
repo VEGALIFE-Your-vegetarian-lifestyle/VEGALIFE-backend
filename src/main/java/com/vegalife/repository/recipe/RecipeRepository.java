@@ -35,11 +35,17 @@ public interface RecipeRepository
   /** Admin dashboard (issue #12): total non-deleted recipes. */
   long countByDeletedAtIsNull();
 
-  /** Admin dashboard (issue #12): recipes created within a time range. */
-  long countByCreatedAtBetweenAndDeletedAtIsNull(Instant from, Instant to);
-
-  /** Admin dashboard (issue #12): recipes awaiting moderation review. */
+  /** Admin dashboard: recipes awaiting moderation review. */
   long countByModerationStatusAndDeletedAtIsNull(ModerationStatus moderationStatus);
+
+  /**
+   * Admin dashboard: when the oldest recipe awaiting review was created, so the queue can report
+   * age rather than only size. Empty when nothing is waiting.
+   */
+  @Query(
+      "select min(r.createdAt) from Recipe r"
+          + " where r.moderationStatus = :status and r.deletedAt is null")
+  Optional<Instant> findOldestCreatedAtByModerationStatus(@Param("status") ModerationStatus status);
 
   /** Owner-scoped lookup for a member delete (BR-RECP-010). */
   Optional<Recipe> findByIdAndUser_IdAndDeletedAtIsNull(UUID id, UUID userId);

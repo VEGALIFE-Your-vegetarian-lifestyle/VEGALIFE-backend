@@ -42,6 +42,12 @@ public interface SavedItemRepository extends JpaRepository<SavedItem, UUID> {
   @Query("delete from SavedItem s where s.userId = :userId and s.recipeId = :recipeId")
   int deleteSavedRecipe(@Param("userId") UUID userId, @Param("recipeId") UUID recipeId);
 
+  /** Admin dashboard: lifetime saves of posts. */
+  long countByPostIdIsNotNull();
+
+  /** Admin dashboard: lifetime saves of recipes. */
+  long countByRecipeIdIsNotNull();
+
   /**
    * The caller's saved posts that are still publicly visible, newest save first.
    *
