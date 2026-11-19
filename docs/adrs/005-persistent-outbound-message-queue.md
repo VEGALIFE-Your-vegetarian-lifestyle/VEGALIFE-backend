@@ -49,7 +49,8 @@ Constraints shaping the options:
 Replace inline SMTP sends with a **persistent outbound message queue
 (a transactional outbox)** in PostgreSQL: business methods write an
 `outbound_message` row in the same transaction in which they create the
-OTP (via a new `@Primary` `OutboxEmailService`), a scheduled background
+OTP (via a new `@Primary` `OutboxEmailService` — since retired, see
+ADR-028), a scheduled background
 drainer claims due rows with `FOR UPDATE SKIP LOCKED` and dispatches
 them through a channel-adapter interface (the existing
 `SmtpEmailServiceImpl` becomes the EMAIL channel adapter), retrying
