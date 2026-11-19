@@ -1,12 +1,6 @@
 package com.vegalife.integration.controller.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -16,22 +10,22 @@ import com.vegalife.dto.request.auth.RegisterRequest;
 import com.vegalife.enums.token.OtpPurpose;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
+import com.vegalife.integration.outbound.QueuedEmailOtp;
 import com.vegalife.model.token.OtpCode;
 import com.vegalife.model.token.RefreshToken;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.token.RefreshTokenRepository;
 import com.vegalife.repository.user.UserRepository;
-import com.vegalife.service.email.EmailService;
+import com.vegalife.service.email.EmailPayload;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.annotation.DirtiesContext;
@@ -79,14 +73,17 @@ class AuthControllerIntegrationTest {
 
   @Autowired private OtpCodeRepository otpCodeRepository;
 
-  @MockBean private EmailService emailService;
+  @Autowired private OutboundMessageRepository outboundMessageRepository;
 
   @BeforeEach
   void setUp() {
+    outboundMessageRepository.deleteAll();
     otpCodeRepository.deleteAll();
     userRepository.deleteAll();
-    doNothing().when(emailService).sendVerificationOtp(anyString(), anyString(), anyString());
-    doNothing().when(emailService).sendPasswordResetOtp(anyString(), anyString(), anyString());
+  }
+
+  private long queuedEmails(String email, EmailPayload.Type type) {
+    return QueuedEmailOtp.count(outboundMessageRepository, objectMapper, email, type);
   }
 
   private User createActivatedUser(String displayName, String email) {
@@ -102,15 +99,13 @@ class AuthControllerIntegrationTest {
   }
 
   private String captureOtp(String email) {
-    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-    verify(emailService).sendPasswordResetOtp(eq(email), anyString(), captor.capture());
-    return captor.getValue();
+    return QueuedEmailOtp.latest(
+        outboundMessageRepository, objectMapper, email, EmailPayload.Type.PASSWORD_RESET);
   }
 
   private String captureVerificationOtp(String email) {
-    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-    verify(emailService).sendVerificationOtp(eq(email), anyString(), captor.capture());
-    return captor.getValue();
+    return QueuedEmailOtp.latest(
+        outboundMessageRepository, objectMapper, email, EmailPayload.Type.EMAIL_VERIFICATION);
   }
 
   private void registerUser(String displayName, String email) throws Exception {
@@ -312,10 +307,14 @@ class AuthControllerIntegrationTest {
             jsonPath("$.message")
                 .value("If an account with that email exists, a verification code has been sent"));
 
-    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-    verify(emailService, times(2))
-        .sendVerificationOtp(eq("resend@test.com"), anyString(), captor.capture());
-    String secondOtp = captor.getAllValues().get(1);
+    List<String> issued =
+        QueuedEmailOtp.all(
+            outboundMessageRepository,
+            objectMapper,
+            "resend@test.com",
+            EmailPayload.Type.EMAIL_VERIFICATION);
+    assertThat(issued).hasSize(2);
+    String secondOtp = issued.get(1);
     assertThat(secondOtp).matches("\\d{6}");
 
     mockMvc
@@ -353,8 +352,7 @@ class AuthControllerIntegrationTest {
             jsonPath("$.message")
                 .value("If an account with that email exists, a verification code has been sent"));
 
-    verify(emailService, never())
-        .sendVerificationOtp(eq("ghost@test.com"), anyString(), anyString());
+    assertThat(queuedEmails("ghost@test.com", EmailPayload.Type.EMAIL_VERIFICATION)).isZero();
   }
 
   @Test
@@ -374,8 +372,7 @@ class AuthControllerIntegrationTest {
             jsonPath("$.message")
                 .value("If an account with that email exists, a verification code has been sent"));
 
-    verify(emailService, never())
-        .sendVerificationOtp(eq("verified@test.com"), anyString(), anyString());
+    assertThat(queuedEmails("verified@test.com", EmailPayload.Type.EMAIL_VERIFICATION)).isZero();
   }
 
   @Test
@@ -559,7 +556,7 @@ class AuthControllerIntegrationTest {
                 .value(
                     "If an account with that email exists, a password reset code has been sent"));
 
-    verify(emailService, never()).sendPasswordResetOtp(anyString(), anyString(), anyString());
+    assertThat(queuedEmails("nobody@test.com", EmailPayload.Type.PASSWORD_RESET)).isZero();
   }
 
   @Test
@@ -720,10 +717,13 @@ class AuthControllerIntegrationTest {
                 .content("{\"email\":\"resendotp@test.com\"}"))
         .andExpect(status().isOk());
 
-    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-    verify(emailService, org.mockito.Mockito.times(2))
-        .sendPasswordResetOtp(eq("resendotp@test.com"), anyString(), captor.capture());
-    List<String> otps = captor.getAllValues();
+    List<String> otps =
+        QueuedEmailOtp.all(
+            outboundMessageRepository,
+            objectMapper,
+            "resendotp@test.com",
+            EmailPayload.Type.PASSWORD_RESET);
+    assertThat(otps).hasSize(2);
     String firstOtp = otps.get(0);
     String secondOtp = otps.get(1);
     assertThat(firstOtp).isNotEqualTo(secondOtp);

@@ -3,21 +3,24 @@ package com.vegalife.unit.service.payment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.enums.outbound.OutboundChannel;
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
-import com.vegalife.service.email.EmailService;
+import com.vegalife.service.email.EmailPayload;
 import com.vegalife.service.payment.PaymentGateway;
 import com.vegalife.service.payment.PaymentWebhookService;
 import java.util.HashMap;
@@ -30,6 +33,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
@@ -45,7 +49,9 @@ class PaymentWebhookServiceTest {
   @Mock private AiSubscriptionRepository subscriptionRepository;
   @Mock private AiPlanRepository planRepository;
   @Mock private UserRepository userRepository;
-  @Mock private EmailService emailService;
+  @Mock private OutboundMessageRepository outboundMessageRepository;
+
+  @Spy private ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
   @InjectMocks private PaymentWebhookService paymentWebhookService;
 
@@ -80,7 +86,7 @@ class PaymentWebhookServiceTest {
   }
 
   @Test
-  void handleNotification_paid_stampsGrantedAtOnTheAcquisitionAndSendsReceipt() {
+  void handleNotification_paid_stampsGrantedAtOnTheAcquisitionAndSendsReceipt() throws Exception {
     Map<String, String> params = approvedParams();
     stubHappyPath(params);
 
@@ -93,7 +99,21 @@ class PaymentWebhookServiceTest {
     verify(subscriptionRepository).save(saved.capture());
     assertThat(saved.getValue().getGrantedAt()).isNotNull();
     assertThat(saved.getValue().getPaymentId()).isEqualTo(ledger.getId());
-    verify(emailService).sendPaymentReceipt(eq("member@example.com"), eq("member"), any());
+
+    ArgumentCaptor<OutboundMessage> queued = ArgumentCaptor.forClass(OutboundMessage.class);
+    verify(outboundMessageRepository).save(queued.capture());
+    OutboundMessage row = queued.getValue();
+    assertThat(row.getChannel()).isEqualTo(OutboundChannel.EMAIL);
+    assertThat(row.getRecipient()).isEqualTo("member@example.com");
+    // A receipt has no OTP-style deadline, so the row never expires on its own.
+    assertThat(row.getExpiresAt()).isNull();
+    EmailPayload payload = objectMapper.readValue(row.getPayload(), EmailPayload.class);
+    assertThat(payload.type()).isEqualTo(EmailPayload.Type.RECEIPT);
+    assertThat(payload.displayName()).isEqualTo("member");
+    assertThat(payload.receipt()).isNotNull();
+    assertThat(payload.receipt().planName()).isEqualTo("Pro");
+    assertThat(payload.receipt().amount()).isEqualTo(49000L);
+    assertThat(payload.receipt().reference()).isEqualTo(txnRef);
   }
 
   @Test
@@ -123,7 +143,8 @@ class PaymentWebhookServiceTest {
     assertThat(ack.get("RspCode")).isEqualTo("00");
     assertThat(ledger.getStatus()).isEqualTo(PaymentLedgerStatus.failed);
     assertThat(acquisition.getGrantedAt()).isNull();
-    verifyNoInteractions(subscriptionRepository, planRepository, userRepository, emailService);
+    verifyNoInteractions(
+        subscriptionRepository, planRepository, userRepository, outboundMessageRepository);
   }
 
   @Test
