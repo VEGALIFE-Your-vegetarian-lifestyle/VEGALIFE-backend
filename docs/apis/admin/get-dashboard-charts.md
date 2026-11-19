@@ -43,6 +43,10 @@ With three presets the server derives the bucket size and the window is bounded 
 `month` is the last 30 days, not a calendar month, so its point count never varies with month
 length. The window starts at the bucket boundary and ends at "now", so the **last bucket is partial**.
 
+Buckets are **UTC-aligned**: a `day` bucket starts at 00:00 UTC, an `hour` bucket on the hour in UTC.
+The alignment is fixed in the query rather than taken from the database session timezone, so the
+series is identical whatever timezone the server runs in.
+
 ### Request Body
 
 No request body.
@@ -84,8 +88,7 @@ No request body.
     },
     "growth": {
       "points": [
-        { "bucketStart": "2026-11-14T00:00:00Z", "newUsers": 40,
-          "newPayingUsers": 3, "conversionRate": 0.075 }
+        { "bucketStart": "2026-11-14T00:00:00Z", "newUsers": 40, "newPayingUsers": 3 }
       ]
     }
   }
@@ -107,7 +110,7 @@ No request body.
 | data.revenueByPlan.items[] | array | Succeeded revenue per plan, ranked by `amount` descending. `amount` is what was actually charged, in whole dong (VND), read from the ledger — never the catalogue price multiplied by a count, or a price change would rewrite history. `active` is the plan's current state, kept so a deactivated plan that still earned in the window is visible. Draw as horizontal bars. |
 | data.paymentHealth.points[] | array | One point per bucket. `succeeded` is bucketed by `paid_at`; `failed` by `updated_at` (the ledger has no `failed_at`, so this is a documented proxy); pending by `created_at`. `pendingFresh` / `pendingStale` split at 24 hours of age. Draw as a stacked bar — the four values partition the attempts that started in the bucket. |
 | data.paymentHealth.totals | object | Window totals computed from the rows themselves, plus `successRate = succeeded / (succeeded + failed)`. `pending` is excluded from the denominator: a healthy day with payments still in flight would otherwise look bad. |
-| data.growth.points[] | array | New non-deleted accounts and distinct new paying accounts per bucket, both counting people, so one axis serves both. `conversionRate = newPayingUsers / newUsers`, `0` when nobody signed up. Noisy per bucket — smooth before drawing a trend. |
+| data.growth.points[] | array | New non-deleted accounts per bucket and distinct members whose **first** succeeded payment landed in that bucket, both counting people, so one axis serves both. No ratio is derived: the two counts cover different populations (a member who registered months ago and pays today is a first-time payer today but not a new user today), so dividing them would not be a conversion rate and could exceed 1. For conversion, use `money.payerConversionRate` on the summary. |
 
 ### Error Responses
 
@@ -126,6 +129,12 @@ No request body.
 - The window is half-open, `[from, to)`, so a row written exactly on a boundary is counted once.
   Because the window ends at "now", the last bucket is partial.
 - A bucket with no rows is returned as zero rather than omitted, so the series has no gaps.
+- Buckets are UTC-aligned regardless of the server's timezone, so a `day` bucket is not a local
+  calendar day in every zone.
+- `newPayingUsers` counts a member only in the bucket where their first succeeded payment landed, so
+  a repeat buyer is not counted again. No conversion ratio is derived per bucket: the two counts
+  cover different populations, so the trustworthy conversion figure is `money.payerConversionRate`
+  on the summary.
 - Revenue counts only `succeeded` payments. There is no refund write path in this codebase, so the
   figures are gross, not net.
 - Results are cached in-process (Caffeine) for 15 minutes, keyed by `range`. The lifetime summary is

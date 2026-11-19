@@ -316,7 +316,7 @@ public class AdminDashboardService {
     for (Instant bucket : buckets) {
       long users = newUsers.getOrDefault(bucket, 0L);
       long payers = newPayingUsers.getOrDefault(bucket, 0L);
-      points.add(new GrowthResponse.Point(bucket, users, payers, rate(payers, users)));
+      points.add(new GrowthResponse.Point(bucket, users, payers));
     }
 
     return GrowthResponse.builder().points(points).build();

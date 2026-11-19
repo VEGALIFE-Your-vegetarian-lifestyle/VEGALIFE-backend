@@ -255,7 +255,7 @@ class AdminDashboardServiceTest {
   }
 
   @Test
-  void getChartsDerivesConversionRateFromSignupsAndPayers() {
+  void getChartsReportsSignupsAndFirstTimePayersAsSeparateCounts() {
     // The service truncates the window start to build its first bucket, so answering with that same
     // bucket guarantees the rows land in a point instead of being zero-filled away.
     when(chartRepository.findNewUsersPerBucket(any(), any(), anyString()))
@@ -268,9 +268,11 @@ class AdminDashboardServiceTest {
     DashboardChartsResponse response =
         adminDashboardService.getCharts(DashboardRequest.builder().range("week").build());
 
-    double totalRate =
-        response.getGrowth().getPoints().stream().mapToDouble(p -> p.conversionRate()).sum();
-    assertThat(totalRate).isEqualTo(0.05);
+    long signups = response.getGrowth().getPoints().stream().mapToLong(p -> p.newUsers()).sum();
+    long payers =
+        response.getGrowth().getPoints().stream().mapToLong(p -> p.newPayingUsers()).sum();
+    assertThat(signups).isEqualTo(40L);
+    assertThat(payers).isEqualTo(2L);
   }
 
   /** The same truncation the service applies, so a stubbed row lands on a real bucket. */

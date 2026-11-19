@@ -20,6 +20,11 @@ import org.springframework.stereotype.Repository;
  *
  * <p>Every window is half-open, {@code [from, to)}, so adjacent windows cannot both claim a row
  * written exactly on the boundary.
+ *
+ * <p>{@code date_trunc} takes an explicit {@code 'UTC'} zone. Without it, truncation happens in the
+ * session timezone, so a server running in, say, Asia/Bangkok would produce bucket starts at local
+ * midnight — which never match the UTC-aligned buckets the service generates, and every series
+ * would silently come back empty.
  */
 @Repository
 @RequiredArgsConstructor
@@ -30,7 +35,7 @@ public class AdminDashboardChartRepository {
   /** Succeeded revenue per bucket: the amount received and how many payments produced it. */
   public List<RevenueRow> findRevenueTrend(Instant from, Instant to, String interval) {
     return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), l.paid_at) AS bucket_start,"
+        "SELECT date_trunc(cast(? AS text), l.paid_at, 'UTC') AS bucket_start,"
             + "       sum(l.amount)::bigint AS amount,"
             + "       count(*) AS tx_count"
             + "  FROM payment_ledger l"
@@ -79,7 +84,7 @@ public class AdminDashboardChartRepository {
   /** Succeeded payments per bucket, bucketed by {@code paid_at} — the moment the money landed. */
   public List<BucketCountRow> findSucceededPerBucket(Instant from, Instant to, String interval) {
     return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), l.paid_at) AS bucket_start, count(*) AS cnt"
+        "SELECT date_trunc(cast(? AS text), l.paid_at, 'UTC') AS bucket_start, count(*) AS cnt"
             + "  FROM payment_ledger l"
             + " WHERE l.status = 'succeeded' AND l.paid_at >= ? AND l.paid_at < ?"
             + " GROUP BY bucket_start",
@@ -100,7 +105,7 @@ public class AdminDashboardChartRepository {
    */
   public List<BucketCountRow> findFailedPerBucket(Instant from, Instant to, String interval) {
     return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), l.updated_at) AS bucket_start, count(*) AS cnt"
+        "SELECT date_trunc(cast(? AS text), l.updated_at, 'UTC') AS bucket_start, count(*) AS cnt"
             + "  FROM payment_ledger l"
             + " WHERE l.status = 'failed' AND l.updated_at >= ? AND l.updated_at < ?"
             + " GROUP BY bucket_start",
@@ -122,7 +127,7 @@ public class AdminDashboardChartRepository {
   public List<PendingBucketRow> findPendingPerBucket(
       Instant from, Instant to, Instant staleBefore, String interval) {
     return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), l.created_at) AS bucket_start,"
+        "SELECT date_trunc(cast(? AS text), l.created_at, 'UTC') AS bucket_start,"
             + "       count(*) FILTER (WHERE l.created_at >= ?) AS fresh,"
             + "       count(*) FILTER (WHERE l.created_at < ?) AS stale"
             + "  FROM payment_ledger l"
@@ -143,7 +148,7 @@ public class AdminDashboardChartRepository {
   /** New non-deleted accounts per bucket. */
   public List<BucketCountRow> findNewUsersPerBucket(Instant from, Instant to, String interval) {
     return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), u.created_at) AS bucket_start, count(*) AS cnt"
+        "SELECT date_trunc(cast(? AS text), u.created_at, 'UTC') AS bucket_start, count(*) AS cnt"
             + "  FROM \"user\" u"
             + " WHERE u.deleted_at IS NULL AND u.created_at >= ? AND u.created_at < ?"
             + " GROUP BY bucket_start",
@@ -156,18 +161,27 @@ public class AdminDashboardChartRepository {
   }
 
   /**
-   * Distinct members who paid for the first time inside each bucket.
+   * Distinct members whose <em>first</em> succeeded payment landed in each bucket.
    *
-   * <p>Distinct because one member may hold several acquisitions; counting ledger rows would report
-   * a repeat buyer as several new payers.
+   * <p>Distinct because one member may hold several acquisitions. The {@code NOT EXISTS} clause is
+   * what makes this "first time" rather than "paid at all": a member who already paid before this
+   * row's {@code paid_at} is excluded, so a repeat buyer is reported once, in the bucket where they
+   * converted. Without it the series counts every payer active in the bucket, which cannot be
+   * divided by signups to produce a conversion rate — the two would be different populations and
+   * the ratio could exceed 1.
    */
   public List<BucketCountRow> findNewPayingUsersPerBucket(
       Instant from, Instant to, String interval) {
     return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), l.paid_at) AS bucket_start,"
+        "SELECT date_trunc(cast(? AS text), l.paid_at, 'UTC') AS bucket_start,"
             + "       count(DISTINCT l.user_id) AS cnt"
             + "  FROM payment_ledger l"
             + " WHERE l.status = 'succeeded' AND l.paid_at >= ? AND l.paid_at < ?"
+            + "   AND NOT EXISTS ("
+            + "         SELECT 1 FROM payment_ledger p"
+            + "          WHERE p.user_id = l.user_id"
+            + "            AND p.status = 'succeeded'"
+            + "            AND p.paid_at < l.paid_at)"
             + " GROUP BY bucket_start",
         (rs, rowNum) ->
             new BucketCountRow(
