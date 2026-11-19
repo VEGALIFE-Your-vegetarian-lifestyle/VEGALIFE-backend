@@ -76,7 +76,8 @@ Same `PostListResponse` shape as `GET /api/posts/me` — see `docs/apis/post/get
 - `rejectionReason` is owner-scoped: the post's author reads why an admin rejected it, but a guest or another member gets `null` even though the rest of the payload is identical. The reason is admin wording about the author's own content, not public information.
 - A soft-deleted post and an unknown id are both reported as `404 Post not found` — the same not-found-over-leak pattern used elsewhere in the post API, so no post data or existence is leaked.
 - Public access: this route is `permitAll`, so guests may read any non-deleted post — like `GET /api/posts` and `GET /api/users/{userId}/posts`. Only a supplied-but-invalid token is rejected (`401`); a missing token is not.
-- No view-count increment, caching, or ETags are performed by this endpoint.
+- No caching or ETags are performed by this endpoint.
+- A successful read counts as a view when the post is `published` and the caller is not its author (BR-POST-016): `viewCount` is incremented by one and the response carries the new value. The author's own reads and reads of non-published posts are not counted. There is no de-duplication — every qualifying request increments.
 
 ## Example
 

@@ -28,7 +28,7 @@ Issue #8 was originally a personalized recommendation feed, but the schema canno
 - Personalization, semantic filtering, or any per-user ranking (deferred with issue #8; needs interaction-history data first).
 - Recording view, vote, or comment interactions.
 - Category filtering, keyword search, or client-selectable sort order.
-- Popularity ranking (`post.view_count` is never incremented by any code path today, so it cannot rank anything).
+- Popularity ranking (`post.view_count` only counts non-author reads of published posts — BR-POST-016 — which is not enough signal for a ranking yet).
 
 ## Requirements
 

@@ -25,7 +25,7 @@ The frontend post detail page (and shared links) cannot fetch a single post toda
 ## Non-goals
 
 - Gating the response on the post's status or on ownership — only soft-deletion excludes a post.
-- View-count increment, caching, or ETags.
+- View-count increment, caching, or ETags. (View counting was added later as a separate change — see BR-POST-016 in `docs/brs/posts.md`; caching and ETags remain absent.)
 - Comments, reactions, or "related posts" in the payload.
 - A global feed or listing other users' posts (that's `GET /api/posts`, a separate feature).
 
