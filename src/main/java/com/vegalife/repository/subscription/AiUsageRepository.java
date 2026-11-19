@@ -21,6 +21,12 @@ public interface AiUsageRepository extends JpaRepository<AiUsage, UUID> {
   long sumRequestCount(@Param("userId") UUID userId);
 
   /**
+   * Admin dashboard: how many members have ever consumed an AI request. The only monotonic
+   * activation signal, since {@code user.status} is current state and is overwritten by a suspend.
+   */
+  long countByRequestCountGreaterThan(int requestCount);
+
+  /**
    * Counts one successful request (BR-AI-002). Inserts the member's only row or bumps it in place,
    * so concurrent sends can never both read the same stale count. Runs inside the caller's
    * transaction — the caller already knows the reply succeeded.

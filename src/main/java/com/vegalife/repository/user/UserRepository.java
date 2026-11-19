@@ -1,8 +1,8 @@
 package com.vegalife.repository.user;
 
+import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.user.User;
 import jakarta.persistence.LockModeType;
-import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -31,9 +31,12 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
       """)
   Optional<UserAccountAuthState> findAccountAuthStateById(@Param("id") UUID id);
 
-  /** Admin dashboard (issue #12): total registered accounts. */
+  /** Admin dashboard: total registered accounts. */
   long countByDeletedAtIsNull();
 
-  /** Admin dashboard (issue #12): accounts created within a time range. */
-  long countByCreatedAtBetweenAndDeletedAtIsNull(Instant from, Instant to);
+  /** Admin dashboard: accounts that have verified their email. Set once, so it never reverts. */
+  long countByEmailVerifiedTrueAndDeletedAtIsNull();
+
+  /** Admin dashboard: accounts currently in one lifecycle state (e.g. suspended). */
+  long countByStatusAndDeletedAtIsNull(UserStatus status);
 }
