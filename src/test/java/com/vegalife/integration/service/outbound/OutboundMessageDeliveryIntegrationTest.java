@@ -106,7 +106,7 @@ class OutboundMessageDeliveryIntegrationTest {
 
     OutboundMessage settled = singleRow();
     assertThat(settled.getStatus()).isEqualTo(OutboundStatus.COMPLETED);
-    assertThat(settled.getPayload()).isNull();
+    assertThat(settled.getPayload()).isNotBlank();
     assertThat(settled.getCompletedAt()).isNotNull();
     assertThat(settled.getLockedAt()).isNull();
     assertThat(settled.getLockedBy()).isNull();

@@ -192,7 +192,8 @@ class OutboundMessageQueueDaoIntegrationTest {
     assertThat(queueDao.markCompleted(row.getId(), WORKER_A, Instant.now())).isTrue();
     OutboundMessage completed = reload(row.getId());
     assertThat(completed.getStatus()).isEqualTo(OutboundStatus.COMPLETED);
-    assertThat(completed.getPayload()).isNull();
+    // The payload outlives delivery so a settled row stays readable for diagnosis.
+    assertThat(completed.getPayload()).isNotBlank();
     assertThat(completed.getLockedAt()).isNull();
     assertThat(completed.getLockedBy()).isNull();
     assertThat(completed.getCompletedAt()).isNotNull();
@@ -212,7 +213,7 @@ class OutboundMessageQueueDaoIntegrationTest {
     assertThat(queueDao.markTerminal(row.getId(), OutboundStatus.EXPIRED, WORKER_A)).isTrue();
     OutboundMessage expired = reload(row.getId());
     assertThat(expired.getStatus()).isEqualTo(OutboundStatus.EXPIRED);
-    assertThat(expired.getPayload()).isNull();
+    assertThat(expired.getPayload()).isNotBlank();
     assertThat(expired.getLockedAt()).isNull();
     assertThat(expired.getLockedBy()).isNull();
     assertThat(expired.getCompletedAt()).isNull();

@@ -36,13 +36,13 @@ public class OutboundMessageQueueDao {
 
   private static final String COMPLETE_SQL =
       "UPDATE outbound_message"
-          + " SET status = 'COMPLETED', completed_at = ?, payload = NULL,"
+          + " SET status = 'COMPLETED', completed_at = ?,"
           + " locked_at = NULL, locked_by = NULL"
           + " WHERE id = ? AND status = 'PROCESSING' AND locked_by = ?";
 
   private static final String TERMINAL_SQL =
       "UPDATE outbound_message"
-          + " SET status = ?, payload = NULL, locked_at = NULL, locked_by = NULL"
+          + " SET status = ?, locked_at = NULL, locked_by = NULL"
           + " WHERE id = ? AND status = 'PROCESSING' AND locked_by = ?";
 
   private static final String SCHEDULE_RETRY_SQL =
@@ -83,8 +83,9 @@ public class OutboundMessageQueueDao {
   }
 
   /**
-   * Marks a claimed row FAILED or EXPIRED and clears the payload; fails (returns false) if the
-   * caller no longer owns it.
+   * Marks a claimed row FAILED or EXPIRED; fails (returns false) if the caller no longer owns it.
+   * The payload is kept: rows are only removed by the retention purge, so a settled row stays
+   * readable for diagnosis until then.
    */
   @Transactional
   public boolean markTerminal(UUID id, OutboundStatus terminalStatus, String workerId) {
