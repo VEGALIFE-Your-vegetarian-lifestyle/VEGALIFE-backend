@@ -199,15 +199,37 @@ public class PostService {
    * returned too.
    *
    * <p>{@code viewerId} is only used to decide whether the admin rejection reason is included: the
-   * author sees why their post was refused, everyone else gets the same payload without it.
+   * author sees why their post was refused, everyone else gets the same payload without it. It also
+   * decides whether this read counts as a view (BR-POST-016).
    */
-  @Transactional(readOnly = true)
+  @Transactional
   public PostListResponse getPost(UUID viewerId, UUID postId) {
     Post post =
         postRepository
             .findDetailById(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-    return toResponse(post, attachedRecipeIds(postId), viewerId);
+    PostListResponse response = toResponse(post, attachedRecipeIds(postId), viewerId);
+    if (countsAsView(post, viewerId)) {
+      postRepository.incrementViewCount(postId);
+      // The response is filled in from the value just written instead of from the entity: the
+      // increment is a bulk update that bypasses the persistence context, so the loaded entity is
+      // already stale, and mutating it would dirty it into an UPDATE that bumps {@code updated_at}.
+      Integer views = post.getViewCount();
+      response.setViewCount(views == null ? 1 : views + 1);
+    }
+    return response;
+  }
+
+  /**
+   * BR-POST-016: a view is another person reading a published post. The author's own reads are
+   * excluded — they would inflate the number the author sees — and so are non-published posts,
+   * which only their author and admins reach, and an admin's review is not an audience.
+   */
+  private boolean countsAsView(Post post, UUID viewerId) {
+    if (post.getStatus() != PostStatus.published) {
+      return false;
+    }
+    return viewerId == null || !viewerId.equals(post.getUser().getId());
   }
 
   /**

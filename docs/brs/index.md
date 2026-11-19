@@ -49,6 +49,7 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-013 | Only Approved Recipes May Be Attached to a Post | Active | 2026-11-12 |
 | BR-POST-014 | Post List Filters Only Narrow the Visible Set | Active | 2026-11-19 |
 | BR-POST-015 | A Post With Media Waits for Admin Review | Active | 2026-11-19 |
+| BR-POST-016 | A View Is Another Person Reading a Published Post | Active | 2026-11-20 |
 | BR-ADMIN-002 | Every Administrator Content-Moderation Action Is Logged | Retired by ADR-027 | 2026-11-19 |
 | BR-COMMENT-001 | Comment Creation Requires Authentication; Reading Is Public | Active | 2026-10-11 |
 | BR-COMMENT-002 | Only the Owner May Edit a Comment | Active | 2026-10-11 |

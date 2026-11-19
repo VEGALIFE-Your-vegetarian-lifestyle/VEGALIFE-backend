@@ -14,6 +14,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -32,6 +33,20 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
   @EntityGraph(attributePaths = "user")
   @Query("select p from Post p where p.id = :id and p.deletedAt is null")
   Optional<Post> findDetailById(@Param("id") UUID id);
+
+  /**
+   * Records one view of a post.
+   *
+   * <p>A bulk update rather than load-modify-save: concurrent reads each add one instead of
+   * overwriting each other's count. It deliberately leaves {@code updated_at} alone — a view is not
+   * an edit, so it must not reorder "recently updated" lists or re-timestamp the row — which also
+   * means the caller must not rely on a previously loaded {@code Post} to observe the new value.
+   *
+   * @return the number of rows updated: 1, or 0 when the post no longer exists
+   */
+  @Modifying
+  @Query("update Post p set p.viewCount = p.viewCount + 1 where p.id = :id")
+  int incrementViewCount(@Param("id") UUID id);
 
   Optional<Post> findByIdAndStatusAndDeletedAtIsNull(UUID id, PostStatus status);
 

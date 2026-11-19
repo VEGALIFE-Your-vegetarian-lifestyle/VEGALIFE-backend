@@ -31,6 +31,7 @@ import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
+import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -94,6 +95,8 @@ class PostControllerIntegrationTest {
   @Autowired private OutboundMessageRepository outboundMessageRepository;
 
   @Autowired private JwtTokenService jwtTokenService;
+
+  @Autowired private EntityManager entityManager;
 
   private User user;
   private User otherUser;
@@ -189,6 +192,58 @@ class PostControllerIntegrationTest {
   @Test
   void getPost_withoutJwt_unknownIdReturns404() throws Exception {
     mockMvc.perform(get("/api/posts/{postId}", UUID.randomUUID())).andExpect(status().isNotFound());
+  }
+
+  @Test
+  void getPost_anotherMembersViewIncrementsViewCount() throws Exception {
+    Post published = createPost(otherUser, "Someone else's post", PostStatus.published, null);
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", published.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.viewCount").value(1));
+
+    assertThat(storedViewCount(published.getId())).isEqualTo(1);
+  }
+
+  @Test
+  void getPost_guestViewIncrementsViewCount() throws Exception {
+    Post published = createPost(otherUser, "Public post", PostStatus.published, null);
+
+    mockMvc
+        .perform(get("/api/posts/{postId}", published.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.viewCount").value(1));
+
+    assertThat(storedViewCount(published.getId())).isEqualTo(1);
+  }
+
+  @Test
+  void getPost_authorsOwnViewDoesNotIncrementViewCount() throws Exception {
+    Post published = createPost(user, "My post", PostStatus.published, null);
+
+    mockMvc
+        .perform(
+            get("/api/posts/{postId}", published.getId())
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.viewCount").value(0));
+
+    assertThat(storedViewCount(published.getId())).isZero();
+  }
+
+  @Test
+  void getPost_viewOfNonPublishedPostDoesNotIncrementViewCount() throws Exception {
+    Post draft = createPost(otherUser, "Someone else's draft", PostStatus.drafted, null);
+
+    mockMvc
+        .perform(get("/api/posts/{postId}", draft.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.viewCount").value(0));
+
+    assertThat(storedViewCount(draft.getId())).isZero();
   }
 
   @Test
@@ -1265,6 +1320,16 @@ class PostControllerIntegrationTest {
             .viewCount(0)
             .deletedAt(deletedAt)
             .build());
+  }
+
+  /**
+   * Reads the persisted counter rather than the loaded entity: the increment is a bulk update that
+   * bypasses the persistence context, so a plain {@code findById} inside this test's transaction
+   * would hand back the pre-increment instance.
+   */
+  private int storedViewCount(UUID postId) {
+    entityManager.clear();
+    return postRepository.findById(postId).orElseThrow().getViewCount();
   }
 
   private Post createPublished(User owner, String title, Instant publishedAt) {

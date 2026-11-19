@@ -19,6 +19,7 @@
 | BR-POST-013 | Only Approved Recipes May Be Attached to a Post | Active | 2026-11-12 |
 | BR-POST-014 | Post List Filters Only Narrow the Visible Set | Active | 2026-11-19 |
 | BR-POST-015 | A Post With Media Waits for Admin Review | Active | 2026-11-19 |
+| BR-POST-016 | A View Is Another Person Reading a Published Post | Active | 2026-11-20 |
 | BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-11-13 |
 | BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-11-19 |
 | BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-11-13 |
@@ -434,7 +435,7 @@ A shared or linked post must be readable by anyone who opens the link, signed in
 
 ## Scope & Exceptions
 
-Applies to `GET /api/posts/{postId}`. It does not define owner/admin draft preview, caching, or view-count behavior — none of these exist for this endpoint. `GET /api/posts/me` (the caller's own list, all statuses, authenticated) and `GET /api/users/{userId}/posts` (public, owner/admin see all statuses) have their own rules (BR-POST-002, BR-POST-010).
+Applies to `GET /api/posts/{postId}`. It does not define owner/admin draft preview, caching, or view counting — the counter is governed by BR-POST-016 and caching does not exist for this endpoint. `GET /api/posts/me` (the caller's own list, all statuses, authenticated) and `GET /api/users/{userId}/posts` (public, owner/admin see all statuses) have their own rules (BR-POST-002, BR-POST-010).
 
 ## Enforcement
 
@@ -967,4 +968,69 @@ this rule.
 ## Last Reviewed
 
 2026-11-12, by Vegalife backend team
+
+---
+
+# Business Rule: A View Is Another Person Reading a Published Post
+
+## Rule ID
+
+`BR-POST-016`
+
+## Status
+
+Active
+
+## Statement
+
+Reading a single post increments its view count by one when, and only when, both of these hold:
+
+- the post is `published`, and
+- the caller is not the post's author (a guest counts as a non-author).
+
+Every other read leaves the counter unchanged: the author reading their own post, a read of any
+non-`published` post (`drafted`, `processing`, `pending`, `unpublished`), and a read that resolves to
+`404`. There is no de-duplication — repeated reads by the same person each increment, and no view
+history is recorded.
+
+The response to the request that incremented carries the new value; the stored value is the single
+source of truth, and nothing else in the system increments this column.
+
+## Rationale
+
+The counter exists to say how many people have read a post, so the audience is what counts. The
+author's own opening of the post is not an audience, and excluding it keeps an author's editing
+refreshes from inflating the number they are shown. Non-published posts are only reachable by their
+author, who is already excluded, and by Administrators reviewing them — counting a reviewer's read
+would measure moderation traffic rather than reach. Counting every request instead of de-duplicating
+keeps the write a single atomic statement with no new table, at the cost of tolerating refreshes; that
+trade is recorded here rather than left implicit so a later "unique readers" requirement is a visible
+change rather than a silent reinterpretation.
+
+## Scope & Exceptions
+
+Applies to `GET /api/posts/{postId}` only. The list, feed, related, search, saved, and admin routes
+read the counter but never increment it, and editing a post never changes it (BR-POST-007) — an edited
+`published` post returns to `processing` (BR-FILTER-005) and so stops counting until it is published
+again. The admin listing may sort by `viewCount`. Not covered: bot filtering, per-session or per-IP
+de-duplication, and any analytics history — none exist.
+
+## Enforcement
+
+- Repository: `PostRepository.incrementViewCount(id)` issues a single `update Post p set p.viewCount =
+  p.viewCount + 1 where p.id = :id`. A bulk update, not a load-modify-save, so concurrent reads add up
+  instead of overwriting each other; it deliberately does not touch `updated_at`.
+- Service: `PostService.getPost()` applies the guard (`countsAsView`) and fills the response's
+  `viewCount` from the pre-increment value plus one, rather than from the stale loaded entity.
+- Tests: `PostServiceTest.getPost_guestViewOfPublishedPostIncrementsTheCount`,
+  `getPost_anotherMembersViewOfPublishedPostIncrementsTheCount`,
+  `getPost_authorsOwnViewIsNotCounted`, `getPost_viewOfNonPublishedPostIsNotCounted`;
+  `PostControllerIntegrationTest.getPost_anotherMembersViewIncrementsViewCount`,
+  `getPost_guestViewIncrementsViewCount`, `getPost_authorsOwnViewDoesNotIncrementViewCount`,
+  `getPost_viewOfNonPublishedPostDoesNotIncrementViewCount`.
+- API reference: `docs/apis/post/get-posts-postid.md`.
+
+## Last Reviewed
+
+2026-11-20, by Vegalife backend team
 
