@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.Difficulty;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.enums.recipe.Unit;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
@@ -291,6 +292,175 @@ class AdminRecipeControllerIntegrationTest {
         .andExpect(
             jsonPath("$.data.content[*].name")
                 .value(containsInAnyOrder("In both linked posts", "In recipes only")));
+  }
+
+  @Test
+  void listRecipes_filterByKeyword_returnsOnlyMatchingRecipes() throws Exception {
+    createRecipe(author2, "Aardvark tofu bowl", null, Set.of(), false);
+    createRecipe(member, "Zebra soup", null, Set.of(), false);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "AARDVARK"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Aardvark tofu bowl"));
+  }
+
+  @Test
+  void listRecipes_filterByKeywordMatchingIngredient_returnsTheRecipeOnce() throws Exception {
+    createRecipe(author2, "Tofu bowl", null, Set.of(), true);
+    createRecipe(member, "Zebra soup", null, Set.of(), false);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "tofu"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Tofu bowl"));
+  }
+
+  @Test
+  void listRecipes_filterByKeywordWithWildcard_matchesLiterally() throws Exception {
+    createRecipe(author2, "Aardvark tofu bowl", null, Set.of(), false);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "%"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(0));
+  }
+
+  @Test
+  void listRecipes_filterByDeletionStatus_returnsOnlyThatState() throws Exception {
+    createRecipe(author2, "Active recipe", null, Set.of(), false);
+    createRecipe(member, "Removed recipe", Instant.now(), Set.of(), false);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("status", "DELETED"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Removed recipe"))
+        .andExpect(jsonPath("$.data.content[0].status").value("DELETED"));
+  }
+
+  @Test
+  void listRecipes_withoutDeletionStatus_returnsActiveAndDeletedRecipes() throws Exception {
+    createRecipe(author2, "Active recipe", null, Set.of(), false);
+    createRecipe(member, "Removed recipe", Instant.now(), Set.of(), false);
+
+    mockMvc
+        .perform(get("/api/admin/recipes").header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(2));
+  }
+
+  @Test
+  void listRecipes_withInvalidDeletionStatus_returns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("status", "ARCHIVED"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void listRecipes_filterByDifficulty_returnsOnlyThatDifficulty() throws Exception {
+    createRecipe(author2, "Easy bowl", null, Set.of(), false);
+    Recipe hard = createRecipe(member, "Hard bowl", null, Set.of(), false);
+    hard.setDifficulty(Difficulty.HARD);
+    recipeRepository.saveAndFlush(hard);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("difficulty", "hard"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Hard bowl"));
+  }
+
+  @Test
+  void listRecipes_withInvalidDifficulty_returns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("difficulty", "EXTREME"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void listRecipes_filterByMaxTotalTime_excludesRecipesOverTheLimit() throws Exception {
+    // The helper creates prep 10 + cook 15 = 25 minutes.
+    createRecipe(author2, "Quick bowl", null, Set.of(), false);
+    Recipe slow = createRecipe(member, "Slow bowl", null, Set.of(), false);
+    slow.setPrepTimeMinutes(30);
+    slow.setCookTimeMinutes(60);
+    recipeRepository.saveAndFlush(slow);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("maxTotalTimeMinutes", "30"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Quick bowl"));
+  }
+
+  @Test
+  void listRecipes_filterByDishId_returnsOnlyRecipesForThatDish() throws Exception {
+    createRecipe(author2, "Test bowl recipe", null, Set.of(), false);
+    Dish otherDish = dishRepository.saveAndFlush(Dish.builder().name("Other plate").build());
+    recipeRepository.saveAndFlush(
+        Recipe.builder()
+            .dish(otherDish)
+            .user(member)
+            .name("Other plate recipe")
+            .instructions("Stir and serve")
+            .servings(2)
+            .difficulty(Difficulty.EASY)
+            .build());
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("dishId", otherDish.getId().toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Other plate recipe"));
+  }
+
+  @Test
+  void listRecipes_filterByModerationStatus_returnsOnlyThatState() throws Exception {
+    createRecipe(author2, "Pending recipe", null, Set.of(), false);
+    Recipe approved = createRecipe(member, "Approved recipe", null, Set.of(), false);
+    approved.setModerationStatus(ModerationStatus.APPROVED);
+    recipeRepository.saveAndFlush(approved);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("moderationStatus", "approved"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Approved recipe"));
   }
 
   @Test

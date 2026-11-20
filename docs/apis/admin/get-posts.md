@@ -1,7 +1,7 @@
 # API Reference: GET /api/admin/posts
 
 ## Overview
-Return a paginated list of every non-deleted post across all users and all statuses, optionally filtered by status, author, category, and creation date range, with the semantic content-filter verdict on each item. Admin only.
+Return a paginated list of every non-deleted post across all users and all statuses, optionally filtered by status, author, category, a text keyword, and creation date range, with the semantic content-filter verdict on each item. Admin only.
 
 ## Endpoint
 ```
@@ -26,8 +26,9 @@ None.
 | flag | string | No | Last verdict: `FILTER_PASSED`, `FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`, or `all`. Defaults to `all` when omitted, so nothing is silently hidden; matches exactly (ADR-025) |
 | userId | uuid | No | Only posts authored by this user |
 | categoryId | uuid | No | Only posts belonging to this category |
+| keyword | string | No | Case-insensitive substring matched against `title` or `content` (plain text, not `rawContent`). `%`, `_` and `\` are matched literally. Blank or omitted applies no keyword filter |
 | createdFrom | string | No | ISO-8601 datetime lower bound (inclusive) on `createdAt`, e.g. `2026-01-01T00:00:00Z` |
-| createdTo | string | No | ISO-8601 datetime upper bound (inclusive) on `createdAt`, e.g. `2026-01-31T23:59:59Z` |
+| createdTo | string | No | ISO-8601 datetime upper bound (inclusive) on `createdAt`, e.g. `2026-01-31T23:59:59Z`. `createdFrom` after `createdTo` returns 400 |
 
 ### Request Body
 No request body
@@ -115,6 +116,7 @@ No request body
 - Only `ROLE_ADMIN` may call this endpoint (`@PreAuthorize("hasRole('ADMIN')")` on `AdminPostController`; ADR-009 — there is no `/api/admin/**` path rule).
 - Unlike `GET /api/posts/me` and `GET /api/users/{userId}/posts`, no status restriction is applied: every status is listable (issue #1 / FR-002).
 - `status` and `flag` are independent filters and combine with AND; `flag` matches the verdict exactly (BR-FILTER-008).
+- `keyword` matches the same fields, with the same literal-wildcard rule, as the member feed's keyword (BR-POST-014): `title` or `content`. It is a filter like any other and combines with the rest using AND; a search matching nothing returns 200 with an empty `content` array.
 - When no `flag` parameter is supplied the list defaults to `flag=all`, so no verdict is silently hidden (issue #5). The review queue is `status=pending`, which lists every post whose verdict is recorded and whose admin decision is still outstanding, regardless of verdict (ADR-029).
 - `flag` is the post's last verdict and survives publication (ADR-025). At `pending` it says why the post is held (`FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`, or `FILTER_PASSED` for a media-bearing post the text filter cleared, BR-POST-015); it is `null` only for a row published before verdicts were stored and later sent back for review. At `processing` it is `null`, because the run is still in flight. At `published` it distinguishes a post the filter cleared (`FILTER_PASSED`) from one an admin approved over a blocker — the only place that distinction is readable.
 - This is the only API surface that exposes `flag`/`flagDetail`; the member-facing post responses do not carry them (ADR-025).

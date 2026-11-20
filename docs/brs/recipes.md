@@ -530,13 +530,18 @@ only by its title.
   categories reached indirectly through attached posts.
 - `GET /api/search` keeps its original text-fields-only recipe matching while it
   is deprecated; it is not widened to dish or ingredient names.
-- Admin recipe listings have their own filters and are outside this rule.
+- The admin listing (`GET /api/admin/recipes`) has its own, wider filter set, but
+  its `keyword`, `dishId`, `difficulty` and `maxTotalTimeMinutes` filters reuse the
+  predicates described here, so a search returns the same recipes there as here —
+  plus soft-deleted and unapproved ones the member routes cannot see.
 
 ## Enforcement
 
 - `RecipeSpecifications.catalogue(...)` composes the author, moderation-state,
   dish, difficulty, total-time, and keyword predicates; the public route always
-  passes `ModerationStatus.APPROVED` and no author.
+  passes `ModerationStatus.APPROVED` and no author. `allWithFilters(...)` builds
+  the admin listing from the same predicate list, adding deletion state, category
+  and createdAt range.
 - The keyword predicate uses an `EXISTS` subquery over `recipe_ingredient` →
   `ingredient`, so an ingredient match cannot duplicate a recipe row or inflate
   `totalElements`.

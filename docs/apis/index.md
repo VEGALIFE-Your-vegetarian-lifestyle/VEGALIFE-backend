@@ -21,16 +21,16 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `admin/dish-ingredient-crud.md` | `GET/POST/PATCH/DELETE /api/admin/dishes/{dishId}/ingredients[/{ingredientId}]` | Curate a dish's associated ingredients and which are required (Admin) |
 | `admin/get-payments.md` | `GET /api/admin/payments` | List payments across all users, money-only, with user/status/date filters (Admin) |
 | `admin/plan-crud.md` | `GET/POST/PATCH/DELETE /api/admin/plans[/{planId}]` | Manage AI plans, request quotas, and descriptions, including soft-deactivation (Admin) |
-| `admin/get-posts.md` | `GET /api/admin/posts` | List all posts across users and statuses (Admin) |
+| `admin/get-posts.md` | `GET /api/admin/posts` | List and search all posts across users and statuses (Admin) |
 | `admin/post-posts-postid-moderate.md` | `POST /api/admin/posts/{postId}/moderate` | **Removed** — retained only as a record; replaced by approve/reject (ADR-016) |
 | `admin/post-posts-postid-approve.md` | `GET/POST /api/admin/posts/{postId}[/approve\|/reject]` | Read a post's component detail, approve or reject it with its components (Admin) |
-| `admin/get-recipes.md` | `GET /api/admin/recipes` | List all recipes across users with ingredients and instructions (Admin) |
+| `admin/get-recipes.md` | `GET /api/admin/recipes` | List and search all recipes across users with ingredients and instructions (Admin) |
 | `admin/recipe-crud.md` | `GET/PATCH/DELETE /api/admin/recipes[/{recipeId}][/approve\|/reject]` | Manage recipes, including review state (Admin) |
 | `admin/post-restaurants.md` | `POST /api/admin/restaurants` | Create a restaurant (Admin) |
 | `admin/patch-restaurants-restaurantid.md` | `PATCH /api/admin/restaurants/{restaurantId}` | Edit a restaurant (Admin) |
 | `admin/delete-restaurants-restaurantid.md` | `DELETE /api/admin/restaurants/{restaurantId}` | Soft-delete a restaurant (Admin) |
 | `admin/settings-crud.md` | `GET/PATCH /api/admin/settings` | Manage grouped platform settings, audited (Admin) |
-| `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
+| `admin/get-users.md` | `GET /api/admin/users` | List and search user accounts (Admin) |
 | `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |
 | `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |
 | `admin/get-videos.md` | `GET /api/admin/videos` | List all uploaded videos across users and statuses (Admin) |

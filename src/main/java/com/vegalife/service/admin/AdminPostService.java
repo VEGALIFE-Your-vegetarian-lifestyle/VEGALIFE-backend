@@ -84,7 +84,8 @@ public class AdminPostService {
     Pageable pageable =
         PageRequest.of(request.getPage(), request.getSize(), parseSort(request.getSort()));
     Specification<Post> spec =
-        PostSpecifications.allWithFilters(status, flag, userId, categoryId, createdFrom, createdTo);
+        PostSpecifications.allWithFilters(
+            status, flag, userId, categoryId, createdFrom, createdTo, request.getKeyword());
     Page<Post> page = postRepository.findAll(spec, pageable);
 
     log.debug(

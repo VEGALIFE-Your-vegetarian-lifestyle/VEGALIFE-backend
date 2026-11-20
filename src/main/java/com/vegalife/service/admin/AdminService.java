@@ -39,6 +39,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class AdminService {
 
+  /** Columns an administrator may sort the user list by; {@code passwordHash} is never one. */
+  private static final Set<String> USER_SORTABLE_PROPERTIES =
+      Set.of("createdAt", "updatedAt", "displayName", "email", "status", "role");
+
+  private static final String USER_SORTABLE_PROPERTIES_MESSAGE =
+      "Sort property must be one of: createdAt, updatedAt, displayName, email, status, role";
+
   private final UserRepository userRepository;
   private final AdminUserMapper adminUserMapper;
   private final JwtTokenService jwtTokenService;
@@ -59,7 +66,8 @@ public class AdminService {
     Pageable pageable =
         PageRequest.of(request.getPage(), request.getSize(), parseSort(request.getSort()));
     Specification<User> spec =
-        UserSpecifications.activeWithFilters(status, role, createdFrom, createdTo);
+        UserSpecifications.activeWithFilters(
+            status, role, createdFrom, createdTo, request.getKeyword(), request.getEmailVerified());
     Page<User> page = userRepository.findAll(spec, pageable);
 
     log.debug(
@@ -238,6 +246,9 @@ public class AdminService {
     // than let Spring Data throw a PropertyReferenceException, which would surface as a 500.
     if ("username".equals(property)) {
       property = "displayName";
+    }
+    if (!USER_SORTABLE_PROPERTIES.contains(property)) {
+      throw new ValidationException(USER_SORTABLE_PROPERTIES_MESSAGE);
     }
     Sort.Direction direction =
         parts.length == 2 && parts[1].trim().equalsIgnoreCase("asc")

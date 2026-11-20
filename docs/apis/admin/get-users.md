@@ -1,7 +1,7 @@
 # API Reference: GET /api/admin/users
 
 ## Overview
-Return a paginated list of non-deleted user accounts, optionally filtered by status, role, and creation date range. Admin only.
+Return a paginated list of non-deleted user accounts, optionally filtered by status, role, email verification, a text keyword, and creation date range. Admin only.
 
 ## Endpoint
 ```
@@ -18,11 +18,13 @@ Required: Valid JWT access token in Authorization header (`Bearer <token>`), rol
 |------|------|----------|-------------|
 | page | integer | No | 0-based page index, default 0 |
 | size | integer | No | Page size, default 20, max 100 |
-| sort | string | No | Format `property,direction`. Default `createdAt,desc` |
+| sort | string | No | Format `property,direction`. Default `createdAt,desc`. Allowed properties: `createdAt`, `updatedAt`, `displayName`, `email`, `status`, `role` (`username` is accepted as an alias for `displayName`). Any other property returns 400 |
 | status | string | No | One of: `created`, `activated`, `deactivated`, `suspended` |
 | role | string | No | One of: `ADMIN`, `USER` |
+| emailVerified | boolean | No | `true` for verified accounts only, `false` for unverified only; omit for both |
+| keyword | string | No | Case-insensitive substring matched against `displayName` or `email`. `%`, `_` and `\` are matched literally. Blank or omitted applies no keyword filter |
 | createdFrom | string | No | ISO-8601 date or datetime lower bound (inclusive) on `createdAt` |
-| createdTo | string | No | ISO-8601 date or datetime upper bound (inclusive) on `createdAt` |
+| createdTo | string | No | ISO-8601 date or datetime upper bound (inclusive) on `createdAt`. `createdFrom` after `createdTo` returns 400 |
 
 ### Request Body
 No request body
@@ -76,19 +78,22 @@ No request body
 ### Error Responses
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
+| 400 | Invalid `status`, `role`, `sort`, `emailVerified`, or `createdFrom` after `createdTo` | "Validation failed" |
 | 401 | Missing/invalid JWT | "Unauthorized" |
 | 403 | Authenticated non-admin | "Forbidden" |
 | 500 | Server error | "Internal server error" |
 
 ## Business Rules
-- Soft-deleted users (`deletedAt != null`) are excluded (issue #24 / FR-005).
+- Soft-deleted users (`deletedAt != null`) are excluded (issue #24 / FR-005), including from `keyword` results.
 - Only `ROLE_ADMIN` may call this endpoint (SecurityConfig `/api/admin/**`).
+- Every filter narrows the result; combining filters is an AND. A filter matching nothing returns 200 with an empty `content` array.
+- `passwordHash` is never returned and never sortable.
 
 ## Example
 
 ### Request
 ```bash
-curl -X GET "http://localhost:8080/api/admin/users?page=0&size=20&status=activated&role=USER&sort=createdAt,desc" \
+curl -X GET "http://localhost:8080/api/admin/users?page=0&size=20&status=activated&role=USER&emailVerified=true&keyword=jane&sort=createdAt,desc" \
   -H "Authorization: Bearer <admin_access_token>"
 ```
 

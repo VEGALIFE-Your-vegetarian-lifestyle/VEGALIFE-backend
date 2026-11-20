@@ -41,6 +41,9 @@ public class PostListRequest {
 
   private UUID categoryId;
 
+  /** Case-insensitive substring matched against {@code title} or {@code content}. */
+  private String keyword;
+
   @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
   private Instant createdFrom;
 
