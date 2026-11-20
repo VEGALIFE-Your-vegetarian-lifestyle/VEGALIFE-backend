@@ -30,6 +30,24 @@ public interface RecipeRepository
   /** Recipes currently attached to a post, read from the owning side ({@code Recipe.posts}). */
   List<Recipe> findByPosts_IdAndDeletedAtIsNull(UUID postId);
 
+  /**
+   * The (post, recipe) pairs joining a page of posts to their attached, non-deleted recipes — one
+   * query for the whole page instead of one per post. Read from the owning side ({@code
+   * Recipe.posts}), the same association {@link #findByPosts_IdAndDeletedAtIsNull} uses.
+   */
+  @Query(
+      "select p.id as postId, r.id as recipeId from Recipe r join r.posts p"
+          + " where p.id in :postIds and r.deletedAt is null")
+  List<PostRecipeId> findRecipeIdsByPostIds(@Param("postIds") Collection<UUID> postIds);
+
+  /** One row of {@link #findRecipeIdsByPostIds}: which recipe is attached to which post. */
+  interface PostRecipeId {
+
+    UUID getPostId();
+
+    UUID getRecipeId();
+  }
+
   Optional<Recipe> findByIdAndDeletedAtIsNull(UUID id);
 
   /** Admin dashboard (issue #12): total non-deleted recipes. */

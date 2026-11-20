@@ -13,22 +13,28 @@ import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
+import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.post.PostSpecifications;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -60,6 +66,7 @@ public class AdminPostService {
   private final DishRepository dishRepository;
   private final IngredientRepository ingredientRepository;
   private final DishIngredientService dishIngredientService;
+  private final UserProfileRepository userProfileRepository;
 
   @Transactional(readOnly = true)
   public PageResponse<AdminPostListResponse> listPosts(PostListRequest request) {
@@ -86,8 +93,81 @@ public class AdminPostService {
         page.getSize(),
         page.getTotalElements());
 
-    Page<AdminPostListResponse> mapped = page.map(adminPostMapper::toResponse);
-    return PageResponse.from(mapped);
+    return PageResponse.<AdminPostListResponse>builder()
+        .content(enrich(page.getContent()))
+        .page(page.getNumber())
+        .size(page.getSize())
+        .totalElements(page.getTotalElements())
+        .totalPages(page.getTotalPages())
+        .first(page.isFirst())
+        .last(page.isLast())
+        .build();
+  }
+
+  /**
+   * Maps one page of posts, then fills the two fields the mapper cannot reach.
+   *
+   * <p>Both are resolved for the whole page rather than per row: the avatar lives on {@code
+   * UserProfile} and the attached recipes are read from the owning {@code Recipe.posts} side, so
+   * neither is a property of the {@code Post} being mapped.
+   *
+   * <p>The result is a strict superset of {@code PostListResponse} — the author's avatar, the
+   * editor document and the attached recipe ids are all present, on top of the moderation fields
+   * only an admin may see. The contract is asserted by an integration test that compares the two
+   * live payloads, so a future member field cannot go missing here unnoticed.
+   */
+  private List<AdminPostListResponse> enrich(List<Post> posts) {
+    List<AdminPostListResponse> responses =
+        posts.stream().map(adminPostMapper::toResponse).collect(Collectors.toList());
+    if (responses.isEmpty()) {
+      return responses;
+    }
+
+    applyAuthorAvatars(responses);
+    applyRecipeIds(responses);
+    return responses;
+  }
+
+  /**
+   * Resolves every author avatar in the page with a single query. A member with no profile row yet
+   * (BR-PROFILE-003) has no avatar, which is null rather than an error.
+   */
+  private void applyAuthorAvatars(List<AdminPostListResponse> responses) {
+    Set<UUID> authorIds =
+        responses.stream()
+            .map(AdminPostListResponse::getUserId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+    if (authorIds.isEmpty()) {
+      return;
+    }
+    // Built by hand rather than Collectors.toMap: avatars are nullable and toMap rejects nulls.
+    Map<UUID, String> avatars = new HashMap<>();
+    for (UserProfile profile : userProfileRepository.findByUserIdIn(authorIds)) {
+      avatars.put(profile.getUser().getId(), profile.getAvatarUrl());
+    }
+    responses.forEach(response -> response.setAvatarUrl(avatars.get(response.getUserId())));
+  }
+
+  /** Groups the page's (post, recipe) pairs by post so each item lists its own attached recipes. */
+  private void applyRecipeIds(List<AdminPostListResponse> responses) {
+    Set<UUID> postIds =
+        responses.stream()
+            .map(AdminPostListResponse::getId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+    if (postIds.isEmpty()) {
+      return;
+    }
+    Map<UUID, Set<UUID>> recipeIdsByPost = new HashMap<>();
+    for (RecipeRepository.PostRecipeId row : recipeRepository.findRecipeIdsByPostIds(postIds)) {
+      recipeIdsByPost
+          .computeIfAbsent(row.getPostId(), key -> new HashSet<>())
+          .add(row.getRecipeId());
+    }
+    responses.forEach(
+        response ->
+            response.setRecipeIds(recipeIdsByPost.getOrDefault(response.getId(), new HashSet<>())));
   }
 
   /**
