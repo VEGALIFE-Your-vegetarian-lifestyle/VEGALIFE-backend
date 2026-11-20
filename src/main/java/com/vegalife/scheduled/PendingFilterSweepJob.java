@@ -6,6 +6,7 @@ import com.vegalife.enums.post.PostStatus;
 import com.vegalife.model.post.Post;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.filter.FilterProperties;
 import com.vegalife.service.filter.PostFlagDetail;
 import java.time.Instant;
@@ -39,15 +40,18 @@ public class PendingFilterSweepJob {
   private final OutboundMessageRepository outboundMessageRepository;
   private final FilterProperties filterProperties;
   private final boolean schedulingEnabled;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   public PendingFilterSweepJob(
       PostRepository postRepository,
       OutboundMessageRepository outboundMessageRepository,
       FilterProperties filterProperties,
+      AdminDashboardCacheInvalidator dashboardCache,
       @Value("${app.scheduling.enabled:true}") boolean schedulingEnabled) {
     this.postRepository = postRepository;
     this.outboundMessageRepository = outboundMessageRepository;
     this.filterProperties = filterProperties;
+    this.dashboardCache = dashboardCache;
     this.schedulingEnabled = schedulingEnabled;
   }
 
@@ -85,6 +89,9 @@ public class PendingFilterSweepJob {
           "Pending filter sweep settled {} post(s) as FILTER_SKIPPED with queue rows older than {}",
           stalePosts.size(),
           cutoff);
+      // Only when something actually moved: this runs hourly, and evicting on every empty sweep
+      // would keep a 26-query summary permanently cold for no change at all.
+      dashboardCache.summary();
     }
   }
 

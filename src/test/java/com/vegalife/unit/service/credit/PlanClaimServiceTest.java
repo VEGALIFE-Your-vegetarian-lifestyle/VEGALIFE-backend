@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.credit.PlanClaimService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import java.util.UUID;
@@ -20,6 +21,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PlanClaimServiceTest {
 
   @Mock private AiSubscriptionRepository subscriptionRepository;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private PlanClaimService planClaimService;
 

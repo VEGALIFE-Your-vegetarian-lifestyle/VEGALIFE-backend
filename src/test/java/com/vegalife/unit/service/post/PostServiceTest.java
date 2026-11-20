@@ -39,6 +39,7 @@ import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.PlatformSettingsProvider;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
 import com.vegalife.service.filter.FilterOutcome;
 import com.vegalife.service.filter.FilterVerdict;
@@ -92,6 +93,8 @@ class PostServiceTest {
   @Mock private PostEmbeddingRepository postEmbeddingRepository;
 
   @Mock private ActiveEmbeddingModel activeEmbeddingModel;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private PostService postService;
 

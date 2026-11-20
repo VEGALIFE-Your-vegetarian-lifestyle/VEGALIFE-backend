@@ -27,6 +27,7 @@ import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.service.admin.AdminRecipeService;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -63,6 +64,8 @@ class AdminRecipeServiceTest {
   @Mock private RecipeIngredientRepository recipeIngredientRepository;
 
   @Mock private DishIngredientService dishIngredientService;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private AdminRecipeService adminRecipeService;
 

@@ -107,7 +107,12 @@ No request body.
 - No value on this endpoint is range-limited. Lifetime totals never reset; queue values are the
   current snapshot. Use the charts endpoint for anything time-based.
 - Results are cached in-process (Caffeine) for 5 minutes under a single unkeyed entry, so repeated
-  loads within the window skip the underlying count queries.
+  loads within the window skip the underlying count queries. The entry is also cleared whenever a
+  write changes a value it contains — approving a post, suspending a user, settling a payment, and
+  the other paths listed in `docs/feats/admin-dashboard-cache-invalidation.md` — so the TTL is an
+  upper bound on staleness for the metrics no write can move (queue age, stale pending payments),
+  not the normal path for the rest. `generatedAt` always reports when the payload was built, so a
+  cache hit honestly reports an older timestamp.
 - `revenueTotal` counts only `succeeded` rows. It is deliberately not described as net revenue,
   because no refund path writes a `refunded` status.
 - `activatedEver` uses `ai_usage`, not `user.status`: a suspension overwrites the latter, so it can

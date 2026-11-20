@@ -33,6 +33,7 @@ import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
 import com.vegalife.service.filter.ContentFilterOutboundAdapter;
 import com.vegalife.service.filter.ContentFilterPayload;
@@ -88,6 +89,7 @@ class ContentFilterOutboundAdapterTest {
   @Mock private PostEmbeddingRepository postEmbeddingRepository;
   @Mock private DuplicateDetector duplicateDetector;
   @Mock private ActiveEmbeddingModel activeEmbeddingModel;
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   private ContentFilterOutboundAdapter adapter;
   private final ObjectMapper objectMapper = new ObjectMapper();
@@ -105,7 +107,8 @@ class ContentFilterOutboundAdapterTest {
             duplicateDetector,
             activeEmbeddingModel,
             objectMapper,
-            filterProperties);
+            filterProperties,
+            dashboardCache);
     noRecipeAttached();
   }
 

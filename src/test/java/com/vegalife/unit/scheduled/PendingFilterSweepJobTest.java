@@ -16,6 +16,7 @@ import com.vegalife.model.post.Post;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.scheduled.PendingFilterSweepJob;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.filter.FilterProperties;
 import com.vegalife.service.filter.PostFlagDetail;
 import java.time.Instant;
@@ -34,6 +35,8 @@ class PendingFilterSweepJobTest {
   @Mock private PostRepository postRepository;
 
   @Mock private OutboundMessageRepository outboundMessageRepository;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   private FilterProperties properties;
 
@@ -139,6 +142,6 @@ class PendingFilterSweepJobTest {
 
   private PendingFilterSweepJob createJob(boolean schedulingEnabled) {
     return new PendingFilterSweepJob(
-        postRepository, outboundMessageRepository, properties, schedulingEnabled);
+        postRepository, outboundMessageRepository, properties, dashboardCache, schedulingEnabled);
   }
 }

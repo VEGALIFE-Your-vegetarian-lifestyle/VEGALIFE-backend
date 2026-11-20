@@ -20,6 +20,7 @@ import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.email.EmailPayload;
 import com.vegalife.service.payment.PaymentGateway;
 import com.vegalife.service.payment.PaymentWebhookService;
@@ -52,6 +53,8 @@ class PaymentWebhookServiceTest {
   @Mock private OutboundMessageRepository outboundMessageRepository;
 
   @Spy private ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private PaymentWebhookService paymentWebhookService;
 

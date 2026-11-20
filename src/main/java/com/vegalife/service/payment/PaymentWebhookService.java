@@ -15,6 +15,7 @@ import com.vegalife.repository.subscription.AiPlanRepository;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.email.EmailPayload;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -58,6 +59,7 @@ public class PaymentWebhookService {
   private final UserRepository userRepository;
   private final OutboundMessageRepository outboundMessageRepository;
   private final ObjectMapper objectMapper;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   /**
    * Processes one IPN notification. Handled outcomes always acknowledge; only exceptions escape
@@ -121,6 +123,9 @@ public class PaymentWebhookService {
     }
     if (paid) {
       fulfil(ledger, params);
+      // revenueTotal, transactionsTotal, payingUsersTotal, freeGrantsTotal and the revenue-by-plan
+      // series all move when money settles. fulfil() is private, so the eviction belongs here.
+      dashboardCache.all();
       return ack(RSP_SUCCESS, "Confirm Success");
     }
     if (STATUS_PROCESSING.equals(transactionStatus)) {
@@ -131,6 +136,8 @@ public class PaymentWebhookService {
       return ack(RSP_SUCCESS, "Confirm Success");
     }
     recordFailure(ledger, params, responseCode, transactionStatus);
+    // A pending ledger turning failed can still change pendingStaleCount.
+    dashboardCache.summary();
     return ack(RSP_SUCCESS, "Confirm Success");
   }
 

@@ -14,6 +14,7 @@ import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ForbiddenException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -37,6 +38,7 @@ public class CommentService {
   private final PostRepository postRepository;
   private final UserRepository userRepository;
   private final UserProfileRepository userProfileRepository;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   @Transactional
   public CommentResponse createComment(UUID userId, UUID postId, CommentCreateRequest request) {
@@ -105,6 +107,8 @@ public class CommentService {
 
     comment.setDeletedAt(Instant.now());
     commentRepository.saveAndFlush(comment);
+    // totalComments fell, and the comment left the reported set if it had been reported.
+    dashboardCache.summary();
   }
 
   /**
@@ -122,6 +126,10 @@ public class CommentService {
 
     comment.setReportCount(comment.getReportCount() + 1);
     commentRepository.save(comment);
+    // Only the 0 -> 1 crossing changes reportedComments, but reading the previous count back to
+    // decide would have to happen before the increment; evicting unconditionally is the same cost
+    // and cannot be got wrong.
+    dashboardCache.summary();
   }
 
   /**

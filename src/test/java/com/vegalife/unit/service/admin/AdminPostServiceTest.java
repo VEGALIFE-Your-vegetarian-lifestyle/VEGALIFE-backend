@@ -33,6 +33,7 @@ import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.service.admin.AdminPostService;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.filter.FilterOutcome;
 import com.vegalife.service.filter.FilterVerdict;
 import com.vegalife.service.filter.PostFlagDetail;
@@ -76,6 +77,8 @@ class AdminPostServiceTest {
   @Mock private DishIngredientService dishIngredientService;
 
   @Mock private UserProfileRepository userProfileRepository;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private AdminPostService adminPostService;
 

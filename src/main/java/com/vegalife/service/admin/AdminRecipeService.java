@@ -15,6 +15,7 @@ import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.recipe.RecipeSpecifications;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.service.recipe.RecipeNutritionCalculator;
 import com.vegalife.shared.dto.PageResponse;
@@ -61,6 +62,7 @@ public class AdminRecipeService {
   private final RecipeIngredientRepository recipeIngredientRepository;
   private final DishIngredientService dishIngredientService;
   private final AdminRecipeMapper adminRecipeMapper;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   /**
    * Lists recipes, optionally narrowed by author, category, date range, review state, deletion
@@ -169,6 +171,8 @@ public class AdminRecipeService {
     Recipe recipe = findActive(recipeId);
     recipe.setDeletedAt(Instant.now());
     recipeRepository.save(recipe);
+    // totalRecipes fell; a PENDING recipe also left the moderation queue.
+    dashboardCache.summary();
 
     log.info("Admin {} soft-deleted recipe {}", adminId, recipe.getId());
   }
@@ -201,6 +205,9 @@ public class AdminRecipeService {
 
     approvePendingNamesOf(saved);
     dishIngredientService.seedFromApprovedRecipe(saved);
+
+    // pendingRecipes fell. Placed after the component work so the eviction covers the whole write.
+    dashboardCache.summary();
 
     return toResponse(saved);
   }
@@ -261,6 +268,8 @@ public class AdminRecipeService {
     recipe.setModerationStatus(ModerationStatus.REJECTED);
     recipe.setRejectionReason(reason);
     Recipe saved = recipeRepository.saveAndFlush(recipe);
+    // pendingRecipes fell: the recipe left the queue.
+    dashboardCache.summary();
     log.info("Admin {} rejected recipe {}", adminId, saved.getId());
 
     return toResponse(saved);
