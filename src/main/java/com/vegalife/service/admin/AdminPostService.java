@@ -220,8 +220,19 @@ public class AdminPostService {
 
     return AdminPostDetailResponse.builder()
         .id(post.getId())
+        .userId(post.getUser().getId())
+        .displayName(post.getUser().getDisplayName())
+        .avatarUrl(avatarOf(post.getUser().getId()))
         .title(post.getTitle())
         .content(post.getContent())
+        .rawContent(post.getRawContent())
+        .featuredImageUrl(post.getFeaturedImageUrl())
+        // Same extraction as the list item, reused so the two cannot drift apart.
+        .categoryIds(adminPostMapper.categoryIds(post.getCategories()))
+        .mediaIds(adminPostMapper.mediaIds(post.getMedia()))
+        // Read from the owning Recipe.posts side, like the list route: the same set of recipes,
+        // reported as ids here and as reviewable components in `recipes`.
+        .recipeIds(components.recipes().stream().map(Recipe::getId).collect(Collectors.toSet()))
         .status(post.getStatus().name())
         .flag(post.getFlag() == null ? null : post.getFlag().name())
         .flagDetail(PostFlagDetailResponse.from(post.getFlagDetail()))
@@ -229,10 +240,19 @@ public class AdminPostService {
         .contentScore(post.getContentScore())
         .recipes(recipeSummaries)
         .names(nameSummaries)
-        .userId(post.getUser().getId())
-        .displayName(post.getUser().getDisplayName())
         .email(post.getUser().getEmail())
+        .viewCount(post.getViewCount())
+        .publishedAt(post.getPublishedAt())
+        .createdAt(post.getCreatedAt())
         .build();
+  }
+
+  /** The author's avatar, or null when they have no profile row yet (BR-PROFILE-003). */
+  private String avatarOf(UUID userId) {
+    return userProfileRepository.findByUserIdIn(Set.of(userId)).stream()
+        .findFirst()
+        .map(UserProfile::getAvatarUrl)
+        .orElse(null);
   }
 
   /**

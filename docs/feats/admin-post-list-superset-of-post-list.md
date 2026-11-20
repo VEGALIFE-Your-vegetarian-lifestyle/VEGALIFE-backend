@@ -10,7 +10,7 @@ Backend team.
 
 ## Summary
 
-`GET /api/admin/posts` currently returns 15 of the 16 fields a member-facing post listing carries. This feature makes the admin list item a strict superset of `PostListResponse` — every member field present, plus the moderation fields only an admin may see — so one client-side post shape works for both surfaces and a reviewer never has to fetch the member view to see what a member sees.
+`GET /api/admin/posts` currently returns 13 of the 16 fields a member-facing post listing carries. This feature makes the admin list item a strict superset of `PostListResponse` — every member field present, plus the moderation fields only an admin may see — so one client-side post shape works for both surfaces and a reviewer never has to fetch the member view to see what a member sees.
 
 ## Problem / motivation
 
@@ -38,8 +38,20 @@ The practical cost: the two payloads drift silently. Nothing in the build fails 
 - Changing `GET /api/posts`, `GET /api/posts/{postId}`, `GET /api/posts/me`, `GET /api/users/{userId}/posts`, or the saved-items post shape. Only the admin list changes.
 - Making the admin list *equal* to the member list. The admin fields stay; this is superset, not parity.
 - Populating `recipeIds` on the member feed or the member list routes. Those stay empty there by design (`PostService.readPublishedPostsByIds`, `PostService.listFeed`), and this feature does not touch them.
-- Making `AdminPostDetailResponse` (`GET /api/admin/posts/{postId}`) a superset of the list item. Its Javadoc claims that today and is wrong; correcting it is a documentation fix noted under Risks, not part of the payload change.
 - Adding a `keyword` filter to `GET /api/admin/posts`, or fixing its fan-out query cost. Both are separate concerns.
+
+## Follow-on: the admin detail view becomes a superset too
+
+The list item is now a superset of the member item, but `GET /api/admin/posts/{postId}` was still a *narrower* shape than the list item: `AdminPostDetailResponse` returned 10 of the list item's 19 fields, dropping `avatarUrl`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `viewCount`, `publishedAt`, and `createdAt`, and adding `contentScore`, `recipes[]`, and `names[]`.
+
+That is a substantive moderation gap, not untidiness. Under ADR-029 / BR-POST-015 a post carrying media waits at `pending` for an admin to review exactly that media — yet the screen an admin opens to decide returned neither `featuredImageUrl` nor `mediaIds`. A reviewer had to fall back to the list to see what they were approving. `rawContent` was missing for the same reason, so a rich-text post could not be reviewed in full from the detail view.
+
+The detail response therefore gains those nine fields. It remains a *different* shape from the list in one respect that is deliberate: `recipes` is `List<ComponentSummary>` (`{id, type, name, moderationStatus}`) because a reviewer needs each recipe's moderation state, while the list's `recipeIds` is just `Set<UUID>`. Both stay; they answer different questions.
+
+- [ ] FR-009: `AdminPostDetailResponse` declares `avatarUrl`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `viewCount`, `publishedAt`, and `createdAt`.
+- [ ] FR-010: Every field name on `AdminPostListResponse` also exists on `AdminPostDetailResponse`.
+- [ ] FR-011: `recipeIds` on the detail view is derived from the components the detail already loads, so it adds no query; `avatarUrl` costs one lookup.
+- [ ] FR-012: An integration test asserts the detail payload's field-name set is a superset of the admin list item's, computed from live responses.
 
 ## Requirements
 
@@ -91,6 +103,6 @@ The admin DTO stays a flat, hand-declared class — the codebase has no DTO inhe
 ## Risks / open questions
 
 - **Duplicate field declarations can still drift.** The user-confirmed trade-off is a flat duplicate plus a live-payload test (FR-006) rather than DTO inheritance. A field added to `PostListResponse` on a branch where the admin test is not run locally will be caught in CI, not at compile time. Accepted deliberately to keep DTO style uniform.
-- **`AdminPostDetailResponse`'s Javadoc is already inaccurate** — it says it "carries everything `AdminPostListResponse` does, plus …" while dropping `featuredImageUrl`, `categoryIds`, `mediaIds`, `viewCount`, `publishedAt`, and `createdAt`. That wording is corrected as part of the documentation update here, but making the detail payload an actual superset is out of scope.
 - **`rawContent` on a list page enlarges the response.** It is a full editor document per row. The member feed already accepts that cost, and `size` is capped at 100, so this is accepted; if payload size becomes a problem the fix belongs on both surfaces at once.
 - **Sorting/filtering are unchanged.** The recipe-id lookup joins the post ids already fetched, so it cannot widen or reorder the result set.
+- **The three shapes now nest rather than overlap arbitrarily**: detail ⊇ list ⊇ member item. Keeping that true is what the two superset tests buy, and it is the reason a new member field must be added to both admin DTOs.

@@ -651,6 +651,8 @@ class AdminPostServiceTest {
     assertThat(detail.getFlagDetail().getThreshold()).isEqualTo(0.7);
     assertThat(detail.getRecipes()).hasSize(1);
     assertThat(detail.getRecipes().get(0).getType()).isEqualTo("RECIPE");
+    // recipeIds is derived from the components already loaded, not from a second query.
+    assertThat(detail.getRecipeIds()).containsExactly(recipeId);
     assertThat(detail.getNames())
         .extracting(AdminPostDetailResponse.ComponentSummary::getType)
         .containsExactly("DISH", "INGREDIENT");

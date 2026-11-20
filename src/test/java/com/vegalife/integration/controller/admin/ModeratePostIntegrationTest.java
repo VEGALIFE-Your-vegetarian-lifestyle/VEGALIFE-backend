@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
@@ -44,6 +46,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -292,6 +295,74 @@ class ModeratePostIntegrationTest {
         .perform(
             get("/api/admin/posts/" + post.getId()).header("Authorization", "Bearer " + userToken))
         .andExpect(status().isForbidden());
+  }
+
+  /**
+   * The decision screen must carry everything the queue item carries, or an admin approving a
+   * media-bearing post cannot see the media they are approving (ADR-029). Compared from the two
+   * live payloads so a field added to the list DTO and forgotten here fails this test.
+   */
+  @Test
+  void getPostDetail_itemFields_areASupersetOfTheAdminListItemFields() throws Exception {
+    Post post =
+        createPost(
+            member, PostStatus.published, PostFlag.FILTER_PASSED, new HashSet<>(Set.of(category)));
+
+    JsonNode listItem =
+        read(get("/api/admin/posts").header("Authorization", "Bearer " + adminToken))
+            .path("data")
+            .path("content")
+            .get(0);
+    JsonNode detail =
+        read(get("/api/admin/posts/" + post.getId())
+                .header("Authorization", "Bearer " + adminToken))
+            .path("data");
+
+    Set<String> listFields = fieldNames(listItem);
+    Set<String> detailFields = fieldNames(detail);
+
+    assertThat(detailFields).containsAll(listFields);
+  }
+
+  @Test
+  void getPostDetail_carriesMediaFieldsAndMemberPostShape() throws Exception {
+    Post post =
+        createPost(
+            member, PostStatus.pending, PostFlag.FILTER_PASSED, new HashSet<>(Set.of(category)));
+    post.setFeaturedImageUrl("https://cdn.example.com/featured.jpg");
+    post.setViewCount(9);
+    postRepository.saveAndFlush(post);
+
+    mockMvc
+        .perform(
+            get("/api/admin/posts/" + post.getId()).header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        // The two fields the media review decision actually depends on (ADR-029).
+        .andExpect(
+            jsonPath("$.data.featuredImageUrl").value("https://cdn.example.com/featured.jpg"))
+        .andExpect(jsonPath("$.data.mediaIds").isArray())
+        .andExpect(jsonPath("$.data.categoryIds[0]").value(category.getId().toString()))
+        .andExpect(jsonPath("$.data.viewCount").value(9))
+        .andExpect(jsonPath("$.data.rawContent").exists())
+        .andExpect(jsonPath("$.data.recipeIds").isArray())
+        .andExpect(jsonPath("$.data.createdAt").exists());
+  }
+
+  private JsonNode read(MockHttpServletRequestBuilder request) throws Exception {
+    String body =
+        mockMvc
+            .perform(request)
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return new ObjectMapper().readTree(body);
+  }
+
+  private static Set<String> fieldNames(JsonNode node) {
+    Set<String> names = new HashSet<>();
+    node.fieldNames().forEachRemaining(names::add);
+    return names;
   }
 
   @Test
