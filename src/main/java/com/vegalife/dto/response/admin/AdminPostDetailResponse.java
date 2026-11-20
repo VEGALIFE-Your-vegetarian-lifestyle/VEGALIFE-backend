@@ -11,10 +11,15 @@ import lombok.NoArgsConstructor;
 /**
  * Admin-only view of a post for moderation (ADR-016).
  *
- * <p>Carries everything {@link AdminPostListResponse} does, plus the evidence a reviewer needs to
- * decide: the two relevance scores and the state of every dish and ingredient name the post
- * references. None of it is exposed to members — a score is not a verdict, and showing a creator
- * the number would only invite gaming it.
+ * <p>Carries the moderation evidence a reviewer needs to decide: the post's content score and the
+ * state of every dish and ingredient name it references. None of it is exposed to members — a score
+ * is not a verdict, and showing a creator the number would only invite gaming it.
+ *
+ * <p>This is not a superset of {@link AdminPostListResponse}: it deliberately omits {@code
+ * featuredImageUrl}, {@code categoryIds}, {@code mediaIds}, {@code recipeIds}, {@code avatarUrl},
+ * {@code rawContent}, {@code viewCount}, {@code publishedAt}, and {@code createdAt}, all of which
+ * the list endpoint returns. The list item is the only place that carries the full member post
+ * shape.
  */
 @Data
 @Builder
