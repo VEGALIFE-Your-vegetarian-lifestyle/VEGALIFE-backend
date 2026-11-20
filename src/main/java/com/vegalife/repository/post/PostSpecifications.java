@@ -4,6 +4,7 @@ import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
+import com.vegalife.repository.LikePatterns;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
@@ -12,14 +13,10 @@ import jakarta.persistence.criteria.Root;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import org.springframework.data.jpa.domain.Specification;
 
 public final class PostSpecifications {
-
-  /** Escape character for user-supplied {@code LIKE} patterns. */
-  private static final char LIKE_ESCAPE = '\\';
 
   private PostSpecifications() {}
 
@@ -36,6 +33,24 @@ public final class PostSpecifications {
       Instant createdFrom,
       Instant createdTo) {
     return filtering(status, flag, userId, categoryId, createdFrom, createdTo, null);
+  }
+
+  /**
+   * The admin filter set: every non-deleted post, optionally narrowed by status, flag, author,
+   * category, createdAt range and keyword.
+   *
+   * <p>Delegates to {@link #filtering} rather than repeating the predicate list, so keyword search
+   * means exactly the same thing here as on the member feed.
+   */
+  public static Specification<Post> allWithFilters(
+      PostStatus status,
+      PostFlag flag,
+      UUID userId,
+      UUID categoryId,
+      Instant createdFrom,
+      Instant createdTo,
+      String keyword) {
+    return filtering(status, flag, userId, categoryId, createdFrom, createdTo, keyword);
   }
 
   /**
@@ -99,20 +114,9 @@ public final class PostSpecifications {
    * and {@code \} are treated literally.
    */
   private static Predicate keywordMatches(Root<Post> root, CriteriaBuilder cb, String keyword) {
-    String pattern = likePattern(keyword);
+    String pattern = LikePatterns.contains(keyword);
     return cb.or(
-        cb.like(cb.lower(root.get("title")), pattern, LIKE_ESCAPE),
-        cb.like(cb.lower(root.get("content")), pattern, LIKE_ESCAPE));
-  }
-
-  private static String likePattern(String keyword) {
-    String escaped =
-        keyword
-            .trim()
-            .toLowerCase(Locale.ROOT)
-            .replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_");
-    return "%" + escaped + "%";
+        cb.like(cb.lower(root.get("title")), pattern, LikePatterns.ESCAPE),
+        cb.like(cb.lower(root.get("content")), pattern, LikePatterns.ESCAPE));
   }
 }

@@ -63,9 +63,10 @@ public class AdminRecipeService {
   private final AdminRecipeMapper adminRecipeMapper;
 
   /**
-   * Lists recipes, optionally narrowed by author, category, date range and review state. The review
-   * state filter is what makes the queue reachable: {@code moderationStatus=PENDING} lists exactly
-   * the recipes waiting for a decision.
+   * Lists recipes, optionally narrowed by author, category, date range, review state, deletion
+   * state and the catalogue's dish, difficulty, total-time and keyword filters. The review state
+   * filter is what makes the queue reachable: {@code moderationStatus=PENDING} lists exactly the
+   * recipes waiting for a decision.
    */
   @Transactional(readOnly = true)
   public PageResponse<AdminRecipeListResponse> listRecipes(RecipeListRequest request) {
@@ -80,12 +81,23 @@ public class AdminRecipeService {
 
     ModerationStatus moderationStatus =
         AdminComponentQuery.parseStatus(request.getModerationStatus());
+    Boolean deleted = parseDeletionStatus(request.getStatus());
+    Difficulty difficulty = parseDifficultyFilter(request.getDifficulty());
 
     Pageable pageable =
         PageRequest.of(request.getPage(), request.getSize(), parseSort(request.getSort()));
     Specification<Recipe> spec =
         RecipeSpecifications.allWithFilters(
-            userId, categoryId, createdFrom, createdTo, moderationStatus);
+            userId,
+            categoryId,
+            createdFrom,
+            createdTo,
+            moderationStatus,
+            deleted,
+            request.getDishId(),
+            difficulty,
+            request.getMaxTotalTimeMinutes(),
+            request.getKeyword());
     Page<Recipe> page = recipeRepository.findAll(spec, pageable);
 
     log.debug(
@@ -319,12 +331,38 @@ public class AdminRecipeService {
     return builder.build();
   }
 
+  /**
+   * Maps the deletion {@code status} filter onto {@code deletedAt}. {@code null} keeps both active
+   * and soft-deleted recipes, which is what the list did before the filter existed.
+   */
+  private Boolean parseDeletionStatus(String status) {
+    if (status == null || status.isBlank()) {
+      return null;
+    }
+    return switch (status.trim().toUpperCase(Locale.ROOT)) {
+      case "ACTIVE" -> Boolean.FALSE;
+      case "DELETED" -> Boolean.TRUE;
+      default -> throw new ValidationException("Status must be ACTIVE or DELETED");
+    };
+  }
+
   private Difficulty parseDifficulty(String difficulty) {
     try {
       return Difficulty.valueOf(difficulty.trim().toUpperCase(Locale.ROOT));
     } catch (IllegalArgumentException ex) {
       throw new ValidationException("Difficulty must be EASY, MEDIUM, or HARD");
     }
+  }
+
+  /**
+   * The list filter's difficulty: absent means "no difficulty filter", which is different from the
+   * update path, where an absent value means "leave it alone" and a blank one is a mistake.
+   */
+  private Difficulty parseDifficultyFilter(String difficulty) {
+    if (difficulty == null || difficulty.isBlank()) {
+      return null;
+    }
+    return parseDifficulty(difficulty);
   }
 
   private Sort parseSort(String sort) {

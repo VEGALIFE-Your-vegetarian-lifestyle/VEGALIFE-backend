@@ -43,6 +43,26 @@ public class RecipeListRequest {
    */
   private String moderationStatus;
 
+  /**
+   * {@code ACTIVE} or {@code DELETED}; blank or absent means both. Distinct from {@link
+   * #moderationStatus}: this is about soft-deletion, not review. The list returns soft-deleted rows
+   * and reports each one's state in its {@code status} field, so this is the filter that makes them
+   * reachable on their own.
+   */
+  private String status;
+
+  private UUID dishId;
+
+  /** {@code EASY}, {@code MEDIUM} or {@code HARD}; blank or absent means every difficulty. */
+  private String difficulty;
+
+  /** Keeps recipes whose prep plus cook time is at most this many minutes. */
+  @Min(value = 0, message = "maxTotalTimeMinutes must be >= 0")
+  private Integer maxTotalTimeMinutes;
+
+  /** Case-insensitive substring over the recipe text, its dish name, or any ingredient name. */
+  private String keyword;
+
   public int getPage() {
     return page == null ? 0 : page;
   }

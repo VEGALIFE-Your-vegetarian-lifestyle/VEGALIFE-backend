@@ -7,6 +7,7 @@ import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
+import com.vegalife.repository.LikePatterns;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Join;
@@ -17,14 +18,10 @@ import jakarta.persistence.criteria.Subquery;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import org.springframework.data.jpa.domain.Specification;
 
 public final class RecipeSpecifications {
-
-  /** Escape character for user-supplied {@code LIKE} patterns. */
-  private static final char LIKE_ESCAPE = '\\';
 
   private RecipeSpecifications() {}
 
@@ -50,32 +47,44 @@ public final class RecipeSpecifications {
       Instant createdFrom,
       Instant createdTo,
       ModerationStatus moderationStatus) {
-    return (root, query, cb) -> {
-      List<Predicate> predicates = new ArrayList<>();
+    return allWithFilters(
+        userId, categoryId, createdFrom, createdTo, moderationStatus, null, null, null, null, null);
+  }
 
-      if (userId != null) {
-        predicates.add(cb.equal(root.get("user").get("id"), userId));
-      }
-      if (createdFrom != null) {
-        predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), createdFrom));
-      }
-      if (createdTo != null) {
-        predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), createdTo));
-      }
-      if (moderationStatus != null) {
-        predicates.add(cb.equal(root.get("moderationStatus"), moderationStatus));
-      }
-      if (categoryId != null) {
-        Join<Recipe, Post> post = root.join("posts", JoinType.INNER);
-        Join<Post, Category> category = post.join("categories", JoinType.INNER);
-        predicates.add(cb.equal(category.get("id"), categoryId));
-        if (query != null) {
-          query.distinct(true);
-        }
-      }
-
-      return cb.and(predicates.toArray(new Predicate[0]));
-    };
+  /**
+   * The admin filter set: every recipe, including soft-deleted ones, narrowed by any combination of
+   * author, category, createdAt range, review state, deletion state and the catalogue's dish,
+   * difficulty, total-time and keyword filters.
+   *
+   * <p>The keyword, dish, difficulty and total-time predicates are the ones the member catalogue
+   * uses; this method exists so the admin list reuses them rather than re-implementing the matching
+   * rule.
+   *
+   * @param deleted {@code Boolean.FALSE} keeps only active recipes, {@code Boolean.TRUE} only
+   *     soft-deleted ones, {@code null} keeps both
+   */
+  public static Specification<Recipe> allWithFilters(
+      UUID userId,
+      UUID categoryId,
+      Instant createdFrom,
+      Instant createdTo,
+      ModerationStatus moderationStatus,
+      Boolean deleted,
+      UUID dishId,
+      Difficulty difficulty,
+      Integer maxTotalTimeMinutes,
+      String keyword) {
+    return build(
+        userId,
+        categoryId,
+        createdFrom,
+        createdTo,
+        moderationStatus,
+        deleted,
+        dishId,
+        difficulty,
+        maxTotalTimeMinutes,
+        keyword);
   }
 
   /**
@@ -93,12 +102,51 @@ public final class RecipeSpecifications {
       Difficulty difficulty,
       Integer maxTotalTimeMinutes,
       String keyword) {
+    return build(
+        userId,
+        null,
+        null,
+        null,
+        moderationStatus,
+        Boolean.FALSE,
+        dishId,
+        difficulty,
+        maxTotalTimeMinutes,
+        keyword);
+  }
+
+  /**
+   * One predicate list behind every recipe listing, so a filter can never mean two different things
+   * on two routes.
+   */
+  private static Specification<Recipe> build(
+      UUID userId,
+      UUID categoryId,
+      Instant createdFrom,
+      Instant createdTo,
+      ModerationStatus moderationStatus,
+      Boolean deleted,
+      UUID dishId,
+      Difficulty difficulty,
+      Integer maxTotalTimeMinutes,
+      String keyword) {
     return (root, query, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
-      predicates.add(cb.isNull(root.get("deletedAt")));
+
+      if (Boolean.FALSE.equals(deleted)) {
+        predicates.add(cb.isNull(root.get("deletedAt")));
+      } else if (Boolean.TRUE.equals(deleted)) {
+        predicates.add(cb.isNotNull(root.get("deletedAt")));
+      }
 
       if (userId != null) {
         predicates.add(cb.equal(root.get("user").get("id"), userId));
+      }
+      if (createdFrom != null) {
+        predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), createdFrom));
+      }
+      if (createdTo != null) {
+        predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), createdTo));
       }
       if (moderationStatus != null) {
         predicates.add(cb.equal(root.get("moderationStatus"), moderationStatus));
@@ -119,6 +167,14 @@ public final class RecipeSpecifications {
       }
       if (keyword != null && !keyword.isBlank()) {
         predicates.add(keywordMatches(root, query, cb, keyword));
+      }
+      if (categoryId != null) {
+        Join<Recipe, Post> post = root.join("posts", JoinType.INNER);
+        Join<Post, Category> category = post.join("categories", JoinType.INNER);
+        predicates.add(cb.equal(category.get("id"), categoryId));
+        if (query != null) {
+          query.distinct(true);
+        }
       }
 
       return cb.and(predicates.toArray(new Predicate[0]));
@@ -158,11 +214,11 @@ public final class RecipeSpecifications {
 
   /** Case-insensitive whole-phrase match across the recipe's own text fields. */
   private static Predicate textMatches(Root<Recipe> root, CriteriaBuilder cb, String keyword) {
-    String pattern = likePattern(keyword);
+    String pattern = LikePatterns.contains(keyword);
     return cb.or(
-        cb.like(cb.lower(root.get("name")), pattern, LIKE_ESCAPE),
-        cb.like(cb.lower(root.get("description")), pattern, LIKE_ESCAPE),
-        cb.like(cb.lower(root.get("instructions")), pattern, LIKE_ESCAPE));
+        cb.like(cb.lower(root.get("name")), pattern, LikePatterns.ESCAPE),
+        cb.like(cb.lower(root.get("description")), pattern, LikePatterns.ESCAPE),
+        cb.like(cb.lower(root.get("instructions")), pattern, LikePatterns.ESCAPE));
   }
 
   /**
@@ -172,8 +228,8 @@ public final class RecipeSpecifications {
    */
   private static Predicate keywordMatches(
       Root<Recipe> root, CriteriaQuery<?> query, CriteriaBuilder cb, String keyword) {
-    String pattern = likePattern(keyword);
-    Predicate dish = cb.like(cb.lower(root.get("dish").get("name")), pattern, LIKE_ESCAPE);
+    String pattern = LikePatterns.contains(keyword);
+    Predicate dish = cb.like(cb.lower(root.get("dish").get("name")), pattern, LikePatterns.ESCAPE);
 
     Subquery<UUID> ingredientMatch = query.subquery(UUID.class);
     Root<RecipeIngredient> line = ingredientMatch.from(RecipeIngredient.class);
@@ -182,19 +238,8 @@ public final class RecipeSpecifications {
         .select(line.get("recipeId"))
         .where(
             cb.equal(line.get("recipeId"), root.get("id")),
-            cb.like(cb.lower(ingredient.get("name")), pattern, LIKE_ESCAPE));
+            cb.like(cb.lower(ingredient.get("name")), pattern, LikePatterns.ESCAPE));
 
     return cb.or(textMatches(root, cb, keyword), dish, cb.exists(ingredientMatch));
-  }
-
-  private static String likePattern(String keyword) {
-    String escaped =
-        keyword
-            .trim()
-            .toLowerCase(Locale.ROOT)
-            .replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_");
-    return "%" + escaped + "%";
   }
 }

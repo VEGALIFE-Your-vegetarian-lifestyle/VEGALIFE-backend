@@ -33,6 +33,12 @@ public class UserListRequest {
   @Pattern(regexp = "^(ADMIN|USER)$", message = "Role must be ADMIN or USER")
   private String role;
 
+  /** Case-insensitive substring matched against {@code displayName} or {@code email}. */
+  private String keyword;
+
+  /** {@code true} for verified accounts only, {@code false} for unverified only, blank for both. */
+  private Boolean emailVerified;
+
   @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
   private Instant createdFrom;
 

@@ -206,6 +206,76 @@ class PostSpecificationsTest {
     assertThat(result.getTotalElements()).isZero();
   }
 
+  @Test
+  void allWithFilters_byKeyword_matchesTitleCaseInsensitively() {
+    Page<Post> result = findAllByKeyword("ALICE");
+
+    assertThat(result.getContent())
+        .extracting(Post::getTitle)
+        .containsExactlyInAnyOrder("Alice published", "Alice held", "Alice unpublished");
+    assertThat(result.getTotalElements()).isEqualTo(3);
+  }
+
+  @Test
+  void allWithFilters_byKeyword_matchesContent() {
+    Page<Post> result = findAllByKeyword("post content");
+
+    // Every non-deleted post shares the same content; the soft-deleted one stays out.
+    assertThat(result.getContent())
+        .extracting(Post::getTitle)
+        .containsExactlyInAnyOrder(
+            "Alice published", "Alice held", "Alice unpublished", "Bob drafted");
+    assertThat(result.getTotalElements()).isEqualTo(4);
+  }
+
+  @Test
+  void allWithFilters_byKeywordMatchingTitleAndContent_returnsThePostOnce() {
+    Post both = createPost(alice, "Curry night", PostStatus.published, null, null, Set.of(vegan));
+    both.setContent("Curry night, every night");
+    entityManager.flush();
+    entityManager.clear();
+
+    Page<Post> result = findAllByKeyword("curry night");
+
+    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Curry night");
+    assertThat(result.getTotalElements()).isOne();
+  }
+
+  @Test
+  void allWithFilters_byKeywordWithWildcardCharacter_matchesLiterally() {
+    Page<Post> result = findAllByKeyword("%");
+
+    assertThat(result.getContent()).isEmpty();
+    assertThat(result.getTotalElements()).isZero();
+  }
+
+  @Test
+  void allWithFilters_byBlankKeyword_appliesNoKeywordPredicate() {
+    Page<Post> result = findAllByKeyword("   ");
+
+    assertThat(result.getTotalElements()).isEqualTo(4);
+  }
+
+  @Test
+  void allWithFilters_byKeywordAndStatus_combinesBoth() {
+    Specification<Post> spec =
+        PostSpecifications.allWithFilters(
+            PostStatus.published, null, null, null, null, null, "alice");
+    Page<Post> result =
+        postRepository.findAll(
+            spec, PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "createdAt")));
+
+    assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Alice published");
+    assertThat(result.getTotalElements()).isOne();
+  }
+
+  private Page<Post> findAllByKeyword(String keyword) {
+    Specification<Post> spec =
+        PostSpecifications.allWithFilters(null, null, null, null, null, null, keyword);
+    return postRepository.findAll(
+        spec, PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "createdAt")));
+  }
+
   private Page<Post> findAll(
       PostStatus status,
       PostFlag flag,

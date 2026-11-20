@@ -322,6 +322,69 @@ class AdminPostControllerIntegrationTest {
   }
 
   @Test
+  void listPosts_filterByKeyword_returnsOnlyMatchingPosts() throws Exception {
+    createPost(member, "Vegan pho", PostStatus.published, null, null);
+    createPost(author2, "Bean burger", PostStatus.drafted, null, null);
+
+    mockMvc
+        .perform(
+            get("/api/admin/posts")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "PHO")
+                .param("flag", "all"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content.length()").value(1))
+        .andExpect(jsonPath("$.data.content[0].title").value("Vegan pho"));
+  }
+
+  @Test
+  void listPosts_filterByKeywordMatchingContent_returnsThePost() throws Exception {
+    createPost(member, "Unrelated title", PostStatus.published, null, null);
+
+    mockMvc
+        .perform(
+            get("/api/admin/posts")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "unrelated title")
+                .param("flag", "all"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1));
+  }
+
+  @Test
+  void listPosts_filterByKeywordWithWildcard_matchesLiterally() throws Exception {
+    createPost(member, "Vegan pho", PostStatus.published, null, null);
+    createPost(author2, "Bean burger", PostStatus.drafted, null, null);
+
+    mockMvc
+        .perform(
+            get("/api/admin/posts")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "%")
+                .param("flag", "all"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(0))
+        .andExpect(jsonPath("$.data.content.length()").value(0));
+  }
+
+  @Test
+  void listPosts_filterByKeywordMatchingNothing_returns200WithEmptyPage() throws Exception {
+    createPost(member, "Vegan pho", PostStatus.published, null, null);
+
+    mockMvc
+        .perform(
+            get("/api/admin/posts")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "nothing matches this")
+                .param("flag", "all"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(0))
+        .andExpect(jsonPath("$.data.content.length()").value(0));
+  }
+
+  @Test
   void listPosts_filterByCategoryId_returnsEachMatchingPostExactlyOnce() throws Exception {
     Category recipes = categoryRepository.saveAndFlush(Category.builder().name("Recipes").build());
     Category snacks = categoryRepository.saveAndFlush(Category.builder().name("Snacks").build());
