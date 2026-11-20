@@ -43,18 +43,21 @@ No request body
     "content": [
       {
         "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
+        "displayName": "jane",
+        "avatarUrl": "https://cdn.example.com/avatar/jane.jpg",
         "title": "Vegan pho at home",
         "content": "A step-by-step guide to a clear mushroom broth...",
+        "rawContent": { "type": "doc", "content": [] },
         "featuredImageUrl": "https://cdn.example.com/posts/pho.jpg",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "mediaIds": [],
+        "recipeIds": ["3f2a7c11-6b4d-4e29-9a41-0d5c8e77b210"],
         "status": "published",
         "flag": null,
         "viewCount": 42,
         "publishedAt": "2026-09-28T08:15:00Z",
         "createdAt": "2026-09-28T08:00:00Z",
-        "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "displayName": "jane",
         "email": "jane@example.com"
       }
     ],
@@ -74,11 +77,16 @@ No request body
 | message | string | "Posts retrieved successfully" |
 | data.content | array | Post items for this page |
 | data.content[].id | uuid | Post id |
+| data.content[].userId | uuid | Author user id |
+| data.content[].displayName | string | Author's display name |
+| data.content[].avatarUrl | string \| null | Author avatar URL, resolved from the author's profile; null when the author has no profile row yet (BR-PROFILE-003) |
 | data.content[].title | string | Post title |
 | data.content[].content | string | Post body, kept for moderation review (issue #101) |
+| data.content[].rawContent | object \| null | The rich-text editor document as submitted, same value the member post responses return |
 | data.content[].featuredImageUrl | string | Featured image URL, nullable |
 | data.content[].categoryIds | uuid[] | Category ids the post belongs to |
 | data.content[].mediaIds | uuid[] | Media ids attached to the post |
+| data.content[].recipeIds | uuid[] | Ids of the non-deleted recipes attached to the post; empty when none is attached |
 | data.content[].status | string | drafted, processing, pending, published, or unpublished |
 | data.content[].flag | string \| null | The post's last verdict: `FILTER_PASSED` (the filter cleared the text, or approved over a blocker), or `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` (held, or approved/rejected over the blocker). `null` on a draft, on a run still in flight, and on rows published before V58 (ADR-025, ADR-029) |
 | data.content[].flagDetail | object \| null | The evidence behind `flag` as a JSON snapshot (ADR-024, ADR-025): `kind` (always equal to `flag`) plus the fields that verdict owns — `score`/`threshold` for `FILTER_PASSED`, `outcome`/`score`/`threshold` for `FILTER_FAILED`, `postId`/`similarity`/`threshold` for `SIMILAR_CONTENT`, `cause` for `FILTER_SKIPPED`. Absent fields are omitted; null with no verdict |
@@ -86,8 +94,6 @@ No request body
 | data.content[].viewCount | integer | View counter |
 | data.content[].publishedAt | string | ISO-8601 publish timestamp, nullable |
 | data.content[].createdAt | string | ISO-8601 creation timestamp |
-| data.content[].userId | uuid | Author user id |
-| data.content[].displayName | string | Author's display name |
 | data.content[].email | string | Author email |
 | data.page | integer | 0-based page index returned |
 | data.size | integer | Page size used |
@@ -112,6 +118,7 @@ No request body
 - When no `flag` parameter is supplied the list defaults to `flag=all`, so no verdict is silently hidden (issue #5). The review queue is `status=pending`, which lists every post whose verdict is recorded and whose admin decision is still outstanding, regardless of verdict (ADR-029).
 - `flag` is the post's last verdict and survives publication (ADR-025). At `pending` it says why the post is held (`FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`, or `FILTER_PASSED` for a media-bearing post the text filter cleared, BR-POST-015); it is `null` only for a row published before verdicts were stored and later sent back for review. At `processing` it is `null`, because the run is still in flight. At `published` it distinguishes a post the filter cleared (`FILTER_PASSED`) from one an admin approved over a blocker — the only place that distinction is readable.
 - This is the only API surface that exposes `flag`/`flagDetail`; the member-facing post responses do not carry them (ADR-025).
+- The item is a strict superset of the member post item (`PostListResponse`): every field a member-facing listing returns — including `avatarUrl`, `rawContent`, and `recipeIds` — is present here under the same name, plus `flag`, `flagDetail`, and `email`. `avatarUrl` and `recipeIds` are resolved in one batched query each per page, never one per post. An integration test compares the two live payloads, so a field added to `PostListResponse` and not here fails CI.
 
 ## Example
 
@@ -130,11 +137,16 @@ curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&status=pending
     "content": [
       {
         "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
+        "displayName": "jane",
+        "avatarUrl": "https://cdn.example.com/avatar/jane.jpg",
         "title": "Vegan pho at home",
         "content": "A step-by-step guide to a clear mushroom broth...",
+        "rawContent": { "type": "doc", "content": [] },
         "featuredImageUrl": "https://cdn.example.com/posts/pho.jpg",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "mediaIds": [],
+        "recipeIds": [],
         "status": "pending",
         "flag": "SIMILAR_CONTENT",
         "flagDetail": {
@@ -146,8 +158,6 @@ curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&status=pending
         "viewCount": 42,
         "publishedAt": null,
         "createdAt": "2026-09-28T08:00:00Z",
-        "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "displayName": "jane",
         "email": "jane@example.com"
       }
     ],

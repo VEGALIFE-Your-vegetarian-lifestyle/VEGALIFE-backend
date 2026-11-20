@@ -1,7 +1,10 @@
 package com.vegalife.dto.response.admin;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.vegalife.dto.response.post.PostFlagDetailResponse;
+import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,10 +14,18 @@ import lombok.NoArgsConstructor;
 /**
  * Admin-only view of a post for moderation (ADR-016).
  *
- * <p>Carries everything {@link AdminPostListResponse} does, plus the evidence a reviewer needs to
- * decide: the two relevance scores and the state of every dish and ingredient name the post
- * references. None of it is exposed to members — a score is not a verdict, and showing a creator
- * the number would only invite gaming it.
+ * <p>Carries the moderation evidence a reviewer needs to decide: the post's content score and the
+ * state of every dish and ingredient name it references. None of it is exposed to members — a score
+ * is not a verdict, and showing a creator the number would only invite gaming it.
+ *
+ * <p>It is a strict superset of {@link AdminPostListResponse}: every field the list item carries is
+ * present here too. The media fields matter most — under ADR-029 a post with media waits at {@code
+ * pending} for exactly that media to be reviewed, so a decision screen without {@code
+ * featuredImageUrl} and {@code mediaIds} could not support the decision it exists for.
+ *
+ * <p>One field deliberately differs in type rather than being duplicated: {@link #recipes} is a
+ * list of {@link ComponentSummary} because a reviewer needs each recipe's moderation state, while
+ * the list item's {@code recipeIds} is just a set of ids. Both answer different questions.
  */
 @Data
 @Builder
@@ -23,8 +34,28 @@ import lombok.NoArgsConstructor;
 public class AdminPostDetailResponse {
 
   private UUID id;
+
+  private UUID userId;
+  private String displayName;
+
+  /** Author avatar, resolved from {@code UserProfile}; null when the author has no profile row. */
+  private String avatarUrl;
+
   private String title;
   private String content;
+
+  /** The rich-text editor document as submitted, so a rich post can be reviewed in full. */
+  private JsonNode rawContent;
+
+  private String featuredImageUrl;
+  private Set<UUID> categoryIds;
+
+  /** Media attached to the post; this is what an admin reviews on a {@code pending} media post. */
+  private Set<UUID> mediaIds;
+
+  /** Ids of the attached non-deleted recipes. See {@link #recipes} for their review state. */
+  private Set<UUID> recipeIds;
+
   private String status;
 
   /**
@@ -63,8 +94,10 @@ public class AdminPostDetailResponse {
    */
   private List<ComponentSummary> names;
 
-  private UUID userId;
-  private String displayName;
+  private Integer viewCount;
+  private Instant publishedAt;
+  private Instant createdAt;
+
   private String email;
 
   /**

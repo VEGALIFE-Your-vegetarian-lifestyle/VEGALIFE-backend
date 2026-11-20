@@ -8,7 +8,7 @@ including the dishes, ingredients and recipe the post carries.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/admin/posts/{postId}` | Full detail: the content score and referenced component states |
+| `GET /api/admin/posts/{postId}` | Full detail: everything the queue item carries, plus the content score and referenced component states |
 | `POST /api/admin/posts/{postId}/approve` | Publish the post and approve pending components |
 | `POST /api/admin/posts/{postId}/reject` | Unpublish the post and reject pending components |
 
@@ -32,8 +32,16 @@ roles receive `403 Forbidden`.
   "message": "Post retrieved successfully",
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
+    "userId": "9f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
+    "displayName": "jane",
+    "avatarUrl": "https://cdn.example.com/avatars/jane.jpg",
     "title": "Vegan pho at home",
     "content": "…",
+    "rawContent": { "type": "doc", "content": [] },
+    "featuredImageUrl": "https://cdn.example.com/posts/pho.jpg",
+    "categoryIds": ["0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d"],
+    "mediaIds": ["1b2c3d4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e"],
+    "recipeIds": ["0b0f8c1e-1f2a-4c3d-9e8f-7a6b5c4d3e2f"],
     "status": "pending",
     "flag": "FILTER_FAILED",
     "flagDetail": {
@@ -44,9 +52,10 @@ roles receive `403 Forbidden`.
     },
     "rejectionReason": null,
     "contentScore": 0.3120,
-    "userId": "9f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
-    "displayName": "jane",
     "email": "jane@example.com",
+    "viewCount": 42,
+    "publishedAt": null,
+    "createdAt": "2026-11-18T09:12:44Z",
     "recipes": [
       {
         "id": "0b0f8c1e-1f2a-4c3d-9e8f-7a6b5c4d3e2f",
@@ -75,16 +84,38 @@ roles receive `403 Forbidden`.
 
 | Field | Type | Description |
 |---|---|---|
+| id | string (UUID) | Post id. |
+| userId | string (UUID) | Author id. |
+| displayName | string | Author's display name. |
+| avatarUrl | string \| null | Author's avatar from `UserProfile`. `null` when the author has no profile row. |
+| title | string | Post title. |
+| content | string | Plain-text body. |
+| rawContent | object \| null | The rich-text editor document as submitted, so a rich post can be reviewed in full. |
+| featuredImageUrl | string \| null | Featured image. Part of what an admin reviews on a media-bearing post (ADR-029). |
+| categoryIds | array (UUID) | Categories the post is filed under. |
+| mediaIds | array (UUID) | Non-deleted media attached to the post — the media a reviewer decides on (ADR-029). |
+| recipeIds | array (UUID) | Ids of the attached non-deleted recipes. Use `recipes[]` for their review state. |
 | contentScore | number \| null | Relevance score for `title + content`. `null` = never scored. |
 | status | string | `drafted`, `processing`, `pending`, `published` or `unpublished`. A post whose verdict is recorded and whose admin decision is outstanding is `pending`; `processing` means the filter run is still in flight. |
 | flag | string \| null | The post's last verdict: `FILTER_PASSED` (the filter cleared the text), or `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` (held, or approved/rejected over the blocker). `null` on a draft, on a run still in flight, and on rows published before V58 (ADR-025, ADR-029). |
 | flagDetail | object \| null | The evidence behind `flag` as a JSON snapshot (ADR-024, ADR-025): `kind` (always equal to `flag`) plus the fields that verdict owns — `score`/`threshold` for `FILTER_PASSED`, `outcome`/`score`/`threshold` for `FILTER_FAILED`, `postId`/`similarity`/`threshold` for `SIMILAR_CONTENT`, `cause` for `FILTER_SKIPPED`. Absent fields are omitted. |
 | rejectionReason | string \| null | Why an admin rejected this post. Cleared when the post is approved. `null` = no reason recorded. |
-| recipes | array | Recipe bodies the post attaches. Empty when none is attached. |
+| email | string | Author's email. |
+| viewCount | integer | View counter. |
+| publishedAt | string (ISO-8601) \| null | First publication time. `null` while the post has never been published. |
+| createdAt | string (ISO-8601) | Creation time. |
+| recipes | array | Recipe bodies the post attaches, each with its moderation state. Empty when none is attached. |
 | names | array | Every dish and ingredient name the post references. |
 | recipes[].type / names[].type | string | `RECIPE`, `DISH` or `INGREDIENT`. |
 | recipes[].moderationStatus, names[].moderationStatus | string | `PENDING`, `APPROVED` or `REJECTED`. |
 | recipes[].score / names[].score | — | Removed by ADR-026. No component carries a score; the property is absent from both arrays. |
+
+This payload is a **superset** of the admin queue item: every field
+[`GET /api/admin/posts`](get-posts.md) returns is present here too, plus
+`contentScore`, `recipes` and `names`. The `recipes` array differs by design from the list
+item's `recipeIds` — it is the same set of recipes, reported with each one's moderation
+state because that is what the decision needs. An integration test compares the two live
+payloads, so a field added to the list and forgotten here fails CI.
 
 Components are assembled at read time from the recipe, dish and ingredient rows
 the post references. They are not stored.
