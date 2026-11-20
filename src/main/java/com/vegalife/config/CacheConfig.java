@@ -17,6 +17,11 @@ import org.springframework.context.annotation.Configuration;
  * lifetime summary is cheap and must stay close to live, while the chart series run bucketed {@code
  * date_trunc} queries over a window and change slowly. Sharing one entry would force the
  * alert-adjacent summary to age at the charts' pace.
+ *
+ * <p>These TTLs are an upper bound, not the update mechanism: {@code
+ * service/cache/AdminDashboardCacheInvalidator} clears an entry when a write makes it untrue, so a
+ * value an admin can act on does not wait for expiry. What the TTL still covers is the metrics no
+ * write moves — queue age and stale pending payments both advance on the clock alone.
  */
 @Configuration
 @EnableCaching

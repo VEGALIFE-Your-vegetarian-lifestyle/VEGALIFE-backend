@@ -136,7 +136,9 @@ package — that would blend an average across a window in which prices may have
 - Revenue counts only `succeeded` payments. There is no refund write path in this codebase, so the
   figures are gross, not net.
 - Results are cached in-process (Caffeine) for 15 minutes, keyed by `range`. The lifetime summary is
-  cached separately with a shorter TTL.
+  cached separately with a shorter TTL. Both are cleared when a write changes what they report —
+  a settled payment, an approve/reject, or a plan activation toggle — so the TTL bounds staleness
+  rather than defining it. See `docs/feats/admin-dashboard-cache-invalidation.md`.
 
 ## Non-goals
 
