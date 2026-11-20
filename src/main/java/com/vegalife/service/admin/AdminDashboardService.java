@@ -83,7 +83,7 @@ public class AdminDashboardService {
    * describes what is true right now.
    */
   @Transactional(readOnly = true)
-  @Cacheable(cacheNames = AdminDashboardCacheNames.ADMIN_DASHBOARD_SUMMARY_CACHE)
+  @Cacheable(cacheNames = AdminDashboardCacheNames.ADMIN_DASHBOARD_SUMMARY_CACHE, sync = true)
   public DashboardResponse getSummary() {
     Instant now = Instant.now();
 
@@ -101,7 +101,8 @@ public class AdminDashboardService {
   @Transactional(readOnly = true)
   @Cacheable(
       cacheNames = AdminDashboardCacheNames.ADMIN_DASHBOARD_CHARTS_CACHE,
-      key = "#request.range")
+      key = "#request.range",
+      sync = true)
   public DashboardChartsResponse getCharts(DashboardRequest request) {
     Instant to = Instant.now();
     String interval = intervalFor(request.getRange());
