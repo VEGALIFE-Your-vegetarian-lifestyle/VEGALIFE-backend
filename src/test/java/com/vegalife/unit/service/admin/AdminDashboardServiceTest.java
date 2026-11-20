@@ -17,9 +17,7 @@ import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.repository.admin.AdminDashboardChartRepository;
 import com.vegalife.repository.admin.AdminDashboardChartRepository.BucketCountRow;
-import com.vegalife.repository.admin.AdminDashboardChartRepository.PendingBucketRow;
 import com.vegalife.repository.admin.AdminDashboardChartRepository.PlanRevenueRow;
-import com.vegalife.repository.admin.AdminDashboardChartRepository.RevenueRow;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.post.VoteRepository;
@@ -178,9 +176,7 @@ class AdminDashboardServiceTest {
     assertThat(response.getMeta().getInterval()).isEqualTo("day");
     assertThat(response.getMeta().getBoundary()).isEqualTo("inclusiveStartExclusiveEnd");
     assertThat(response.getMeta().getCurrency()).isEqualTo("VND");
-    assertThat(response.getRevenueTrend().getPoints()).hasSize(7);
-    assertThat(response.getPaymentHealth().getPoints()).hasSize(7);
-    assertThat(response.getGrowth().getPoints()).hasSize(7);
+    assertThat(response.getPublishedPosts().getPoints()).hasSize(7);
   }
 
   @Test
@@ -189,7 +185,7 @@ class AdminDashboardServiceTest {
         adminDashboardService.getCharts(DashboardRequest.builder().range("day").build());
 
     assertThat(response.getMeta().getInterval()).isEqualTo("hour");
-    assertThat(response.getRevenueTrend().getPoints()).hasSize(24);
+    assertThat(response.getPublishedPosts().getPoints()).hasSize(24);
   }
 
   @Test
@@ -198,46 +194,38 @@ class AdminDashboardServiceTest {
         adminDashboardService.getCharts(DashboardRequest.builder().range("month").build());
 
     assertThat(response.getMeta().getInterval()).isEqualTo("day");
-    assertThat(response.getRevenueTrend().getPoints()).hasSize(30);
+    assertThat(response.getPublishedPosts().getPoints()).hasSize(30);
   }
 
   @Test
-  void getChartsZeroFillsBucketsWithNoRows() {
-    when(chartRepository.findRevenueTrend(any(), any(), anyString()))
-        .thenReturn(List.of(new RevenueRow(Instant.parse("2020-01-01T00:00:00Z"), 900L, 3L)));
+  void getChartsZeroFillsBucketsWithNoPublishedPosts() {
+    when(chartRepository.findPublishedPostsPerBucket(any(), any(), anyString()))
+        .thenReturn(List.of(new BucketCountRow(Instant.parse("2020-01-01T00:00:00Z"), 900L)));
 
     DashboardChartsResponse response =
         adminDashboardService.getCharts(DashboardRequest.builder().range("week").build());
 
-    long total = response.getRevenueTrend().getPoints().stream().mapToLong(p -> p.amount()).sum();
+    long total =
+        response.getPublishedPosts().getPoints().stream().mapToLong(p -> p.published()).sum();
     // The stubbed row falls outside the real window, so every bucket must be reported as zero.
-    assertThat(response.getRevenueTrend().getPoints()).hasSize(7);
+    assertThat(response.getPublishedPosts().getPoints()).hasSize(7);
     assertThat(total).isZero();
   }
 
   @Test
-  void getChartsDerivesSuccessRateFromDecidedOutcomesOnly() {
-    when(chartRepository.findSucceededPerBucket(any(), any(), anyString()))
-        .thenReturn(List.of(new BucketCountRow(Instant.now(), 8L)));
-    when(chartRepository.findFailedPerBucket(any(), any(), anyString()))
-        .thenReturn(List.of(new BucketCountRow(Instant.now(), 2L)));
+  void getChartsCountsPublishedPostsIntoTheirBucket() {
+    // The service truncates the window start to build its first bucket, so answering with that same
+    // bucket guarantees the row lands in a point instead of being zero-filled away.
+    when(chartRepository.findPublishedPostsPerBucket(any(), any(), anyString()))
+        .thenAnswer(
+            invocation -> List.of(new BucketCountRow(firstBucket(invocation.getArgument(0)), 6L)));
 
     DashboardChartsResponse response =
         adminDashboardService.getCharts(DashboardRequest.builder().range("week").build());
 
-    assertThat(response.getPaymentHealth().getTotals().successRate()).isEqualTo(0.8);
-  }
-
-  @Test
-  void getChartsSeparatesFreshAndStalePendingPayments() {
-    when(chartRepository.findPendingPerBucket(any(), any(), any(), anyString()))
-        .thenReturn(List.of(new PendingBucketRow(Instant.now(), 3L, 5L)));
-
-    DashboardChartsResponse response =
-        adminDashboardService.getCharts(DashboardRequest.builder().range("week").build());
-
-    assertThat(response.getPaymentHealth().getTotals().pendingFresh()).isEqualTo(3L);
-    assertThat(response.getPaymentHealth().getTotals().pendingStale()).isEqualTo(5L);
+    long total =
+        response.getPublishedPosts().getPoints().stream().mapToLong(p -> p.published()).sum();
+    assertThat(total).isEqualTo(6L);
   }
 
   @Test
@@ -255,24 +243,18 @@ class AdminDashboardServiceTest {
   }
 
   @Test
-  void getChartsReportsSignupsAndFirstTimePayersAsSeparateCounts() {
-    // The service truncates the window start to build its first bucket, so answering with that same
-    // bucket guarantees the rows land in a point instead of being zero-filled away.
-    when(chartRepository.findNewUsersPerBucket(any(), any(), anyString()))
-        .thenAnswer(
-            invocation -> List.of(new BucketCountRow(firstBucket(invocation.getArgument(0)), 40L)));
-    when(chartRepository.findNewPayingUsersPerBucket(any(), any(), anyString()))
-        .thenAnswer(
-            invocation -> List.of(new BucketCountRow(firstBucket(invocation.getArgument(0)), 2L)));
+  void getChartsReportsPurchasedPackageCountAlongsideRevenue() {
+    UUID planId = UUID.randomUUID();
+    when(chartRepository.findRevenueByPlan(any(), any()))
+        .thenReturn(List.of(new PlanRevenueRow(planId, "PLUS", "Plus", 495_000L, 5L, true)));
 
     DashboardChartsResponse response =
         adminDashboardService.getCharts(DashboardRequest.builder().range("week").build());
 
-    long signups = response.getGrowth().getPoints().stream().mapToLong(p -> p.newUsers()).sum();
-    long payers =
-        response.getGrowth().getPoints().stream().mapToLong(p -> p.newPayingUsers()).sum();
-    assertThat(signups).isEqualTo(40L);
-    assertThat(payers).isEqualTo(2L);
+    // Purchases is how many packages were bought; amount is the money they produced. Ten packages
+    // at a different price must not be inferred from one from the other.
+    assertThat(response.getRevenueByPlan().getItems().get(0).purchases()).isEqualTo(5L);
+    assertThat(response.getRevenueByPlan().getItems().get(0).amount()).isEqualTo(495_000L);
   }
 
   /** The same truncation the service applies, so a stubbed row lands on a real bucket. */
