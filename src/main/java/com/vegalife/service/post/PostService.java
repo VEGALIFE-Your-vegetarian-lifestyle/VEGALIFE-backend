@@ -34,6 +34,7 @@ import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.PlatformSettingsProvider;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
 import com.vegalife.service.filter.ContentFilterPayload;
 import com.vegalife.service.filter.PostFlagDetail;
@@ -80,6 +81,7 @@ public class PostService {
   private final PlatformSettingsProvider platformSettingsProvider;
   private final PostEmbeddingRepository postEmbeddingRepository;
   private final ActiveEmbeddingModel activeEmbeddingModel;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   @Transactional
   public PostListResponse createPost(UUID userId, PostCreateRequest request) {
@@ -110,6 +112,8 @@ public class PostService {
     boolean filterEnabled = platformSettingsProvider.isContentFilterEnabled();
 
     Post saved = postRepository.saveAndFlush(post);
+    // totalPosts rose, and so did filterSkippedPosts when the filter is switched off.
+    dashboardCache.summary();
     if (request.isPublish()) {
       if (filterEnabled) {
         enqueueContentFilter(saved);
@@ -179,6 +183,11 @@ public class PostService {
         markForAdminReview(saved);
       }
     }
+    // An edit can move a published post out of the feed (re-queued, held for a new image,
+    // withdrawn)
+    // or add one to the pending queue. Both the summary and the published-posts series can change,
+    // and deciding which did would mean re-deriving the transition this method just computed.
+    dashboardCache.all();
     return toResponse(saved, actorId);
   }
 
@@ -191,6 +200,9 @@ public class PostService {
     Post post = findManageablePost(actorId, isAdmin, postId);
     post.setDeletedAt(Instant.now());
     postRepository.saveAndFlush(post);
+    // totalPosts fell; a post that was published also leaves the series, and one that was pending
+    // leaves the queue.
+    dashboardCache.all();
   }
 
   /**
@@ -304,6 +316,9 @@ public class PostService {
       log.info("Post {} gained attached media; held for admin review", post.getId());
     }
     Post saved = postRepository.saveAndFlush(post);
+    // Gaining media can move a published post to pending: the chart loses it and the queue gains
+    // it.
+    dashboardCache.all();
     return toResponse(saved, attachedRecipeIds(postId), actorId);
   }
 

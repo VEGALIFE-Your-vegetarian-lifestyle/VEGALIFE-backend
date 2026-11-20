@@ -2,6 +2,7 @@ package com.vegalife.service.credit;
 
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.repository.subscription.AiSubscriptionRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PlanClaimService {
 
   private final AiSubscriptionRepository subscriptionRepository;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   /**
    * Grants the plan to the member, or refuses when it is already claimed.
@@ -32,5 +34,7 @@ public class PlanClaimService {
     if (subscriptionRepository.insertClaim(userId, plan.getId()) == 0) {
       throw new DuplicateResourceException("Plan already claimed");
     }
+    // freeGrantsTotal rose: the insert stamps granted_at, which is what that metric counts.
+    dashboardCache.summary();
   }
 }

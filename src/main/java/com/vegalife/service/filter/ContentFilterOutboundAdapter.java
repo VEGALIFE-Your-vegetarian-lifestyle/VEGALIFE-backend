@@ -18,6 +18,7 @@ import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.filter.ContentFilterService.FilterResult;
 import com.vegalife.service.outbound.OutboundChannelAdapter;
 import com.vegalife.shared.exception.EmbeddingClientException;
@@ -73,6 +74,7 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
   private final ActiveEmbeddingModel activeEmbeddingModel;
   private final ObjectMapper objectMapper;
   private final FilterProperties filterProperties;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   @Override
   public OutboundChannel channel() {
@@ -121,6 +123,9 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
       // review queue. Marking it FAILED would only misreport it (ADR-020).
       applyFilterUnavailable(post, e);
       postRepository.save(post);
+      // Held for manual review: pendingPosts and filterSkippedPosts rose. The post was never
+      // published, so no series moved.
+      dashboardCache.summary();
       log.error(
           "Content filter could not run for post {} (outbound message {}): {}. The post is queued"
               + " for manual review instead of being retried.",
@@ -163,6 +168,10 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
     // never match itself.
     storeEmbedding(post.getId(), embedding);
     postRepository.save(post);
+    // This is the dominant publisher: a PASS publishes the post, while a FAIL, UNCERTAIN, component
+    // escalation or duplicate holds it. Either way the queue count moved, and a publication also
+    // moved the published-posts series.
+    dashboardCache.all();
   }
 
   /**
@@ -236,6 +245,8 @@ public class ContentFilterOutboundAdapter implements OutboundChannelAdapter {
             : "FILTER_UNAVAILABLE: " + cause.getMessage();
     block(post, PostFlag.FILTER_SKIPPED, PostFlagDetail.skipped(PostFlagDetail.CAUSE_UNAVAILABLE));
     postRepository.save(post);
+    // Settled out of processing into the queue: pendingPosts and filterSkippedPosts rose.
+    dashboardCache.summary();
     log.error(
         "Outbound message {} was abandoned; post {} is held as FILTER_SKIPPED: {}",
         message.getId(),

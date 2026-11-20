@@ -21,6 +21,7 @@ import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.recipe.RecipeSpecifications;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
@@ -66,6 +67,7 @@ public class RecipeService {
   private final DishIngredientService dishIngredientService;
   private final RecipeNutritionService recipeNutritionService;
   private final TransactionTemplate transactionTemplate;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   /**
    * BR-RECP-002: a concurrent create may win the unique index between our lookup and our insert.
@@ -75,12 +77,18 @@ public class RecipeService {
   public RecipeResponse createRecipe(UUID userId, RecipeCreateRequest request) {
     List<NormalizedIngredient> ingredients = normalizeIngredients(request.getIngredients());
 
+    RecipeResponse created;
     try {
-      return transactionTemplate.execute(status -> doCreate(userId, request, ingredients));
+      created = transactionTemplate.execute(status -> doCreate(userId, request, ingredients));
     } catch (DataIntegrityViolationException ex) {
       log.warn("Concurrent find-or-create conflict while creating recipe, retrying once");
-      return transactionTemplate.execute(status -> doCreate(userId, request, ingredients));
+      created = transactionTemplate.execute(status -> doCreate(userId, request, ingredients));
     }
+    // totalRecipes rose and the recipe entered the queue as PENDING. Evicted here rather than in
+    // doCreate because this method owns the transactions: registering a synchronization inside one
+    // would fire after its own commit, which is not the commit that ends the request.
+    dashboardCache.summary();
+    return created;
   }
 
   /**
@@ -129,6 +137,8 @@ public class RecipeService {
 
     recipe.setDeletedAt(Instant.now());
     recipeRepository.save(recipe);
+    // totalRecipes fell; a PENDING recipe also left the moderation queue.
+    dashboardCache.summary();
     log.info("Recipe {} soft-deleted by author {}", recipe.getId(), callerId);
   }
 
