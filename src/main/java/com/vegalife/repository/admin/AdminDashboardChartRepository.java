@@ -32,37 +32,17 @@ public class AdminDashboardChartRepository {
 
   private final JdbcTemplate jdbcTemplate;
 
-  /** Succeeded revenue per bucket: the amount received and how many payments produced it. */
-  public List<RevenueRow> findRevenueTrend(Instant from, Instant to, String interval) {
-    return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), l.paid_at, 'UTC') AS bucket_start,"
-            + "       sum(l.amount)::bigint AS amount,"
-            + "       count(*) AS tx_count"
-            + "  FROM payment_ledger l"
-            + " WHERE l.status = 'succeeded' AND l.paid_at >= ? AND l.paid_at < ?"
-            + " GROUP BY bucket_start"
-            + " ORDER BY bucket_start",
-        (rs, rowNum) ->
-            new RevenueRow(
-                bucketStart(rs.getObject("bucket_start", OffsetDateTime.class)),
-                rs.getLong("amount"),
-                rs.getLong("tx_count")),
-        interval,
-        timestamp(from),
-        timestamp(to));
-  }
-
   /**
    * Succeeded revenue per plan, ranked by amount.
    *
    * <p>The plan is reached through the acquisition row, which owns the plan link since V48; the
    * ledger describes money only. A deactivated plan still appears when it earned inside the window,
-   * so the plan breakdown always sums to the same total as the trend.
+   * so the plan breakdown always sums to the same total as the ledger.
    */
   public List<PlanRevenueRow> findRevenueByPlan(Instant from, Instant to) {
     return jdbcTemplate.query(
         "SELECT p.id AS plan_id, p.code AS code, p.name AS name, p.active AS active,"
-            + "       sum(l.amount)::bigint AS amount, count(*) AS tx_count"
+            + "       sum(l.amount)::bigint AS amount, count(*) AS purchases"
             + "  FROM payment_ledger l"
             + "  JOIN ai_subscription s ON s.payment_id = l.id"
             + "  JOIN ai_plan p ON p.id = s.plan_id"
@@ -75,113 +55,28 @@ public class AdminDashboardChartRepository {
                 rs.getString("code"),
                 rs.getString("name"),
                 rs.getLong("amount"),
-                rs.getLong("tx_count"),
+                rs.getLong("purchases"),
                 rs.getBoolean("active")),
         timestamp(from),
         timestamp(to));
   }
 
-  /** Succeeded payments per bucket, bucketed by {@code paid_at} — the moment the money landed. */
-  public List<BucketCountRow> findSucceededPerBucket(Instant from, Instant to, String interval) {
-    return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), l.paid_at, 'UTC') AS bucket_start, count(*) AS cnt"
-            + "  FROM payment_ledger l"
-            + " WHERE l.status = 'succeeded' AND l.paid_at >= ? AND l.paid_at < ?"
-            + " GROUP BY bucket_start",
-        (rs, rowNum) ->
-            new BucketCountRow(
-                bucketStart(rs.getObject("bucket_start", OffsetDateTime.class)), rs.getLong("cnt")),
-        interval,
-        timestamp(from),
-        timestamp(to));
-  }
-
   /**
-   * Failed payments per bucket.
+   * Posts that reached readers per bucket.
    *
-   * <p>Bucketed by {@code updated_at} because the ledger has no {@code failed_at} column: the
-   * transition only bumps the Hibernate update timestamp. That is a proxy, not an exact decision
-   * time, and the API documents it as such.
+   * <p>Only {@code published} and not soft-deleted: drafts and anything still in the moderation
+   * queue are not content readers ever saw. Bucketed on {@code published_at} rather than {@code
+   * created_at} so a post written earlier and released today lands in today's bucket. Published
+   * posts always carry a {@code published_at}, so no row is silently dropped by the range filter.
    */
-  public List<BucketCountRow> findFailedPerBucket(Instant from, Instant to, String interval) {
-    return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), l.updated_at, 'UTC') AS bucket_start, count(*) AS cnt"
-            + "  FROM payment_ledger l"
-            + " WHERE l.status = 'failed' AND l.updated_at >= ? AND l.updated_at < ?"
-            + " GROUP BY bucket_start",
-        (rs, rowNum) ->
-            new BucketCountRow(
-                bucketStart(rs.getObject("bucket_start", OffsetDateTime.class)), rs.getLong("cnt")),
-        interval,
-        timestamp(from),
-        timestamp(to));
-  }
-
-  /**
-   * Still-pending payments per bucket, split by age at query time.
-   *
-   * <p>{@code staleBefore} is the 24-hour cutoff: a row created before it has been pending too long
-   * to be normal. Nothing in this codebase expires or reconciles a pending payment, so the stale
-   * share is money that tried and never arrived.
-   */
-  public List<PendingBucketRow> findPendingPerBucket(
-      Instant from, Instant to, Instant staleBefore, String interval) {
-    return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), l.created_at, 'UTC') AS bucket_start,"
-            + "       count(*) FILTER (WHERE l.created_at >= ?) AS fresh,"
-            + "       count(*) FILTER (WHERE l.created_at < ?) AS stale"
-            + "  FROM payment_ledger l"
-            + " WHERE l.status = 'pending' AND l.created_at >= ? AND l.created_at < ?"
-            + " GROUP BY bucket_start",
-        (rs, rowNum) ->
-            new PendingBucketRow(
-                bucketStart(rs.getObject("bucket_start", OffsetDateTime.class)),
-                rs.getLong("fresh"),
-                rs.getLong("stale")),
-        interval,
-        timestamp(staleBefore),
-        timestamp(staleBefore),
-        timestamp(from),
-        timestamp(to));
-  }
-
-  /** New non-deleted accounts per bucket. */
-  public List<BucketCountRow> findNewUsersPerBucket(Instant from, Instant to, String interval) {
-    return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), u.created_at, 'UTC') AS bucket_start, count(*) AS cnt"
-            + "  FROM \"user\" u"
-            + " WHERE u.deleted_at IS NULL AND u.created_at >= ? AND u.created_at < ?"
-            + " GROUP BY bucket_start",
-        (rs, rowNum) ->
-            new BucketCountRow(
-                bucketStart(rs.getObject("bucket_start", OffsetDateTime.class)), rs.getLong("cnt")),
-        interval,
-        timestamp(from),
-        timestamp(to));
-  }
-
-  /**
-   * Distinct members whose <em>first</em> succeeded payment landed in each bucket.
-   *
-   * <p>Distinct because one member may hold several acquisitions. The {@code NOT EXISTS} clause is
-   * what makes this "first time" rather than "paid at all": a member who already paid before this
-   * row's {@code paid_at} is excluded, so a repeat buyer is reported once, in the bucket where they
-   * converted. Without it the series counts every payer active in the bucket, which cannot be
-   * divided by signups to produce a conversion rate — the two would be different populations and
-   * the ratio could exceed 1.
-   */
-  public List<BucketCountRow> findNewPayingUsersPerBucket(
+  public List<BucketCountRow> findPublishedPostsPerBucket(
       Instant from, Instant to, String interval) {
     return jdbcTemplate.query(
-        "SELECT date_trunc(cast(? AS text), l.paid_at, 'UTC') AS bucket_start,"
-            + "       count(DISTINCT l.user_id) AS cnt"
-            + "  FROM payment_ledger l"
-            + " WHERE l.status = 'succeeded' AND l.paid_at >= ? AND l.paid_at < ?"
-            + "   AND NOT EXISTS ("
-            + "         SELECT 1 FROM payment_ledger p"
-            + "          WHERE p.user_id = l.user_id"
-            + "            AND p.status = 'succeeded'"
-            + "            AND p.paid_at < l.paid_at)"
+        "SELECT date_trunc(cast(? AS text), p.published_at, 'UTC') AS bucket_start,"
+            + "       count(*) AS cnt"
+            + "  FROM post p"
+            + " WHERE p.status = 'published' AND p.deleted_at IS NULL"
+            + "   AND p.published_at >= ? AND p.published_at < ?"
             + " GROUP BY bucket_start",
         (rs, rowNum) ->
             new BucketCountRow(
@@ -199,16 +94,10 @@ public class AdminDashboardChartRepository {
     return Timestamp.from(instant);
   }
 
-  /** Succeeded revenue in one bucket. */
-  public record RevenueRow(Instant bucketStart, long amount, long transactions) {}
-
-  /** One plan's succeeded revenue inside the window. */
+  /** One plan's succeeded revenue inside the window, and how many packages were bought. */
   public record PlanRevenueRow(
-      UUID planId, String code, String name, long amount, long transactions, boolean active) {}
+      UUID planId, String code, String name, long amount, long purchases, boolean active) {}
 
   /** A plain count in one bucket. */
   public record BucketCountRow(Instant bucketStart, long count) {}
-
-  /** Pending payments in one bucket, split by whether they are already too old. */
-  public record PendingBucketRow(Instant bucketStart, long fresh, long stale) {}
 }

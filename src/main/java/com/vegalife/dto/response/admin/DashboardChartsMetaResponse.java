@@ -38,9 +38,9 @@ public class DashboardChartsMetaResponse {
   private String boundary;
 
   /**
-   * Currency of every amount in {@link RevenueTrendResponse} and {@link RevenueByPlanResponse}.
-   * Always {@code VND}: the platform settles in VND only, and every amount is in whole dong even
-   * though the gateway notifies hundredths.
+   * Currency of every amount in {@link RevenueByPlanResponse}. Always {@code VND}: the platform
+   * settles in VND only, and every amount is in whole dong even though the gateway notifies
+   * hundredths.
    */
   private String currency;
 

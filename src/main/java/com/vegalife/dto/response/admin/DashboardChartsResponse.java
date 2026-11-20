@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * Time-series payload for the admin console — the only dashboard surface that carries a time
- * filter. All four series share one {@code interval}, so their x-axes line up and a client can draw
+ * filter. Both series share one {@code interval}, so their x-axes line up and a client can draw
  * them against a single time scale.
  */
 @Data
@@ -17,8 +17,6 @@ import lombok.NoArgsConstructor;
 public class DashboardChartsResponse {
 
   private DashboardChartsMetaResponse meta;
-  private RevenueTrendResponse revenueTrend;
   private RevenueByPlanResponse revenueByPlan;
-  private PaymentHealthResponse paymentHealth;
-  private GrowthResponse growth;
+  private PublishedPostsResponse publishedPosts;
 }
