@@ -21,6 +21,7 @@ import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.post.CommentService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ForbiddenException;
@@ -47,6 +48,8 @@ class CommentServiceTest {
   @Mock private UserRepository userRepository;
 
   @Mock private UserProfileRepository userProfileRepository;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private CommentService commentService;
 

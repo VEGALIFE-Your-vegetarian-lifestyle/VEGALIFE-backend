@@ -34,6 +34,7 @@ import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.service.recipe.RecipeNutritionService;
 import com.vegalife.service.recipe.RecipeService;
@@ -82,6 +83,8 @@ class RecipeServiceTest {
   @Mock private RecipeNutritionService recipeNutritionService;
 
   @Mock private TransactionTemplate transactionTemplate;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private RecipeService recipeService;
 
