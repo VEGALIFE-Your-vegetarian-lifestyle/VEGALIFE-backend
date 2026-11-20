@@ -21,6 +21,7 @@ import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserProfileRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -67,6 +68,7 @@ public class AdminPostService {
   private final IngredientRepository ingredientRepository;
   private final DishIngredientService dishIngredientService;
   private final UserProfileRepository userProfileRepository;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   @Transactional(readOnly = true)
   public PageResponse<AdminPostListResponse> listPosts(PostListRequest request) {
@@ -294,6 +296,10 @@ public class AdminPostService {
 
     approveComponents(postId);
 
+    // published_at moved and the post left the pending queue: both the summary and the
+    // published-posts series are now wrong.
+    dashboardCache.all();
+
     log.info("Admin {} approved post {}", adminId, post.getId());
 
     return getPostDetail(postId);
@@ -321,6 +327,9 @@ public class AdminPostService {
     postRepository.saveAndFlush(post);
 
     rejectPendingComponents(postId, reason);
+
+    // published_at was cleared and the post left the pending queue.
+    dashboardCache.all();
 
     log.info("Admin {} rejected post {}", adminId, post.getId());
 

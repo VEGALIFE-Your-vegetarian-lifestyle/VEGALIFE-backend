@@ -13,6 +13,7 @@ import com.vegalife.dto.request.admin.AdminPlanUpdateRequest;
 import com.vegalife.dto.response.admin.AdminPlanResponse;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.repository.subscription.AiPlanRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.subscription.AdminPlanService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -31,6 +32,8 @@ class AdminPlanServiceTest {
   @Mock private AiPlanRepository aiPlanRepository;
 
   @Mock private AdminPlanMapper adminPlanMapper;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private AdminPlanService adminPlanService;
 

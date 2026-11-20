@@ -14,6 +14,7 @@ import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.CommentSpecifications;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.repository.user.UserSpecifications;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.token.JwtTokenService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.DuplicateResourceException;
@@ -51,6 +52,7 @@ public class AdminService {
   private final JwtTokenService jwtTokenService;
   private final CommentRepository commentRepository;
   private final AdminCommentMapper adminCommentMapper;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   @Transactional(readOnly = true)
   public PageResponse<UserListResponse> listUsers(UserListRequest request) {
@@ -137,6 +139,9 @@ public class AdminService {
     comment.setDeletedAt(Instant.now());
     Comment saved = commentRepository.saveAndFlush(comment);
 
+    // totalComments dropped, and the comment left the reported set if it was reported.
+    dashboardCache.summary();
+
     log.info("Comment {} moderated by admin {}", saved.getId(), adminId);
   }
 
@@ -154,6 +159,9 @@ public class AdminService {
 
     user.setStatus(UserStatus.suspended);
     userRepository.save(user);
+
+    // users.suspended and the derived activation/payer rates moved.
+    dashboardCache.summary();
 
     int revoked = jwtTokenService.revokeAllUserRefreshTokens(userId);
     log.info("User {} suspended; revoked {} refresh tokens", userId, revoked);
@@ -175,6 +183,9 @@ public class AdminService {
 
     user.setStatus(UserStatus.activated);
     userRepository.save(user);
+
+    // users.suspended fell; the status-based rates moved with it.
+    dashboardCache.summary();
 
     log.info("User {} restored; status set to activated", userId);
 

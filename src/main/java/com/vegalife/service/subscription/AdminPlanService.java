@@ -6,6 +6,7 @@ import com.vegalife.dto.request.admin.AdminPlanUpdateRequest;
 import com.vegalife.dto.response.admin.AdminPlanResponse;
 import com.vegalife.model.subscription.AiPlan;
 import com.vegalife.repository.subscription.AiPlanRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import java.util.Comparator;
@@ -35,6 +36,7 @@ public class AdminPlanService {
 
   private final AiPlanRepository aiPlanRepository;
   private final AdminPlanMapper adminPlanMapper;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   @Transactional(readOnly = true)
   public List<AdminPlanResponse> listPlans() {
@@ -94,6 +96,10 @@ public class AdminPlanService {
     }
 
     AiPlan saved = aiPlanRepository.saveAndFlush(plan);
+    // revenueByPlan projects p.active, so an activation toggle changes the chart without any money
+    // moving. Unconditional: only the chart carries plan attributes, and skipping the eviction when
+    // active is null would need the request re-inspected here.
+    dashboardCache.charts();
     return adminPlanMapper.toResponse(saved);
   }
 
@@ -106,6 +112,8 @@ public class AdminPlanService {
     AiPlan plan = findPlan(planId);
     plan.setActive(false);
     aiPlanRepository.saveAndFlush(plan);
+    // Same projection as updatePlan: the chart's active flag flipped even though no revenue did.
+    dashboardCache.charts();
   }
 
   private AiPlan findPlan(UUID planId) {

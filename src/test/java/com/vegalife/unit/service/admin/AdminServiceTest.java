@@ -21,6 +21,7 @@ import com.vegalife.model.user.User;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.AdminService;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.token.JwtTokenService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.DuplicateResourceException;
@@ -54,6 +55,8 @@ class AdminServiceTest {
   @Mock private CommentRepository commentRepository;
 
   @Mock private AdminCommentMapper adminCommentMapper;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private AdminService adminService;
 
