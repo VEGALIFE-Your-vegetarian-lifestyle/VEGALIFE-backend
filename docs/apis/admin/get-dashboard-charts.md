@@ -3,8 +3,13 @@
 ## Overview
 
 Bucketed time series for the admin console. This is the **only** dashboard surface that carries a
-time filter: four series — revenue trend, revenue by plan, payment health, and growth — all sharing
-one bucket size so their x-axes line up.
+time filter: two series — revenue by plan and published posts — sharing one bucket size so their
+x-axes line up.
+
+Revenue counts money that arrived; published posts counts content that reached readers. Nothing
+else is plotted here. User acquisition, payment outcomes, and engagement are reported as
+current-state totals on the lifetime summary instead, where they are not distorted by a short
+window.
 
 Every money amount is in whole dong (VND), and `meta.currency` says so. The platform settles in VND
 only; the gateway notifies hundredths, but `payment_ledger.amount` — and therefore every amount here
@@ -28,9 +33,11 @@ Required: a valid JWT access token in the `Authorization` header (`Bearer <token
 |------|------|----------|-------------|
 | range | string | No | One of `day`, `week`, `month`. Default `week`. Any other value → 400. |
 
+`range` applies to **both** series: it is the single time filter for this endpoint.
+
 `custom` is deliberately **not** supported. Arbitrary windows would need a maximum-span cap, a
-maximum-bucket cap, and a caller-supplied bucket size that could desynchronise the four series.
-With three presets the server derives the bucket size and the window is bounded by construction.
+maximum-bucket cap, and a caller-supplied bucket size that could desynchronise the series. With
+three presets the server derives the bucket size and the window is bounded by construction.
 
 ### Range to bucket mapping
 
@@ -67,28 +74,18 @@ No request body.
       "currency": "VND",
       "generatedAt": "2026-11-20T09:14:03Z"
     },
-    "revenueTrend": {
-      "points": [
-        { "bucketStart": "2026-11-14T00:00:00Z", "amount": 245000, "transactions": 5 }
-      ]
-    },
     "revenueByPlan": {
       "items": [
-        { "planId": "…", "code": "PRO", "name": "Pro", "amount": 4900000,
-          "transactions": 100, "active": true }
+        { "planId": "…", "code": "PRO", "name": "Pro", "amount": 2597000,
+          "purchases": 53, "active": true },
+        { "planId": "…", "code": "PLUS", "name": "Plus", "amount": 2079000,
+          "purchases": 21, "active": true }
       ]
     },
-    "paymentHealth": {
+    "publishedPosts": {
       "points": [
-        { "bucketStart": "2026-11-14T00:00:00Z", "succeeded": 12, "failed": 3,
-          "pendingFresh": 1, "pendingStale": 2 }
-      ],
-      "totals": { "succeeded": 40, "failed": 8, "pendingFresh": 2, "pendingStale": 6,
-                  "successRate": 0.8333 }
-    },
-    "growth": {
-      "points": [
-        { "bucketStart": "2026-11-14T00:00:00Z", "newUsers": 40, "newPayingUsers": 3 }
+        { "bucketStart": "2026-11-14T00:00:00Z", "published": 12 },
+        { "bucketStart": "2026-11-15T00:00:00Z", "published": 0 }
       ]
     }
   }
@@ -99,18 +96,19 @@ No request body.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| data.meta.range | string | The requested preset, echoed after validation. |
+| data.meta.range | string | The requested preset, echoed after validation. Applied to every series. |
 | data.meta.interval | string | Bucket size derived by the server: `hour` or `day`. Never supplied by the caller. |
 | data.meta.from | timestamp | Window start, inclusive. |
 | data.meta.to | timestamp | Window end, exclusive. |
 | data.meta.boundary | string | Always `inclusiveStartExclusiveEnd`, stated so a client labels the axis correctly. |
-| data.meta.currency | string | Currency of every amount in `revenueTrend` and `revenueByPlan`. Always `VND`: the platform settles in VND only. |
+| data.meta.currency | string | Currency of every amount in `revenueByPlan`. Always `VND`: the platform settles in VND only. |
 | data.meta.generatedAt | timestamp | When the payload was produced. The response is cached, so this is the freshness signal. |
-| data.revenueTrend.points[] | array | One point per bucket. `amount` is succeeded revenue in whole dong (VND); `transactions` is how many payments produced it, so a hover can tell one large payment from several ordinary ones. Draw as a line or area. |
-| data.revenueByPlan.items[] | array | Succeeded revenue per plan, ranked by `amount` descending. `amount` is what was actually charged, in whole dong (VND), read from the ledger — never the catalogue price multiplied by a count, or a price change would rewrite history. `active` is the plan's current state, kept so a deactivated plan that still earned in the window is visible. Draw as horizontal bars. |
-| data.paymentHealth.points[] | array | One point per bucket. `succeeded` is bucketed by `paid_at`; `failed` by `updated_at` (the ledger has no `failed_at`, so this is a documented proxy); pending by `created_at`. `pendingFresh` / `pendingStale` split at 24 hours of age. Draw as a stacked bar — the four values partition the attempts that started in the bucket. |
-| data.paymentHealth.totals | object | Window totals computed from the rows themselves, plus `successRate = succeeded / (succeeded + failed)`. `pending` is excluded from the denominator: a healthy day with payments still in flight would otherwise look bad. |
-| data.growth.points[] | array | New non-deleted accounts per bucket and distinct members whose **first** succeeded payment landed in that bucket, both counting people, so one axis serves both. No ratio is derived: the two counts cover different populations (a member who registered months ago and pays today is a first-time payer today but not a new user today), so dividing them would not be a conversion rate and could exceed 1. For conversion, use `money.payerConversionRate` on the summary. |
+| data.revenueByPlan.items[] | array | Succeeded revenue per plan **over the window**, ranked by `amount` descending. `amount` is what was actually charged, in whole dong (VND), read from the ledger — never the catalogue price multiplied by a count, or a price change would rewrite history. `purchases` is how many packages of that plan were bought in the same window. `active` is the plan's current state, kept so a deactivated plan that still earned in the window is visible. Draw as horizontal bars. |
+| data.publishedPosts.points[] | array | One point per bucket. `published` is how many posts became visible to readers in that bucket. Counts only posts with status `published` that are not soft-deleted; drafts, queued, and rejected posts are excluded. Bucketed by `published_at`, so a post drafted weeks ago and released today lands in today's bucket. Draw as a bar or line. |
+
+`amount` and `purchases` are independent measures: a plan with a high price can have fewer purchases
+than a cheaper one, so derive neither from the other and do not divide one by the other to price a
+package — that would blend an average across a window in which prices may have changed.
 
 ### Error Responses
 
@@ -124,23 +122,21 @@ No request body.
 ## Business Rules
 
 - Only an Administrator may view the dashboard.
-- The four series always share one bucket size, so a client can draw them against a single time
+- The two series always share one bucket size, so a client can draw them against a single time
   scale. The bucket size is server-derived from `range` and is never a request parameter.
+- The same `range` filters both series; there is no way to ask for revenue over one window and
+  posts over another.
 - The window is half-open, `[from, to)`, so a row written exactly on a boundary is counted once.
   Because the window ends at "now", the last bucket is partial.
 - A bucket with no rows is returned as zero rather than omitted, so the series has no gaps.
 - Buckets are UTC-aligned regardless of the server's timezone, so a `day` bucket is not a local
   calendar day in every zone.
-- `newPayingUsers` counts a member only in the bucket where their first succeeded payment landed, so
-  a repeat buyer is not counted again. No conversion ratio is derived per bucket: the two counts
-  cover different populations, so the trustworthy conversion figure is `money.payerConversionRate`
-  on the summary.
+- `publishedPosts` measures what readers saw, not what authors submitted. Content still in the
+  moderation queue appears on the summary as pending, never here.
 - Revenue counts only `succeeded` payments. There is no refund write path in this codebase, so the
   figures are gross, not net.
 - Results are cached in-process (Caffeine) for 15 minutes, keyed by `range`. The lifetime summary is
   cached separately with a shorter TTL.
-- `pendingStale` exists because nothing in this codebase expires or reconciles a pending payment: a
-  checkout whose notification never arrives stays pending forever, so that pool only grows.
 
 ## Non-goals
 

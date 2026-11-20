@@ -16,7 +16,7 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `admin/get-comments.md` | `GET /api/admin/comments` | List all comments (Admin) |
 | `admin/post-comments-commentid-moderate.md` | `POST /api/admin/comments/{commentId}/moderate` | Soft-delete a comment with a required reason (Admin) |
 | `admin/get-dashboard.md` | `GET /api/admin/dashboard` | Lifetime and current-state platform snapshot, cached (Admin) |
-| `admin/get-dashboard-charts.md` | `GET /api/admin/dashboard/charts` | Bucketed time series for a day/week/month range, cached (Admin) |
+| `admin/get-dashboard-charts.md` | `GET /api/admin/dashboard/charts` | Bucketed revenue-by-plan and published-posts series for a day/week/month range, cached (Admin) |
 | `admin/dish-and-ingredient-crud.md` | `GET/POST/PATCH/DELETE /api/admin/dishes[/{dishId}][/approve\|/reject]` | Manage dish names, including review state; `admin/ingredients` mirrors it (Admin) |
 | `admin/dish-ingredient-crud.md` | `GET/POST/PATCH/DELETE /api/admin/dishes/{dishId}/ingredients[/{ingredientId}]` | Curate a dish's associated ingredients and which are required (Admin) |
 | `admin/get-payments.md` | `GET /api/admin/payments` | List payments across all users, money-only, with user/status/date filters (Admin) |
