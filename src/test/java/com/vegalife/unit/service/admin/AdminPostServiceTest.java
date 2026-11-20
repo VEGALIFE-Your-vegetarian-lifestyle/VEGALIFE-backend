@@ -25,11 +25,13 @@ import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
+import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.service.admin.AdminPostService;
 import com.vegalife.service.filter.FilterOutcome;
 import com.vegalife.service.filter.FilterVerdict;
@@ -73,6 +75,8 @@ class AdminPostServiceTest {
 
   @Mock private DishIngredientService dishIngredientService;
 
+  @Mock private UserProfileRepository userProfileRepository;
+
   @InjectMocks private AdminPostService adminPostService;
 
   private User author;
@@ -115,6 +119,10 @@ class AdminPostServiceTest {
             .email("jane@example.com")
             .build();
     expectedPageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+    // The page enrichment reads both batch sources by default; the list tests below do not care
+    // about them, so they answer empty unless a test says otherwise.
+    lenient().when(userProfileRepository.findByUserIdIn(any())).thenReturn(List.of());
+    lenient().when(recipeRepository.findRecipeIdsByPostIds(any())).thenReturn(List.of());
   }
 
   @Test
@@ -240,6 +248,49 @@ class AdminPostServiceTest {
     assertThat(result.getTotalElements()).isZero();
     assertThat(result.isFirst()).isTrue();
     assertThat(result.isLast()).isTrue();
+  }
+
+  @Test
+  void listPosts_fillsAvatarAndRecipeIdsInOneBatchPerPage() {
+    Post second = Post.builder().id(UUID.randomUUID()).user(author).title("Second").build();
+    AdminPostListResponse secondResponse =
+        AdminPostListResponse.builder().id(second.getId()).userId(author.getId()).build();
+    Page<Post> page = new PageImpl<>(List.of(post, second), expectedPageable, 2);
+    when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+    when(adminPostMapper.toResponse(post)).thenReturn(postResponse);
+    when(adminPostMapper.toResponse(second)).thenReturn(secondResponse);
+
+    UserProfile profile = UserProfile.builder().user(author).avatarUrl("https://cdn/a.jpg").build();
+    when(userProfileRepository.findByUserIdIn(Set.of(author.getId()))).thenReturn(List.of(profile));
+    RecipeRepository.PostRecipeId row = postRecipeId(post.getId(), UUID.randomUUID());
+    when(recipeRepository.findRecipeIdsByPostIds(Set.of(post.getId(), second.getId())))
+        .thenReturn(List.of(row));
+
+    PageResponse<AdminPostListResponse> result = adminPostService.listPosts(new PostListRequest());
+
+    assertThat(result.getContent().get(0).getAvatarUrl()).isEqualTo("https://cdn/a.jpg");
+    assertThat(result.getContent().get(0).getRecipeIds()).containsExactly(row.getRecipeId());
+    assertThat(result.getContent().get(1).getAvatarUrl()).isEqualTo("https://cdn/a.jpg");
+    assertThat(result.getContent().get(1).getRecipeIds()).isEmpty();
+
+    // Two authors but one lookup, two posts but one lookup: the page size does not multiply
+    // queries.
+    verify(userProfileRepository).findByUserIdIn(Set.of(author.getId()));
+    verify(recipeRepository).findRecipeIdsByPostIds(Set.of(post.getId(), second.getId()));
+  }
+
+  private RecipeRepository.PostRecipeId postRecipeId(UUID postId, UUID recipeId) {
+    return new RecipeRepository.PostRecipeId() {
+      @Override
+      public UUID getPostId() {
+        return postId;
+      }
+
+      @Override
+      public UUID getRecipeId() {
+        return recipeId;
+      }
+    };
   }
 
   @Test
