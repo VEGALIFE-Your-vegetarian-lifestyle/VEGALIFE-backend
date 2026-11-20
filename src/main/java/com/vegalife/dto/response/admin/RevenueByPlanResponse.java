@@ -23,9 +23,13 @@ public class RevenueByPlanResponse {
   private List<Item> items;
 
   /**
-   * One plan's revenue in the window. {@code active} is the plan's current catalogue state, kept so
-   * a deactivated plan that still earned in the window is visible rather than silently dropped.
+   * One plan's revenue in the window.
+   *
+   * <p>{@code purchases} is how many packages of this plan were bought — one per succeeded payment
+   * — so a client can show volume alongside money. It is a count of packages, not of dong: {@code
+   * amount} is the money. {@code active} is the plan's current catalogue state, kept so a
+   * deactivated plan that still earned in the window is visible rather than silently dropped.
    */
   public record Item(
-      UUID planId, String code, String name, long amount, long transactions, boolean active) {}
+      UUID planId, String code, String name, long amount, long purchases, boolean active) {}
 }

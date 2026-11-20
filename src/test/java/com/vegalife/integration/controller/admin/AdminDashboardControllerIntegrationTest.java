@@ -7,11 +7,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
+import com.vegalife.model.post.Post;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.AdminDashboardCacheNames;
@@ -69,6 +73,8 @@ class AdminDashboardControllerIntegrationTest {
   @Autowired private MockMvc mockMvc;
 
   @Autowired private UserRepository userRepository;
+
+  @Autowired private PostRepository postRepository;
 
   @Autowired private PaymentLedgerRepository paymentLedgerRepository;
 
@@ -174,9 +180,17 @@ class AdminDashboardControllerIntegrationTest {
         .andExpect(jsonPath("$.data.meta.interval").value("day"))
         .andExpect(jsonPath("$.data.meta.boundary").value("inclusiveStartExclusiveEnd"))
         .andExpect(jsonPath("$.data.meta.currency").value("VND"))
-        .andExpect(jsonPath("$.data.revenueTrend.points.length()").value(7))
-        .andExpect(jsonPath("$.data.paymentHealth.points.length()").value(7))
-        .andExpect(jsonPath("$.data.growth.points.length()").value(7));
+        .andExpect(jsonPath("$.data.publishedPosts.points.length()").value(7));
+  }
+
+  @Test
+  void getCharts_noLongerReturnsTheRetiredSeries() throws Exception {
+    mockMvc
+        .perform(get("/api/admin/dashboard/charts").header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.revenueTrend").doesNotExist())
+        .andExpect(jsonPath("$.data.paymentHealth").doesNotExist())
+        .andExpect(jsonPath("$.data.growth").doesNotExist());
   }
 
   @Test
@@ -188,7 +202,7 @@ class AdminDashboardControllerIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.meta.interval").value("hour"))
-        .andExpect(jsonPath("$.data.revenueTrend.points.length()").value(24));
+        .andExpect(jsonPath("$.data.publishedPosts.points.length()").value(24));
   }
 
   @Test
@@ -200,21 +214,42 @@ class AdminDashboardControllerIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.meta.interval").value("day"))
-        .andExpect(jsonPath("$.data.revenueTrend.points").isArray())
-        .andExpect(jsonPath("$.data.revenueTrend.points[0].bucketStart").exists());
+        .andExpect(jsonPath("$.data.publishedPosts.points").isArray())
+        .andExpect(jsonPath("$.data.publishedPosts.points[0].bucketStart").exists());
   }
 
   @Test
-  void getCharts_countsOnlyFirstTimePayersInGrowth() throws Exception {
-    User repeatBuyer = saveMember("repeatbuyer", "repeat@example.com");
-    User firstTimer = saveMember("firsttimer", "first@example.com");
+  void getCharts_countsOnlyPublishedPostsAndBucketsThemByPublishedAt() throws Exception {
+    User author = saveMember("postauthor", "postauthor@example.com");
 
-    Instant firstPurchase = Instant.now().minus(3, ChronoUnit.DAYS);
-    Instant repeatPurchase = Instant.now().minus(1, ChronoUnit.HOURS);
+    // Counted: published, not deleted, released inside the window.
+    savePost(
+        author, "Published today", PostStatus.published, Instant.now().minus(1, ChronoUnit.HOURS));
+    savePost(
+        author,
+        "Published two days ago",
+        PostStatus.published,
+        Instant.now().minus(2, ChronoUnit.DAYS));
 
-    saveSucceededPayment(repeatBuyer.getId(), "txn-repeat-1", firstPurchase);
-    saveSucceededPayment(repeatBuyer.getId(), "txn-repeat-2", repeatPurchase);
-    saveSucceededPayment(firstTimer.getId(), "txn-first-1", repeatPurchase);
+    // Excluded: written earlier but never released.
+    savePost(author, "Still a draft", PostStatus.drafted, null);
+    savePost(author, "Waiting on a human", PostStatus.pending, null);
+    savePost(author, "Rejected", PostStatus.unpublished, null);
+
+    // Excluded: published long before the window started.
+    savePost(
+        author,
+        "Published a year ago",
+        PostStatus.published,
+        Instant.now().minus(365, ChronoUnit.DAYS));
+
+    // Excluded: published inside the window but since soft-deleted.
+    savePost(
+        author,
+        "Published then deleted",
+        PostStatus.published,
+        Instant.now().minus(1, ChronoUnit.DAYS),
+        Instant.now().minus(12, ChronoUnit.HOURS));
 
     MvcResult result =
         mockMvc
@@ -227,16 +262,16 @@ class AdminDashboardControllerIntegrationTest {
         objectMapper
             .readTree(result.getResponse().getContentAsString())
             .path("data")
-            .path("growth")
+            .path("publishedPosts")
             .path("points");
 
-    long payers = 0;
+    long published = 0;
     for (JsonNode point : points) {
-      payers += point.path("newPayingUsers").asLong();
+      published += point.path("published").asLong();
     }
-    // Two distinct members paid for the first time inside the window. The repeat purchase must not
-    // add a third, which is what counting every payer active in a bucket would do.
-    assertThat(payers).isEqualTo(2L);
+    // Only the two live, in-window published posts count. A draft, a queued post, a rejected post,
+    // an out-of-window post and a soft-deleted post must all stay out of the series.
+    assertThat(published).isEqualTo(2L);
   }
 
   @Test
@@ -282,6 +317,27 @@ class AdminDashboardControllerIntegrationTest {
             .role(UserRole.USER)
             .status(UserStatus.activated)
             .emailVerified(true)
+            .build());
+  }
+
+  private void savePost(User author, String title, PostStatus status, Instant publishedAt) {
+    savePost(author, title, status, publishedAt, null);
+  }
+
+  private void savePost(
+      User author, String title, PostStatus status, Instant publishedAt, Instant deletedAt) {
+    // saveAndFlush: the chart queries go through JdbcTemplate, which reads the database directly
+    // and would not see a row JPA is still holding in the persistence context.
+    postRepository.saveAndFlush(
+        Post.builder()
+            .user(author)
+            .title(title)
+            .content("Content for " + title)
+            .rawContent(JsonNodeFactory.instance.objectNode())
+            .status(status)
+            .viewCount(0)
+            .publishedAt(publishedAt)
+            .deletedAt(deletedAt)
             .build());
   }
 

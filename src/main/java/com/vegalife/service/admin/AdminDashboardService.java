@@ -10,10 +10,8 @@ import com.vegalife.dto.response.admin.DashboardModerationQueueMetrics;
 import com.vegalife.dto.response.admin.DashboardMoneyMetrics;
 import com.vegalife.dto.response.admin.DashboardResponse;
 import com.vegalife.dto.response.admin.DashboardUserMetrics;
-import com.vegalife.dto.response.admin.GrowthResponse;
-import com.vegalife.dto.response.admin.PaymentHealthResponse;
+import com.vegalife.dto.response.admin.PublishedPostsResponse;
 import com.vegalife.dto.response.admin.RevenueByPlanResponse;
-import com.vegalife.dto.response.admin.RevenueTrendResponse;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.post.VoteType;
@@ -121,10 +119,8 @@ public class AdminDashboardService {
                 .currency(SETTLEMENT_CURRENCY)
                 .generatedAt(to)
                 .build())
-        .revenueTrend(revenueTrend(from, to, interval, buckets))
         .revenueByPlan(revenueByPlan(from, to))
-        .paymentHealth(paymentHealth(from, to, interval, buckets, to))
-        .growth(growth(from, to, interval, buckets))
+        .publishedPosts(publishedPosts(from, to, interval, buckets))
         .build();
   }
 
@@ -221,24 +217,6 @@ public class AdminDashboardService {
         .orElse(0L);
   }
 
-  private RevenueTrendResponse revenueTrend(
-      Instant from, Instant to, String interval, List<Instant> buckets) {
-    Map<Instant, AdminDashboardChartRepository.RevenueRow> byBucket = new LinkedHashMap<>();
-    chartRepository
-        .findRevenueTrend(from, to, interval)
-        .forEach(row -> byBucket.put(row.bucketStart(), row));
-
-    List<RevenueTrendResponse.Point> points = new ArrayList<>(buckets.size());
-    for (Instant bucket : buckets) {
-      AdminDashboardChartRepository.RevenueRow row = byBucket.get(bucket);
-      points.add(
-          new RevenueTrendResponse.Point(
-              bucket, row == null ? 0L : row.amount(), row == null ? 0L : row.transactions()));
-    }
-
-    return RevenueTrendResponse.builder().points(points).build();
-  }
-
   private RevenueByPlanResponse revenueByPlan(Instant from, Instant to) {
     List<RevenueByPlanResponse.Item> items =
         chartRepository.findRevenueByPlan(from, to).stream()
@@ -249,7 +227,7 @@ public class AdminDashboardService {
                         row.code(),
                         row.name(),
                         row.amount(),
-                        row.transactions(),
+                        row.purchases(),
                         row.active()))
             .toList();
 
@@ -257,69 +235,20 @@ public class AdminDashboardService {
   }
 
   /**
-   * Outcomes per bucket. Succeeded, failed and pending are bucketed on different columns, so each
-   * is fetched separately and merged by bucket rather than grouped in one query.
+   * Published posts per bucket. Like every other series it is zero-filled from the shared bucket
+   * list, so a quiet day reads as zero rather than as a gap in the axis.
    */
-  private PaymentHealthResponse paymentHealth(
-      Instant from, Instant to, String interval, List<Instant> buckets, Instant now) {
-    List<AdminDashboardChartRepository.BucketCountRow> succeededRows =
-        chartRepository.findSucceededPerBucket(from, to, interval);
-    List<AdminDashboardChartRepository.BucketCountRow> failedRows =
-        chartRepository.findFailedPerBucket(from, to, interval);
-    List<AdminDashboardChartRepository.PendingBucketRow> pendingRows =
-        chartRepository.findPendingPerBucket(from, to, now.minus(STALE_PAYMENT_AGE), interval);
+  private PublishedPostsResponse publishedPosts(
+      Instant from, Instant to, String interval, List<Instant> buckets) {
+    Map<Instant, Long> published =
+        countByBucket(chartRepository.findPublishedPostsPerBucket(from, to, interval));
 
-    Map<Instant, Long> succeeded = countByBucket(succeededRows);
-    Map<Instant, Long> failed = countByBucket(failedRows);
-    Map<Instant, AdminDashboardChartRepository.PendingBucketRow> pending = new LinkedHashMap<>();
-    pendingRows.forEach(row -> pending.put(row.bucketStart(), row));
-
-    List<PaymentHealthResponse.Point> points = new ArrayList<>(buckets.size());
+    List<PublishedPostsResponse.Point> points = new ArrayList<>(buckets.size());
     for (Instant bucket : buckets) {
-      AdminDashboardChartRepository.PendingBucketRow pendingRow = pending.get(bucket);
-      points.add(
-          new PaymentHealthResponse.Point(
-              bucket,
-              succeeded.getOrDefault(bucket, 0L),
-              failed.getOrDefault(bucket, 0L),
-              pendingRow == null ? 0L : pendingRow.fresh(),
-              pendingRow == null ? 0L : pendingRow.stale()));
+      points.add(new PublishedPostsResponse.Point(bucket, published.getOrDefault(bucket, 0L)));
     }
 
-    // Totals come from the rows themselves, not from the merged points: a row whose bucket fell
-    // outside the series must still be counted, or the total would silently disagree with the sum
-    // of the buckets it was drawn from.
-    long succeededTotal = succeededRows.stream().mapToLong(r -> r.count()).sum();
-    long failedTotal = failedRows.stream().mapToLong(r -> r.count()).sum();
-    long pendingFreshTotal = pendingRows.stream().mapToLong(r -> r.fresh()).sum();
-    long pendingStaleTotal = pendingRows.stream().mapToLong(r -> r.stale()).sum();
-
-    return PaymentHealthResponse.builder()
-        .points(points)
-        .totals(
-            new PaymentHealthResponse.Totals(
-                succeededTotal,
-                failedTotal,
-                pendingFreshTotal,
-                pendingStaleTotal,
-                rate(succeededTotal, succeededTotal + failedTotal)))
-        .build();
-  }
-
-  private GrowthResponse growth(Instant from, Instant to, String interval, List<Instant> buckets) {
-    Map<Instant, Long> newUsers =
-        countByBucket(chartRepository.findNewUsersPerBucket(from, to, interval));
-    Map<Instant, Long> newPayingUsers =
-        countByBucket(chartRepository.findNewPayingUsersPerBucket(from, to, interval));
-
-    List<GrowthResponse.Point> points = new ArrayList<>(buckets.size());
-    for (Instant bucket : buckets) {
-      long users = newUsers.getOrDefault(bucket, 0L);
-      long payers = newPayingUsers.getOrDefault(bucket, 0L);
-      points.add(new GrowthResponse.Point(bucket, users, payers));
-    }
-
-    return GrowthResponse.builder().points(points).build();
+    return PublishedPostsResponse.builder().points(points).build();
   }
 
   private static Map<Instant, Long> countByBucket(
@@ -330,8 +259,8 @@ public class AdminDashboardService {
   }
 
   /**
-   * Bucket size, derived from the range so a caller cannot desynchronise the four series: {@code
-   * day} is sliced hourly, {@code week} and {@code month} daily.
+   * Bucket size, derived from the range so a caller cannot desynchronise the series: {@code day} is
+   * sliced hourly, {@code week} and {@code month} daily.
    */
   private static String intervalFor(String range) {
     return switch (range) {

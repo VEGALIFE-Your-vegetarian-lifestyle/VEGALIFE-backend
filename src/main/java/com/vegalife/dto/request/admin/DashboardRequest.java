@@ -12,8 +12,8 @@ import lombok.NoArgsConstructor;
  *
  * <p>There is deliberately no {@code custom} preset and no {@code from}/{@code to}: arbitrary
  * windows would need a maximum-span cap, a maximum-bucket cap, and a caller-supplied {@code
- * interval} that could desynchronise the four series. With three fixed presets the server derives
- * the bucket size and the window is bounded by construction.
+ * interval} that could desynchronise the series. With three fixed presets the server derives the
+ * bucket size and the window is bounded by construction.
  */
 @Data
 @Builder
