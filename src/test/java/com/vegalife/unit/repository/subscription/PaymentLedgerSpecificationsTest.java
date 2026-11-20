@@ -26,7 +26,6 @@ class PaymentLedgerSpecificationsTest {
 
   private final UUID userA = UUID.randomUUID();
   private final UUID userB = UUID.randomUUID();
-  private final UUID planId = UUID.randomUUID();
 
   @Test
   void withFilters_noFilters_returnsAllRows() {
@@ -143,7 +142,6 @@ class PaymentLedgerSpecificationsTest {
     PaymentLedger ledger =
         PaymentLedger.builder()
             .userId(userId)
-            .planId(planId)
             .amount(49000L)
             .currency("VND")
             .status(status)

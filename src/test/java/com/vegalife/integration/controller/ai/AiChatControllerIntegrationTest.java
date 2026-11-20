@@ -12,17 +12,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.subscription.AiPlan;
+import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.AiUsage;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.ai.AiConversationRepository;
 import com.vegalife.repository.ai.AiMessageRepository;
 import com.vegalife.repository.subscription.AiPlanRepository;
+import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.AiUsageRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
 import java.time.Instant;
-import java.time.YearMonth;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -86,6 +86,7 @@ class AiChatControllerIntegrationTest {
   @Autowired private UserRepository userRepository;
   @Autowired private AiPlanRepository planRepository;
   @Autowired private AiUsageRepository usageRepository;
+  @Autowired private AiSubscriptionRepository subscriptionRepository;
   @Autowired private AiConversationRepository conversationRepository;
   @Autowired private AiMessageRepository messageRepository;
   @Autowired private JwtTokenService jwtTokenService;
@@ -109,6 +110,17 @@ class AiChatControllerIntegrationTest {
                 .build());
     accessToken = jwtTokenService.generateAccessToken(user);
 
+    // Every account starts with no allowance (issue #181), so grant the free plan here; the tests
+    // below are about the chat turn, not about acquiring one.
+    AiPlan freePlan = planRepository.findByCode("FREE").orElseThrow();
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(user.getId())
+            .planId(freePlan.getId())
+            .paymentId(null)
+            .grantedAt(Instant.now())
+            .build());
+
     when(chatModel.call(any(Prompt.class))).thenReturn(chatResponse("Try a tofu scramble."));
     when(chatModel.stream(any(Prompt.class)))
         .thenReturn(
@@ -124,6 +136,7 @@ class AiChatControllerIntegrationTest {
     // The SSE path persists on a separate thread/connection, so the test cannot roll back; remove
     // everything this test created (children before the user row that owns them).
     usageRepository.deleteAll();
+    subscriptionRepository.deleteAll();
     messageRepository.deleteAll();
     conversationRepository.deleteAll();
     userRepository.deleteAll();
@@ -164,8 +177,7 @@ class AiChatControllerIntegrationTest {
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.message").value("Message sent successfully"))
             .andExpect(jsonPath("$.data.reply").value("Try a tofu scramble."))
-            .andExpect(jsonPath("$.data.usage.used").value(1))
-            .andExpect(jsonPath("$.data.usage.limit").value(20))
+            .andExpect(jsonPath("$.data.usage.remainingUsage").value(4))
             .andReturn();
 
     String body = result.getResponse().getContentAsString();
@@ -180,10 +192,7 @@ class AiChatControllerIntegrationTest {
                 UUID.fromString(conversationId)))
         .hasSize(2);
 
-    YearMonth month = YearMonth.now(ZoneOffset.UTC);
-    Instant start = month.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-    Instant end = month.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-    assertThat(usageRepository.sumRequestCountInWindow(user.getId(), start, end)).isEqualTo(1L);
+    assertThat(usageRepository.sumRequestCount(user.getId())).isEqualTo(1L);
   }
 
   @Test
@@ -219,18 +228,10 @@ class AiChatControllerIntegrationTest {
   }
 
   @Test
-  void send_atMonthlyLimit_returns429WithRetryAfterAndNoProviderCall() throws Exception {
+  void send_overQuota_returns429WithoutRetryAfterAndNoProviderCall() throws Exception {
     AiPlan freePlan = planRepository.findByCode("FREE").orElseThrow();
-    YearMonth month = YearMonth.now(ZoneOffset.UTC);
-    Instant start = month.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-    Instant end = month.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
     usageRepository.save(
-        AiUsage.builder()
-            .userId(user.getId())
-            .requestCount(freePlan.getMonthlyRequestLimit())
-            .periodStart(start)
-            .periodEnd(end)
-            .build());
+        AiUsage.builder().userId(user.getId()).requestCount(freePlan.getRequestQuota()).build());
 
     mockMvc
         .perform(
@@ -239,12 +240,12 @@ class AiChatControllerIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"message\":\"one more\"}"))
         .andExpect(status().isTooManyRequests())
+        // No reset exists to advertise: waiting would not help.
+        .andExpect(header().doesNotExist("Retry-After"))
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(
             jsonPath("$.message")
-                .value(
-                    org.hamcrest.Matchers.containsString(
-                        "/" + freePlan.getMonthlyRequestLimit() + ")")));
+                .value("No AI requests remaining. Claim a free plan or purchase one to continue."));
 
     assertThat(conversationRepository.findAll()).isEmpty();
     assertThat(messageRepository.findAll()).isEmpty();
@@ -336,25 +337,14 @@ class AiChatControllerIntegrationTest {
 
     assertThat(conversationRepository.findAll()).hasSize(1);
     assertThat(messageRepository.findAll()).hasSize(2);
-    YearMonth month = YearMonth.now(ZoneOffset.UTC);
-    Instant start = month.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-    Instant end = month.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-    assertThat(usageRepository.sumRequestCountInWindow(user.getId(), start, end)).isEqualTo(1L);
+    assertThat(usageRepository.sumRequestCount(user.getId())).isEqualTo(1L);
   }
 
   @Test
   void stream_overQuota_returns429WithoutOpeningStream() throws Exception {
     AiPlan freePlan = planRepository.findByCode("FREE").orElseThrow();
-    YearMonth month = YearMonth.now(ZoneOffset.UTC);
-    Instant start = month.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-    Instant end = month.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
     usageRepository.save(
-        AiUsage.builder()
-            .userId(user.getId())
-            .requestCount(freePlan.getMonthlyRequestLimit())
-            .periodStart(start)
-            .periodEnd(end)
-            .build());
+        AiUsage.builder().userId(user.getId()).requestCount(freePlan.getRequestQuota()).build());
 
     mockMvc
         .perform(

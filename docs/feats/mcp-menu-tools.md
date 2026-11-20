@@ -53,6 +53,9 @@ menus by hand.
   `GET /api/dishes/suggestions`. This non-goal still holds for everything else
   — ingredient search, recipe lookup by name, shop discovery — and BR-MCP-002
   now records the six-tool surface. See `docs/feats/dish-suggestions.md`.
+  **Amended 2026-11-05:** `suggest_dishes` carries both bounds for all five
+  macros, mirroring the endpoint exactly; no calorie-only shortcut. See
+  `docs/adrs/022-ingredient-level-nutrition.md`.
 - No public tool exposure, no OAuth/authorization server, no agent framework.
 - No change to AI quota mechanics (BR-AI-001/002 unchanged).
 - No frontend work; the chat UI already posts to the same endpoints.
@@ -81,7 +84,8 @@ menus by hand.
       the backend service layer. Dietary preferences are not tool parameters —
       they live on the member's profile.
 - [ ] FR-005: `update_menu` refuses, at the tool layer, any menu that is not
-      the caller's current-week `drafted` menu (BR-MCP-005).
+      the caller's own `drafted` menu whose week starts tomorrow or later
+      (BR-MCP-005).
 - [ ] FR-006: `schedule_menu` calls `MenuService.changeStatus(...,
       "scheduled")`; the chat prompt instructs the assistant to confirm the
       week with the user first (BR-MCP-006).
@@ -145,7 +149,7 @@ chat — as myself, with no one else's data reachable.
       then the assistant says there is none and offers to draft one.
 - [ ] Given a member confirms a draft week, when the assistant calls
       `create_menu`, then a `drafted` menu exists for that member only.
-- [ ] Given a drafted current-week menu, when the user confirms scheduling,
+- [ ] Given a drafted upcoming-week menu, when the user confirms scheduling,
       then `schedule_menu` transitions it to `scheduled`; when a second
       overlapping week is attempted, the 409 is relayed as an explanation,
       not a crash.

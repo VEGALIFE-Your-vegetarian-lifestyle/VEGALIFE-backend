@@ -5,6 +5,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * One plan in the public catalogue (issue #181, ADR-021). {@code price.amount == 0} is what makes a
+ * plan claimable; there is no separate flag.
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -13,6 +17,7 @@ public class AvailablePlanResponse {
 
   private String code;
   private String name;
-  private int monthlyRequestLimit;
+  private String description;
+  private int requestQuota;
   private PlanPriceResponse price;
 }

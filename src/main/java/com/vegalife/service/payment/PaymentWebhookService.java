@@ -1,15 +1,22 @@
 package com.vegalife.service.payment;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.subscription.AiPlan;
+import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.subscription.AiPlanRepository;
+import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
-import com.vegalife.service.email.EmailService;
-import com.vegalife.service.outbound.OutboundEmailPayload;
-import com.vegalife.service.subscription.SubscriptionService;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
+import com.vegalife.service.email.EmailPayload;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,10 +54,12 @@ public class PaymentWebhookService {
 
   private final PaymentGateway paymentGateway;
   private final PaymentLedgerRepository paymentLedgerRepository;
+  private final AiSubscriptionRepository subscriptionRepository;
   private final AiPlanRepository planRepository;
   private final UserRepository userRepository;
-  private final SubscriptionService subscriptionService;
-  private final EmailService emailService;
+  private final OutboundMessageRepository outboundMessageRepository;
+  private final ObjectMapper objectMapper;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   /**
    * Processes one IPN notification. Handled outcomes always acknowledge; only exceptions escape
@@ -114,6 +123,9 @@ public class PaymentWebhookService {
     }
     if (paid) {
       fulfil(ledger, params);
+      // revenueTotal, transactionsTotal, payingUsersTotal, freeGrantsTotal and the revenue-by-plan
+      // series all move when money settles. fulfil() is private, so the eviction belongs here.
+      dashboardCache.all();
       return ack(RSP_SUCCESS, "Confirm Success");
     }
     if (STATUS_PROCESSING.equals(transactionStatus)) {
@@ -124,6 +136,8 @@ public class PaymentWebhookService {
       return ack(RSP_SUCCESS, "Confirm Success");
     }
     recordFailure(ledger, params, responseCode, transactionStatus);
+    // A pending ledger turning failed can still change pendingStaleCount.
+    dashboardCache.summary();
     return ack(RSP_SUCCESS, "Confirm Success");
   }
 
@@ -136,36 +150,65 @@ public class PaymentWebhookService {
     ledger.setProviderReference(params.get("vnp_TransactionNo"));
     ledger.setResponseCode(params.get("vnp_ResponseCode"));
     ledger.setBankCode(params.get("vnp_BankCode"));
-
-    // Issue #111 FR-002: record which subscription this payment produced; a denied
-    // purchase (gate) leaves the row unlinked while the payment stays succeeded.
-    subscriptionService
-        .activatePlan(ledger.getUserId(), ledger.getPlanId(), paidAt)
-        .ifPresent(subscription -> ledger.setSubscriptionId(subscription.getId()));
-
     paymentLedgerRepository.save(ledger);
+
+    // The acquisition was written at checkout, before the money moved, because the
+    // notification names no plan. Stamping granted_at is the grant itself; the
+    // allowance is recomputed from granted rows, so there is no balance to credit.
+    AiSubscription acquisition =
+        subscriptionRepository
+            .findByPaymentId(ledger.getId())
+            .orElseThrow(() -> missingRow("acquisition", ledger.getId(), ledger.getTxnRef()));
+    acquisition.setGrantedAt(paidAt);
+    subscriptionRepository.save(acquisition);
 
     AiPlan plan =
         planRepository
-            .findById(ledger.getPlanId())
-            .orElseThrow(() -> missingRow("plan", ledger.getPlanId(), ledger.getTxnRef()));
+            .findById(acquisition.getPlanId())
+            .orElseThrow(() -> missingRow("plan", acquisition.getPlanId(), ledger.getTxnRef()));
     User user =
         userRepository
             .findById(ledger.getUserId())
             .orElseThrow(() -> missingRow("user", ledger.getUserId(), ledger.getTxnRef()));
-    emailService.sendPaymentReceipt(
+    enqueueReceipt(
         user.getEmail(),
         user.getDisplayName(),
-        new OutboundEmailPayload.Receipt(
+        new EmailPayload.Receipt(
             plan.getName(), ledger.getAmount(), ledger.getCurrency(), paidAt, ledger.getTxnRef()));
 
     log.info(
-        "IPN: txn {} fulfilled, user {} upgraded to plan {} (amount {} {})",
+        "IPN: txn {} fulfilled, user {} granted plan {} (amount {} {})",
         ledger.getTxnRef(),
         ledger.getUserId(),
         plan.getCode(),
         ledger.getAmount(),
         ledger.getCurrency());
+  }
+
+  /**
+   * ADR-005 outbox: enqueue the receipt row in the fulfilment transaction. A receipt has no
+   * OTP-style business deadline, so it carries no {@code expiresAt} and stays deliverable until the
+   * queue's max-age guard (BR-PAY-007).
+   */
+  private void enqueueReceipt(String to, String displayName, EmailPayload.Receipt receipt) {
+    try {
+      OutboundMessage message =
+          OutboundMessage.builder()
+              .channel(OutboundChannel.EMAIL)
+              .recipient(to)
+              .payload(
+                  objectMapper.writeValueAsString(
+                      new EmailPayload(
+                          EmailPayload.Type.RECEIPT, displayName, null, null, receipt)))
+              .status(OutboundStatus.PENDING)
+              .attempts(0)
+              .nextAttemptAt(Instant.now())
+              .build();
+      outboundMessageRepository.save(message);
+      log.info("Queued receipt email for {} on outbound queue", to);
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("Failed to serialize outbound email payload", e);
+    }
   }
 
   /** FR-012/FR-015: ledger recorded as failed, subscription and email untouched. */

@@ -67,10 +67,10 @@ takes its place.**
 ### Migration safety for stored JSON
 
 `outbound_message.payload` rows written before this change contain a
-`"username"` key (email OTP and receipt payloads). `OutboundEmailPayload`
-renames its field to `displayName` and declares
-`@JsonAlias("username")`, so rows already on the queue still deserialize and
-drain normally across the deploy.
+`"username"` key (email OTP and receipt payloads). The email payload type
+(later renamed `EmailPayload`) renames its field to `displayName` and
+declares `@JsonAlias("username")`, so rows already on the queue still
+deserialize and drain normally across the deploy.
 
 ### Legacy admin sort parameter
 

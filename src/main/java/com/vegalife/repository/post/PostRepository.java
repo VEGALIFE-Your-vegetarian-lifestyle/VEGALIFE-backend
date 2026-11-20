@@ -10,9 +10,11 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -32,25 +34,30 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
   @Query("select p from Post p where p.id = :id and p.deletedAt is null")
   Optional<Post> findDetailById(@Param("id") UUID id);
 
+  /**
+   * Records one view of a post.
+   *
+   * <p>A bulk update rather than load-modify-save: concurrent reads each add one instead of
+   * overwriting each other's count. It deliberately leaves {@code updated_at} alone — a view is not
+   * an edit, so it must not reorder "recently updated" lists or re-timestamp the row — which also
+   * means the caller must not rely on a previously loaded {@code Post} to observe the new value.
+   *
+   * @return the number of rows updated: 1, or 0 when the post no longer exists
+   */
+  @Modifying
+  @Query("update Post p set p.viewCount = p.viewCount + 1 where p.id = :id")
+  int incrementViewCount(@Param("id") UUID id);
+
   Optional<Post> findByIdAndStatusAndDeletedAtIsNull(UUID id, PostStatus status);
 
   Optional<Post> findByIdAndUser_IdAndDeletedAtIsNull(UUID id, UUID userId);
 
-  /** Author-fetched: each row's response carries the author's id and display name. */
+  /** Author-fetched for every specification-based list query. */
+  @Override
   @EntityGraph(attributePaths = "user")
-  Page<Post> findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID userId, Pageable pageable);
+  Page<Post> findAll(Specification<Post> spec, Pageable pageable);
 
-  /** Author-fetched; see {@link #findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc}. */
-  @EntityGraph(attributePaths = "user")
-  Page<Post> findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-      UUID userId, PostStatus status, Pageable pageable);
-
-  /** Author-fetched; see {@link #findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc}. */
-  @EntityGraph(attributePaths = "user")
-  Page<Post> findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-      PostStatus status, Pageable pageable);
-
-  /** Author-fetched; see {@link #findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc}. */
+  /** Author-fetched; see {@link #findAll(Specification, Pageable)}. */
   @EntityGraph(attributePaths = "user")
   @Query("select p from Post p where p.id in :ids")
   List<Post> findWithAuthorByIdIn(@Param("ids") Collection<UUID> ids);
@@ -65,18 +72,26 @@ public interface PostRepository extends JpaRepository<Post, UUID>, JpaSpecificat
           + " where m.id in :mediaIds and p.deletedAt is null")
   List<MediaPostRow> findPostRowsByMediaIdsIn(@Param("mediaIds") Collection<UUID> mediaIds);
 
-  /** Admin dashboard (issue #12): total non-deleted posts. */
+  /** Admin dashboard: total non-deleted posts. */
   long countByDeletedAtIsNull();
 
-  /** Admin dashboard (issue #12): posts created within a time range. */
-  long countByCreatedAtBetweenAndDeletedAtIsNull(Instant from, Instant to);
+  /**
+   * Admin dashboard: posts waiting for an admin decision. One predicate, the same one the review
+   * queue uses ({@code status=pending}), so the metric and the queue cannot disagree (ADR-029).
+   */
+  long countByStatusAndDeletedAtIsNull(PostStatus status);
 
-  /** Admin dashboard (issue #12): posts awaiting moderation review. */
+  /**
+   * Admin dashboard: posts carrying a given filter verdict, e.g. {@code FILTER_SKIPPED} — content
+   * the filter never scored, which no other surface reports.
+   */
   long countByFlagAndDeletedAtIsNull(PostFlag flag);
 
-  /** Admin dashboard (issue #12): distinct authors who posted within a time range. */
+  /**
+   * Admin dashboard: when the oldest post awaiting a decision was created, so the queue can report
+   * age rather than only size. Empty when nothing is waiting.
+   */
   @Query(
-      "select distinct p.user.id from Post p"
-          + " where p.createdAt between :from and :to and p.deletedAt is null")
-  List<UUID> findDistinctAuthorIdsInRange(@Param("from") Instant from, @Param("to") Instant to);
+      "select min(p.createdAt) from Post p" + " where p.status = :status and p.deletedAt is null")
+  Optional<Instant> findOldestCreatedAtByStatus(@Param("status") PostStatus status);
 }

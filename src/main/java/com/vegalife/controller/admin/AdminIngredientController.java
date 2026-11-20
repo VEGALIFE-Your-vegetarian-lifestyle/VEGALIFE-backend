@@ -3,7 +3,6 @@ package com.vegalife.controller.admin;
 import com.vegalife.dto.request.admin.AdminComponentListRequest;
 import com.vegalife.dto.request.admin.AdminIngredientCreateRequest;
 import com.vegalife.dto.request.admin.AdminIngredientUpdateRequest;
-import com.vegalife.dto.request.admin.ComponentModerationRequest;
 import com.vegalife.dto.response.admin.AdminIngredientResponse;
 import com.vegalife.service.admin.AdminIngredientService;
 import com.vegalife.shared.dto.ApiResponse;
@@ -13,6 +12,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -39,7 +39,7 @@ public class AdminIngredientController {
 
   @GetMapping
   public ResponseEntity<ApiResponse<PageResponse<AdminIngredientResponse>>> listIngredients(
-      @Valid @ModelAttribute AdminComponentListRequest request) {
+      @Valid @ParameterObject @ModelAttribute AdminComponentListRequest request) {
     PageResponse<AdminIngredientResponse> page = adminIngredientService.listIngredients(request);
     return ResponseEntity.ok(ApiResponse.success(page, "Ingredients retrieved successfully"));
   }
@@ -81,26 +81,17 @@ public class AdminIngredientController {
 
   @PostMapping("/{ingredientId}/approve")
   public ResponseEntity<ApiResponse<AdminIngredientResponse>> approveIngredient(
-      @AuthenticationPrincipal UUID adminId,
-      @PathVariable UUID ingredientId,
-      @Valid @RequestBody(required = false) ComponentModerationRequest request) {
+      @AuthenticationPrincipal UUID adminId, @PathVariable UUID ingredientId) {
     AdminIngredientResponse ingredient =
-        adminIngredientService.approveIngredient(adminId, ingredientId, reasonOf(request));
+        adminIngredientService.approveIngredient(adminId, ingredientId);
     return ResponseEntity.ok(ApiResponse.success(ingredient, "Ingredient approved successfully"));
   }
 
   @PostMapping("/{ingredientId}/reject")
   public ResponseEntity<ApiResponse<AdminIngredientResponse>> rejectIngredient(
-      @AuthenticationPrincipal UUID adminId,
-      @PathVariable UUID ingredientId,
-      @Valid @RequestBody(required = false) ComponentModerationRequest request) {
+      @AuthenticationPrincipal UUID adminId, @PathVariable UUID ingredientId) {
     AdminIngredientResponse ingredient =
-        adminIngredientService.rejectIngredient(adminId, ingredientId, reasonOf(request));
+        adminIngredientService.rejectIngredient(adminId, ingredientId);
     return ResponseEntity.ok(ApiResponse.success(ingredient, "Ingredient rejected successfully"));
-  }
-
-  /** The reason is optional, so an absent body must not be a 400. */
-  private static String reasonOf(ComponentModerationRequest request) {
-    return request == null ? null : request.getReason();
   }
 }

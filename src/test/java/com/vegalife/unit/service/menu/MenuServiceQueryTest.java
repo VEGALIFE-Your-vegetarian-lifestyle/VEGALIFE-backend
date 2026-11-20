@@ -126,7 +126,8 @@ class MenuServiceQueryTest {
             .dish(dish)
             .servings(1)
             .build();
-    when(menuRepository.findByIdAndUserId(menuId, USER)).thenReturn(Optional.of(menu));
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menuId, USER))
+        .thenReturn(Optional.of(menu));
     when(menuDetailRepository.findByMenuIdInWithDish(List.of(menuId)))
         .thenReturn(List.of(breakfast, lunch));
 
@@ -156,7 +157,8 @@ class MenuServiceQueryTest {
             .description("Chickpeas, cucumber, lemon and dill")
             .cuisineType("Mediterranean")
             .build();
-    when(menuRepository.findByIdAndUserId(menuId, USER)).thenReturn(Optional.of(menu));
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menuId, USER))
+        .thenReturn(Optional.of(menu));
     when(menuDetailRepository.findByMenuIdInWithDish(List.of(menuId)))
         .thenReturn(
             List.of(
@@ -191,7 +193,8 @@ class MenuServiceQueryTest {
     menu.setId(menuId);
     Dish dish = Dish.builder().id(UUID.randomUUID()).name("Chickpea salad").build();
     Recipe recommended = Recipe.builder().id(UUID.randomUUID()).name("Lemon chickpea").build();
-    when(menuRepository.findByIdAndUserId(menuId, USER)).thenReturn(Optional.of(menu));
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menuId, USER))
+        .thenReturn(Optional.of(menu));
     when(menuDetailRepository.findByMenuIdInWithDish(List.of(menuId)))
         .thenReturn(
             List.of(
@@ -225,7 +228,8 @@ class MenuServiceQueryTest {
     Menu menu = menu(MONDAY, SUNDAY, MenuStatus.drafted);
     menu.setId(menuId);
     Dish dish = Dish.builder().id(UUID.randomUUID()).name("Pad Thai").build();
-    when(menuRepository.findByIdAndUserId(menuId, USER)).thenReturn(Optional.of(menu));
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menuId, USER))
+        .thenReturn(Optional.of(menu));
     when(menuDetailRepository.findByMenuIdInWithDish(List.of(menuId)))
         .thenReturn(
             List.of(
@@ -302,7 +306,8 @@ class MenuServiceQueryTest {
   @Test
   void listMealPlansOfForeignOrMissingIdIsNotFound() {
     UUID menuId = UUID.randomUUID();
-    when(menuRepository.findByIdAndUserId(menuId, USER)).thenReturn(Optional.empty());
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menuId, USER))
+        .thenReturn(Optional.empty());
 
     assertThatThrownBy(
             () -> menuService.listMealPlans(USER, MenuQueryFilter.builder().build(), menuId))

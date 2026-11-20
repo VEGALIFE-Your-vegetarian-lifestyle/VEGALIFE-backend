@@ -2,7 +2,9 @@
 
 ## Status
 
-Implemented
+Superseded by [ADR-023](../../adrs/023-post-processing-status-and-flag-blocker.md) — admin hide/unhide
+was removed. Kept as a record of the feature; the `moderation_log` it wrote to was itself dropped by
+ADR-027.
 
 ## Author / owner
 
@@ -10,11 +12,13 @@ Vegalife backend team
 
 ## Summary
 
-Let an Administrator hide any post from the platform and lift the hide, with every action recorded (BR-ADMIN-002).
+*(Historical.)* Let an Administrator hide any post from the platform and lift the hide, with every
+action recorded in `moderation_log`.
 
 ## Problem / motivation
 
-Administrators need to take problematic content out of circulation without deleting it, and to reverse that decision later. The `hidden` status already exists but had no way to be set.
+Administrators needed to take problematic content out of circulation without deleting it, and to
+reverse that decision later. The `hidden` status already existed but had no way to be set.
 
 ## Goals
 
@@ -34,7 +38,7 @@ Administrators need to take problematic content out of circulation without delet
 - [x] FR-002: `hidden: true` sets status `hidden` and clears `publishedAt`; repeating it is a no-op.
 - [x] FR-003: `hidden: false` moves a hidden post to `created`; on a post that is not hidden it returns `400`.
 - [x] FR-004: Missing or soft-deleted posts return `404`.
-- [x] FR-005: Each state change writes `HIDE_POST` or `UNHIDE_POST` to `moderation_log`.
+- [x] FR-005: Each state change writes `HIDE_POST` or `UNHIDE_POST` to `moderation_log` (historical — both the endpoint and the table have since been removed).
 - [x] FR-006: The owner cannot publish a hidden post through the edit endpoint.
 
 ## Design overview

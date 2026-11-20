@@ -1,7 +1,7 @@
 # API Reference: GET /api/admin/posts
 
 ## Overview
-Return a paginated list of every non-deleted post across all users and all statuses, optionally filtered by status, author, category, and creation date range, with the semantic content-filter verdict on each item. Admin only.
+Return a paginated list of every non-deleted post across all users and all statuses, optionally filtered by status, author, category, a text keyword, and creation date range, with the semantic content-filter verdict on each item. Admin only.
 
 ## Endpoint
 ```
@@ -22,12 +22,13 @@ None.
 | page | integer | No | 0-based page index, default 0 |
 | size | integer | No | Page size, default 20, max 100 |
 | sort | string | No | Format `property,direction`. Default `createdAt,desc`. Property must be one of: `createdAt`, `publishedAt`, `updatedAt`, `viewCount`, `title` |
-| status | string | No | One of: `created`, `processed`, `published`, `unpublished`, `hidden` |
-| flag | string | No | Content-filter verdict: `PENDING`, `PASSED`, `REJECTED`, `NEEDS_REVIEW`, or `all`. Defaults to `NEEDS_REVIEW` when omitted; `all` disables the flag filter (issue #5) |
+| status | string | No | One of: `drafted`, `processing`, `pending`, `published`, `unpublished`. The review queue is `pending` |
+| flag | string | No | Last verdict: `FILTER_PASSED`, `FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`, or `all`. Defaults to `all` when omitted, so nothing is silently hidden; matches exactly (ADR-025) |
 | userId | uuid | No | Only posts authored by this user |
 | categoryId | uuid | No | Only posts belonging to this category |
+| keyword | string | No | Case-insensitive substring matched against `title` or `content` (plain text, not `rawContent`). `%`, `_` and `\` are matched literally. Blank or omitted applies no keyword filter |
 | createdFrom | string | No | ISO-8601 datetime lower bound (inclusive) on `createdAt`, e.g. `2026-01-01T00:00:00Z` |
-| createdTo | string | No | ISO-8601 datetime upper bound (inclusive) on `createdAt`, e.g. `2026-01-31T23:59:59Z` |
+| createdTo | string | No | ISO-8601 datetime upper bound (inclusive) on `createdAt`, e.g. `2026-01-31T23:59:59Z`. `createdFrom` after `createdTo` returns 400 |
 
 ### Request Body
 No request body
@@ -43,18 +44,21 @@ No request body
     "content": [
       {
         "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
+        "displayName": "jane",
+        "avatarUrl": "https://cdn.example.com/avatar/jane.jpg",
         "title": "Vegan pho at home",
         "content": "A step-by-step guide to a clear mushroom broth...",
+        "rawContent": { "type": "doc", "content": [] },
         "featuredImageUrl": "https://cdn.example.com/posts/pho.jpg",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "mediaIds": [],
+        "recipeIds": ["3f2a7c11-6b4d-4e29-9a41-0d5c8e77b210"],
         "status": "published",
-        "flag": "PASSED",
+        "flag": null,
         "viewCount": 42,
         "publishedAt": "2026-09-28T08:15:00Z",
         "createdAt": "2026-09-28T08:00:00Z",
-        "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "displayName": "jane",
         "email": "jane@example.com"
       }
     ],
@@ -74,18 +78,23 @@ No request body
 | message | string | "Posts retrieved successfully" |
 | data.content | array | Post items for this page |
 | data.content[].id | uuid | Post id |
+| data.content[].userId | uuid | Author user id |
+| data.content[].displayName | string | Author's display name |
+| data.content[].avatarUrl | string \| null | Author avatar URL, resolved from the author's profile; null when the author has no profile row yet (BR-PROFILE-003) |
 | data.content[].title | string | Post title |
 | data.content[].content | string | Post body, kept for moderation review (issue #101) |
+| data.content[].rawContent | object \| null | The rich-text editor document as submitted, same value the member post responses return |
 | data.content[].featuredImageUrl | string | Featured image URL, nullable |
 | data.content[].categoryIds | uuid[] | Category ids the post belongs to |
 | data.content[].mediaIds | uuid[] | Media ids attached to the post |
-| data.content[].status | string | created, processed, published, unpublished, or hidden |
-| data.content[].flag | string | Content-filter verdict: PENDING, PASSED, REJECTED, NEEDS_REVIEW; null when never filtered |
+| data.content[].recipeIds | uuid[] | Ids of the non-deleted recipes attached to the post; empty when none is attached |
+| data.content[].status | string | drafted, processing, pending, published, or unpublished |
+| data.content[].flag | string \| null | The post's last verdict: `FILTER_PASSED` (the filter cleared the text, or approved over a blocker), or `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` (held, or approved/rejected over the blocker). `null` on a draft, on a run still in flight, and on rows published before V58 (ADR-025, ADR-029) |
+| data.content[].flagDetail | object \| null | The evidence behind `flag` as a JSON snapshot (ADR-024, ADR-025): `kind` (always equal to `flag`) plus the fields that verdict owns — `score`/`threshold` for `FILTER_PASSED`, `outcome`/`score`/`threshold` for `FILTER_FAILED`, `postId`/`similarity`/`threshold` for `SIMILAR_CONTENT`, `cause` for `FILTER_SKIPPED`. Absent fields are omitted; null with no verdict |
+| data.content[].rejectionReason | string | Why an admin rejected the post; null when no reason was recorded |
 | data.content[].viewCount | integer | View counter |
 | data.content[].publishedAt | string | ISO-8601 publish timestamp, nullable |
 | data.content[].createdAt | string | ISO-8601 creation timestamp |
-| data.content[].userId | uuid | Author user id |
-| data.content[].displayName | string | Author's display name |
 | data.content[].email | string | Author email |
 | data.page | integer | 0-based page index returned |
 | data.size | integer | Page size used |
@@ -105,15 +114,19 @@ No request body
 ## Business Rules
 - Soft-deleted posts (`deletedAt != null`) are excluded (issue #1 / FR-006).
 - Only `ROLE_ADMIN` may call this endpoint (`@PreAuthorize("hasRole('ADMIN')")` on `AdminPostController`; ADR-009 — there is no `/api/admin/**` path rule).
-- Unlike `GET /api/posts` and `GET /api/users/{userId}/posts`, no status restriction is applied: every status is listable (issue #1 / FR-002).
-- `status` and `flag` are independent filters and combine with AND; `flag` matches the content-filter verdict exactly (BR-FILTER-008).
-- When no `flag` parameter is supplied, the list defaults to `flag = NEEDS_REVIEW` so an admin lands on posts awaiting a decision (issue #5). Pass `flag=all` to list every flag (including posts never filtered).
+- Unlike `GET /api/posts/me` and `GET /api/users/{userId}/posts`, no status restriction is applied: every status is listable (issue #1 / FR-002).
+- `status` and `flag` are independent filters and combine with AND; `flag` matches the verdict exactly (BR-FILTER-008).
+- `keyword` matches the same fields, with the same literal-wildcard rule, as the member feed's keyword (BR-POST-014): `title` or `content`. It is a filter like any other and combines with the rest using AND; a search matching nothing returns 200 with an empty `content` array.
+- When no `flag` parameter is supplied the list defaults to `flag=all`, so no verdict is silently hidden (issue #5). The review queue is `status=pending`, which lists every post whose verdict is recorded and whose admin decision is still outstanding, regardless of verdict (ADR-029).
+- `flag` is the post's last verdict and survives publication (ADR-025). At `pending` it says why the post is held (`FILTER_FAILED`, `SIMILAR_CONTENT`, `FILTER_SKIPPED`, or `FILTER_PASSED` for a media-bearing post the text filter cleared, BR-POST-015); it is `null` only for a row published before verdicts were stored and later sent back for review. At `processing` it is `null`, because the run is still in flight. At `published` it distinguishes a post the filter cleared (`FILTER_PASSED`) from one an admin approved over a blocker — the only place that distinction is readable.
+- This is the only API surface that exposes `flag`/`flagDetail`; the member-facing post responses do not carry them (ADR-025).
+- The item is a strict superset of the member post item (`PostListResponse`): every field a member-facing listing returns — including `avatarUrl`, `rawContent`, and `recipeIds` — is present here under the same name, plus `flag`, `flagDetail`, and `email`. `avatarUrl` and `recipeIds` are resolved in one batched query each per page, never one per post. An integration test compares the two live payloads, so a field added to `PostListResponse` and not here fails CI.
 
 ## Example
 
 ### Request
 ```bash
-curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&flag=REJECTED&categoryId=1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed&sort=createdAt,desc" \
+curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&status=pending&flag=SIMILAR_CONTENT&categoryId=1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed&sort=createdAt,desc" \
   -H "Authorization: Bearer <admin_access_token>"
 ```
 
@@ -126,18 +139,27 @@ curl -X GET "http://localhost:8080/api/admin/posts?page=0&size=20&flag=REJECTED&
     "content": [
       {
         "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
+        "displayName": "jane",
+        "avatarUrl": "https://cdn.example.com/avatar/jane.jpg",
         "title": "Vegan pho at home",
         "content": "A step-by-step guide to a clear mushroom broth...",
+        "rawContent": { "type": "doc", "content": [] },
         "featuredImageUrl": "https://cdn.example.com/posts/pho.jpg",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "mediaIds": [],
-        "status": "unpublished",
-        "flag": "REJECTED",
+        "recipeIds": [],
+        "status": "pending",
+        "flag": "SIMILAR_CONTENT",
+        "flagDetail": {
+          "kind": "SIMILAR_CONTENT",
+          "postId": "9a1f0d2c-3b4e-4c5d-8e6f-7a8b9c0d1e2f",
+          "similarity": 0.9712,
+          "threshold": 0.85
+        },
         "viewCount": 42,
-        "publishedAt": "2026-09-28T08:15:00Z",
+        "publishedAt": null,
         "createdAt": "2026-09-28T08:00:00Z",
-        "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "displayName": "jane",
         "email": "jane@example.com"
       }
     ],

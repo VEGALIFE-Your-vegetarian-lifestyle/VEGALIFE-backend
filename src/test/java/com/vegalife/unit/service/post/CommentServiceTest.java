@@ -3,7 +3,6 @@ package com.vegalife.unit.service.post;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -18,11 +17,11 @@ import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserProfile;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.post.CommentService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ForbiddenException;
@@ -46,11 +45,11 @@ class CommentServiceTest {
 
   @Mock private PostRepository postRepository;
 
-  @Mock private ModerationLogRepository moderationLogRepository;
-
   @Mock private UserRepository userRepository;
 
   @Mock private UserProfileRepository userProfileRepository;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private CommentService commentService;
 
@@ -242,7 +241,6 @@ class CommentServiceTest {
     commentService.deleteComment(userId, false, postId, commentId);
 
     assertThat(existing.getDeletedAt()).isNotNull();
-    verify(moderationLogRepository, never()).save(any());
   }
 
   @Test
@@ -257,7 +255,7 @@ class CommentServiceTest {
   }
 
   @Test
-  void deleteComment_adminDeletingAnotherUsersCommentIsLogged() {
+  void deleteComment_adminMayDeleteAnotherUsersComment() {
     UUID commentId = UUID.randomUUID();
     UUID ownerId = UUID.randomUUID();
     UUID adminId = UUID.randomUUID();
@@ -270,18 +268,10 @@ class CommentServiceTest {
     commentService.deleteComment(adminId, true, postId, commentId);
 
     assertThat(existing.getDeletedAt()).isNotNull();
-    verify(moderationLogRepository)
-        .save(
-            argThat(
-                log ->
-                    adminId.equals(log.getActorId())
-                        && commentId.equals(log.getTargetId())
-                        && "DELETE_COMMENT".equals(log.getAction())
-                        && "COMMENT".equals(log.getTargetType())));
   }
 
   @Test
-  void deleteComment_adminDeletingOwnCommentIsNotLogged() {
+  void deleteComment_adminDeletingOwnCommentAlsoSoftDeletes() {
     UUID commentId = UUID.randomUUID();
     Comment existing =
         Comment.builder().id(commentId).userId(userId).postId(postId).content("Mine").build();
@@ -291,7 +281,7 @@ class CommentServiceTest {
 
     commentService.deleteComment(userId, true, postId, commentId);
 
-    verify(moderationLogRepository, never()).save(any());
+    assertThat(existing.getDeletedAt()).isNotNull();
   }
 
   @Test
@@ -340,6 +330,26 @@ class CommentServiceTest {
     assertThat(rootResponse.isDeleted()).isFalse();
     assertThat(rootResponse.getReplies()).hasSize(1);
     assertThat(rootResponse.getReplies().get(0).getId()).isEqualTo(replyId);
+  }
+
+  @Test
+  void getComments_authorWithNoAvatarDoesNotThrow() {
+    UUID rootId = UUID.randomUUID();
+    User author = User.builder().id(userId).displayName("veganchef").build();
+    UserProfile profileWithoutAvatar = UserProfile.builder().user(author).avatarUrl(null).build();
+    Comment root =
+        Comment.builder().id(rootId).postId(postId).userId(userId).content("Root").build();
+    when(postRepository.findByIdAndStatusAndDeletedAtIsNull(postId, PostStatus.published))
+        .thenReturn(Optional.of(post));
+    when(commentRepository.findByPostIdOrderByCreatedAtAsc(postId)).thenReturn(List.of(root));
+    when(userRepository.findAllById(any())).thenReturn(List.of(author));
+    when(userProfileRepository.findByUserIdIn(any())).thenReturn(List.of(profileWithoutAvatar));
+
+    PageResponse<CommentThreadResponse> response =
+        commentService.getComments(postId, CommentListRequest.builder().build());
+
+    assertThat(response.getContent()).hasSize(1);
+    assertThat(response.getContent().get(0).getAvatarUrl()).isNull();
   }
 
   @Test

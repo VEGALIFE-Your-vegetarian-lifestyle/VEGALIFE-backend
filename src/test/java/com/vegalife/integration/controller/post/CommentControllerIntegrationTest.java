@@ -12,17 +12,14 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -73,8 +70,6 @@ class CommentControllerIntegrationTest {
 
   @Autowired private CommentRepository commentRepository;
 
-  @Autowired private ModerationLogRepository moderationLogRepository;
-
   @Autowired private JwtTokenService jwtTokenService;
 
   private User user;
@@ -83,7 +78,6 @@ class CommentControllerIntegrationTest {
 
   @BeforeEach
   void setUp() {
-    moderationLogRepository.deleteAll();
     commentRepository.deleteAll();
     postRepository.deleteAll();
     userRepository.deleteAll();
@@ -172,7 +166,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void createComment_unpublishedPostReturns404() throws Exception {
-    Post post = savePost(otherUser, PostStatus.created);
+    Post post = savePost(otherUser, PostStatus.drafted);
 
     mockMvc
         .perform(
@@ -359,7 +353,6 @@ class CommentControllerIntegrationTest {
 
     assertThat(commentRepository.findById(comment.getId()).orElseThrow().getDeletedAt())
         .isNotNull();
-    assertThat(moderationLogRepository.findAll()).isEmpty();
   }
 
   @Test
@@ -384,7 +377,7 @@ class CommentControllerIntegrationTest {
   }
 
   @Test
-  void deleteComment_adminDeletesAnotherUsersCommentAndLogsModeration() throws Exception {
+  void deleteComment_adminDeletesAnotherUsersComment() throws Exception {
     User admin = saveUser("adminuser", "admin@example.com", UserRole.ADMIN);
     String adminToken = jwtTokenService.generateAccessToken(admin);
     Post post = savePost(otherUser, PostStatus.published);
@@ -404,16 +397,10 @@ class CommentControllerIntegrationTest {
 
     assertThat(commentRepository.findById(comment.getId()).orElseThrow().getDeletedAt())
         .isNotNull();
-    List<ModerationLog> logs = moderationLogRepository.findAll();
-    assertThat(logs).hasSize(1);
-    assertThat(logs.getFirst().getActorId()).isEqualTo(admin.getId());
-    assertThat(logs.getFirst().getTargetId()).isEqualTo(comment.getId());
-    assertThat(logs.getFirst().getAction()).isEqualTo("DELETE_COMMENT");
-    assertThat(logs.getFirst().getTargetType()).isEqualTo("COMMENT");
   }
 
   @Test
-  void deleteComment_adminDeletingOwnCommentIsNotLogged() throws Exception {
+  void deleteComment_adminDeletingOwnCommentAlsoSoftDeletes() throws Exception {
     User admin = saveUser("adminuser", "admin@example.com", UserRole.ADMIN);
     String adminToken = jwtTokenService.generateAccessToken(admin);
     Post post = savePost(otherUser, PostStatus.published);
@@ -427,7 +414,8 @@ class CommentControllerIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk());
 
-    assertThat(moderationLogRepository.findAll()).isEmpty();
+    assertThat(commentRepository.findById(comment.getId()).orElseThrow().getDeletedAt())
+        .isNotNull();
   }
 
   @Test
@@ -569,7 +557,7 @@ class CommentControllerIntegrationTest {
 
   @Test
   void listComments_unpublishedPostReturns404() throws Exception {
-    Post post = savePost(otherUser, PostStatus.created);
+    Post post = savePost(otherUser, PostStatus.drafted);
 
     mockMvc
         .perform(get("/api/posts/{postId}/comments", post.getId()))

@@ -36,11 +36,13 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * Filter bypass (interp. A): with the {@code content_filter_enabled} platform setting off (issue
- * #13 follow-up — this used to be the static {@code app.filter.enabled} property), a published post
- * is forwarded straight to the admin review queue ({@code flag=NEEDS_REVIEW}, {@code
- * status=unpublished}) with no embedding call and no outbound row, and an admin can then moderate
- * it to published.
+ * Filter bypass: with the {@code content_filter_enabled} platform setting off (issue #13 follow-up
+ * — this used to be the static {@code app.filter.enabled} property), a submitted post is held at
+ * {@code pending} with {@code flag=FILTER_SKIPPED} (the filter never ran) and no outbound row, and
+ * an admin can then publish it through the moderation endpoint.
+ *
+ * <p>{@code FILTER_SKIPPED} rather than {@code FILTER_FAILED}: the filter never formed an opinion,
+ * so calling it a failure would misreport what happened (ADR-023).
  */
 @Testcontainers
 @SpringBootTest
@@ -124,32 +126,33 @@ class FilterBypassForwardsToAdminIntegrationTest {
                     """
                         .formatted(category.getId())))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.data.status").value("unpublished"))
-        .andExpect(jsonPath("$.data.flag").value("NEEDS_REVIEW"));
+        .andExpect(jsonPath("$.data.status").value("pending"))
+        // The member-facing response does not carry the verdict; the admin list below does.
+        .andExpect(jsonPath("$.data.flag").doesNotExist());
 
     UUID postId = findPostId("Bát đậu hũ non sốt mè rang");
     assertThat(outboundMessageRepository.findAll())
         .as("filter bypass must not enqueue a CONTENT_FILTER row")
         .isEmpty();
 
-    // Admin default list (no flag param) shows the forwarded post.
+    // Admin default list (no flag param) shows the held post.
     mockMvc
         .perform(get("/api/admin/posts").header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.totalElements").value(1))
         .andExpect(jsonPath("$.data.content[0].id").value(postId.toString()))
-        .andExpect(jsonPath("$.data.content[0].flag").value("NEEDS_REVIEW"));
+        .andExpect(jsonPath("$.data.content[0].flag").value("FILTER_SKIPPED"));
 
     // Admin approves it through the moderation endpoint.
     mockMvc
         .perform(
             post("/api/admin/posts/" + postId + "/approve")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"reason\":\"Bypass demo\"}"))
+                .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.status").value("published"))
-        .andExpect(jsonPath("$.data.flag").value("NEEDS_REVIEW"));
+        // Approving does not relabel the verdict: it stays the record of why the post was held
+        // (ADR-025).
+        .andExpect(jsonPath("$.data.flag").value("FILTER_SKIPPED"));
   }
 
   private User createUser(String displayName, String email, UserRole role) {

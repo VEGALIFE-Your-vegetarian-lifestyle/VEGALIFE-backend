@@ -29,8 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>This is the only path that can mark an entry {@code required}, and the only path that can
  * reinstate an entry the auto-seed path is forbidden from resurrecting (BR-DISH-003).
  *
- * <p>These writes are not moderation decisions — they neither approve nor reject a name — so unlike
- * the dish and ingredient approve/reject endpoints they do not write a {@code moderation_log} row.
+ * <p>These writes are not moderation decisions — they neither approve nor reject a name, so unlike
+ * the dish and ingredient approve/reject endpoints they change no moderation state.
  */
 @Service
 @RequiredArgsConstructor

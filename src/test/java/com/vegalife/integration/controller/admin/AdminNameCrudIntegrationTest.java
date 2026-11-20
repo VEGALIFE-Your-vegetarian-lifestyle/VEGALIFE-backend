@@ -13,8 +13,8 @@ import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
+import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
@@ -82,8 +82,6 @@ class AdminNameCrudIntegrationTest {
 
   @Autowired private MediaRepository mediaRepository;
 
-  @Autowired private ModerationLogRepository moderationLogRepository;
-
   @Autowired private RecipeRepository recipeRepository;
 
   @Autowired private RecipeIngredientRepository recipeIngredientRepository;
@@ -96,10 +94,10 @@ class AdminNameCrudIntegrationTest {
 
   private String adminToken;
   private String memberToken;
+  private User memberUser;
 
   @BeforeEach
   void setUp() {
-    moderationLogRepository.deleteAll();
     recipeIngredientRepository.deleteAll();
     recipeRepository.deleteAll();
     dishRepository.deleteAll();
@@ -112,9 +110,8 @@ class AdminNameCrudIntegrationTest {
     adminToken =
         jwtTokenService.generateAccessToken(
             createUser("adminnames", "admin.names@example.com", UserRole.ADMIN));
-    memberToken =
-        jwtTokenService.generateAccessToken(
-            createUser("membernames", "member.names@example.com", UserRole.USER));
+    memberUser = createUser("membernames", "member.names@example.com", UserRole.USER);
+    memberToken = jwtTokenService.generateAccessToken(memberUser);
   }
 
   @Test
@@ -193,6 +190,42 @@ class AdminNameCrudIntegrationTest {
   }
 
   @Test
+  void updateDish_imageUrlIsReturnedOnBothDishAndRecipeResponses() throws Exception {
+    Dish dish =
+        dishRepository.saveAndFlush(
+            Dish.builder()
+                .name("bánh mì chay")
+                .moderationStatus(ModerationStatus.APPROVED)
+                .build());
+    Recipe recipe =
+        recipeRepository.saveAndFlush(
+            Recipe.builder()
+                .user(memberUser)
+                .dish(dish)
+                .name("Bánh mì")
+                .instructions("Assemble")
+                .servings(1)
+                .moderationStatus(ModerationStatus.APPROVED)
+                .build());
+
+    mockMvc
+        .perform(
+            patch("/api/admin/dishes/" + dish.getId())
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"imageUrl\":\"https://cdn.example.com/banh-mi.jpg\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.imageUrl").value("https://cdn.example.com/banh-mi.jpg"));
+
+    // The image lives on the shared dish, so the recipe read returns it without a column of its
+    // own.
+    mockMvc
+        .perform(get("/api/recipes/{recipeId}", recipe.getId()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.imageUrl").value("https://cdn.example.com/banh-mi.jpg"));
+  }
+
+  @Test
   void deleteDish_hidesItButKeepsTheRowAndTheName() throws Exception {
     Dish dish =
         dishRepository.saveAndFlush(
@@ -242,9 +275,7 @@ class AdminNameCrudIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/dishes/" + dish.getId() + "/approve")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"reason\":\"real dish\"}"))
+                .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.moderationStatus").value("APPROVED"));
 
@@ -259,9 +290,7 @@ class AdminNameCrudIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/dishes/" + dish.getId() + "/reject")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"reason\":\"not vegan\"}"))
+                .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.moderationStatus").value("REJECTED"));
   }

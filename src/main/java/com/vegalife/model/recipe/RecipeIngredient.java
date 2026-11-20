@@ -42,9 +42,13 @@ public class RecipeIngredient {
   @JoinColumn(name = "ingredient_id", insertable = false, updatable = false)
   private Ingredient ingredient;
 
+  /**
+   * The quantity, expressed in the referenced ingredient's own {@link
+   * com.vegalife.enums.recipe.Unit}.
+   *
+   * <p>There is no per-line unit: the ingredient owns exactly one, so a column here could only ever
+   * repeat it or contradict it (ADR-022).
+   */
   @Column(name = "amount", nullable = false, precision = 10, scale = 3)
   private BigDecimal amount;
-
-  @Column(name = "unit", nullable = false, length = 30)
-  private String unit;
 }

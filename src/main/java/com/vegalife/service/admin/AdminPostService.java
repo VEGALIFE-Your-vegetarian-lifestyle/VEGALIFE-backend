@@ -4,32 +4,38 @@ import com.vegalife.dto.mapper.admin.AdminPostMapper;
 import com.vegalife.dto.request.admin.PostListRequest;
 import com.vegalife.dto.response.admin.AdminPostDetailResponse;
 import com.vegalife.dto.response.admin.AdminPostListResponse;
+import com.vegalife.dto.response.post.PostFlagDetailResponse;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
-import com.vegalife.repository.admin.ModerationLogRepository;
+import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.post.PostSpecifications;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.repository.user.UserProfileRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -55,13 +61,14 @@ public class AdminPostService {
       "At least one category is required to publish a post";
 
   private final PostRepository postRepository;
-  private final ModerationLogRepository moderationLogRepository;
   private final AdminPostMapper adminPostMapper;
   private final RecipeRepository recipeRepository;
   private final RecipeIngredientRepository recipeIngredientRepository;
   private final DishRepository dishRepository;
   private final IngredientRepository ingredientRepository;
   private final DishIngredientService dishIngredientService;
+  private final UserProfileRepository userProfileRepository;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   @Transactional(readOnly = true)
   public PageResponse<AdminPostListResponse> listPosts(PostListRequest request) {
@@ -79,7 +86,8 @@ public class AdminPostService {
     Pageable pageable =
         PageRequest.of(request.getPage(), request.getSize(), parseSort(request.getSort()));
     Specification<Post> spec =
-        PostSpecifications.allWithFilters(status, flag, userId, categoryId, createdFrom, createdTo);
+        PostSpecifications.allWithFilters(
+            status, flag, userId, categoryId, createdFrom, createdTo, request.getKeyword());
     Page<Post> page = postRepository.findAll(spec, pageable);
 
     log.debug(
@@ -88,13 +96,86 @@ public class AdminPostService {
         page.getSize(),
         page.getTotalElements());
 
-    Page<AdminPostListResponse> mapped = page.map(adminPostMapper::toResponse);
-    return PageResponse.from(mapped);
+    return PageResponse.<AdminPostListResponse>builder()
+        .content(enrich(page.getContent()))
+        .page(page.getNumber())
+        .size(page.getSize())
+        .totalElements(page.getTotalElements())
+        .totalPages(page.getTotalPages())
+        .first(page.isFirst())
+        .last(page.isLast())
+        .build();
   }
 
   /**
-   * Admin detail view for one post (ADR-016): the post, its scores, and the state of every dish and
-   * ingredient name it references.
+   * Maps one page of posts, then fills the two fields the mapper cannot reach.
+   *
+   * <p>Both are resolved for the whole page rather than per row: the avatar lives on {@code
+   * UserProfile} and the attached recipes are read from the owning {@code Recipe.posts} side, so
+   * neither is a property of the {@code Post} being mapped.
+   *
+   * <p>The result is a strict superset of {@code PostListResponse} — the author's avatar, the
+   * editor document and the attached recipe ids are all present, on top of the moderation fields
+   * only an admin may see. The contract is asserted by an integration test that compares the two
+   * live payloads, so a future member field cannot go missing here unnoticed.
+   */
+  private List<AdminPostListResponse> enrich(List<Post> posts) {
+    List<AdminPostListResponse> responses =
+        posts.stream().map(adminPostMapper::toResponse).collect(Collectors.toList());
+    if (responses.isEmpty()) {
+      return responses;
+    }
+
+    applyAuthorAvatars(responses);
+    applyRecipeIds(responses);
+    return responses;
+  }
+
+  /**
+   * Resolves every author avatar in the page with a single query. A member with no profile row yet
+   * (BR-PROFILE-003) has no avatar, which is null rather than an error.
+   */
+  private void applyAuthorAvatars(List<AdminPostListResponse> responses) {
+    Set<UUID> authorIds =
+        responses.stream()
+            .map(AdminPostListResponse::getUserId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+    if (authorIds.isEmpty()) {
+      return;
+    }
+    // Built by hand rather than Collectors.toMap: avatars are nullable and toMap rejects nulls.
+    Map<UUID, String> avatars = new HashMap<>();
+    for (UserProfile profile : userProfileRepository.findByUserIdIn(authorIds)) {
+      avatars.put(profile.getUser().getId(), profile.getAvatarUrl());
+    }
+    responses.forEach(response -> response.setAvatarUrl(avatars.get(response.getUserId())));
+  }
+
+  /** Groups the page's (post, recipe) pairs by post so each item lists its own attached recipes. */
+  private void applyRecipeIds(List<AdminPostListResponse> responses) {
+    Set<UUID> postIds =
+        responses.stream()
+            .map(AdminPostListResponse::getId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+    if (postIds.isEmpty()) {
+      return;
+    }
+    Map<UUID, Set<UUID>> recipeIdsByPost = new HashMap<>();
+    for (RecipeRepository.PostRecipeId row : recipeRepository.findRecipeIdsByPostIds(postIds)) {
+      recipeIdsByPost
+          .computeIfAbsent(row.getPostId(), key -> new HashSet<>())
+          .add(row.getRecipeId());
+    }
+    responses.forEach(
+        response ->
+            response.setRecipeIds(recipeIdsByPost.getOrDefault(response.getId(), new HashSet<>())));
+  }
+
+  /**
+   * Admin detail view for one post (ADR-016): the post, its content score, and the state of every
+   * dish and ingredient name it references.
    *
    * <p>Component information is queried here rather than stored on the post. Storing it would mean
    * a snapshot that goes stale as soon as another post approves the same name, and the only
@@ -117,7 +198,6 @@ public class AdminPostService {
               .type("RECIPE")
               .name(recipe.getName())
               .moderationStatus(recipe.getModerationStatus().name())
-              .score(recipe.getScore())
               .build());
     }
 
@@ -143,17 +223,39 @@ public class AdminPostService {
 
     return AdminPostDetailResponse.builder()
         .id(post.getId())
+        .userId(post.getUser().getId())
+        .displayName(post.getUser().getDisplayName())
+        .avatarUrl(avatarOf(post.getUser().getId()))
         .title(post.getTitle())
         .content(post.getContent())
+        .rawContent(post.getRawContent())
+        .featuredImageUrl(post.getFeaturedImageUrl())
+        // Same extraction as the list item, reused so the two cannot drift apart.
+        .categoryIds(adminPostMapper.categoryIds(post.getCategories()))
+        .mediaIds(adminPostMapper.mediaIds(post.getMedia()))
+        // Read from the owning Recipe.posts side, like the list route: the same set of recipes,
+        // reported as ids here and as reviewable components in `recipes`.
+        .recipeIds(components.recipes().stream().map(Recipe::getId).collect(Collectors.toSet()))
         .status(post.getStatus().name())
         .flag(post.getFlag() == null ? null : post.getFlag().name())
+        .flagDetail(PostFlagDetailResponse.from(post.getFlagDetail()))
+        .rejectionReason(post.getRejectionReason())
         .contentScore(post.getContentScore())
         .recipes(recipeSummaries)
         .names(nameSummaries)
-        .userId(post.getUser().getId())
-        .displayName(post.getUser().getDisplayName())
         .email(post.getUser().getEmail())
+        .viewCount(post.getViewCount())
+        .publishedAt(post.getPublishedAt())
+        .createdAt(post.getCreatedAt())
         .build();
+  }
+
+  /** The author's avatar, or null when they have no profile row yet (BR-PROFILE-003). */
+  private String avatarOf(UUID userId) {
+    return userProfileRepository.findByUserIdIn(Set.of(userId)).stream()
+        .findFirst()
+        .map(UserProfile::getAvatarUrl)
+        .orElse(null);
   }
 
   /**
@@ -167,11 +269,15 @@ public class AdminPostService {
    * are {@link ModerationStatus#REJECTED} ones: approving a post must never resurrect a name an
    * admin previously refused.
    *
-   * <p>Refuses a hidden post (it is moderated through the visibility endpoint) and a post with no
-   * category (BR-CONTENT-003), both carried over from the endpoint this replaces.
+   * <p>Refuses a drafted post (nobody submitted it) and a post with no category (BR-CONTENT-003),
+   * both carried over from the endpoint this replaces.
+   *
+   * <p>The post's flag is left exactly as it was (ADR-025): approving a {@code FILTER_FAILED} post
+   * publishes it but does not relabel the verdict, so the row still says the decision was a human
+   * override rather than a filter pass.
    */
   @Transactional
-  public AdminPostDetailResponse approvePost(UUID adminId, UUID postId, String reason) {
+  public AdminPostDetailResponse approvePost(UUID adminId, UUID postId) {
     Post post = requireModeratablePost(postId);
 
     if (post.getCategories().isEmpty()) {
@@ -180,18 +286,19 @@ public class AdminPostService {
 
     post.setStatus(PostStatus.published);
     post.setPublishedAt(post.getPublishedAt() == null ? Instant.now() : post.getPublishedAt());
+    // Current state, not history: once approved again, a stale reason would describe a decision
+    // that no longer holds.
+    post.setRejectionReason(null);
+    // The flag is deliberately kept: published + FILTER_FAILED says a human overrode the filter,
+    // which is a different fact from published + FILTER_PASSED. Clearing it here would erase the
+    // only place that distinction is stored (ADR-025).
     postRepository.saveAndFlush(post);
 
-    approveComponents(postId, adminId, reason);
+    approveComponents(postId);
 
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action("APPROVE_POST")
-            .targetType("POST")
-            .targetId(post.getId())
-            .reason(reason)
-            .build());
+    // published_at moved and the post left the pending queue: both the summary and the
+    // published-posts series are now wrong.
+    dashboardCache.all();
 
     log.info("Admin {} approved post {}", adminId, post.getId());
 
@@ -214,18 +321,15 @@ public class AdminPostService {
 
     post.setStatus(PostStatus.unpublished);
     post.setPublishedAt(null);
+    post.setRejectionReason(reason);
+    // The blocker stays: together with rejection_reason it is the full decision record — what the
+    // machine saw and what the admin decided on top of it (ADR-025).
     postRepository.saveAndFlush(post);
 
-    rejectPendingComponents(postId, adminId, reason);
+    rejectPendingComponents(postId, reason);
 
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action("REJECT_POST")
-            .targetType("POST")
-            .targetId(post.getId())
-            .reason(reason)
-            .build());
+    // published_at was cleared and the post left the pending queue.
+    dashboardCache.all();
 
     log.info("Admin {} rejected post {}", adminId, post.getId());
 
@@ -235,18 +339,21 @@ public class AdminPostService {
   /**
    * Loads a post that may be approved or rejected.
    *
-   * <p>The hidden check is carried over from the endpoint this replaces: a hidden post is removed
-   * from public view through a different, admin-only path, and approving it here would silently
-   * override that decision.
+   * <p>A {@code drafted} post is refused: nobody submitted it, so there is nothing to moderate —
+   * approving it would publish content its author never asked to publish (ADR-023). A {@code
+   * pending} post is the normal case: a verdict was recorded and a human must decide. A {@code
+   * published} post stays moderatable because approve/reject is also how the dish and ingredient
+   * names it introduced are decided (ADR-016). A {@code processing} post is allowed too — an admin
+   * may decide before the filter finishes, and the late verdict is then discarded.
    */
   private Post requireModeratablePost(UUID postId) {
     Post post =
         postRepository
             .findByIdAndDeletedAtIsNull(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-    if (post.getStatus() == PostStatus.hidden) {
+    if (post.getStatus() == PostStatus.drafted) {
       throw new ValidationException(
-          "A hidden post is moderated through the visibility endpoint, not approve/reject");
+          "A drafted post has not been submitted for publication and cannot be moderated");
     }
     return post;
   }
@@ -258,25 +365,23 @@ public class AdminPostService {
    * <p>The seeding half is what keeps the two approval paths from diverging: a recipe approved via
    * its post contributes exactly what one approved via the recipe queue does.
    */
-  private void approveComponents(UUID postId, UUID adminId, String reason) {
+  private void approveComponents(UUID postId) {
     Components components = componentsOf(postId);
 
     for (Recipe recipe : components.recipes()) {
-      if (approveIfPending(
-          recipe.getModerationStatus(), "RECIPE", recipe.getId(), adminId, reason)) {
+      if (isAwaitingReview(recipe.getModerationStatus())) {
         recipe.setModerationStatus(ModerationStatus.APPROVED);
         recipeRepository.save(recipe);
       }
     }
     for (Dish dish : components.dishes()) {
-      if (approveIfPending(dish.getModerationStatus(), "DISH", dish.getId(), adminId, reason)) {
+      if (isAwaitingReview(dish.getModerationStatus())) {
         dish.setModerationStatus(ModerationStatus.APPROVED);
         dishRepository.save(dish);
       }
     }
     for (Ingredient ingredient : components.ingredients()) {
-      if (approveIfPending(
-          ingredient.getModerationStatus(), "INGREDIENT", ingredient.getId(), adminId, reason)) {
+      if (isAwaitingReview(ingredient.getModerationStatus())) {
         ingredient.setModerationStatus(ModerationStatus.APPROVED);
         ingredientRepository.save(ingredient);
       }
@@ -290,25 +395,26 @@ public class AdminPostService {
   }
 
   /** Reject every component of the post that is still awaiting review. */
-  private void rejectPendingComponents(UUID postId, UUID adminId, String reason) {
+  private void rejectPendingComponents(UUID postId, String reason) {
     Components components = componentsOf(postId);
 
     for (Recipe recipe : components.recipes()) {
-      if (rejectIfPending(
-          recipe.getModerationStatus(), "RECIPE", recipe.getId(), adminId, reason)) {
+      if (isAwaitingReview(recipe.getModerationStatus())) {
         recipe.setModerationStatus(ModerationStatus.REJECTED);
+        // The reason is recorded on the recipe as well as the post: the recipe's author reads its
+        // own rejection from its own row, and the decision that refused it is the same decision.
+        recipe.setRejectionReason(reason);
         recipeRepository.save(recipe);
       }
     }
     for (Dish dish : components.dishes()) {
-      if (rejectIfPending(dish.getModerationStatus(), "DISH", dish.getId(), adminId, reason)) {
+      if (isAwaitingReview(dish.getModerationStatus())) {
         dish.setModerationStatus(ModerationStatus.REJECTED);
         dishRepository.save(dish);
       }
     }
     for (Ingredient ingredient : components.ingredients()) {
-      if (rejectIfPending(
-          ingredient.getModerationStatus(), "INGREDIENT", ingredient.getId(), adminId, reason)) {
+      if (isAwaitingReview(ingredient.getModerationStatus())) {
         ingredient.setModerationStatus(ModerationStatus.REJECTED);
         ingredientRepository.save(ingredient);
       }
@@ -370,43 +476,14 @@ public class AdminPostService {
       List<Recipe> recipes, List<Dish> dishes, List<Ingredient> ingredients) {}
 
   /**
-   * Whether a component may be approved.
+   * Whether a component may still be decided: only while it is {@code PENDING}.
    *
-   * <p>A REJECTED name is a permanent block (BR-DISH-001), so approving the post that mentions it
-   * must not undo that. An already-APPROVED name needs no work and no log entry.
+   * <p>A REVIEWED name survives, in both directions. An {@code APPROVED} name was reviewed on its
+   * own merits and an approving post must not re-open it; a {@code REJECTED} name is a permanent
+   * block (BR-DISH-001), so approving the post that mentions it must not undo either.
    */
-  private boolean approveIfPending(
-      ModerationStatus current, String type, UUID id, UUID adminId, String reason) {
-    if (current != ModerationStatus.PENDING) {
-      return false;
-    }
-    logComponentDecision(adminId, "APPROVE_COMPONENT", type, id, reason);
-    return true;
-  }
-
-  /**
-   * Whether a component may be rejected: only while it is still awaiting review. An APPROVED name
-   * was reviewed on its own merits and survives a bad post.
-   */
-  private boolean rejectIfPending(
-      ModerationStatus current, String type, UUID id, UUID adminId, String reason) {
-    if (current != ModerationStatus.PENDING) {
-      return false;
-    }
-    logComponentDecision(adminId, "REJECT_COMPONENT", type, id, reason);
-    return true;
-  }
-
-  private void logComponentDecision(
-      UUID adminId, String action, String type, UUID id, String reason) {
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action(action)
-            .targetType(type)
-            .targetId(id)
-            .reason(reason)
-            .build());
+  private boolean isAwaitingReview(ModerationStatus current) {
+    return current == ModerationStatus.PENDING;
   }
 
   private PostStatus parseStatus(String status) {
@@ -417,7 +494,7 @@ public class AdminPostService {
       return PostStatus.valueOf(status);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException(
-          "Status must be one of: created, processed, published, unpublished, hidden");
+          "Status must be one of: drafted, processing, pending, published, unpublished");
     }
   }
 
@@ -429,7 +506,7 @@ public class AdminPostService {
       return PostFlag.valueOf(flag);
     } catch (IllegalArgumentException ex) {
       throw new ValidationException(
-          "Flag must be one of: all, PENDING, PASSED, REJECTED, NEEDS_REVIEW");
+          "Flag must be one of: all, FILTER_PASSED, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED");
     }
   }
 

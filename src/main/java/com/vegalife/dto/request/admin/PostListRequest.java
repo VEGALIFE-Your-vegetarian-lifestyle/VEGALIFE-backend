@@ -27,18 +27,22 @@ public class PostListRequest {
   private String sort;
 
   @Pattern(
-      regexp = "^(created|processed|published|unpublished|hidden)$",
-      message = "Status must be one of: created, processed, published, unpublished, hidden")
+      regexp = "^(drafted|processing|pending|published|unpublished)$",
+      message = "Status must be one of: drafted, processing, pending, published, unpublished")
   private String status;
 
   @Pattern(
-      regexp = "^(all|PENDING|PASSED|REJECTED|NEEDS_REVIEW)?$",
-      message = "Flag must be one of: all, PENDING, PASSED, REJECTED, NEEDS_REVIEW")
+      regexp = "^(all|FILTER_PASSED|FILTER_FAILED|SIMILAR_CONTENT|FILTER_SKIPPED)?$",
+      message =
+          "Flag must be one of: all, FILTER_PASSED, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED")
   private String flag;
 
   private UUID userId;
 
   private UUID categoryId;
+
+  /** Case-insensitive substring matched against {@code title} or {@code content}. */
+  private String keyword;
 
   @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
   private Instant createdFrom;
@@ -59,10 +63,13 @@ public class PostListRequest {
   }
 
   /**
-   * Issue #5: an admin opening the list without a flag lands on the posts awaiting review. The
-   * literal {@code all} disables the flag filter entirely.
+   * No flag filter by default: a post can carry any of the four verdicts, so preselecting one would
+   * silently hide the others. The review queue itself is {@code status=pending}, which lists every
+   * post with a recorded verdict that no admin has decided (ADR-029). {@code FILTER_PASSED} is most
+   * useful combined with {@code status=published}: it separates a post the filter cleared from one
+   * an admin approved over a blocker (ADR-025).
    */
   public String getFlag() {
-    return flag == null || flag.isBlank() ? "NEEDS_REVIEW" : flag;
+    return flag == null || flag.isBlank() ? "all" : flag;
   }
 }

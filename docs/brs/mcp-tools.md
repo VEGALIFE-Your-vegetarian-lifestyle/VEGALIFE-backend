@@ -17,10 +17,11 @@ describe is now the backend's own `@Tool` methods, not an MCP server.
 | BR-MCP-002 | Exactly six tools are exposed | Active | 2026-10-25 |
 | BR-MCP-003 | Tool calls consume no AI quota | Active | 2026-10-12 |
 | BR-MCP-004 | Credentials are never model-visible or logged | Active | 2026-10-12 |
-| BR-MCP-005 | Chat edits only the caller's current-week draft | Active | 2026-10-12 |
+| BR-MCP-005 | Chat edits only the caller's own upcoming draft | Active | 2026-11-14 |
 | BR-MCP-006 | Scheduling happens only after explicit user confirmation | Active | 2026-10-12 |
-| BR-MCP-007 | Tool failures are model-readable results, not transport errors | Active | 2026-10-12 |
+| BR-MCP-007 | Tool failures are model-readable results, not transport errors | Active | 2026-11-06 |
 | BR-MCP-008 | Allergies come from the profile, never from a tool argument | Active | 2026-10-25 |
+| BR-MCP-009 | A browsing tool's filters mirror its endpoint exactly | Active | 2026-11-05 |
 
 ### BR-MCP-001 — Tool calls act as the authenticated caller
 Every menu tool call executes as the member whose authentication produced the
@@ -62,12 +63,43 @@ mirrors `GET /api/dishes/suggestions`.
   `docs/feats/meal-plan-detail-query.md`)
 - Amended: 2026-10-13 — the registry moved from the `mcp-server` module to
   `MenuTools`; the count and the names are unchanged.
+- Amended: 2026-11-12 — `DELETE /api/menus/{menuId}` (BR-MENU-008) was added
+  to the REST surface and deliberately *not* to this one: deletion stays
+  unavailable to the assistant, and the count remains six.
 - Amended: 2026-10-25 — count raised from five to six with `suggest_dishes`
   (issue #163). The original rule treated "no dish discovery" as a non-goal;
   the AI could previously only plan meals from dish ids the member had already
   named. `suggest_dishes` closes that gap with a read-only, allergy-filtered
   browse that mirrors an existing member-facing endpoint. See
   `docs/feats/dish-suggestions.md`.
+
+### BR-MCP-009 — A browsing tool's filters mirror its endpoint exactly
+`suggest_dishes` exposes every recipe filter that `GET /api/dishes/suggestions`
+accepts, and no subset of it: `name`, `cuisineType`, `difficulty`, `maxPrepTime`,
+`maxCookTime`, `maxTotalTime`, and both bounds for each of the five macros —
+`minCalories`/`maxCalories`, `minProtein`/`maxProtein`,
+`minCarbohydrate`/`maxCarbohydrate`, `minFat`/`maxFat`, `minFiber`/`maxFiber`.
+
+The tool deliberately has **no** calorie-only shortcut. A tool that mirrored the
+endpoint for dish discovery but offered a narrower nutrition surface would let
+the same question ("high protein, low fat, at least 8 g of fibre") get a
+different answer depending on whether the member typed it into REST or into chat.
+The remedy for a filter the model should not use is a prompt, not a missing
+argument.
+
+Two consequences are inherited from the endpoint and are not tool-layer choices:
+
+- The values are whole-recipe totals **derived** from ingredients, never
+  author-edited (BR-RECP-004).
+- A recipe whose totals are unresolved fails **every** bound, lower and upper
+  alike — unknown is not zero (BR-RECP-006). The tool must not offer an
+  "include unknown" escape hatch.
+
+- Enforcement: the `@ToolParam` set on `suggestDishes`; asserted by
+  `MenuToolsTest.suggestDishes_forwardsEveryNutritionBound`
+- Related: `docs/feats/dish-suggestions.md`,
+  `docs/adrs/022-ingredient-level-nutrition.md`, BR-RECP-004, BR-RECP-006
+- Added: 2026-11-05
 
 ### BR-MCP-008 — Allergies come from the profile, never from a tool argument
 No tool and no endpoint accepts an allergen, allergy, or `exclude` parameter.
@@ -100,7 +132,8 @@ entirely.
 
 ### BR-MCP-003 — Tool calls consume no AI quota
 Menu tool calls are steps inside one chat turn, not separate turns: they never
-invoke `AiQuotaGuard` and never increment `ai_usage`. One chat turn that
+invoke the quota gate (`RequestAllowanceService`) and never increment
+`ai_usage`. One chat turn that
 triggers N tool calls counts exactly one unit, so BR-AI-001/002 keep their
 current meaning. A turn whose tool call fails still completes and still counts
 as one unit only if the assistant reply is produced.
@@ -130,21 +163,26 @@ result, or log line contains a token.
   or log. Scope widened from "no credential enters a prompt/schema/result" to
   also cover the server-side hop, which no longer carries one.
 
-### BR-MCP-005 — Chat edits only the caller's current-week draft
-`update_menu` refuses any menu that is not the caller's own **and** not in the
-current (UTC, BR-MENU-004) week **and** not in status `drafted` — a stricter
-restriction than the REST API, which allows edits while `scheduled`
-(BR-MENU-006). Rejections happen at the tool layer with a message the model
-can relay; the backend's own checks still run afterwards.
+### BR-MCP-005 — Chat edits only the caller's own upcoming draft
+`update_menu` refuses any menu that is not the caller's own **or** not in status
+`drafted` **or** whose week has already started (`start_date` before tomorrow,
+UTC per BR-MENU-004) — a stricter restriction than the REST API, which allows
+edits while `scheduled` (BR-MENU-006). The window is the same one BR-MENU-005
+applies to creation, so a week the assistant just created is always editable.
+Rejections happen at the tool layer with a message the model can relay; the
+backend's own checks still run afterwards.
 
-- Enforcement: `MenuTools.preCheckCurrentWeekDraft` before the service call
-  (compares the target's membership in the current server-UTC week's drafted
-  set); backend BR-MENU-006 as the backstop
-- Related: BR-MENU-004, BR-MENU-006, FR-005
+- Enforcement: `MenuTools.preCheckUpcomingDraft` before the service call,
+  backed by `MenuService.isUpcomingDraft`; backend BR-MENU-006 as the backstop
+- Related: BR-MENU-004, BR-MENU-005, BR-MENU-006, FR-005
 - Added: 2026-10-12
 - Amended: 2026-10-13 — pre-check moved from `ToolScope` in the `mcp-server`
   module into `MenuTools`; its conditions and its readable refusal message are
   unchanged.
+- Amended: 2026-11-14 — window narrowed from "the current week" to "starts
+  tomorrow or later", because creation now refuses a week that has already
+  begun. The paged current-week lookup (and its first-page-only edge case) is
+  replaced by a direct owned-menu check.
 
 ### BR-MCP-006 — Scheduling happens only after explicit user confirmation
 `schedule_menu` must not be called until the assistant has stated the exact
@@ -166,11 +204,28 @@ JSON object; failure is bare `error: ...` text (or, for the BR-MCP-005
 pre-check, `update refused: ...`) — never an exception escaping to the caller
 and never a transport failure, since there is no transport to fail.
 
+This covers failures that happen **before** the tool method runs, not just
+inside it. Spring AI binds a tool call's arguments first, and its default
+`DefaultToolExecutionExceptionProcessor` rethrows whenever the failure's cause
+is not a `RuntimeException` — which is every Jackson binding failure, since
+`MismatchedInputException` extends `IOException`. A malformed structured
+argument therefore escaped the tool layer entirely and the member received a
+502 (issue #190). A binding failure is a tool failure like any other: it is
+relayed to the model as text so the assistant can retry within the same turn.
+
 - Enforcement: `MenuTools` catches service and validation exceptions and
   converts them to result text; `RawTextToolResultConverter` emits the
-  envelope unescaped so a `String` return is not double-encoded
-- Related: ADR-013, `docs/apis/error-responses.md`
+  envelope unescaped so a `String` return is not double-encoded;
+  `ToolArgumentFailureProcessor` (registered by `ToolCallingConfig`) returns a
+  readable line for any `ToolExecutionException`, including a binding failure,
+  instead of rethrowing
+- Related: ADR-013, `docs/apis/error-responses.md`, `docs/apis/mcp/post-mcp.md`
 - Added: 2026-10-12
 - Amended: 2026-10-13 — the backend-call error mapping went with the removed
   HTTP hop; the catch-and-format behavior it implemented is now in `MenuTools`
   itself.
+- Amended: 2026-11-06 — scope extended to argument-binding failures, which
+  Spring AI raises before the tool method is entered and which the framework's
+  default processor rethrows unconditionally (issue #190). `create_menu` also
+  now accepts a stringified or wrapped `days` value, so a mis-serialized week
+  usually succeeds instead of needing the retry.

@@ -1,27 +1,26 @@
 package com.vegalife.integration.controller.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.user.AuthProvider;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.infrastructure.google.GoogleIdTokenVerifier;
 import com.vegalife.infrastructure.google.GoogleTokenExchanger;
 import com.vegalife.infrastructure.google.GoogleUserInfo;
+import com.vegalife.integration.outbound.QueuedEmailOtp;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.token.RefreshTokenRepository;
 import com.vegalife.repository.user.UserIdentityRepository;
 import com.vegalife.repository.user.UserRepository;
-import com.vegalife.service.email.EmailService;
+import com.vegalife.service.email.EmailPayload;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -79,18 +78,20 @@ class GoogleAuthControllerIntegrationTest {
   @Autowired private OtpCodeRepository otpCodeRepository;
   @Autowired private PasswordEncoder passwordEncoder;
 
+  @Autowired private OutboundMessageRepository outboundMessageRepository;
+
+  @Autowired private ObjectMapper objectMapper;
+
   @MockBean private GoogleTokenExchanger googleTokenExchanger;
   @MockBean private GoogleIdTokenVerifier googleIdTokenVerifier;
-  @MockBean private EmailService emailService;
 
   @BeforeEach
   void setUp() {
+    outboundMessageRepository.deleteAll();
     userIdentityRepository.deleteAll();
     refreshTokenRepository.deleteAll();
     otpCodeRepository.deleteAll();
     userRepository.deleteAll();
-    doNothing().when(emailService).sendVerificationOtp(anyString(), anyString(), anyString());
-    doNothing().when(emailService).sendPasswordResetOtp(anyString(), anyString(), anyString());
   }
 
   private User createActivatedPasswordUser(String displayName, String email) {
@@ -144,7 +145,13 @@ class GoogleAuthControllerIntegrationTest {
     assertThat(created.getStatus()).isEqualTo(UserStatus.activated);
     assertThat(created.getPasswordHash()).isNull();
     // No email-verification OTP is issued: Google already proved the address.
-    verify(emailService, never()).sendVerificationOtp(anyString(), anyString(), anyString());
+    assertThat(
+            QueuedEmailOtp.count(
+                outboundMessageRepository,
+                objectMapper,
+                "newcomer@gmail.com",
+                EmailPayload.Type.EMAIL_VERIFICATION))
+        .isZero();
 
     assertThat(
             userIdentityRepository.findByProviderAndProviderSubject(AuthProvider.GOOGLE, "sub-new"))

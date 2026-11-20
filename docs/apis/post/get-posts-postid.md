@@ -2,7 +2,7 @@
 
 ## Overview
 
-Return a single post by id, using the same response shape as the post list endpoints. Visibility depends only on the post not being soft-deleted, never on status or ownership — a draft, `unpublished`, or `hidden` post is returned to any caller just like a published one.
+Return a single post by id, using the same response shape as the post list endpoints. Visibility depends only on the post not being soft-deleted, never on status or ownership — a `drafted`, `processing`, `pending`, or `unpublished` post is returned to any caller just like a published one.
 
 ## Endpoint
 
@@ -50,7 +50,7 @@ No request body.
     "mediaIds": [],
     "recipeIds": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
     "status": "published",
-    "flag": "PASSED",
+    "rejectionReason": null,
     "viewCount": 12,
     "publishedAt": "2026-09-26T10:00:00Z",
     "createdAt": "2026-09-26T09:50:00Z"
@@ -58,7 +58,9 @@ No request body.
 }
 ```
 
-Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-posts.md` for the full field table, including the author summary (`userId`, `displayName`, `avatarUrl`). Unlike the list and feed endpoints, this endpoint resolves `recipeIds` to the post's actual attached recipes (issue #137), since it returns a single post rather than a page.
+Same `PostListResponse` shape as `GET /api/posts/me` — see `docs/apis/post/get-posts-me.md` for the full field table, including the author summary (`userId`, `displayName`, `avatarUrl`). Unlike the list and feed endpoints, this endpoint resolves `recipeIds` to the post's actual attached recipes (issue #137), since it returns a single post rather than a page.
+
+`rejectionReason` is owner-scoped on this endpoint: it is populated only when the caller authored the post, and is `null` for a guest or another member. See Business Rules.
 
 ### Error Responses
 
@@ -71,9 +73,11 @@ Same `PostListResponse` shape as `GET /api/posts` — see `docs/apis/post/get-po
 ## Business Rules
 
 - Visibility is gated by `deleted_at IS NULL` only (BR-POST-011); neither status nor ownership is checked, so another user's post is returned and the caller's own non-published post is returned too.
+- `rejectionReason` is owner-scoped: the post's author reads why an admin rejected it, but a guest or another member gets `null` even though the rest of the payload is identical. The reason is admin wording about the author's own content, not public information.
 - A soft-deleted post and an unknown id are both reported as `404 Post not found` — the same not-found-over-leak pattern used elsewhere in the post API, so no post data or existence is leaked.
-- Public access: this route is `permitAll`, so guests may read any non-deleted post — like `GET /api/posts/feed` and `GET /api/users/{userId}/posts`. Only a supplied-but-invalid token is rejected (`401`); a missing token is not.
-- No view-count increment, caching, or ETags are performed by this endpoint.
+- Public access: this route is `permitAll`, so guests may read any non-deleted post — like `GET /api/posts` and `GET /api/users/{userId}/posts`. Only a supplied-but-invalid token is rejected (`401`); a missing token is not.
+- No caching or ETags are performed by this endpoint.
+- A successful read counts as a view when the post is `published` and the caller is not its author (BR-POST-016): `viewCount` is incremented by one and the response carries the new value. The author's own reads and reads of non-published posts are not counted. There is no de-duplication — every qualifying request increments.
 
 ## Example
 

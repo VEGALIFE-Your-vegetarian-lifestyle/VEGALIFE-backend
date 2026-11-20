@@ -130,7 +130,7 @@ class RelatedPostsIntegrationTest {
   }
 
   private Post draftPost(String title) {
-    return postRepository.saveAndFlush(basePost(title).status(PostStatus.created).build());
+    return postRepository.saveAndFlush(basePost(title).status(PostStatus.drafted).build());
   }
 
   private Post.PostBuilder basePost(String title) {

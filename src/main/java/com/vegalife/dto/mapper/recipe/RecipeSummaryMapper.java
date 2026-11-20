@@ -11,11 +11,19 @@ public final class RecipeSummaryMapper {
 
   private RecipeSummaryMapper() {}
 
-  public static RecipeSummaryResponse toSummary(Recipe recipe) {
+  /**
+   * Builds the recommendation shape for one recipe.
+   *
+   * <p>{@code imageUrl} is passed in rather than read from {@code recipe.getDish()}: the image is
+   * the shared dish's, both callers already hold that dish, and reading through the lazy
+   * association here would cost one query per recommendation for a value the caller has in hand.
+   */
+  public static RecipeSummaryResponse toSummary(Recipe recipe, String imageUrl) {
     return RecipeSummaryResponse.builder()
         .id(recipe.getId())
         .name(recipe.getName())
         .description(recipe.getDescription())
+        .imageUrl(imageUrl)
         .prepTimeMinutes(recipe.getPrepTimeMinutes())
         .cookTimeMinutes(recipe.getCookTimeMinutes())
         .servings(recipe.getServings())
@@ -25,6 +33,7 @@ public final class RecipeSummaryMapper {
         .carbohydrateG(recipe.getCarbohydrateG())
         .fatG(recipe.getFatG())
         .fiberG(recipe.getFiberG())
+        .nutritionResolved(recipe.getCalories() != null)
         .build();
   }
 }

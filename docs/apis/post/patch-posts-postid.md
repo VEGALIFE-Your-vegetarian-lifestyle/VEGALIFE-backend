@@ -44,19 +44,19 @@ Required: a valid JWT access token in the `Authorization` header (`Bearer <token
 | rawContent | object | Required on every request. Rich-text document produced by the frontend editor; must be a JSON object. |
 | featuredImageUrl | string | New featured image URL. Optional, left unchanged when omitted. |
 | categoryIds | array of UUID | Replaces the whole category set; every category must exist and be active (BR-CONTENT-004). Optional, left unchanged when omitted. |
-| publish | boolean | `true` publishes, `false` returns the post to a private draft (BR-CONTENT-003). Optional, left unchanged when omitted. |
+| publish | boolean | `true` submits the post for a filter re-check, `false` withdraws it to a private draft. Optional: omitted/`null` leaves the publish state unchanged. |
 
 ## Responses
 
 ### Success Response (200 OK)
 
-Returns the updated post using `PostListResponse` (`id`, `userId`, `displayName`, `avatarUrl`, `title`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `status`, `flag`, `viewCount`, `publishedAt`, `createdAt`). `flag` is the content filter state: `null` (never filtered), `PENDING`, `PASSED`, `REJECTED`, or `NEEDS_REVIEW`. `recipeIds` is always empty here — this endpoint never changes recipe attachments; use `POST /api/posts/{postId}/recipes` for that (issue #137).
+Returns the updated post using `PostListResponse` (`id`, `userId`, `displayName`, `avatarUrl`, `title`, `rawContent`, `featuredImageUrl`, `categoryIds`, `mediaIds`, `recipeIds`, `status`, `rejectionReason`, `viewCount`, `publishedAt`, `createdAt`). `status` is one of `drafted`, `processing`, `pending`, `published`, `unpublished`. The filter verdict (`flag`/`flagDetail`) is not part of the member-facing shape — it is exposed on the admin post endpoints only (ADR-025). `rejectionReason` is returned only to the post's author — an Administrator editing someone else's post gets `null`. `recipeIds` is always empty here — this endpoint never changes recipe attachments; use `POST /api/posts/{postId}/recipes` for that (issue #137).
 
 ### Error Responses
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | `content` or `rawContent` missing/invalid; invalid title; unknown/inactive category; publishing without a category; non-admin changing a `hidden` post | `Validation failed` or the specific rule message |
+| 400 | `content` or `rawContent` missing/invalid; invalid title; unknown/inactive category; publishing without a category | `Validation failed` or the specific rule message |
 | 401 | JWT is missing, invalid, expired, or the account is inactive | `Unauthorized` |
 | 404 | Post does not exist or is soft-deleted; for non-admins, also when it belongs to another user | `Post not found` |
 | 500 | Unexpected server error | `Internal server error` |
@@ -64,13 +64,15 @@ Returns the updated post using `PostListResponse` (`id`, `userId`, `displayName`
 ## Business Rules
 
 - Only the owner or an Administrator can edit a post; a non-admin gets `404` for others' posts.
-- Every edit an Administrator makes to another user's post is written to `moderation_log` (BR-ADMIN-002).
+- An Administrator's edit of another user's post leaves no trace of who did it (ADR-027).
 - Publishing requires at least one active category; a published post cannot lose its last category.
-- `publish: true` queues the post for filtering rather than publishing it directly: the post goes to `flag: PENDING` and waits for filtering (BR-POST-004). Unpublishing (`publish: false`) withdraws the post immediately, sets status `created`, clears `publishedAt`, and returns it to a private draft — an `unpublished` post keeps its `flag` (BR-POST-007).
-- A title or content change to a published or unpublished post re-queues semantic filtering and returns the post to `flag: PENDING` (BR-POST-007). `rawContent` is never read by the filter and a `rawContent`-only change does not re-queue.
-- A `REJECTED` or `NEEDS_REVIEW` post is returned to the owner as status `unpublished`, not `published` (BR-POST-010, BR-FILTER-008).
+- `publish: true` does not publish: the post moves to `processing` with no flag and waits for the content filter, or for an admin when filtering is disabled (BR-POST-004, BR-FILTER-005).
+- `publish: false` withdraws the post immediately: `status = drafted`, `publishedAt` cleared, and any `flag`/`flagDetail` cleared. Withdrawal works from every state except `drafted` (where it is a no-op) — including `processing` and `pending`, so an author can take back a post nobody has decided on yet (BR-POST-007).
+- A title or content change to a `published`, `unpublished`, or `pending` post re-queues semantic filtering and moves it to `processing` with no flag (BR-POST-007). A post that is merely in flight (`processing` + no flag) is not queued a second time — the pending run already reads the edited body. `rawContent` is never read by the filter and a `rawContent`-only change does not re-queue.
+- The filter never unpublishes: a `FAIL`/`UNCERTAIN` verdict, or a near-duplicate, moves the post to `pending` with a `flag` for an admin to decide (BR-FILTER-008). Only an admin rejection produces `unpublished` (BR-POST-012).
+- A changed `featuredImageUrl` on a `published` post moves it to `pending` and keeps its `flag`, without starting a filter run: the filter judges text only, so the new image has no verdict and an admin must review it (BR-POST-015, ADR-029). Clearing the image (`null` or blank) leaves the post alone.
 - Filtering itself is never triggered synchronously by this endpoint; it runs through the async outbox (BR-FILTER-006).
-- Schema: migration `V18__create_moderation_log.sql` adds `moderation_log`; migration `V19__add_post_filtering.sql` adds the `flag` column exposed in the response; migration `V27__add_post_raw_content_drop_type_video_url.sql` adds `raw_content` and drops `type`/`video_url`; migration `V31__drop_post_status_flagged.sql` removes the `flagged` status value.
+- Schema: migration `V19__add_post_filtering.sql` adds the `flag` column; `V27__add_post_raw_content_drop_type_video_url.sql` adds `raw_content` and drops `type`/`video_url`; `V31__drop_post_status_flagged.sql` removes the `flagged` status value; `V56__post_processing_status_and_flag_blocker.sql` reshapes `status`/`flag` per ADR-023 and adds `flag_detail`; `V57__store_post_flag_detail_as_json.sql` converts `flag_detail` to `JSONB` and enforces `flag_detail->>'kind' = flag` (ADR-024); `V58__keep_post_flag_after_publication.sql` adds `FILTER_PASSED` and permits a flag on any status except `drafted` (ADR-025); `V60__drop_moderation_log.sql` drops the retired audit table (ADR-027); `V61__add_post_pending_status.sql` adds `pending` and `CHECK (status <> 'processing' OR flag IS NULL)` (ADR-029).
 
 ## Example
 

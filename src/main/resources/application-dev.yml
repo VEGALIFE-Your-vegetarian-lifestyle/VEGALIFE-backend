@@ -2,6 +2,12 @@ spring:
   config:
     activate:
       on-profile: dev
+    # Local `.env` (gitignored, not baked into images) answers the environment
+    # placeholders in this file and in application.yml. `optional:` keeps a missing
+    # file a no-op, and config-data ranks below real OS variables, so a deploy
+    # environment still wins. `[.properties]` is required because the filename has
+    # no suffix Boot can infer; .env.example is written in properties syntax.
+    import: optional:file:./.env[.properties]
 
   ai:
     openai:
@@ -37,7 +43,7 @@ spring:
 
 logging:
   level:
-    com.vegalife: DEBUG
+    com.vegalife: ${LOGGING_LEVEL_COM_VEGALIFE:DEBUG}
     org.springframework.web: DEBUG
     org.hibernate.SQL: DEBUG
 
@@ -46,9 +52,9 @@ app:
     vnpay:
       # Sandbox is the default for local runs; credentials come from the env and
       # stay blank until set, so checkout answers 500 (FR-019) rather than signing
-      # with an empty secret.
-      enabled: true
+      # with an empty secret. payment-url has no non-dev default; locale and
+      # enabled default in application.yml and this only flips `enabled` on.
+      enabled: ${VNPAY_ENABLED:true}
       tmn-code: ${VNPAY_TMN_CODE:}
       secure-hash-secret: ${VNPAY_SECURE_HASH_SECRET:}
       payment-url: ${VNPAY_PAYMENT_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
-      locale: vn

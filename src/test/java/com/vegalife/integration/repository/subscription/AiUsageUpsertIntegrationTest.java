@@ -8,9 +8,6 @@ import com.vegalife.model.subscription.AiUsage;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.subscription.AiUsageRepository;
 import com.vegalife.repository.user.UserRepository;
-import java.time.Instant;
-import java.time.YearMonth;
-import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,9 +23,9 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * Exercises the atomic quota upsert on real PostgreSQL: {@code INSERT ... ON CONFLICT DO UPDATE}
- * must create the window row on the first send and increment it on every later send, so concurrent
- * turns cannot race past the limit.
+ * Exercises the atomic consumption upsert on real PostgreSQL (issue #181): {@code INSERT ... ON
+ * CONFLICT (user_id) DO UPDATE} creates the member's one lifetime row on the first send and
+ * increments it in place forever after. No window, no reset.
  */
 @Testcontainers
 @SpringBootTest
@@ -58,8 +55,6 @@ class AiUsageUpsertIntegrationTest {
   @Autowired private UserRepository userRepository;
 
   private UUID userId;
-  private Instant windowStart;
-  private Instant windowEnd;
 
   @BeforeEach
   void setUp() {
@@ -74,22 +69,17 @@ class AiUsageUpsertIntegrationTest {
                 .emailVerified(true)
                 .build());
     userId = user.getId();
-
-    YearMonth month = YearMonth.now(ZoneOffset.UTC);
-    windowStart = month.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-    windowEnd = month.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
   }
 
   @Test
   void incrementRequestCount_createsRowThenIncrementsAtomically() {
-    assertThat(usageRepository.sumRequestCountInWindow(userId, windowStart, windowEnd)).isZero();
+    assertThat(usageRepository.sumRequestCount(userId)).isZero();
 
-    usageRepository.incrementRequestCount(userId, windowStart, windowEnd);
-    usageRepository.incrementRequestCount(userId, windowStart, windowEnd);
-    usageRepository.incrementRequestCount(userId, windowStart, windowEnd);
+    usageRepository.incrementRequestCount(userId);
+    usageRepository.incrementRequestCount(userId);
+    usageRepository.incrementRequestCount(userId);
 
-    assertThat(usageRepository.sumRequestCountInWindow(userId, windowStart, windowEnd))
-        .isEqualTo(3L);
+    assertThat(usageRepository.sumRequestCount(userId)).isEqualTo(3L);
     assertThat(usageRepository.findAll())
         .filteredOn(u -> userId.equals(u.getUserId()))
         .singleElement()
@@ -98,19 +88,15 @@ class AiUsageUpsertIntegrationTest {
   }
 
   @Test
-  void sumRequestCountInWindow_ignoresOtherWindows() {
-    Instant nextStart = windowEnd;
-    Instant nextEnd = nextStart.plusSeconds(2_592_000);
-    usageRepository.incrementRequestCount(userId, windowStart, windowEnd);
-    usageRepository.incrementRequestCount(userId, nextStart, nextEnd);
+  void incrementRequestCount_neverCreatesASecondRowForTheSameMember() {
+    usageRepository.incrementRequestCount(userId);
+    usageRepository.incrementRequestCount(userId);
 
-    assertThat(usageRepository.sumRequestCountInWindow(userId, windowStart, windowEnd))
-        .isEqualTo(1L);
+    assertThat(usageRepository.findAll()).filteredOn(u -> userId.equals(u.getUserId())).hasSize(1);
   }
 
   @Test
-  void sumRequestCountInWindow_withoutRowIsZero() {
-    assertThat(usageRepository.sumRequestCountInWindow(UUID.randomUUID(), windowStart, windowEnd))
-        .isZero();
+  void sumRequestCount_withoutRowIsZero() {
+    assertThat(usageRepository.sumRequestCount(UUID.randomUUID())).isZero();
   }
 }

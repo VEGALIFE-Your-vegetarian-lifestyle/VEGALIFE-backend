@@ -22,7 +22,9 @@ public class SearchRequest {
   private String q;
 
   /** post/video select from the post table; video is a post with video/* media attached. */
-  @Pattern(regexp = "^(post|video|recipe)?$", message = "type must be one of: post, video, recipe")
+  @Pattern(
+      regexp = "^(post|video|recipe|restaurant)?$",
+      message = "type must be one of: post, video, recipe, restaurant")
   private String type;
 
   /** Narrows posts/videos; never excludes recipes (a recipe has no category of its own). */

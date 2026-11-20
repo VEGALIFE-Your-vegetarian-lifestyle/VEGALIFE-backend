@@ -117,14 +117,16 @@ registration.
 ## Design overview
 
 Transactional outbox — see `docs/adrs/005-persistent-outbound-message-queue.md`
-for the decision and alternatives. In short: `V15__create_outbound_message.sql`
-adds the queue table; `OutboxEmailService` (`@Primary` `EmailService`
-implementation) writes rows; a `@Scheduled` drainer claims rows
-(`PENDING`/`DEFERRED`, `next_attempt_at <= now`) and sends them through
-a channel adapter, marking `COMPLETED` or scheduling the next retry;
-exponential-ish fixed backoff (10s/30s/2m → 5m deferred), OTP-expiry
-precedence, visibility-timeout recovery, payload clearing, retention
-purge, and log-based counters.
+for the decision and alternatives, and
+`docs/adrs/028-enqueue-email-from-sending-services.md` for the enqueue
+shape. In short: `V15__create_outbound_message.sql` adds the queue table;
+each sending service writes its own row in its transaction (`AuthService`,
+`PaymentWebhookService`, and the content-filter and media-purge callers); a
+`@Scheduled` drainer claims rows (`PENDING`/`DEFERRED`, `next_attempt_at <=
+now`) and sends them through a channel adapter, marking `COMPLETED` or
+scheduling the next retry; exponential-ish fixed backoff (10s/30s/2m → 5m
+deferred), OTP-expiry precedence, visibility-timeout recovery, payload
+retention until purge, retention purge, and log-based counters.
 
 ## Success metrics
 

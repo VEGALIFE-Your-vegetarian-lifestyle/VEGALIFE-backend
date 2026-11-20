@@ -260,12 +260,12 @@ Package-by-layer, mirroring the subscription feature:
   `/{paymentId}`), `checkout-ttl` (default `30m`). Dev/test
   profile values point at sandbox hosts with placeholder credentials; prod
   values are environment-only.
-- **Receipt email** adds `OutboundEmailPayload.Type.RECEIPT` with a nested
+- **Receipt email** adds `EmailPayload.Type.RECEIPT` with a nested
   `Receipt(planName, amount, currency, paidAt, reference)` plus a
   back-compatible 4-argument constructor, a `sendPaymentReceipt` method on
-  `EmailService` implemented by both `OutboxEmailService` (enqueue) and
-  `SmtpEmailServiceImpl` (render `email/payment-receipt`), and a
-  `deliver` branch in `EmailChannelAdapter`.
+  `EmailService` implemented by `SmtpEmailServiceImpl` (render
+  `email/payment-receipt`), and a `deliver` branch in `EmailChannelAdapter`.
+  `PaymentWebhookService` enqueues the row itself (ADR-028).
 - **DTOs** `dto/request/payment/CheckoutRequest` (`planCode`, `@NotBlank`)
   and `dto/response/payment/CheckoutResponse`.
 - **ADR-008** records the build-vs-buy decision (hand-rolled thin client,

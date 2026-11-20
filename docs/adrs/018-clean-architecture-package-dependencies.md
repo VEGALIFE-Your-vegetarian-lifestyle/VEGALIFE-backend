@@ -160,7 +160,9 @@ what the rank table already implies.
   the owning domain package rather than reaching across domains.
 - The `service/email ↔ service/outbound` same-rank cycle is accepted for now;
   merging `OutboundEmailPayload` into a shared payload type is a possible
-  follow-up.
+  follow-up. **Resolved by ADR-028:** the payload is now
+  `service/email/EmailPayload` and the cycle no longer includes the enqueue
+  path, since no class in `service/outbound` constructs it.
 - Large but mechanical diff: ~50–60 main-source moves plus the mirrored test
   tree, delivered as commit-sized phases on one dedicated branch.
 

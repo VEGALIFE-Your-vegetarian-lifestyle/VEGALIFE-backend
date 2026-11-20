@@ -29,7 +29,20 @@ public class RecipeIngredientItem {
       message = "Ingredient amount must have at most 3 decimal places")
   private BigDecimal amount;
 
-  @NotBlank(message = "Ingredient unit is required")
+  /**
+   * The measurement unit, optional.
+   *
+   * <p>Used <strong>only when this name does not exist yet</strong>: the value becomes the new
+   * ingredient's unit, and an admin may correct it later (ADR-022). For an existing ingredient the
+   * canonical unit wins and this field is ignored, so one member cannot re-denominate a shared
+   * ingredient that other recipes already depend on.
+   *
+   * <p>Accepted values are {@code G}, {@code ML}, {@code PIECE} and their spelling variants; {@code
+   * kg}, {@code tbsp} and other real units are refused, because silently redefining {@code 1 kg} as
+   * {@code 1 g} would change the quantity. The field is optional so an existing {@code PIECE}
+   * ingredient can be written as {@code "2 cà chua"}; omitting it for an ingredient whose unit is
+   * still undecided stores {@code null} and leaves the recipe uncomputable.
+   */
   @Size(max = 30, message = "Ingredient unit must not exceed 30 characters")
   private String unit;
 }

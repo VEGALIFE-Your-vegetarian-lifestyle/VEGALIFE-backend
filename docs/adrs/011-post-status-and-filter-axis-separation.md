@@ -2,6 +2,10 @@
 
 ## Status
 
+Superseded by [ADR-023](023-post-processing-status-and-flag-blocker.md) (decisions 2, 4 and 5; the
+"one axis per concern" principle is kept and strengthened). Accepted 2026-10-10, superseded
+2026-11-13. The text below is the record of the decision as made, not the current model.
+
 Accepted (supersedes the `status = flagged` part of ADR-007)
 
 ## Date

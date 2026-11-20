@@ -17,9 +17,11 @@ import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.infrastructure.payment.vnpay.VnpaySigner;
 import com.vegalife.model.subscription.AiPlan;
+import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.subscription.AiPlanRepository;
+import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.payment.PaymentGateway;
@@ -83,6 +85,8 @@ class PaymentStatusIntegrationTest {
   @Autowired private AiPlanRepository planRepository;
 
   @Autowired private PaymentLedgerRepository paymentLedgerRepository;
+
+  @Autowired private AiSubscriptionRepository subscriptionRepository;
 
   @Autowired private JwtTokenService jwtTokenService;
 
@@ -199,12 +203,7 @@ class PaymentStatusIntegrationTest {
         .andExpect(jsonPath("$.data.currency").value("VND"))
         .andExpect(jsonPath("$.data.createdAt").isNotEmpty())
         .andExpect(jsonPath("$.data.paidAt").value(nullValue()))
-        .andExpect(jsonPath("$.data.plan.code").value("PRO"))
-        .andExpect(jsonPath("$.data.plan.name").value(proPlan.getName()))
-        .andExpect(
-            jsonPath("$.data.plan.monthlyRequestLimit").value(proPlan.getMonthlyRequestLimit()))
-        .andExpect(jsonPath("$.data.plan.price.amount").value((int) proPlan.getPriceAmount()))
-        .andExpect(jsonPath("$.data.plan.price.currency").value("VND"));
+        .andExpect(jsonPath("$.data.plan").doesNotExist());
 
     // FR-007/ADR-008: a status read is a ledger lookup, never a gateway round-trip.
     verifyNoInteractions(paymentGateway);
@@ -238,8 +237,7 @@ class PaymentStatusIntegrationTest {
         .andExpect(jsonPath("$.data.amount").value((int) proPlan.getPriceAmount()))
         .andExpect(jsonPath("$.data.currency").value("VND"))
         .andExpect(jsonPath("$.data.createdAt").isNotEmpty())
-        .andExpect(jsonPath("$.data.paidAt").isNotEmpty())
-        .andExpect(jsonPath("$.data.plan.code").value("PRO"));
+        .andExpect(jsonPath("$.data.paidAt").isNotEmpty());
   }
 
   private PaymentLedger pendingLedger(UUID userId) {
@@ -247,14 +245,24 @@ class PaymentStatusIntegrationTest {
         paymentLedgerRepository.save(
             PaymentLedger.builder()
                 .userId(userId)
-                .planId(proPlan.getId())
                 .amount(proPlan.getPriceAmount())
                 .currency(proPlan.getPriceCurrency())
                 .status(PaymentLedgerStatus.pending)
                 .provider("vnpay")
                 .build());
     ledger.setTxnRef(ledger.getId().toString().replace("-", ""));
-    return paymentLedgerRepository.save(ledger);
+    ledger = paymentLedgerRepository.save(ledger);
+
+    // Checkout writes the acquisition before the money moves (issue #181); fulfilment has nothing
+    // to stamp without it.
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(userId)
+            .planId(proPlan.getId())
+            .paymentId(ledger.getId())
+            .grantedAt(null)
+            .build());
+    return ledger;
   }
 
   /** Signs the same notification shape VNPay sends, using the configured (fake) test secret. */

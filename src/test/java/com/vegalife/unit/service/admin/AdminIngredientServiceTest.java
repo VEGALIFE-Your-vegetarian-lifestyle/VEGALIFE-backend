@@ -3,7 +3,6 @@ package com.vegalife.unit.service.admin;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,20 +11,20 @@ import com.vegalife.dto.request.admin.AdminIngredientCreateRequest;
 import com.vegalife.dto.request.admin.AdminIngredientUpdateRequest;
 import com.vegalife.dto.response.admin.AdminIngredientResponse;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.admin.ModerationLog;
+import com.vegalife.enums.recipe.Unit;
 import com.vegalife.model.recipe.Ingredient;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.service.admin.AdminIngredientService;
+import com.vegalife.service.recipe.RecipeNutritionService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
+import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -35,7 +34,7 @@ class AdminIngredientServiceTest {
 
   @Mock private IngredientRepository ingredientRepository;
 
-  @Mock private ModerationLogRepository moderationLogRepository;
+  @Mock private RecipeNutritionService recipeNutritionService;
 
   @InjectMocks private AdminIngredientService adminIngredientService;
 
@@ -65,7 +64,92 @@ class AdminIngredientServiceTest {
 
     assertThat(response.getModerationStatus()).isEqualTo("APPROVED");
     assertThat(response.getName()).isEqualTo("đậu hũ");
-    assertThat(lastLog().getAction()).isEqualTo("CREATE_INGREDIENT");
+    // A name with no nutrition yet is unresolved, not zero-calorie.
+    assertThat(response.isNutritionResolved()).isFalse();
+    assertThat(response.getCalories()).isNull();
+  }
+
+  @Test
+  void createIngredient_withFullNutrition_normalisesUnitAndStoresPerUnitValues() {
+    when(ingredientRepository.findByNameIgnoreCase("đậu hũ")).thenReturn(Optional.empty());
+    when(ingredientRepository.saveAndFlush(any(Ingredient.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    AdminIngredientResponse response =
+        adminIngredientService.createIngredient(
+            adminId,
+            AdminIngredientCreateRequest.builder()
+                .name("đậu hũ")
+                .unit("grams")
+                .calories(new BigDecimal("1.44"))
+                .proteinG(new BigDecimal("0.1719"))
+                .carbohydrateG(new BigDecimal("0.0278"))
+                .fatG(new BigDecimal("0.0872"))
+                .fiberG(new BigDecimal("0.023"))
+                .build());
+
+    assertThat(response.getUnit()).isEqualTo("G");
+    assertThat(response.getCalories()).isEqualByComparingTo("1.44");
+    assertThat(response.isNutritionResolved()).isTrue();
+  }
+
+  @Test
+  void createIngredient_pieceUnit_takesPerPieceEstimateWithNoPieceWeight() {
+    when(ingredientRepository.findByNameIgnoreCase("cà chua")).thenReturn(Optional.empty());
+    when(ingredientRepository.saveAndFlush(any(Ingredient.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    AdminIngredientResponse response =
+        adminIngredientService.createIngredient(
+            adminId,
+            AdminIngredientCreateRequest.builder()
+                .name("cà chua")
+                .unit("quả")
+                .calories(new BigDecimal("22.14"))
+                .proteinG(new BigDecimal("1.0824"))
+                .carbohydrateG(new BigDecimal("4.7847"))
+                .fatG(new BigDecimal("0.246"))
+                .fiberG(new BigDecimal("1.476"))
+                .build());
+
+    assertThat(response.getUnit()).isEqualTo("PIECE");
+    // The per-piece figure is the estimate itself; nothing else is recorded to justify it.
+    assertThat(response.getCalories()).isEqualByComparingTo("22.14");
+    assertThat(response.isNutritionResolved()).isTrue();
+  }
+
+  @Test
+  void createIngredient_partialNutrition_isRefused() {
+    when(ingredientRepository.findByNameIgnoreCase("đậu hũ")).thenReturn(Optional.empty());
+
+    // A half-filled ingredient could price a recipe while silently omitting a macro.
+    assertThatThrownBy(
+            () ->
+                adminIngredientService.createIngredient(
+                    adminId,
+                    AdminIngredientCreateRequest.builder()
+                        .name("đậu hũ")
+                        .unit("G")
+                        .calories(new BigDecimal("144"))
+                        .build()))
+        .isInstanceOf(ValidationException.class)
+        .hasMessageContaining("in full or not at all");
+
+    verify(ingredientRepository, never()).saveAndFlush(any(Ingredient.class));
+  }
+
+  @Test
+  void createIngredient_unknownUnit_isRefused() {
+    when(ingredientRepository.findByNameIgnoreCase("đậu hũ")).thenReturn(Optional.empty());
+
+    // 'kg' is not a spelling variant of 'g': accepting it would redefine the nutrition basis.
+    assertThatThrownBy(
+            () ->
+                adminIngredientService.createIngredient(
+                    adminId,
+                    AdminIngredientCreateRequest.builder().name("đậu hũ").unit("kg").build()))
+        .isInstanceOf(ValidationException.class)
+        .hasMessageContaining("unit must be G, ML, or PIECE");
   }
 
   @Test
@@ -127,7 +211,110 @@ class AdminIngredientServiceTest {
   }
 
   @Test
-  void deleteIngredient_softDeletesAndLogs() {
+  void updateIngredient_nutritionChange_recomputesEveryRecipeUsingIt() {
+    ingredient.setModerationStatus(ModerationStatus.APPROVED);
+    when(ingredientRepository.findByIdAndDeletedAtIsNull(ingredient.getId()))
+        .thenReturn(Optional.of(ingredient));
+    when(ingredientRepository.saveAndFlush(ingredient)).thenReturn(ingredient);
+
+    adminIngredientService.updateIngredient(
+        adminId,
+        ingredient.getId(),
+        AdminIngredientUpdateRequest.builder()
+            .unit("G")
+            .calories(new BigDecimal("1.44"))
+            .proteinG(new BigDecimal("0.1719"))
+            .carbohydrateG(new BigDecimal("0.0278"))
+            .fatG(new BigDecimal("0.0872"))
+            .fiberG(new BigDecimal("0.023"))
+            .build());
+
+    // Persisted totals would be silently stale otherwise.
+    verify(recipeNutritionService).recomputeForIngredient(ingredient.getId());
+  }
+
+  @Test
+  void updateIngredient_nameOnlyChange_doesNotRecomputeRecipes() {
+    ingredient.setModerationStatus(ModerationStatus.APPROVED);
+    when(ingredientRepository.findByIdAndDeletedAtIsNull(ingredient.getId()))
+        .thenReturn(Optional.of(ingredient));
+    when(ingredientRepository.saveAndFlush(ingredient)).thenReturn(ingredient);
+
+    adminIngredientService.updateIngredient(
+        adminId, ingredient.getId(), AdminIngredientUpdateRequest.builder().name("tàu hũ").build());
+
+    // A rename cannot change any recipe's arithmetic.
+    verify(recipeNutritionService, never()).recomputeForIngredient(any());
+  }
+
+  @Test
+  void updateIngredient_completingPartialNutrition_isAccepted() {
+    ingredient.setUnit(Unit.G);
+    ingredient.setCalories(new BigDecimal("1.44"));
+    ingredient.setProteinG(new BigDecimal("0.1719"));
+    ingredient.setCarbohydrateG(new BigDecimal("0.0278"));
+    ingredient.setFatG(new BigDecimal("0.0872"));
+    ingredient.setFiberG(new BigDecimal("0.023"));
+    when(ingredientRepository.findByIdAndDeletedAtIsNull(ingredient.getId()))
+        .thenReturn(Optional.of(ingredient));
+    when(ingredientRepository.saveAndFlush(ingredient)).thenReturn(ingredient);
+
+    // Merging one field onto a complete row is a correction, not a half-answer.
+    AdminIngredientResponse response =
+        adminIngredientService.updateIngredient(
+            adminId,
+            ingredient.getId(),
+            AdminIngredientUpdateRequest.builder().calories(new BigDecimal("1.50")).build());
+
+    assertThat(response.getCalories()).isEqualByComparingTo("1.50");
+    assertThat(response.getProteinG()).isEqualByComparingTo("0.1719");
+    assertThat(response.isNutritionResolved()).isTrue();
+  }
+
+  @Test
+  void updateIngredient_partialNutritionOnEmptyRow_isRefused() {
+    when(ingredientRepository.findByIdAndDeletedAtIsNull(ingredient.getId()))
+        .thenReturn(Optional.of(ingredient));
+
+    assertThatThrownBy(
+            () ->
+                adminIngredientService.updateIngredient(
+                    adminId,
+                    ingredient.getId(),
+                    AdminIngredientUpdateRequest.builder()
+                        .calories(new BigDecimal("1.44"))
+                        .build()))
+        .isInstanceOf(ValidationException.class)
+        .hasMessageContaining("in full");
+
+    verify(ingredientRepository, never()).saveAndFlush(any(Ingredient.class));
+  }
+
+  @Test
+  void updateIngredient_unitChange_recomputesAndWarns() {
+    ingredient.setModerationStatus(ModerationStatus.APPROVED);
+    ingredient.setUnit(Unit.G);
+    ingredient.setCalories(new BigDecimal("3.65"));
+    ingredient.setProteinG(new BigDecimal("0.0713"));
+    ingredient.setCarbohydrateG(new BigDecimal("0.7995"));
+    ingredient.setFatG(new BigDecimal("0.0066"));
+    ingredient.setFiberG(new BigDecimal("0.013"));
+    when(ingredientRepository.findByIdAndDeletedAtIsNull(ingredient.getId()))
+        .thenReturn(Optional.of(ingredient));
+    when(ingredientRepository.saveAndFlush(ingredient)).thenReturn(ingredient);
+    when(recipeNutritionService.recomputeForIngredient(ingredient.getId())).thenReturn(4);
+
+    adminIngredientService.updateIngredient(
+        adminId, ingredient.getId(), AdminIngredientUpdateRequest.builder().unit("ML").build());
+
+    // Allowed silently, but every stored amount now means something different, so the recipes are
+    // recomputed and the change is traceable in the log.
+    assertThat(ingredient.getUnit()).isEqualTo(Unit.ML);
+    verify(recipeNutritionService).recomputeForIngredient(ingredient.getId());
+  }
+
+  @Test
+  void deleteIngredient_softDeletes() {
     when(ingredientRepository.findByIdAndDeletedAtIsNull(ingredient.getId()))
         .thenReturn(Optional.of(ingredient));
 
@@ -135,7 +322,6 @@ class AdminIngredientServiceTest {
 
     assertThat(ingredient.getDeletedAt()).isNotNull();
     verify(ingredientRepository, never()).delete(any(Ingredient.class));
-    assertThat(lastLog().getAction()).isEqualTo("DELETE_INGREDIENT");
   }
 
   @Test
@@ -146,12 +332,12 @@ class AdminIngredientServiceTest {
 
     assertThat(
             adminIngredientService
-                .approveIngredient(adminId, ingredient.getId(), null)
+                .approveIngredient(adminId, ingredient.getId())
                 .getModerationStatus())
         .isEqualTo("APPROVED");
     assertThat(
             adminIngredientService
-                .rejectIngredient(adminId, ingredient.getId(), "not food")
+                .rejectIngredient(adminId, ingredient.getId())
                 .getModerationStatus())
         .isEqualTo("REJECTED");
   }
@@ -165,11 +351,5 @@ class AdminIngredientServiceTest {
     assertThatThrownBy(() -> adminIngredientService.getIngredient(ingredientId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Ingredient not found");
-  }
-
-  private ModerationLog lastLog() {
-    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository, atLeastOnce()).save(captor.capture());
-    return captor.getAllValues().get(captor.getAllValues().size() - 1);
   }
 }

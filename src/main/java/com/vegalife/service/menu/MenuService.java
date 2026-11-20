@@ -27,8 +27,11 @@ import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.InvalidMenuTransitionException;
 import com.vegalife.shared.exception.MenuNotEditableException;
 import com.vegalife.shared.exception.MenuOverlapException;
+import com.vegalife.shared.exception.MenuValidationException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -63,14 +66,17 @@ public class MenuService {
   private final MenuValidator menuValidator;
   private final DishRepository dishRepository;
   private final RecipeRecommendationService recipeRecommendationService;
+  private final Clock clock;
 
   /**
    * BR-MENU-005: validates the week payload and persists a new {@code drafted} menu with its days
-   * in one transaction. The owner is the authenticated caller; {@code endDate} is derived.
+   * in one transaction. The owner is the authenticated caller; {@code endDate} is derived. A new
+   * week may not start today or earlier — the member would be planning days that are already gone.
    */
   @Transactional
   public MenuDetailResponse createMenu(UUID userId, CreateMenuRequest request) {
     menuValidator.validate(request);
+    requireStartDateIsUpcoming(request.getStartDate());
 
     LocalDate startDate = request.getStartDate();
     Menu menu =
@@ -90,6 +96,34 @@ public class MenuService {
   }
 
   /**
+   * BR-MENU-005: a new week must start tomorrow or later in server-UTC terms (BR-MENU-004), so the
+   * member is never handed a plan whose first days have already passed. Create-only by design:
+   * {@link #updateMenu} rewrites an existing, immutable window and must keep working after that
+   * window has started (BR-MENU-006).
+   */
+  private void requireStartDateIsUpcoming(LocalDate startDate) {
+    LocalDate earliest = LocalDate.now(clock).plusDays(1);
+    if (startDate.isBefore(earliest)) {
+      throw new MenuValidationException("startDate must be tomorrow or later");
+    }
+  }
+
+  /**
+   * BR-MCP-005: whether the caller may edit this menu through the chat tools — their own, not
+   * deleted, still {@code drafted}, and not started yet ({@code startDate >= tomorrow}). A draft
+   * that was already scheduled is deliberately excluded: a scheduled window may have days in the
+   * past even though its meals can still be rewritten through REST (BR-MENU-006).
+   */
+  @Transactional(readOnly = true)
+  public boolean isUpcomingDraft(UUID userId, UUID menuId) {
+    return menuRepository
+        .findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
+        .filter(menu -> menu.getStatus() == MenuStatus.drafted)
+        .filter(menu -> !menu.getStartDate().isBefore(LocalDate.now(clock).plusDays(1)))
+        .isPresent();
+  }
+
+  /**
    * BR-MENU-006: replaces the meals of an owned {@code drafted}/{@code scheduled} menu and updates
    * its free-text fields, re-validating the whole resulting week (BR-MENU-005). The window is
    * immutable, so a scheduled menu cannot gain an overlap through an update — V30's exclusion
@@ -99,7 +133,7 @@ public class MenuService {
   public MenuDetailResponse updateMenu(UUID userId, UUID menuId, UpdateMenuRequest request) {
     Menu menu =
         menuRepository
-            .findByIdAndUserId(menuId, userId)
+            .findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
             .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
     if (menu.getStatus() == MenuStatus.cancelled || menu.getStatus() == MenuStatus.completed) {
       throw new MenuNotEditableException("Only drafted or scheduled menus can be updated");
@@ -129,6 +163,27 @@ public class MenuService {
         userId,
         details.size());
     return toDetail(menu, details);
+  }
+
+  /**
+   * BR-MENU-008: removes an owned menu from every caller-visible surface. Deletion is soft — the
+   * row and its recorded days stay, and {@code deleted_at} marks the removal — so the plan is no
+   * longer listed, no longer readable by id, no longer editable or dispatchable through a status
+   * transition, and no longer occupies its week for the BR-MENU-003 overlap check.
+   *
+   * <p>Any status may be deleted, including a {@code scheduled} week; deleting the live plan simply
+   * frees that week. A foreign, absent, or already-deleted id is a 404, never a 403, and a repeat
+   * delete is therefore a 404 rather than a silent success.
+   */
+  @Transactional
+  public void deleteMenu(UUID userId, UUID menuId) {
+    Menu menu =
+        menuRepository
+            .findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
+            .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
+    menu.setDeletedAt(Instant.now());
+    menuRepository.save(menu);
+    log.info("Soft-deleted {} menu {} for user {}", menu.getStatus(), menuId, userId);
   }
 
   /**
@@ -163,7 +218,7 @@ public class MenuService {
     if (menuId != null) {
       Menu menu =
           menuRepository
-              .findByIdAndUserId(menuId, userId)
+              .findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
               .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
       return List.of(toMealPlan(menu, detailsForMenus(List.of(menu)), userId));
     }
@@ -209,7 +264,7 @@ public class MenuService {
     MenuStatus target = parseTargetStatus(targetStatus);
     Menu menu =
         menuRepository
-            .findByIdAndUserId(menuId, userId)
+            .findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
             .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
     if (!isLegalTransition(menu.getStatus(), target)) {
       throw new InvalidMenuTransitionException(
@@ -217,7 +272,7 @@ public class MenuService {
     }
     if (target == MenuStatus.scheduled
         && menuRepository
-            .existsByUserIdAndStatusAndIdNotAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            .existsByUserIdAndStatusAndIdNotAndDeletedAtIsNullAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
                 userId, MenuStatus.scheduled, menuId, menu.getStartDate(), menu.getEndDate())) {
       throw new MenuOverlapException("Another scheduled menu already overlaps this week");
     }
@@ -337,6 +392,7 @@ public class MenuService {
         .mealType(detail.getMealType().name())
         .dishId(detail.getDish().getId())
         .dishName(detail.getDish().getName())
+        .imageUrl(detail.getDish().getImageUrl())
         .servings(detail.getServings())
         .build();
   }
@@ -403,7 +459,7 @@ public class MenuService {
                 .build())
         .recommendedRecipes(
             recommendations.getOrDefault(dish.getId(), List.of()).stream()
-                .map(RecipeSummaryMapper::toSummary)
+                .map(recipe -> RecipeSummaryMapper.toSummary(recipe, dish.getImageUrl()))
                 .toList())
         .build();
   }

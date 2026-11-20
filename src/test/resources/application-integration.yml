@@ -44,12 +44,11 @@ app:
     vnpay:
       # Checkout is fail-closed without a full configuration (FR-019), so tests
       # need an obviously fake but complete block; no gateway is ever contacted
-      # during integration runs.
+      # during integration runs. enabled/locale come from application.yml.
       enabled: true
       tmn-code: integration-test-tmn
       secure-hash-secret: integration-only-vnpay-secret-not-a-real-credential
       payment-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
-      locale: vn
 
   scheduling:
     enabled: false

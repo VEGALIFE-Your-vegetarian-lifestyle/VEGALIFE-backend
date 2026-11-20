@@ -19,10 +19,12 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -44,7 +46,8 @@ public class MenuController {
   @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<PageResponse<MenuSummaryResponse>>> listMenus(
-      @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute MenuQueryRequest request) {
+      @AuthenticationPrincipal UUID userId,
+      @Valid @ParameterObject @ModelAttribute MenuQueryRequest request) {
     MenuQueryFilter filter =
         filterResolver.resolve(request.getFrom(), request.getTo(), request.getStatus());
     PageResponse<MenuSummaryResponse> menus =
@@ -64,7 +67,7 @@ public class MenuController {
   @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
   public ResponseEntity<ApiResponse<List<MenuMealPlanResponse>>> getMealPlans(
       @AuthenticationPrincipal UUID userId,
-      @Valid @ModelAttribute MenuMealPlanQueryRequest request) {
+      @Valid @ParameterObject @ModelAttribute MenuMealPlanQueryRequest request) {
     MenuQueryFilter filter = filterResolver.resolveMealPlan(request.getFrom(), request.getTo());
     List<MenuMealPlanResponse> plans =
         menuService.listMealPlans(userId, filter, request.getMenuId());
@@ -107,5 +110,19 @@ public class MenuController {
       @Valid @RequestBody UpdateMenuStatusRequest request) {
     MenuDetailResponse updated = menuService.changeStatus(userId, menuId, request.getStatus());
     return ResponseEntity.ok(ApiResponse.success(updated, "Menu status updated successfully"));
+  }
+
+  /**
+   * BR-MENU-008: soft-deletes an owned menu in any status. Cancelling and deleting are different
+   * operations: cancel keeps the plan visible in its terminal state, delete removes it from every
+   * read. Deliberately absent from the AI tool surface (BR-MCP-002).
+   */
+  @DeleteMapping("/{menuId}")
+  @PreAuthorize("isAuthenticated()")
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<Void>> deleteMenu(
+      @AuthenticationPrincipal UUID userId, @PathVariable UUID menuId) {
+    menuService.deleteMenu(userId, menuId);
+    return ResponseEntity.ok(ApiResponse.success(null, "Menu deleted successfully"));
   }
 }

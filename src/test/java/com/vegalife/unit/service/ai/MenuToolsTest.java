@@ -26,6 +26,7 @@ import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -180,7 +181,8 @@ class MenuToolsTest {
 
     String result =
         menuTools.suggestDishes(
-            "pad", "Thai", "EASY", 10, 20, 30, null, null, null, null, null, null, CONTEXT);
+            "pad", "Thai", "EASY", 10, 20, 30, null, null, null, null, null, null, null, null, null,
+            null, null, null, null, CONTEXT);
 
     assertThat(result).contains("\"success\":true").contains("Dish suggestions retrieved");
     ArgumentCaptor<DishSuggestionRequest> request =
@@ -197,11 +199,54 @@ class MenuToolsTest {
   }
 
   @Test
+  void suggestDishes_forwardsEveryNutritionBound() {
+    when(dishSuggestionFacade.suggest(eq(USER), any())).thenReturn(emptySuggestionPage());
+
+    menuTools.suggestDishes(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        new BigDecimal("300"),
+        new BigDecimal("700"),
+        new BigDecimal("10"),
+        new BigDecimal("40"),
+        new BigDecimal("20"),
+        new BigDecimal("60"),
+        new BigDecimal("5"),
+        new BigDecimal("25"),
+        new BigDecimal("8"),
+        new BigDecimal("20"),
+        null,
+        null,
+        null,
+        CONTEXT);
+
+    ArgumentCaptor<DishSuggestionRequest> request =
+        ArgumentCaptor.forClass(DishSuggestionRequest.class);
+    verify(dishSuggestionFacade).suggest(eq(USER), request.capture());
+    DishSuggestionRequest sent = request.getValue();
+    assertThat(sent.getMinCalories()).isEqualByComparingTo("300");
+    assertThat(sent.getMaxCalories()).isEqualByComparingTo("700");
+    assertThat(sent.getMinProtein()).isEqualByComparingTo("10");
+    assertThat(sent.getMaxProtein()).isEqualByComparingTo("40");
+    assertThat(sent.getMinCarbohydrate()).isEqualByComparingTo("20");
+    assertThat(sent.getMaxCarbohydrate()).isEqualByComparingTo("60");
+    assertThat(sent.getMinFat()).isEqualByComparingTo("5");
+    assertThat(sent.getMaxFat()).isEqualByComparingTo("25");
+    assertThat(sent.getMinFiber()).isEqualByComparingTo("8");
+    assertThat(sent.getMaxFiber()).isEqualByComparingTo("20");
+  }
+
+  @Test
   void suggestDishes_clampsRecipesPerDishAndBlankFilters() {
     when(dishSuggestionFacade.suggest(eq(USER), any())).thenReturn(emptySuggestionPage());
 
     menuTools.suggestDishes(
-        "   ", null, null, null, null, null, null, null, null, 0, 999, 99, CONTEXT);
+        "   ", null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, 0, 999, 99, CONTEXT);
 
     ArgumentCaptor<DishSuggestionRequest> request =
         ArgumentCaptor.forClass(DishSuggestionRequest.class);
@@ -219,7 +264,8 @@ class MenuToolsTest {
     when(dishSuggestionFacade.suggest(eq(USER), any())).thenReturn(emptySuggestionPage());
 
     menuTools.suggestDishes(
-        null, null, null, null, null, null, null, null, null, null, null, null, CONTEXT);
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, CONTEXT);
 
     ArgumentCaptor<DishSuggestionRequest> request =
         ArgumentCaptor.forClass(DishSuggestionRequest.class);
@@ -233,7 +279,26 @@ class MenuToolsTest {
   void suggestDishes_refusesWhenTheCallerIsUnattributed() {
     String result =
         menuTools.suggestDishes(
-            null, null, null, null, null, null, null, null, null, null, null, null, NO_IDENTITY);
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            NO_IDENTITY);
 
     assertThat(result).isEqualTo(REFUSED_IDENTITY);
     verifyNoInteractions(dishSuggestionFacade);
@@ -274,8 +339,8 @@ class MenuToolsTest {
 
   @Test
   void createMenu_rejectsAMalformedDishId() {
-    List<MenuTools.Day> days =
-        List.of(new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", "nope", 2))));
+    MenuTools.Days days =
+        days(new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", "nope", 2))));
 
     String result = menuTools.createMenu("2026-10-19", days, "summary", CONTEXT);
 
@@ -289,9 +354,8 @@ class MenuToolsTest {
    */
   @Test
   void createMenu_runsTheBeanValidationTheRestControllerApplies() {
-    List<MenuTools.Day> days =
-        List.of(
-            new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", DISH_ID.toString(), null))));
+    MenuTools.Days days =
+        days(new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", DISH_ID.toString(), null))));
 
     String result = menuTools.createMenu("2026-10-19", days, "summary", CONTEXT);
 
@@ -300,9 +364,8 @@ class MenuToolsTest {
   }
 
   @Test
-  void updateMenu_reachesTheServiceWhenTheTargetIsTheCurrentWeekDraft() {
-    when(menuService.listMenus(eq(USER), any(), anyInt(), anyInt(), any()))
-        .thenReturn(pageContaining(MENU_ID));
+  void updateMenu_reachesTheServiceWhenTheTargetIsAnUpcomingDraft() {
+    when(menuService.isUpcomingDraft(USER, MENU_ID)).thenReturn(true);
     when(menuService.updateMenu(eq(USER), eq(MENU_ID), any()))
         .thenReturn(MenuDetailResponse.builder().id(MENU_ID).status("drafted").build());
 
@@ -313,15 +376,15 @@ class MenuToolsTest {
   }
 
   @Test
-  void updateMenu_refusesWhenTheTargetIsNotTheCurrentWeekDraft() {
-    when(menuService.listMenus(eq(USER), any(), anyInt(), anyInt(), any())).thenReturn(emptyPage());
+  void updateMenu_refusesWhenTheTargetIsNotAnUpcomingDraft() {
+    when(menuService.isUpcomingDraft(USER, MENU_ID)).thenReturn(false);
 
     String result = menuTools.updateMenu(MENU_ID.toString(), breakfastDay(), "summary", CONTEXT);
 
     assertThat(result)
         .isEqualTo(
-            "update refused: the target must be the caller's own current-week menu with status"
-                + " drafted");
+            "update refused: the target must be the caller's own drafted menu that starts tomorrow"
+                + " or later");
     verify(menuService, never()).updateMenu(any(), any(), any());
   }
 
@@ -373,6 +436,82 @@ class MenuToolsTest {
     assertThat(text).doesNotStartWith("\"").startsWith("{").contains("\"success\":true");
   }
 
+  /**
+   * Issue #190: a provider that emits {@code days} as a string instead of an array must not kill
+   * the chat turn. Before the fix this threw {@code ToolExecutionException} out of the tool
+   * callback (surfacing to the member as a 502); the week must instead bind and reach the service.
+   */
+  @Test
+  void createMenu_acceptsTheWeekHandedOverAsALooseJsonString() {
+    when(menuService.createMenu(eq(USER), any()))
+        .thenReturn(MenuDetailResponse.builder().id(MENU_ID).status("drafted").build());
+
+    // Single-quoted keys/values: what a weaker OpenAI-compatible model actually sends.
+    String arguments =
+        "{\"startDate\":\"2026-10-19\",\"notes\":\"summary\",\"days\":\"[{date:'2026-10-19',"
+            + "meals:[{mealType:'BREAKFAST',dishId:'"
+            + DISH_ID
+            + "',servings:2}]}]\"}";
+
+    String result = toolNamed("create_menu").call(arguments, CONTEXT);
+
+    assertThat(result).contains("\"success\":true").contains("Menu created successfully");
+    ArgumentCaptor<CreateMenuRequest> sent = ArgumentCaptor.forClass(CreateMenuRequest.class);
+    verify(menuService).createMenu(eq(USER), sent.capture());
+    assertThat(sent.getValue().getDays()).hasSize(1);
+    assertThat(sent.getValue().getDays().get(0).getDate()).isEqualTo(LocalDate.parse("2026-10-19"));
+    assertThat(sent.getValue().getDays().get(0).getMeals().get(0).getDishId()).isEqualTo(DISH_ID);
+  }
+
+  /** Same tolerance for the array wrapped in its own object, another common model emission. */
+  @Test
+  void createMenu_acceptsTheWeekWrappedInADaysObject() {
+    when(menuService.createMenu(eq(USER), any()))
+        .thenReturn(MenuDetailResponse.builder().id(MENU_ID).status("drafted").build());
+
+    String arguments =
+        "{\"startDate\":\"2026-10-19\",\"notes\":\"summary\",\"days\":{\"days\":[{\"date\":\"2026-10-19\","
+            + "\"meals\":[{\"mealType\":\"BREAKFAST\",\"dishId\":\""
+            + DISH_ID
+            + "\",\"servings\":2}]}]}}";
+
+    String result = toolNamed("create_menu").call(arguments, CONTEXT);
+
+    assertThat(result).contains("\"success\":true");
+    verify(menuService).createMenu(eq(USER), any());
+  }
+
+  /**
+   * The tolerance must not change the contract the model reads: {@code days} stays a JSON array of
+   * day objects, so a prompt that already produces the right shape keeps working unchanged.
+   */
+  @Test
+  void createMenu_advertisesDaysAsAnArrayOfObjects() {
+    String schema = toolNamed("create_menu").getToolDefinition().inputSchema();
+
+    assertThat(schema)
+        .contains("\"days\"")
+        .contains("\"type\" : \"array\"")
+        .contains("\"date\"")
+        .contains("\"meals\"")
+        .contains("\"additionalProperties\" : false");
+  }
+
+  /**
+   * A value that is not a week at all must degrade to the backend's own readable rule, not a bind
+   * failure — the model still gets a sentence it can act on.
+   */
+  @Test
+  void createMenu_reportsUnreadableDaysAsTheBackendRule() {
+    String arguments =
+        "{\"startDate\":\"2026-10-19\",\"notes\":\"summary\",\"days\":\"a nice week of meals\"}";
+
+    String result = toolNamed("create_menu").call(arguments, CONTEXT);
+
+    assertThat(result).isEqualTo("error: days must contain exactly the 7 dates of the week");
+    verifyNoInteractions(menuService);
+  }
+
   private ToolCallback toolNamed(String name) {
     return Arrays.stream(
             MethodToolCallbackProvider.builder().toolObjects(menuTools).build().getToolCallbacks())
@@ -381,9 +520,16 @@ class MenuToolsTest {
         .orElseThrow(() -> new AssertionError("no tool named " + name));
   }
 
-  private static List<MenuTools.Day> breakfastDay() {
-    return List.of(
-        new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", DISH_ID.toString(), 2))));
+  private static MenuTools.Days breakfastDay() {
+    MenuTools.Days days = new MenuTools.Days();
+    days.add(new MenuTools.Day("2026-10-19", List.of(meal("BREAKFAST", DISH_ID.toString(), 2))));
+    return days;
+  }
+
+  private static MenuTools.Days days(MenuTools.Day... entries) {
+    MenuTools.Days days = new MenuTools.Days();
+    days.addAll(List.of(entries));
+    return days;
   }
 
   private static MenuTools.Meal meal(String mealType, String dishId, Integer servings) {
@@ -409,18 +555,6 @@ class MenuToolsTest {
         .size(20)
         .totalElements(0)
         .totalPages(0)
-        .first(true)
-        .last(true)
-        .build();
-  }
-
-  private static PageResponse<MenuSummaryResponse> pageContaining(UUID menuId) {
-    return PageResponse.<MenuSummaryResponse>builder()
-        .content(List.of(MenuSummaryResponse.builder().id(menuId).build()))
-        .page(0)
-        .size(20)
-        .totalElements(1)
-        .totalPages(1)
         .first(true)
         .last(true)
         .build();

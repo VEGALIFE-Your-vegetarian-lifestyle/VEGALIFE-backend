@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class SearchResultItem {
 
-  /** One of {@code post}, {@code video}, {@code recipe}. */
+  /** One of {@code post}, {@code video}, {@code recipe}, {@code restaurant}. */
   private String type;
 
   private UUID id;
@@ -25,7 +25,7 @@ public class SearchResultItem {
    */
   private String snippet;
 
-  /** Always empty for a recipe result. */
+  /** Always empty for a recipe or restaurant result. */
   private Set<UUID> categoryIds;
 
   private Instant createdAt;

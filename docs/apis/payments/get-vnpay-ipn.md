@@ -1,7 +1,7 @@
 # API Reference: GET /api/payments/vnpay/ipn
 
 ## Overview
-VNPay's Instant Payment Notification webhook: accept a signed notification for a payment, record its outcome on `payment_ledger`, and on a verified success fulfil the subscription (plan upsert + receipt email queued). This endpoint is the single source of truth for whether a payment succeeded.
+VNPay's Instant Payment Notification webhook: accept a signed notification for a payment, record its outcome on `payment_ledger`, and on a verified success grant the acquisition (stamp `ai_subscription.granted_at`) and queue a receipt email. This endpoint is the single source of truth for whether a payment succeeded. Its wire format is unchanged by the acquisition model.
 
 The same path is also served by `POST`; VNPay's IPN is documented as a GET with query parameters while some merchant profiles are configured for POST, so both mappings exist and behave identically. Write `POST /api/payments/vnpay/ipn` in the merchant portal if the profile requires it.
 
@@ -63,12 +63,12 @@ No JSON body. GET parameters or POST form fields only.
 
 ### Outcome recorded when RspCode = 00
 
-| vnp_ResponseCode / vnp_TransactionStatus | Ledger status | Subscription | Receipt email |
-|------------------------------------------|---------------|--------------|---------------|
-| `00` / `00` (paid) | `pending → succeeded`, `paid_at` set, `provider_reference` = `vnp_TransactionNo`, `bank_code`, `response_code` recorded | upserted onto the purchased plan, `status = 'active'`, `renewal_date = paid_at + 1 month UTC` | enqueued on the outbound queue, exactly once |
-| `01` / `01` (processing) | stays `pending` | unchanged | none |
-| `07` (risk-flagged) or `04`/`02` (reversed) | `failed`, `response_code` recorded, ERROR log for manual review | unchanged | none |
-| any other terminal combination | `failed`, `response_code` recorded | unchanged | none |
+| vnp_ResponseCode / vnp_TransactionStatus | Ledger status | Acquisition | Receipt email |
+|------------------------------------------|---------------|-------------|---------------|
+| `00` / `00` (paid) | `pending → succeeded`, `paid_at` set, `provider_reference` = `vnp_TransactionNo`, `bank_code`, `response_code` recorded | `granted_at` stamped with `paid_at`; the plan was recorded at checkout | enqueued on the outbound queue, exactly once |
+| `01` / `01` (processing) | stays `pending` | unchanged (`granted_at` still NULL) | none |
+| `07` (risk-flagged) or `04`/`02` (reversed) | `failed`, `response_code` recorded, ERROR log for manual review | unchanged (never granted) | none |
+| any other terminal combination | `failed`, `response_code` recorded | unchanged (never granted) | none |
 | replay of an already-terminal row | unchanged | unchanged | none |
 
 ### Error Responses
@@ -78,10 +78,10 @@ The gateway-neutral error envelope does not apply here; every handled case retur
 - BR-PAY-001: IPN is the sole source of truth for fulfilment; the browser redirect after payment is display-only and mutates nothing.
 - BR-PAY-002: A payment counts as paid only when `vnp_ResponseCode = 00` **and** `vnp_TransactionStatus = 00`.
 - BR-PAY-003: The notified amount must equal the ledger amount exactly or nothing is recorded.
-- BR-PAY-004: `pending → succeeded` happens at most once per ledger row; replays acknowledge `00` with no re-upgrade and no second receipt.
+- BR-PAY-004: `pending → succeeded` happens at most once per ledger row; replays acknowledge `00` with no re-grant and no second receipt.
 - BR-PAY-006: Risk-flagged (`07`) and reversed (`04`) notifications never fulfil, even though money may have moved; they are failed and logged for review.
 - BR-PAY-007: The receipt email is queued in the same transaction as the state change; SMTP is never called inline.
-- Feature Spec: `docs/feats/subscription-purchase.md`
+- Feature Spec: `docs/feats/request-credits.md`; payment mechanics remain in `docs/feats/subscription-purchase.md`
 
 ## Example
 
@@ -119,8 +119,9 @@ curl -G "https://api.example.com/api/payments/vnpay/ipn" \
 ```
 
 ## Related
-- Feature Spec: `docs/feats/subscription-purchase.md`
-- Sibling endpoint: `docs/apis/payments/post-checkout.md` (`POST /api/payments/checkout`)
+- Feature Spec: `docs/feats/request-credits.md`
+- Payment mechanics: `docs/feats/subscription-purchase.md`
+- Sibling endpoint: `docs/apis/subscriptions/post-acquire.md` (`POST /api/subscriptions/acquire`, which creates the pending ledger row)
 - Business Rules: `docs/brs/payments.md`
 - ADR: `docs/adrs/008-vnpay-integration.md`
 - Security config: exact-path `permitAll` for `/api/payments/vnpay/ipn` in `SecurityConfig`

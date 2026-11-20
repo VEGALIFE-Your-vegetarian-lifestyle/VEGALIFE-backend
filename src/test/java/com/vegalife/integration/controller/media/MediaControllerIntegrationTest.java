@@ -459,7 +459,7 @@ class MediaControllerIntegrationTest {
 
     MvcResult result =
         mockMvc
-            .perform(get("/api/posts").header("Authorization", "Bearer " + accessToken))
+            .perform(get("/api/posts/me").header("Authorization", "Bearer " + accessToken))
             .andExpect(status().isOk())
             .andReturn();
 

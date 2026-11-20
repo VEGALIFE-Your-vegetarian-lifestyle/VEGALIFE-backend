@@ -34,7 +34,7 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
 | Parameter | Notes |
 |---|---|
 | `moderationStatus` | `PENDING`, `APPROVED` or `REJECTED`. Absent = every state. `PENDING` is the review queue. |
-| `sort` | One of `createdAt`, `updatedAt`, `name`, `moderationStatus`, `score`. Default `createdAt,desc`. |
+| `sort` | One of `createdAt`, `updatedAt`, `name`, `moderationStatus`. Default `createdAt,desc`. `score` is no longer accepted (ADR-026). |
 | `createdFrom` / `createdTo` | ISO-8601 instants; `400` if `createdFrom` is after `createdTo`. |
 
 ### Response (200 OK)
@@ -56,9 +56,10 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
         "difficulty": "MEDIUM",
         "status": "ACTIVE",
         "moderationStatus": "PENDING",
-        "score": 0.6104,
+        "rejectionReason": null,
         "dishId": "6c2d3e4f-5a6b-7c8d-9e0f-1a2b3c4d5e6f",
         "dishName": "phở chay",
+        "imageUrl": "https://cdn.example.com/dishes/pho-chay.jpg",
         "dishModerationStatus": "PENDING",
         "categoryIds": ["…"],
         "ingredients": [
@@ -67,7 +68,7 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
             "name": "đậu hũ",
             "moderationStatus": "APPROVED",
             "amount": 200,
-            "unit": "g"
+            "unit": "G"
           }
         ],
         "missingRequiredIngredients": [],
@@ -92,8 +93,9 @@ Query parameters: `page`, `size`, `sort`, `userId`, `categoryId`, `createdFrom`,
 |---|---|
 | `status` | `ACTIVE` or `DELETED`, derived from `deletedAt`. |
 | `moderationStatus` | Review state. A recipe can be `ACTIVE` and still `PENDING`. |
-| `score` | Relevance score at submission time. `null` = never scored. |
+| `rejectionReason` | Why an admin rejected this recipe. Cleared on approval. `null` = no reason recorded. |
 | `dishModerationStatus`, `ingredients[].moderationStatus` | The shared names' own states. |
+| `imageUrl` | The shared dish's image. Read-only here: set it through `PATCH /api/admin/dishes/{dishId}`, never through this endpoint. `null` when the dish has none. |
 | `missingRequiredIngredients` | Names of the dish's `required` ingredients this recipe omits (BR-DISH-002). Advisory: it never changes `moderationStatus` and never blocks approve/reject. Empty array when nothing is missing. |
 
 ## PATCH /api/admin/recipes/{recipeId}
@@ -106,14 +108,14 @@ Partial: an omitted field keeps its current value. Accepted: `name`, `descriptio
 `instructions`, `prepTimeMinutes`, `cookTimeMinutes`, `servings`, `difficulty`.
 
 Not accepted: `dishName` (the dish is a shared name with its own endpoint),
-ingredient lines (adding or removing rows is an ingredient operation, not a field
-change), and `moderationStatus`.
+`imageUrl` (it belongs to that shared dish, so it is changed through the dish
+endpoint and affects every recipe using the dish), ingredient lines (adding or
+removing ingredients is an ingredient operation, not a field change), and
+`moderationStatus`.
 
-Neither `moderationStatus` nor `score` changes:
-
-- The state stays put because the admin's edit is itself an approval decision.
-- The score stays as measured at submission — it records why the row was queued,
-  and recomputing it here would quietly rewrite that reason.
+`moderationStatus` does not change: the state stays put because the admin's edit is
+itself an approval decision. There is no recipe score to preserve or recompute —
+recipe bodies are not scored (ADR-026).
 
 | Status | Condition |
 |---|---|
@@ -128,7 +130,7 @@ listed or readable. Returns `200`; `404` if it is already gone.
 
 ## POST /api/admin/recipes/{recipeId}/approve
 
-Body (optional): `{ "reason": "instructions verified" }`
+No request body.
 
 Approves the recipe and, in the same transaction, every `PENDING` dish and ingredient
 name it references. Approving a recipe is a review of that recipe, dish and ingredients
@@ -139,11 +141,10 @@ included, so the reviewer should not have to hunt down each pending name afterwa
   `POST /api/admin/dishes/{dishId}/approve` endpoint remains the only way back.
 - This matches what approving a **post** already does to its components, so the two
   approval paths cannot disagree about what "approved" means.
-- Each name actually changed writes its own `APPROVE_COMPONENT` `moderation_log` row,
-  plus the recipe's own row.
 - Seeded `dish_ingredient` entries land in the same transaction (BR-DISH-003).
+- Takes no request body: approval removes a reason, it does not record one (ADR-027).
 
-An already-approved recipe is a no-op — no state change, no log entry, no name approval.
+An already-approved recipe is a no-op — no state change, no name approval.
 
 ## POST /api/admin/recipes/{recipeId}/reject
 
@@ -156,16 +157,21 @@ still `PENDING` — approval publishes names, rejection never unpublishes them. 
 approved on its own merits, possibly by an earlier post, must not be knocked out by one
 bad recipe.
 
+The supplied `reason` is stored in the recipe's `rejection_reason`, which the recipe's
+author reads back on `GET /api/recipes/me` and `GET /api/recipes/{recipeId}`. Approving the
+recipe again clears it: the column holds the current state, and no earlier reason is retained
+(ADR-027).
+
 ## Business Rules
 
 - Approval is what makes a recipe searchable; search filters on `APPROVED`
   (BR-DISH-001, ADR-016).
 - Approving a recipe approves its pending dish and ingredient names, but never resurrects
   a rejected one.
-- The recipe score escalates a passing post to `NEEDS_REVIEW` but never downgrades a
-  `REJECTED` verdict.
-- Every real change writes a `moderation_log` row (`DELETE_RECIPE`,
-  `APPROVE_COMPONENT`, `REJECT_COMPONENT`).
+- A publish is held only on its own body score or on a `PENDING` dish/ingredient name.
+  Recipe bodies are not embedded or scored, so an attached recipe never changes a
+  post's verdict (ADR-026).
+- No audit trail is kept: no administrator action is recorded anywhere (ADR-027).
 
 ## Related
 

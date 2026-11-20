@@ -2,7 +2,6 @@ package com.vegalife.unit.repository.recipe;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.user.UserRole;
@@ -10,7 +9,9 @@ import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
+import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
+import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.recipe.RecipeSpecifications;
@@ -161,6 +162,207 @@ class RecipeSpecificationsTest {
     assertThat(result.getTotalElements()).isZero();
   }
 
+  @Test
+  void allWithFilters_byDeletionStatusActive_excludesSoftDeletedRecipes() {
+    Page<Recipe> result = findAllAdmin(null, Boolean.FALSE, null, null, null, null);
+
+    assertThat(result.getContent())
+        .extracting(Recipe::getName)
+        .containsExactlyInAnyOrder("Spring rolls", "Stir fry", "Bean burger", "Coconut curry");
+    assertThat(result.getTotalElements()).isEqualTo(4);
+  }
+
+  @Test
+  void allWithFilters_byDeletionStatusDeleted_returnsOnlySoftDeletedRecipes() {
+    Page<Recipe> result = findAllAdmin(null, Boolean.TRUE, null, null, null, null);
+
+    assertThat(result.getContent()).extracting(Recipe::getName).containsExactly("Mushroom soup");
+    assertThat(result.getTotalElements()).isOne();
+  }
+
+  @Test
+  void allWithFilters_withoutDeletionStatus_returnsDeletedAndActiveRecipes() {
+    Page<Recipe> result = findAllAdmin(null, null, null, null, null, null);
+
+    assertThat(result.getTotalElements()).isEqualTo(5);
+  }
+
+  @Test
+  void allWithFilters_byDishId_returnsOnlyRecipesAttachedToThatDish() {
+    Page<Recipe> result = findAllAdmin(null, null, dish.getId(), null, null, null);
+
+    assertThat(result.getTotalElements()).isEqualTo(5);
+  }
+
+  @Test
+  void allWithFilters_byUnknownDishId_returnsEmptyPage() {
+    Page<Recipe> result = findAllAdmin(null, null, UUID.randomUUID(), null, null, null);
+
+    assertThat(result.getContent()).isEmpty();
+    assertThat(result.getTotalElements()).isZero();
+  }
+
+  @Test
+  void allWithFilters_byDifficulty_returnsOnlyThatDifficulty() {
+    Recipe stirFry = entityManager.find(Recipe.class, aliceStirFry.getId());
+    stirFry.setDifficulty(Difficulty.HARD);
+    entityManager.flush();
+    entityManager.clear();
+
+    Page<Recipe> result = findAllAdmin(null, null, null, Difficulty.HARD, null, null);
+
+    assertThat(result.getContent()).extracting(Recipe::getName).containsExactly("Stir fry");
+    assertThat(result.getTotalElements()).isOne();
+  }
+
+  @Test
+  void allWithFilters_byMaxTotalTime_excludesRecipesOverTheLimit() {
+    Recipe springRolls = entityManager.find(Recipe.class, aliceSpringRolls.getId());
+    springRolls.setPrepTimeMinutes(10);
+    springRolls.setCookTimeMinutes(10);
+    Recipe stirFry = entityManager.find(Recipe.class, aliceStirFry.getId());
+    stirFry.setPrepTimeMinutes(5);
+    stirFry.setCookTimeMinutes(60);
+    entityManager.flush();
+    entityManager.clear();
+
+    Page<Recipe> result = findAllAdmin(null, null, null, null, 20, null);
+
+    assertThat(result.getContent()).extracting(Recipe::getName).containsExactly("Spring rolls");
+    assertThat(result.getTotalElements()).isOne();
+  }
+
+  @Test
+  void allWithFilters_byMaxTotalTime_excludesRecipesWithUnknownTime() {
+    // A null prep or cook time makes the sum unknown, not "short enough".
+    Recipe springRolls = entityManager.find(Recipe.class, aliceSpringRolls.getId());
+    springRolls.setPrepTimeMinutes(10);
+    springRolls.setCookTimeMinutes(10);
+    entityManager.flush();
+    entityManager.clear();
+
+    Page<Recipe> result = findAllAdmin(null, null, null, null, 120, null);
+
+    assertThat(result.getContent()).extracting(Recipe::getName).containsExactly("Spring rolls");
+    assertThat(result.getTotalElements()).isOne();
+  }
+
+  @Test
+  void allWithFilters_byKeyword_matchesNameCaseInsensitively() {
+    Page<Recipe> result = findAllAdmin(null, null, null, null, null, "SPRING");
+
+    assertThat(result.getContent()).extracting(Recipe::getName).containsExactly("Spring rolls");
+    assertThat(result.getTotalElements()).isOne();
+  }
+
+  @Test
+  void allWithFilters_byKeyword_matchesInstructions() {
+    Page<Recipe> result = findAllAdmin(null, null, null, null, null, "stir and serve");
+
+    assertThat(result.getTotalElements()).isEqualTo(5);
+  }
+
+  @Test
+  void allWithFilters_byKeyword_matchesDishName() {
+    Page<Recipe> result = findAllAdmin(null, null, null, null, null, "bowl");
+
+    assertThat(result.getTotalElements()).isEqualTo(5);
+  }
+
+  @Test
+  void allWithFilters_byKeyword_matchesIngredientNameAndReturnsRecipeOnce() {
+    Ingredient tofu = createIngredient("Tofu");
+    addIngredient(aliceSpringRolls, tofu, "100");
+    addIngredient(aliceStirFry, tofu, "150");
+    entityManager.flush();
+    entityManager.clear();
+
+    Page<Recipe> result = findAllAdmin(null, null, null, null, null, "tofu");
+
+    // Both recipes carry tofu, each once — the EXISTS subquery must not multiply rows.
+    assertThat(result.getContent())
+        .extracting(Recipe::getName)
+        .containsExactlyInAnyOrder("Spring rolls", "Stir fry");
+    assertThat(result.getTotalElements()).isEqualTo(2);
+  }
+
+  @Test
+  void allWithFilters_byKeywordMatchingSeveralIngredientLines_returnsTheRecipeOnce() {
+    Ingredient tofu = createIngredient("Tofu");
+    Ingredient tofuFirm = createIngredient("Firm tofu");
+    addIngredient(aliceSpringRolls, tofu, "100");
+    addIngredient(aliceSpringRolls, tofuFirm, "50");
+    entityManager.flush();
+    entityManager.clear();
+
+    Page<Recipe> result = findAllAdmin(null, null, null, null, null, "tofu");
+
+    assertThat(result.getContent()).extracting(Recipe::getName).containsExactly("Spring rolls");
+    assertThat(result.getTotalElements()).isOne();
+  }
+
+  @Test
+  void allWithFilters_byKeywordMatchingNothing_returnsEmptyPage() {
+    Page<Recipe> result = findAllAdmin(null, null, null, null, null, "nothing matches this");
+
+    assertThat(result.getContent()).isEmpty();
+    assertThat(result.getTotalElements()).isZero();
+  }
+
+  @Test
+  void allWithFilters_byWildcardCharacter_matchesLiterally() {
+    Page<Recipe> result = findAllAdmin(null, null, null, null, null, "%");
+
+    assertThat(result.getContent()).isEmpty();
+    assertThat(result.getTotalElements()).isZero();
+  }
+
+  @Test
+  void allWithFilters_byKeywordAndDeletionStatus_combinesBoth() {
+    Page<Recipe> result = findAllAdmin(null, Boolean.TRUE, null, null, null, "mushroom");
+
+    assertThat(result.getContent()).extracting(Recipe::getName).containsExactly("Mushroom soup");
+    assertThat(result.getTotalElements()).isOne();
+  }
+
+  private Page<Recipe> findAllAdmin(
+      UUID userId,
+      Boolean deleted,
+      UUID dishId,
+      Difficulty difficulty,
+      Integer maxTotalTimeMinutes,
+      String keyword) {
+    Specification<Recipe> spec =
+        RecipeSpecifications.allWithFilters(
+            userId,
+            null,
+            null,
+            null,
+            null,
+            deleted,
+            dishId,
+            difficulty,
+            maxTotalTimeMinutes,
+            keyword);
+    return recipeRepository.findAll(
+        spec, PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "createdAt")));
+  }
+
+  private Ingredient createIngredient(String name) {
+    Ingredient ingredient = Ingredient.builder().name(name).build();
+    entityManager.persist(ingredient);
+    return ingredient;
+  }
+
+  private void addIngredient(Recipe recipe, Ingredient ingredient, String amount) {
+    entityManager.persist(
+        RecipeIngredient.builder()
+            .recipeId(recipe.getId())
+            .ingredientId(ingredient.getId())
+            .amount(new java.math.BigDecimal(amount))
+            .build());
+  }
+
   private Page<Recipe> findAll(
       UUID userId, UUID categoryId, Instant createdFrom, Instant createdTo) {
     Specification<Recipe> spec =
@@ -203,7 +405,6 @@ class RecipeSpecificationsTest {
             .content("Post content")
             .rawContent(com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
             .status(PostStatus.published)
-            .flag(PostFlag.PENDING)
             .viewCount(0)
             .categories(categories)
             .build();

@@ -1,6 +1,7 @@
 package com.vegalife.integration.controller.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -15,7 +16,6 @@ import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostRepository;
@@ -86,8 +86,6 @@ class RecipeModerationIntegrationTest {
 
   @Autowired private MediaRepository mediaRepository;
 
-  @Autowired private ModerationLogRepository moderationLogRepository;
-
   @Autowired private RecipeRepository recipeRepository;
 
   @Autowired private RecipeIngredientRepository recipeIngredientRepository;
@@ -104,7 +102,6 @@ class RecipeModerationIntegrationTest {
 
   @BeforeEach
   void setUp() {
-    moderationLogRepository.deleteAll();
     recipeIngredientRepository.deleteAll();
     recipeRepository.deleteAll();
     dishRepository.deleteAll();
@@ -152,7 +149,7 @@ class RecipeModerationIntegrationTest {
     mockMvc
         .perform(get("/api/recipes/me").header("Authorization", "Bearer " + authorToken))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data[0].id").value(recipeId.toString()));
+        .andExpect(jsonPath("$.data.content[0].id").value(recipeId.toString()));
   }
 
   @Test
@@ -164,6 +161,98 @@ class RecipeModerationIntegrationTest {
         .perform(
             get("/api/recipes/" + recipeId).header("Authorization", "Bearer " + otherMemberToken))
         .andExpect(status().isNotFound());
+    mockMvc.perform(get("/api/recipes/" + recipeId)).andExpect(status().isNotFound());
+  }
+
+  @Test
+  void approvedRecipe_isReadableByGuestAndAnotherMember() throws Exception {
+    UUID recipeId = createRecipe();
+    approve(recipeId);
+
+    mockMvc
+        .perform(get("/api/recipes/" + recipeId))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.id").value(recipeId.toString()))
+        .andExpect(jsonPath("$.data.moderationStatus").value("APPROVED"));
+
+    mockMvc
+        .perform(
+            get("/api/recipes/" + recipeId).header("Authorization", "Bearer " + otherMemberToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.id").value(recipeId.toString()));
+  }
+
+  @Test
+  void nonAuthorNeverReceivesTheRejectionReason() throws Exception {
+    UUID recipeId = createRecipe();
+    approve(recipeId);
+    // A stale admin note is possible in storage; the public read must still clear it.
+    Recipe recipe = recipeRepository.findById(recipeId).orElseThrow();
+    recipe.setRejectionReason("internal reviewer note");
+    recipeRepository.saveAndFlush(recipe);
+
+    mockMvc
+        .perform(get("/api/recipes/" + recipeId))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.rejectionReason").value(nullValue()));
+
+    mockMvc
+        .perform(
+            get("/api/recipes/" + recipeId).header("Authorization", "Bearer " + otherMemberToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.rejectionReason").value(nullValue()));
+
+    mockMvc
+        .perform(get("/api/recipes/" + recipeId).header("Authorization", "Bearer " + authorToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.rejectionReason").value("internal reviewer note"));
+
+    mockMvc
+        .perform(get("/api/recipes"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content[0].rejectionReason").value(nullValue()));
+  }
+
+  @Test
+  void publicRecipeList_showsOnlyApprovedRecipesNewestFirst() throws Exception {
+    UUID approvedId = createRecipe();
+    createRecipe();
+    approve(approvedId);
+
+    mockMvc
+        .perform(get("/api/recipes"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Recipes retrieved successfully"))
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content.length()").value(1))
+        .andExpect(jsonPath("$.data.content[0].id").value(approvedId.toString()))
+        .andExpect(jsonPath("$.data.content[0].moderationStatus").value("APPROVED"));
+  }
+
+  @Test
+  void publicRecipeList_appliesPaginationAndRejectsOutOfRangeSize() throws Exception {
+    UUID first = createRecipe();
+    UUID second = createRecipe();
+    approve(first);
+    approve(second);
+
+    mockMvc
+        .perform(get("/api/recipes").param("page", "0").param("size", "1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.size").value(1))
+        .andExpect(jsonPath("$.data.totalElements").value(2))
+        .andExpect(jsonPath("$.data.totalPages").value(2))
+        .andExpect(jsonPath("$.data.content.length()").value(1));
+
+    mockMvc.perform(get("/api/recipes").param("size", "101")).andExpect(status().isBadRequest());
+  }
+
+  private void approve(UUID recipeId) throws Exception {
+    mockMvc
+        .perform(
+            post("/api/admin/recipes/" + recipeId + "/approve")
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk());
   }
 
   @Test
@@ -183,9 +272,7 @@ class RecipeModerationIntegrationTest {
     mockMvc
         .perform(
             post("/api/admin/recipes/" + recipeId + "/approve")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
+                .header("Authorization", "Bearer " + adminToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.moderationStatus").value("APPROVED"));
 
@@ -196,10 +283,9 @@ class RecipeModerationIntegrationTest {
   }
 
   @Test
-  void adminUpdate_changesTextButKeepsStateAndScore() throws Exception {
+  void adminUpdate_changesTextButKeepsState() throws Exception {
     UUID recipeId = createRecipe();
     Recipe recipe = recipeRepository.findById(recipeId).orElseThrow();
-    recipe.setScore(0.31);
     recipe.setModerationStatus(ModerationStatus.PENDING);
     recipeRepository.saveAndFlush(recipe);
 
@@ -214,8 +300,8 @@ class RecipeModerationIntegrationTest {
         .andExpect(jsonPath("$.data.servings").value(4))
         // The admin is the approver, so an edit is not a re-review...
         .andExpect(jsonPath("$.data.moderationStatus").value("PENDING"))
-        // ...and the score still records why it was queued.
-        .andExpect(jsonPath("$.data.score").value(0.31));
+        // ...and no score is reported, because recipe bodies are not scored (ADR-026).
+        .andExpect(jsonPath("$.data.score").doesNotExist());
   }
 
   @Test
@@ -232,7 +318,8 @@ class RecipeModerationIntegrationTest {
     mockMvc
         .perform(get("/api/recipes/me").header("Authorization", "Bearer " + authorToken))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data").isEmpty());
+        .andExpect(jsonPath("$.data.content").isEmpty())
+        .andExpect(jsonPath("$.data.totalElements").value(0));
     mockMvc
         .perform(
             get("/api/admin/recipes/" + recipeId).header("Authorization", "Bearer " + adminToken))

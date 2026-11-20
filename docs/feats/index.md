@@ -45,7 +45,7 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `payment-status-api.md`             | Payment Status API (Poll after VNPay Redirect) | Implemented | 2026-10-04 |
 | `post-raw-content-migration.md`     | Post Schema — Rich-Text raw_content, Drop type/video_url | Implemented | 2026-10-05 |
 | `get-post-by-id.md`                 | View Post Detail API (Get Post by ID) | Implemented | 2026-10-05 |
-| `subscription-lifecycle.md`         | AI Subscription Lifecycle (Cancel, Extension, Expiry) | In review | 2026-10-07 |
+| `subscription-lifecycle.md`         | AI Subscription Lifecycle (Cancel, Extension, Expiry) | Superseded | 2026-10-07 |
 | `payment-history.md`                | Payment History API (Member + Admin)     | Approved    | 2026-10-07 |
 | `ai-chat-send.md`                   | AI Chat Send (JSON + SSE Streaming)      | Approved    | 2026-10-07 |
 | `query-menus-by-range.md`           | Query Menus by Week, Month, or Date Range | Superseded  | 2026-10-10 |
@@ -59,3 +59,14 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `google-login.md`                   | Sign In with Google                       | In progress | 2026-10-26 |
 | `post-author-in-response.md`        | Post Responses Carry Their Author's Identity | Implemented | 2026-11-02 |
 | `dish-ingredient-suggestions.md`    | Dish Ingredient Suggestions and Advisory Required Flag | Implemented | 2026-11-02 |
+| `request-credits.md`                | Request Credits — One Acquire Endpoint, Acquisition History, `remainingUsage` | Approved | 2026-11-04 |
+| `ingredient-nutrition.md`           | Ingredient-Level Recipe Nutrition         | Implemented | 2026-11-05 |
+| `nutrition-read-surfaces.md`        | Nutrition on Read Surfaces                | Implemented | 2026-11-06 |
+| `saved-items.md`                    | Saved Posts and Recipes                   | Implemented | 2026-11-12 |
+| `public-recipe-browsing.md`         | Public Recipe Browsing and Post Route Alignment | Approved | 2026-11-13 |
+| `post-recipe-list-filters.md`       | Post and Recipe List Filters              | Approved    | 2026-11-13 |
+| `remove-recipe-scoring.md`          | Remove Recipe-Body Scoring                | In progress | 2026-11-19 |
+| `media-aware-post-moderation.md`    | Media-Aware Post Moderation and a `pending` Status | In progress | 2026-11-19 |
+| `admin-post-list-superset-of-post-list.md` | Admin Post List Is a Superset of the Member Post List | Approved | 2026-11-20 |
+| `admin-list-filter-parity.md`       | Admin List Filter Parity and Search       | Approved    | 2026-11-20 |
+| `admin-dashboard-cache-invalidation.md` | Admin Dashboard Cache Invalidation    | Approved    | 2026-11-21 |

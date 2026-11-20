@@ -136,9 +136,10 @@ call**. If that call fails the publish request still succeeds — the post
 is queued — and what happens next depends on why it failed: a transient
 error is retried with the provider's `Retry-After` honoured, while a
 permanent rejection (bad or missing key, unknown model) moves the post to
-`NEEDS_REVIEW` at once with a `moderation_log` `FILTER_UNAVAILABLE` row
-(ADR-020). No post is left `PENDING` waiting on retries that cannot
-succeed. `EMBED_API_KEY` must therefore be set in any environment where
+`NEEDS_REVIEW` at once, with the cause recorded in the application log only
+(the `moderation_log` row ADR-020 specified was removed by
+[ADR-027](../adrs/027-remove-moderation-log.md)). No post is left `PENDING` waiting on retries that
+cannot succeed. `EMBED_API_KEY` must therefore be set in any environment where
 the filter is left enabled. Setting `FILTER_ENABLED=false` remains
 available as a deliberate outage mode; it bypasses the filter entirely
 rather than failing posts.
@@ -178,6 +179,11 @@ and the whole committed-artefact design would fail. It does not.
   because they are one model's vectors.
 
 ## Recipe body calibration (issue #160, ADR-016)
+
+> **Retired 2026-11-19 by [ADR-026](../adrs/026-remove-recipe-scoring.md).** Recipe bodies are no
+> longer embedded or scored: the recipe centroid pair, its thresholds, both seed corpora, and the
+> code that read them were deleted. The measurements below are kept as history for the decision
+> record, not as a description of live configuration.
 
 The recipe body — `name + description + instructions` — is scored against a
 **second** centroid pair, because its distribution is not post prose: mostly

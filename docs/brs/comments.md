@@ -90,11 +90,11 @@ Active
 
 ## Statement
 
-A comment may be deleted only by its owner or an Administrator. Deletion is soft: `deleted_at` is set and the row is kept, so replies keep pointing at it and the thread shape is preserved. For a non-admin, a missing, already-deleted, or other user's comment is reported as not found. Every deletion an Administrator makes to another user's comment is recorded in `moderation_log` (`BR-ADMIN-002`); deleting your own comment, admin or not, is not logged.
+A comment may be deleted only by its owner or an Administrator. Deletion is soft: `deleted_at` is set and the row is kept, so replies keep pointing at it and the thread shape is preserved. For a non-admin, a missing, already-deleted, or other user's comment is reported as not found.
 
 ## Rationale
 
-Unlike editing (`BR-COMMENT-002`, deliberately owner-only per issue #42), deletion explicitly includes an Administrator moderation path per issue #43 — abusive content must be removable by moderators. Soft deletion (the same approach as `BR-POST-008`) avoids breaking reply threads that a hard delete would orphan, and keeps a moderation trail.
+Unlike editing (`BR-COMMENT-002`, deliberately owner-only per issue #42), deletion explicitly includes an Administrator moderation path per issue #43 — abusive content must be removable by moderators. Soft deletion (the same approach as `BR-POST-008`) avoids breaking reply threads that a hard delete would orphan.
 
 ## Scope & Exceptions
 
@@ -103,9 +103,9 @@ Applies to `DELETE /api/posts/{postId}/comments/{commentId}`. Does not apply to 
 ## Enforcement
 
 - Controller: `CommentController.deleteComment()` supplies the JWT principal and admin flag (mirrors `PostController.isAdmin()`).
-- Service: `CommentService.deleteComment()` scopes the lookup by ownership unless the caller is an Administrator, and logs only an admin's cross-user override.
+- Service: `CommentService.deleteComment()` scopes the lookup by ownership unless the caller is an Administrator.
 - API reference: `docs/apis/post/delete-posts-postid-comments-commentid.md`.
 
 ## Last Reviewed
 
-2026-10-11, by Vegalife backend team
+2026-11-19, by Vegalife backend team

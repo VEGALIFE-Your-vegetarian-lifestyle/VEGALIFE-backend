@@ -12,9 +12,7 @@ import com.vegalife.dto.request.admin.AdminDishCreateRequest;
 import com.vegalife.dto.request.admin.AdminDishUpdateRequest;
 import com.vegalife.dto.response.admin.AdminDishResponse;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Dish;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.recipe.DishIngredientRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.service.admin.AdminDishService;
@@ -26,7 +24,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -39,8 +36,6 @@ class AdminDishServiceTest {
   @Mock private DishIngredientRepository dishIngredientRepository;
 
   @Mock private AdminDishIngredientMapper adminDishIngredientMapper;
-
-  @Mock private ModerationLogRepository moderationLogRepository;
 
   @InjectMocks private AdminDishService adminDishService;
 
@@ -59,7 +54,7 @@ class AdminDishServiceTest {
   }
 
   @Test
-  void createDish_isApprovedOnArrivalAndLogged() {
+  void createDish_isApprovedOnArrival() {
     when(dishRepository.findByNameIgnoreCase("bún chả chay")).thenReturn(Optional.empty());
     when(dishRepository.saveAndFlush(any(Dish.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
@@ -71,7 +66,6 @@ class AdminDishServiceTest {
     assertThat(response.getName()).isEqualTo("bún chả chay");
     // The creator is the approver: an admin-created name needs no second review.
     assertThat(response.getModerationStatus()).isEqualTo("APPROVED");
-    assertThat(lastLog().getAction()).isEqualTo("CREATE_DISH");
   }
 
   @Test
@@ -167,7 +161,7 @@ class AdminDishServiceTest {
   }
 
   @Test
-  void deleteDish_softDeletesAndLogs() {
+  void deleteDish_softDeletes() {
     when(dishRepository.findByIdAndDeletedAtIsNull(dish.getId())).thenReturn(Optional.of(dish));
 
     adminDishService.deleteDish(adminId, dish.getId());
@@ -176,19 +170,16 @@ class AdminDishServiceTest {
     verify(dishRepository).save(dish);
     // Never hard: recipes and menu_detail rows still reference it.
     verify(dishRepository, never()).delete(any(Dish.class));
-    assertThat(lastLog().getAction()).isEqualTo("DELETE_DISH");
   }
 
   @Test
-  void approveDish_pending_becomesApprovedAndLogged() {
+  void approveDish_pending_becomesApproved() {
     when(dishRepository.findByIdAndDeletedAtIsNull(dish.getId())).thenReturn(Optional.of(dish));
     when(dishRepository.saveAndFlush(dish)).thenReturn(dish);
 
-    AdminDishResponse response = adminDishService.approveDish(adminId, dish.getId(), "valid food");
+    AdminDishResponse response = adminDishService.approveDish(adminId, dish.getId());
 
     assertThat(response.getModerationStatus()).isEqualTo("APPROVED");
-    assertThat(lastLog().getAction()).isEqualTo("APPROVE_COMPONENT");
-    assertThat(lastLog().getReason()).isEqualTo("valid food");
   }
 
   @Test
@@ -197,7 +188,7 @@ class AdminDishServiceTest {
     when(dishRepository.findByIdAndDeletedAtIsNull(dish.getId())).thenReturn(Optional.of(dish));
     when(dishRepository.saveAndFlush(dish)).thenReturn(dish);
 
-    AdminDishResponse response = adminDishService.approveDish(adminId, dish.getId(), "mistyped");
+    AdminDishResponse response = adminDishService.approveDish(adminId, dish.getId());
 
     // Post approval must never do this, but an admin naming the row by id is making exactly this
     // decision, and without it a mistyped rejection would poison a real name forever.
@@ -205,14 +196,13 @@ class AdminDishServiceTest {
   }
 
   @Test
-  void approveDish_alreadyApproved_isNoOpWithoutLog() {
+  void approveDish_alreadyApproved_isNoOp() {
     dish.setModerationStatus(ModerationStatus.APPROVED);
     when(dishRepository.findByIdAndDeletedAtIsNull(dish.getId())).thenReturn(Optional.of(dish));
 
-    adminDishService.approveDish(adminId, dish.getId(), null);
+    adminDishService.approveDish(adminId, dish.getId());
 
     verify(dishRepository, never()).saveAndFlush(any(Dish.class));
-    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
   }
 
   @Test
@@ -221,11 +211,10 @@ class AdminDishServiceTest {
     when(dishRepository.findByIdAndDeletedAtIsNull(dish.getId())).thenReturn(Optional.of(dish));
     when(dishRepository.saveAndFlush(dish)).thenReturn(dish);
 
-    AdminDishResponse response = adminDishService.rejectDish(adminId, dish.getId(), "not food");
+    AdminDishResponse response = adminDishService.rejectDish(adminId, dish.getId());
 
     assertThat(response.getModerationStatus()).isEqualTo("REJECTED");
     assertThat(dish.getDeletedAt()).isNull();
-    assertThat(lastLog().getAction()).isEqualTo("REJECT_COMPONENT");
   }
 
   @Test
@@ -236,11 +225,5 @@ class AdminDishServiceTest {
     assertThatThrownBy(() -> adminDishService.getDish(dishId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Dish not found");
-  }
-
-  private ModerationLog lastLog() {
-    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
-    return captor.getAllValues().get(captor.getAllValues().size() - 1);
   }
 }

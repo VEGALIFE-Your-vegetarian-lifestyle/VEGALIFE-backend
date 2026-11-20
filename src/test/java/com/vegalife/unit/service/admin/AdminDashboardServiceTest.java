@@ -1,24 +1,37 @@
 package com.vegalife.unit.service.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.request.admin.DashboardRequest;
+import com.vegalife.dto.response.admin.DashboardChartsResponse;
 import com.vegalife.dto.response.admin.DashboardResponse;
 import com.vegalife.enums.post.PostFlag;
+import com.vegalife.enums.post.PostStatus;
+import com.vegalife.enums.post.VoteType;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.subscription.PaymentLedgerStatus;
+import com.vegalife.enums.user.UserStatus;
+import com.vegalife.repository.admin.AdminDashboardChartRepository;
+import com.vegalife.repository.admin.AdminDashboardChartRepository.BucketCountRow;
+import com.vegalife.repository.admin.AdminDashboardChartRepository.PlanRevenueRow;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.post.VoteRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.repository.saved.SavedItemRepository;
+import com.vegalife.repository.subscription.AiSubscriptionRepository;
+import com.vegalife.repository.subscription.AiUsageRepository;
+import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.AdminDashboardService;
-import com.vegalife.shared.exception.ValidationException;
+import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,88 +47,221 @@ class AdminDashboardServiceTest {
   @Mock private RecipeRepository recipeRepository;
   @Mock private CommentRepository commentRepository;
   @Mock private VoteRepository voteRepository;
+  @Mock private SavedItemRepository savedItemRepository;
+  @Mock private PaymentLedgerRepository paymentLedgerRepository;
+  @Mock private AiSubscriptionRepository aiSubscriptionRepository;
+  @Mock private AiUsageRepository aiUsageRepository;
+  @Mock private AdminDashboardChartRepository chartRepository;
 
   @InjectMocks private AdminDashboardService adminDashboardService;
 
-  @Test
-  void getDashboardAggregatesAllMetricsForDefaultWeekRange() {
-    when(userRepository.countByDeletedAtIsNull()).thenReturn(100L);
-    when(userRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(5L);
-    when(postRepository.countByDeletedAtIsNull()).thenReturn(50L);
-    when(postRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(3L);
-    when(postRepository.countByFlagAndDeletedAtIsNull(PostFlag.NEEDS_REVIEW)).thenReturn(2L);
-    when(postRepository.findDistinctAuthorIdsInRange(any(), any()))
-        .thenReturn(List.of(UUID.randomUUID(), UUID.randomUUID()));
-    when(recipeRepository.countByDeletedAtIsNull()).thenReturn(20L);
-    when(recipeRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(1L);
-    when(recipeRepository.countByModerationStatusAndDeletedAtIsNull(ModerationStatus.PENDING))
-        .thenReturn(4L);
-    when(commentRepository.countByDeletedAtIsNull()).thenReturn(200L);
-    when(commentRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(10L);
-    when(commentRepository.countByReportCountGreaterThanAndDeletedAtIsNull(0)).thenReturn(6L);
-    when(commentRepository.findDistinctCommenterIdsInRange(any(), any()))
-        .thenReturn(List.of(UUID.randomUUID()));
-    when(voteRepository.countByCreatedAtBetween(any(), any())).thenReturn(15L);
+  // ---------------------------------------------------------------------
+  // Summary: lifetime, no time filter
+  // ---------------------------------------------------------------------
 
-    DashboardResponse response =
-        adminDashboardService.getDashboard(DashboardRequest.builder().range("week").build());
+  @Test
+  void getSummaryAggregatesLifetimeMetrics() {
+    when(userRepository.countByDeletedAtIsNull()).thenReturn(100L);
+    when(userRepository.countByEmailVerifiedTrueAndDeletedAtIsNull()).thenReturn(80L);
+    when(aiUsageRepository.countByRequestCountGreaterThan(0)).thenReturn(60L);
+    when(userRepository.countByStatusAndDeletedAtIsNull(UserStatus.suspended)).thenReturn(3L);
+    when(userRepository.countByStatusAndDeletedAtIsNull(UserStatus.deactivated)).thenReturn(2L);
+
+    when(postRepository.countByDeletedAtIsNull()).thenReturn(50L);
+    when(recipeRepository.countByDeletedAtIsNull()).thenReturn(20L);
+    when(commentRepository.countByDeletedAtIsNull()).thenReturn(200L);
+
+    when(voteRepository.count()).thenReturn(120L);
+    when(voteRepository.countByVoteType(VoteType.UPVOTE)).thenReturn(100L);
+    when(voteRepository.countByVoteType(VoteType.DOWNVOTE)).thenReturn(20L);
+    when(savedItemRepository.countByPostIdIsNotNull()).thenReturn(20L);
+    when(savedItemRepository.countByRecipeIdIsNotNull()).thenReturn(10L);
+
+    when(postRepository.countByStatusAndDeletedAtIsNull(PostStatus.pending)).thenReturn(4L);
+    when(recipeRepository.countByModerationStatusAndDeletedAtIsNull(ModerationStatus.PENDING))
+        .thenReturn(2L);
+    when(commentRepository.countByReportCountGreaterThanAndDeletedAtIsNull(0)).thenReturn(6L);
+    when(postRepository.countByFlagAndDeletedAtIsNull(PostFlag.FILTER_SKIPPED)).thenReturn(1L);
+
+    when(paymentLedgerRepository.sumAmountByStatus(PaymentLedgerStatus.succeeded))
+        .thenReturn(500_000L);
+    when(paymentLedgerRepository.countByStatus(PaymentLedgerStatus.succeeded)).thenReturn(5L);
+    when(paymentLedgerRepository.countDistinctUsersByStatus(PaymentLedgerStatus.succeeded))
+        .thenReturn(4L);
+    when(aiSubscriptionRepository.countByPaymentIdIsNullAndGrantedAtIsNotNull()).thenReturn(7L);
+    when(paymentLedgerRepository.countByStatusAndCreatedAtBefore(
+            eq(PaymentLedgerStatus.pending), any()))
+        .thenReturn(3L);
+
+    DashboardResponse response = adminDashboardService.getSummary();
 
     assertThat(response.getUsers().getTotal()).isEqualTo(100L);
-    assertThat(response.getUsers().getNewInRange()).isEqualTo(5L);
-    assertThat(response.getUsers().getActiveInRange()).isEqualTo(3L);
+    assertThat(response.getUsers().getEmailVerified()).isEqualTo(80L);
+    assertThat(response.getUsers().getActivatedEver()).isEqualTo(60L);
+    assertThat(response.getUsers().getSuspended()).isEqualTo(3L);
+    assertThat(response.getUsers().getDeactivated()).isEqualTo(2L);
+    assertThat(response.getUsers().getActivationRate()).isEqualTo(0.8);
+
     assertThat(response.getContent().getTotalPosts()).isEqualTo(50L);
-    assertThat(response.getContent().getNewRecipes()).isEqualTo(1L);
-    assertThat(response.getEngagement().getVotesInRange()).isEqualTo(15L);
-    assertThat(response.getModerationQueue().getPendingPosts()).isEqualTo(2L);
-    assertThat(response.getModerationQueue().getPendingRecipes()).isEqualTo(4L);
+    assertThat(response.getContent().getTotalRecipes()).isEqualTo(20L);
+    assertThat(response.getContent().getTotalComments()).isEqualTo(200L);
+
+    assertThat(response.getEngagement().getTotalVotes()).isEqualTo(120L);
+    assertThat(response.getEngagement().getVotesUp()).isEqualTo(100L);
+    assertThat(response.getEngagement().getVotesDown()).isEqualTo(20L);
+    assertThat(response.getEngagement().getTotalSaves()).isEqualTo(30L);
+    assertThat(response.getEngagement().getSavedPosts()).isEqualTo(20L);
+    assertThat(response.getEngagement().getSavedRecipes()).isEqualTo(10L);
+
+    assertThat(response.getModerationQueue().getPendingPosts()).isEqualTo(4L);
+    assertThat(response.getModerationQueue().getPendingRecipes()).isEqualTo(2L);
     assertThat(response.getModerationQueue().getReportedComments()).isEqualTo(6L);
-    assertThat(response.getRange().getType()).isEqualTo("week");
+    assertThat(response.getModerationQueue().getFilterSkippedPosts()).isEqualTo(1L);
+
+    assertThat(response.getMoney().getRevenueTotal()).isEqualTo(500_000L);
+    assertThat(response.getMoney().getTransactionsTotal()).isEqualTo(5L);
+    assertThat(response.getMoney().getPayingUsersTotal()).isEqualTo(4L);
+    assertThat(response.getMoney().getAverageOrderValue()).isEqualTo(100_000.0);
+    assertThat(response.getMoney().getArpu()).isEqualTo(125_000.0);
+    assertThat(response.getMoney().getFreeGrantsTotal()).isEqualTo(7L);
+    assertThat(response.getMoney().getPayerConversionRate()).isEqualTo(0.04);
+    assertThat(response.getMoney().getPendingStaleCount()).isEqualTo(3L);
+
+    assertThat(response.getMeta().getGeneratedAt()).isNotNull();
+    assertThat(response.getMeta().getCurrency()).isEqualTo("VND");
   }
 
   @Test
-  void getDashboardWithCustomRangeUsesSuppliedDates() {
-    stubZeroCounts();
+  void getSummaryReportsZeroRatesRatherThanDividingByZero() {
+    DashboardResponse response = adminDashboardService.getSummary();
 
-    DashboardRequest request =
-        DashboardRequest.builder()
-            .range("custom")
-            .from(LocalDate.of(2026, 1, 1))
-            .to(LocalDate.of(2026, 1, 31))
-            .build();
-
-    DashboardResponse response = adminDashboardService.getDashboard(request);
-
-    assertThat(response.getRange().getFrom()).isEqualTo(Instant.parse("2026-01-01T00:00:00Z"));
-    assertThat(response.getRange().getTo()).isEqualTo(Instant.parse("2026-02-01T00:00:00Z"));
+    assertThat(response.getUsers().getActivationRate()).isZero();
+    assertThat(response.getMoney().getAverageOrderValue()).isZero();
+    assertThat(response.getMoney().getArpu()).isZero();
+    assertThat(response.getMoney().getPayerConversionRate()).isZero();
   }
 
   @Test
-  void getDashboardRejectsCustomRangeWithFromAfterTo() {
-    DashboardRequest request =
-        DashboardRequest.builder()
-            .range("custom")
-            .from(LocalDate.of(2026, 2, 1))
-            .to(LocalDate.of(2026, 1, 1))
-            .build();
+  void getSummaryReportsTheOldestWaitingItemAcrossAllQueues() {
+    Instant now = Instant.now();
+    when(postRepository.findOldestCreatedAtByStatus(PostStatus.pending))
+        .thenReturn(Optional.of(now.minus(Duration.ofHours(10))));
+    when(recipeRepository.findOldestCreatedAtByModerationStatus(ModerationStatus.PENDING))
+        .thenReturn(Optional.of(now.minus(Duration.ofHours(30))));
+    when(commentRepository.findOldestReportedCreatedAt())
+        .thenReturn(Optional.of(now.minus(Duration.ofHours(2))));
 
-    assertThatThrownBy(() -> adminDashboardService.getDashboard(request))
-        .isInstanceOf(ValidationException.class);
+    DashboardResponse response = adminDashboardService.getSummary();
+
+    assertThat(response.getModerationQueue().getOldestPendingAgeHours()).isBetween(29L, 30L);
   }
 
-  private void stubZeroCounts() {
-    when(userRepository.countByDeletedAtIsNull()).thenReturn(0L);
-    when(userRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(0L);
-    when(postRepository.countByDeletedAtIsNull()).thenReturn(0L);
-    when(postRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(0L);
-    when(postRepository.countByFlagAndDeletedAtIsNull(any())).thenReturn(0L);
-    when(postRepository.findDistinctAuthorIdsInRange(any(), any())).thenReturn(List.of());
-    when(recipeRepository.countByDeletedAtIsNull()).thenReturn(0L);
-    when(recipeRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(0L);
-    when(recipeRepository.countByModerationStatusAndDeletedAtIsNull(any())).thenReturn(0L);
-    when(commentRepository.countByDeletedAtIsNull()).thenReturn(0L);
-    when(commentRepository.countByCreatedAtBetweenAndDeletedAtIsNull(any(), any())).thenReturn(0L);
-    when(commentRepository.countByReportCountGreaterThanAndDeletedAtIsNull(0)).thenReturn(0L);
-    when(commentRepository.findDistinctCommenterIdsInRange(any(), any())).thenReturn(List.of());
-    when(voteRepository.countByCreatedAtBetween(any(), any())).thenReturn(0L);
+  @Test
+  void getSummaryReportsZeroAgeWhenNoQueueHasAnythingWaiting() {
+    DashboardResponse response = adminDashboardService.getSummary();
+
+    assertThat(response.getModerationQueue().getOldestPendingAgeHours()).isZero();
+  }
+
+  // ---------------------------------------------------------------------
+  // Charts: the only time-filtered surface
+  // ---------------------------------------------------------------------
+
+  @Test
+  void getChartsForWeekProducesSevenDailyBuckets() {
+    DashboardChartsResponse response =
+        adminDashboardService.getCharts(DashboardRequest.builder().range("week").build());
+
+    assertThat(response.getMeta().getRange()).isEqualTo("week");
+    assertThat(response.getMeta().getInterval()).isEqualTo("day");
+    assertThat(response.getMeta().getBoundary()).isEqualTo("inclusiveStartExclusiveEnd");
+    assertThat(response.getMeta().getCurrency()).isEqualTo("VND");
+    assertThat(response.getPublishedPosts().getPoints()).hasSize(7);
+  }
+
+  @Test
+  void getChartsForDayProducesTwentyFourHourlyBuckets() {
+    DashboardChartsResponse response =
+        adminDashboardService.getCharts(DashboardRequest.builder().range("day").build());
+
+    assertThat(response.getMeta().getInterval()).isEqualTo("hour");
+    assertThat(response.getPublishedPosts().getPoints()).hasSize(24);
+  }
+
+  @Test
+  void getChartsForMonthProducesThirtyDailyBuckets() {
+    DashboardChartsResponse response =
+        adminDashboardService.getCharts(DashboardRequest.builder().range("month").build());
+
+    assertThat(response.getMeta().getInterval()).isEqualTo("day");
+    assertThat(response.getPublishedPosts().getPoints()).hasSize(30);
+  }
+
+  @Test
+  void getChartsZeroFillsBucketsWithNoPublishedPosts() {
+    when(chartRepository.findPublishedPostsPerBucket(any(), any(), anyString()))
+        .thenReturn(List.of(new BucketCountRow(Instant.parse("2020-01-01T00:00:00Z"), 900L)));
+
+    DashboardChartsResponse response =
+        adminDashboardService.getCharts(DashboardRequest.builder().range("week").build());
+
+    long total =
+        response.getPublishedPosts().getPoints().stream().mapToLong(p -> p.published()).sum();
+    // The stubbed row falls outside the real window, so every bucket must be reported as zero.
+    assertThat(response.getPublishedPosts().getPoints()).hasSize(7);
+    assertThat(total).isZero();
+  }
+
+  @Test
+  void getChartsCountsPublishedPostsIntoTheirBucket() {
+    // The service truncates the window start to build its first bucket, so answering with that same
+    // bucket guarantees the row lands in a point instead of being zero-filled away.
+    when(chartRepository.findPublishedPostsPerBucket(any(), any(), anyString()))
+        .thenAnswer(
+            invocation -> List.of(new BucketCountRow(firstBucket(invocation.getArgument(0)), 6L)));
+
+    DashboardChartsResponse response =
+        adminDashboardService.getCharts(DashboardRequest.builder().range("week").build());
+
+    long total =
+        response.getPublishedPosts().getPoints().stream().mapToLong(p -> p.published()).sum();
+    assertThat(total).isEqualTo(6L);
+  }
+
+  @Test
+  void getChartsRanksPlansAndKeepsDeactivatedOnesThatEarned() {
+    UUID planId = UUID.randomUUID();
+    when(chartRepository.findRevenueByPlan(any(), any()))
+        .thenReturn(List.of(new PlanRevenueRow(planId, "PRO", "Pro", 490_000L, 10L, false)));
+
+    DashboardChartsResponse response =
+        adminDashboardService.getCharts(DashboardRequest.builder().range("week").build());
+
+    assertThat(response.getRevenueByPlan().getItems()).hasSize(1);
+    assertThat(response.getRevenueByPlan().getItems().get(0).code()).isEqualTo("PRO");
+    assertThat(response.getRevenueByPlan().getItems().get(0).active()).isFalse();
+  }
+
+  @Test
+  void getChartsReportsPurchasedPackageCountAlongsideRevenue() {
+    UUID planId = UUID.randomUUID();
+    when(chartRepository.findRevenueByPlan(any(), any()))
+        .thenReturn(List.of(new PlanRevenueRow(planId, "PLUS", "Plus", 495_000L, 5L, true)));
+
+    DashboardChartsResponse response =
+        adminDashboardService.getCharts(DashboardRequest.builder().range("week").build());
+
+    // Purchases is how many packages were bought; amount is the money they produced. Ten packages
+    // at a different price must not be inferred from one from the other.
+    assertThat(response.getRevenueByPlan().getItems().get(0).purchases()).isEqualTo(5L);
+    assertThat(response.getRevenueByPlan().getItems().get(0).amount()).isEqualTo(495_000L);
+  }
+
+  /** The same truncation the service applies, so a stubbed row lands on a real bucket. */
+  private static Instant firstBucket(Instant from) {
+    return from.atZone(java.time.ZoneOffset.UTC)
+        .toLocalDate()
+        .atStartOfDay(java.time.ZoneOffset.UTC)
+        .toInstant();
   }
 }

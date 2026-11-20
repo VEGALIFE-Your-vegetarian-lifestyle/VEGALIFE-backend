@@ -18,7 +18,6 @@ import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Dish;
@@ -26,13 +25,18 @@ import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
+import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
+import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.service.admin.AdminPostService;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
+import com.vegalife.service.filter.FilterOutcome;
+import com.vegalife.service.filter.FilterVerdict;
+import com.vegalife.service.filter.PostFlagDetail;
 import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -45,7 +49,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -61,8 +64,6 @@ class AdminPostServiceTest {
 
   @Mock private PostRepository postRepository;
 
-  @Mock private ModerationLogRepository moderationLogRepository;
-
   @Mock private AdminPostMapper adminPostMapper;
 
   @Mock private RecipeRepository recipeRepository;
@@ -74,6 +75,10 @@ class AdminPostServiceTest {
   @Mock private IngredientRepository ingredientRepository;
 
   @Mock private DishIngredientService dishIngredientService;
+
+  @Mock private UserProfileRepository userProfileRepository;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private AdminPostService adminPostService;
 
@@ -101,7 +106,6 @@ class AdminPostServiceTest {
             .title("Vegan chili")
             .content("A hearty chili recipe")
             .status(PostStatus.published)
-            .flag(PostFlag.PASSED)
             .viewCount(7)
             .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
             .build();
@@ -111,7 +115,6 @@ class AdminPostServiceTest {
             .title("Vegan chili")
             .content("A hearty chili recipe")
             .status("published")
-            .flag("PASSED")
             .viewCount(7)
             .createdAt(post.getCreatedAt())
             .userId(author.getId())
@@ -119,6 +122,10 @@ class AdminPostServiceTest {
             .email("jane@example.com")
             .build();
     expectedPageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+    // The page enrichment reads both batch sources by default; the list tests below do not care
+    // about them, so they answer empty unless a test says otherwise.
+    lenient().when(userProfileRepository.findByUserIdIn(any())).thenReturn(List.of());
+    lenient().when(recipeRepository.findRecipeIdsByPostIds(any())).thenReturn(List.of());
   }
 
   @Test
@@ -149,8 +156,8 @@ class AdminPostServiceTest {
             .page(1)
             .size(10)
             .sort("viewCount,asc")
-            .status("unpublished")
-            .flag("REJECTED")
+            .status("processing")
+            .flag("FILTER_FAILED")
             .userId(author.getId())
             .categoryId(UUID.randomUUID())
             .createdFrom(from)
@@ -188,7 +195,7 @@ class AdminPostServiceTest {
 
     assertThatThrownBy(() -> adminPostService.listPosts(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage("Status must be one of: created, processed, published, unpublished, hidden");
+        .hasMessage("Status must be one of: drafted, processing, pending, published, unpublished");
   }
 
   @Test
@@ -197,7 +204,8 @@ class AdminPostServiceTest {
 
     assertThatThrownBy(() -> adminPostService.listPosts(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage("Flag must be one of: all, PENDING, PASSED, REJECTED, NEEDS_REVIEW");
+        .hasMessage(
+            "Flag must be one of: all, FILTER_PASSED, FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED");
   }
 
   @Test
@@ -246,27 +254,68 @@ class AdminPostServiceTest {
   }
 
   @Test
-  void approvePost_publishesAndLogsWithReason() {
+  void listPosts_fillsAvatarAndRecipeIdsInOneBatchPerPage() {
+    Post second = Post.builder().id(UUID.randomUUID()).user(author).title("Second").build();
+    AdminPostListResponse secondResponse =
+        AdminPostListResponse.builder().id(second.getId()).userId(author.getId()).build();
+    Page<Post> page = new PageImpl<>(List.of(post, second), expectedPageable, 2);
+    when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+    when(adminPostMapper.toResponse(post)).thenReturn(postResponse);
+    when(adminPostMapper.toResponse(second)).thenReturn(secondResponse);
+
+    UserProfile profile = UserProfile.builder().user(author).avatarUrl("https://cdn/a.jpg").build();
+    when(userProfileRepository.findByUserIdIn(Set.of(author.getId()))).thenReturn(List.of(profile));
+    RecipeRepository.PostRecipeId row = postRecipeId(post.getId(), UUID.randomUUID());
+    when(recipeRepository.findRecipeIdsByPostIds(Set.of(post.getId(), second.getId())))
+        .thenReturn(List.of(row));
+
+    PageResponse<AdminPostListResponse> result = adminPostService.listPosts(new PostListRequest());
+
+    assertThat(result.getContent().get(0).getAvatarUrl()).isEqualTo("https://cdn/a.jpg");
+    assertThat(result.getContent().get(0).getRecipeIds()).containsExactly(row.getRecipeId());
+    assertThat(result.getContent().get(1).getAvatarUrl()).isEqualTo("https://cdn/a.jpg");
+    assertThat(result.getContent().get(1).getRecipeIds()).isEmpty();
+
+    // Two authors but one lookup, two posts but one lookup: the page size does not multiply
+    // queries.
+    verify(userProfileRepository).findByUserIdIn(Set.of(author.getId()));
+    verify(recipeRepository).findRecipeIdsByPostIds(Set.of(post.getId(), second.getId()));
+  }
+
+  private RecipeRepository.PostRecipeId postRecipeId(UUID postId, UUID recipeId) {
+    return new RecipeRepository.PostRecipeId() {
+      @Override
+      public UUID getPostId() {
+        return postId;
+      }
+
+      @Override
+      public UUID getRecipeId() {
+        return recipeId;
+      }
+    };
+  }
+
+  @Test
+  void approvePost_publishesAndKeepsTheBlocker() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(PostStatus.unpublished);
-    post.setFlag(PostFlag.REJECTED);
+    post.setStatus(PostStatus.processing);
+    post.setFlag(PostFlag.FILTER_FAILED);
+    post.setFlagDetail(
+        PostFlagDetail.filterFailed(new FilterVerdict(FilterOutcome.FAIL, 0.21, 0.45, List.of())));
     post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId())).thenReturn(List.of());
 
-    adminPostService.approvePost(adminId, post.getId(), "Vegetarian recipe, filter false positive");
+    adminPostService.approvePost(adminId, post.getId());
 
     assertThat(post.getStatus()).isEqualTo(PostStatus.published);
     assertThat(post.getPublishedAt()).isNotNull();
-    // Auto-REJECTED is a record of what the filter decided; approving does not rewrite history.
-    assertThat(post.getFlag()).isEqualTo(PostFlag.REJECTED);
-
-    ModerationLog entry = lastPostLog();
-    assertThat(entry.getActorId()).isEqualTo(adminId);
-    assertThat(entry.getAction()).isEqualTo("APPROVE_POST");
-    assertThat(entry.getTargetType()).isEqualTo("POST");
-    assertThat(entry.getTargetId()).isEqualTo(post.getId());
-    assertThat(entry.getReason()).isEqualTo("Vegetarian recipe, filter false positive");
+    // Published + FILTER_FAILED is the record of a human override; relabelling it FILTER_PASSED
+    // would say the filter cleared content it refused (ADR-025).
+    assertThat(post.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
+    assertThat(post.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_FAILED");
+    assertThat(post.getFlagDetail().path("score").asDouble()).isEqualTo(0.21);
   }
 
   @Test
@@ -294,7 +343,7 @@ class AdminPostServiceTest {
             .build();
     stubPostWithRecipe(recipe, ingredient);
 
-    adminPostService.approvePost(adminId, post.getId(), null);
+    adminPostService.approvePost(adminId, post.getId());
 
     // Approving the post is the reviewer saying the names it introduced are acceptable.
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
@@ -332,7 +381,7 @@ class AdminPostServiceTest {
             .build();
     stubPostWithRecipe(recipe, approvedIngredient);
 
-    adminPostService.approvePost(adminId, post.getId(), null);
+    adminPostService.approvePost(adminId, post.getId());
 
     // A rejected name is a permanent block (BR-DISH-001); approving a post that mentions it must
     // not undo a decision someone already made.
@@ -342,9 +391,12 @@ class AdminPostServiceTest {
   }
 
   @Test
-  void rejectPost_unpublishesAndRejectsPendingComponents() {
+  void rejectPost_unpublishesKeepsTheBlockerAndRejectsPendingComponents() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(PostStatus.published);
+    post.setStatus(PostStatus.processing);
+    post.setFlag(PostFlag.FILTER_FAILED);
+    post.setFlagDetail(
+        PostFlagDetail.filterFailed(new FilterVerdict(FilterOutcome.FAIL, 0.18, 0.45, List.of())));
     post.setPublishedAt(Instant.parse("2026-09-21T10:00:00Z"));
     Dish dish =
         Dish.builder()
@@ -371,14 +423,73 @@ class AdminPostServiceTest {
 
     assertThat(post.getStatus()).isEqualTo(PostStatus.unpublished);
     assertThat(post.getPublishedAt()).isNull();
+    assertThat(post.getRejectionReason()).isEqualTo("not vegan");
+    // Rejection is terminal, but the blocker is part of the decision record: what the machine saw,
+    // next to what the admin decided (ADR-025).
+    assertThat(post.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
+    assertThat(post.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_FAILED");
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
+    // The recipe's author reads this from the recipe's own row, and it was the same decision.
+    assertThat(recipe.getRejectionReason()).isEqualTo("not vegan");
     assertThat(dish.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
     assertThat(ingredient.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
 
-    ModerationLog entry = lastPostLog();
-    assertThat(entry.getAction()).isEqualTo("REJECT_POST");
-    assertThat(entry.getReason()).isEqualTo("not vegan");
     verify(recipeRepository, never()).delete(any(Recipe.class));
+  }
+
+  @Test
+  void rejectThenApprove_clearsTheStoredRejectionReason() {
+    UUID adminId = UUID.randomUUID();
+    post.setStatus(PostStatus.published);
+    post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId())).thenReturn(List.of());
+
+    adminPostService.rejectPost(adminId, post.getId(), "not vegan");
+    assertThat(post.getRejectionReason()).isEqualTo("not vegan");
+
+    adminPostService.approvePost(adminId, post.getId());
+
+    // Current state, not history: a reason left in place would describe a decision that no longer
+    // holds.
+    assertThat(post.getRejectionReason()).isNull();
+  }
+
+  @Test
+  void rejectPost_withoutReason_storesNull() {
+    UUID adminId = UUID.randomUUID();
+    post.setStatus(PostStatus.published);
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId())).thenReturn(List.of());
+
+    adminPostService.rejectPost(adminId, post.getId(), null);
+
+    assertThat(post.getStatus()).isEqualTo(PostStatus.unpublished);
+    assertThat(post.getRejectionReason()).isNull();
+  }
+
+  @Test
+  void approvePost_leavesAnApprovedComponentUntouched() {
+    UUID adminId = UUID.randomUUID();
+    post.setCategories(Set.of(Category.builder().id(UUID.randomUUID()).name("Dinner").build()));
+    Recipe alreadyApproved =
+        Recipe.builder()
+            .id(UUID.randomUUID())
+            .name("món đã duyệt")
+            .moderationStatus(ModerationStatus.APPROVED)
+            .rejectionReason("stale reason from an earlier refusal")
+            .build();
+    when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
+    when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
+        .thenReturn(List.of(alreadyApproved));
+    when(recipeIngredientRepository.findByRecipeId(alreadyApproved.getId())).thenReturn(List.of());
+
+    adminPostService.approvePost(adminId, post.getId());
+
+    // Not rewritten: an already-APPROVED name gets no work (isAwaitingReview).
+    assertThat(alreadyApproved.getRejectionReason())
+        .isEqualTo("stale reason from an earlier refusal");
+    verify(recipeRepository, never()).save(any(Recipe.class));
   }
 
   @Test
@@ -423,34 +534,33 @@ class AdminPostServiceTest {
     post.setCategories(Set.of());
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
-    assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId(), null))
+    assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId()))
         .isInstanceOf(ValidationException.class)
         .hasMessage("At least one category is required to publish a post");
 
-    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
     verify(postRepository, never()).saveAndFlush(any(Post.class));
   }
 
   @Test
-  void approvePost_hiddenPost_throwsValidationException() {
+  void approvePost_draftedPost_throwsValidationException() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(PostStatus.hidden);
+    post.setStatus(PostStatus.drafted);
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
-    assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId(), null))
+    assertThatThrownBy(() -> adminPostService.approvePost(adminId, post.getId()))
         .isInstanceOf(ValidationException.class)
-        .hasMessageContaining("hidden post");
+        .hasMessageContaining("has not been submitted");
   }
 
   @Test
-  void rejectPost_hiddenPost_throwsValidationException() {
+  void rejectPost_draftedPost_throwsValidationException() {
     UUID adminId = UUID.randomUUID();
-    post.setStatus(PostStatus.hidden);
+    post.setStatus(PostStatus.drafted);
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
 
     assertThatThrownBy(() -> adminPostService.rejectPost(adminId, post.getId(), null))
         .isInstanceOf(ValidationException.class)
-        .hasMessageContaining("hidden post");
+        .hasMessageContaining("has not been submitted");
   }
 
   @Test
@@ -459,7 +569,7 @@ class AdminPostServiceTest {
     UUID postId = UUID.randomUUID();
     when(postRepository.findByIdAndDeletedAtIsNull(postId)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> adminPostService.approvePost(adminId, postId, null))
+    assertThatThrownBy(() -> adminPostService.approvePost(adminId, postId))
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Post not found");
   }
@@ -494,18 +604,8 @@ class AdminPostServiceTest {
         .thenReturn(Optional.of(ingredient));
   }
 
-  /** The component log entries are written after the post one, so read them from the end. */
-  private ModerationLog lastPostLog() {
-    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
-    return captor.getAllValues().stream()
-        .filter(entry -> "POST".equals(entry.getTargetType()))
-        .findFirst()
-        .orElseThrow(() -> new AssertionError("no POST moderation log was written"));
-  }
-
   @Test
-  void getPostDetail_returnsScoresAndReferencedNames() {
+  void getPostDetail_returnsContentScoreAndReferencedNames() {
     UUID recipeId = UUID.randomUUID();
     Dish dish =
         Dish.builder()
@@ -518,7 +618,6 @@ class AdminPostServiceTest {
             .id(recipeId)
             .name("bún chả chay")
             .dish(dish)
-            .score(0.81)
             .moderationStatus(ModerationStatus.PENDING)
             .build();
     Ingredient tofu =
@@ -528,7 +627,10 @@ class AdminPostServiceTest {
             .moderationStatus(ModerationStatus.APPROVED)
             .build();
     post.setContentScore(0.63);
-    post.setFlag(PostFlag.NEEDS_REVIEW);
+    post.setFlag(PostFlag.FILTER_FAILED);
+    post.setFlagDetail(
+        PostFlagDetail.filterFailed(
+            new FilterVerdict(FilterOutcome.UNCERTAIN, 0.58, 0.7, List.of())));
     when(postRepository.findByIdAndDeletedAtIsNull(post.getId())).thenReturn(Optional.of(post));
     when(recipeRepository.findByPosts_IdAndDeletedAtIsNull(post.getId()))
         .thenReturn(List.of(recipe));
@@ -543,10 +645,17 @@ class AdminPostServiceTest {
     AdminPostDetailResponse detail = adminPostService.getPostDetail(post.getId());
 
     assertThat(detail.getContentScore()).isEqualTo(0.63);
-    assertThat(detail.getFlag()).isEqualTo("NEEDS_REVIEW");
+    assertThat(detail.getFlag()).isEqualTo("FILTER_FAILED");
+    // The detail reaches the API as an object, not as the raw string it was stored as before
+    // ADR-024.
+    assertThat(detail.getFlagDetail().getKind()).isEqualTo("FILTER_FAILED");
+    assertThat(detail.getFlagDetail().getOutcome()).isEqualTo("UNCERTAIN");
+    assertThat(detail.getFlagDetail().getScore()).isEqualTo(0.58);
+    assertThat(detail.getFlagDetail().getThreshold()).isEqualTo(0.7);
     assertThat(detail.getRecipes()).hasSize(1);
-    assertThat(detail.getRecipes().get(0).getScore()).isEqualTo(0.81);
     assertThat(detail.getRecipes().get(0).getType()).isEqualTo("RECIPE");
+    // recipeIds is derived from the components already loaded, not from a second query.
+    assertThat(detail.getRecipeIds()).containsExactly(recipeId);
     assertThat(detail.getNames())
         .extracting(AdminPostDetailResponse.ComponentSummary::getType)
         .containsExactly("DISH", "INGREDIENT");

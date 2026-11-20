@@ -8,7 +8,7 @@ including the dishes, ingredients and recipe the post carries.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/admin/posts/{postId}` | Full detail: scores and referenced component states |
+| `GET /api/admin/posts/{postId}` | Full detail: everything the queue item carries, plus the content score and referenced component states |
 | `POST /api/admin/posts/{postId}/approve` | Publish the post and approve pending components |
 | `POST /api/admin/posts/{postId}/reject` | Unpublish the post and reject pending components |
 
@@ -32,36 +32,50 @@ roles receive `403 Forbidden`.
   "message": "Post retrieved successfully",
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
-    "title": "Vegan pho at home",
-    "content": "…",
-    "status": "unpublished",
-    "flag": "NEEDS_REVIEW",
-    "contentScore": 0.8123,
-    "publishedAt": null,
-    "createdAt": "2026-10-23T08:00:00Z",
     "userId": "9f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
     "displayName": "jane",
-    "components": [
+    "avatarUrl": "https://cdn.example.com/avatars/jane.jpg",
+    "title": "Vegan pho at home",
+    "content": "…",
+    "rawContent": { "type": "doc", "content": [] },
+    "featuredImageUrl": "https://cdn.example.com/posts/pho.jpg",
+    "categoryIds": ["0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d"],
+    "mediaIds": ["1b2c3d4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e"],
+    "recipeIds": ["0b0f8c1e-1f2a-4c3d-9e8f-7a6b5c4d3e2f"],
+    "status": "pending",
+    "flag": "FILTER_FAILED",
+    "flagDetail": {
+      "kind": "FILTER_FAILED",
+      "outcome": "FAIL",
+      "score": 0.312,
+      "threshold": 0.45
+    },
+    "rejectionReason": null,
+    "contentScore": 0.3120,
+    "email": "jane@example.com",
+    "viewCount": 42,
+    "publishedAt": null,
+    "createdAt": "2026-11-18T09:12:44Z",
+    "recipes": [
       {
         "id": "0b0f8c1e-1f2a-4c3d-9e8f-7a6b5c4d3e2f",
         "type": "RECIPE",
         "name": "Phở chay",
-        "moderationStatus": "PENDING",
-        "score": 0.6104
-      },
+        "moderationStatus": "PENDING"
+      }
+    ],
+    "names": [
       {
         "id": "6c2d3e4f-5a6b-7c8d-9e0f-1a2b3c4d5e6f",
         "type": "DISH",
         "name": "phở chay",
-        "moderationStatus": "PENDING",
-        "score": null
+        "moderationStatus": "PENDING"
       },
       {
         "id": "7d3e4f5a-6b7c-8d9e-0f1a-2b3c4d5e6f70",
         "type": "INGREDIENT",
         "name": "cocain",
-        "moderationStatus": "PENDING",
-        "score": null
+        "moderationStatus": "PENDING"
       }
     ]
   }
@@ -70,10 +84,38 @@ roles receive `403 Forbidden`.
 
 | Field | Type | Description |
 |---|---|---|
+| id | string (UUID) | Post id. |
+| userId | string (UUID) | Author id. |
+| displayName | string | Author's display name. |
+| avatarUrl | string \| null | Author's avatar from `UserProfile`. `null` when the author has no profile row. |
+| title | string | Post title. |
+| content | string | Plain-text body. |
+| rawContent | object \| null | The rich-text editor document as submitted, so a rich post can be reviewed in full. |
+| featuredImageUrl | string \| null | Featured image. Part of what an admin reviews on a media-bearing post (ADR-029). |
+| categoryIds | array (UUID) | Categories the post is filed under. |
+| mediaIds | array (UUID) | Non-deleted media attached to the post — the media a reviewer decides on (ADR-029). |
+| recipeIds | array (UUID) | Ids of the attached non-deleted recipes. Use `recipes[]` for their review state. |
 | contentScore | number \| null | Relevance score for `title + content`. `null` = never scored. |
-| components[].type | string | `RECIPE`, `DISH` or `INGREDIENT`. |
-| components[].moderationStatus | string | `PENDING`, `APPROVED` or `REJECTED`. |
-| components[].score | number \| null | The recipe's score for `RECIPE`; `null` for dish and ingredient, which are not scored. |
+| status | string | `drafted`, `processing`, `pending`, `published` or `unpublished`. A post whose verdict is recorded and whose admin decision is outstanding is `pending`; `processing` means the filter run is still in flight. |
+| flag | string \| null | The post's last verdict: `FILTER_PASSED` (the filter cleared the text), or `FILTER_FAILED` / `SIMILAR_CONTENT` / `FILTER_SKIPPED` (held, or approved/rejected over the blocker). `null` on a draft, on a run still in flight, and on rows published before V58 (ADR-025, ADR-029). |
+| flagDetail | object \| null | The evidence behind `flag` as a JSON snapshot (ADR-024, ADR-025): `kind` (always equal to `flag`) plus the fields that verdict owns — `score`/`threshold` for `FILTER_PASSED`, `outcome`/`score`/`threshold` for `FILTER_FAILED`, `postId`/`similarity`/`threshold` for `SIMILAR_CONTENT`, `cause` for `FILTER_SKIPPED`. Absent fields are omitted. |
+| rejectionReason | string \| null | Why an admin rejected this post. Cleared when the post is approved. `null` = no reason recorded. |
+| email | string | Author's email. |
+| viewCount | integer | View counter. |
+| publishedAt | string (ISO-8601) \| null | First publication time. `null` while the post has never been published. |
+| createdAt | string (ISO-8601) | Creation time. |
+| recipes | array | Recipe bodies the post attaches, each with its moderation state. Empty when none is attached. |
+| names | array | Every dish and ingredient name the post references. |
+| recipes[].type / names[].type | string | `RECIPE`, `DISH` or `INGREDIENT`. |
+| recipes[].moderationStatus, names[].moderationStatus | string | `PENDING`, `APPROVED` or `REJECTED`. |
+| recipes[].score / names[].score | — | Removed by ADR-026. No component carries a score; the property is absent from both arrays. |
+
+This payload is a **superset** of the admin queue item: every field
+[`GET /api/admin/posts`](get-posts.md) returns is present here too, plus
+`contentScore`, `recipes` and `names`. The `recipes` array differs by design from the list
+item's `recipeIds` — it is the same set of recipes, reported with each one's moderation
+state because that is what the decision needs. An integration test compares the two live
+payloads, so a field added to the list and forgotten here fails CI.
 
 Components are assembled at read time from the recipe, dish and ingredient rows
 the post references. They are not stored.
@@ -82,17 +124,18 @@ the post references. They are not stored.
 
 ### Request Body
 
-```json
-{ "reason": "Confirmed vegan recipe, ingredient names valid" }
-```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| reason | string | No | Stored on the moderation log. Max 1000 chars. |
+None. Approval records no rationale — it only removes a reason (ADR-027). A client that still
+sends a body is not broken: Spring Boot disables `FAIL_ON_UNKNOWN_PROPERTIES`, so an unknown
+`reason` field is ignored.
 
 ### Behaviour
 
-- Sets `status = published`, `publishedAt = now`.
+- Sets `status = published` and stamps `publishedAt` (`now` when it was null; a re-check
+  keeps the original publication time).
+- Clears `rejectionReason` — a stale reason would describe a decision that no longer stands.
+- **Keeps** `flag` and `flagDetail`: approving a `FILTER_FAILED` post publishes it but does
+  not relabel the filter's verdict, so the row still says the decision was a human override
+  (ADR-025).
 - Sets every referenced `PENDING` dish, ingredient and recipe to `APPROVED`.
 - Does **not** delete anything.
 - Requires at least one category, as before.
@@ -103,7 +146,7 @@ the post references. They are not stored.
 |---|---|---|
 | 200 | Approved | `Post approved successfully` |
 | 400 | No category | `At least one category is required to publish a post` |
-| 400 | Post is `hidden` | `A hidden post is approved through the visibility endpoint` |
+| 400 | Post is `drafted` | `A drafted post has not been submitted for publication and cannot be moderated` |
 | 404 | Missing or soft-deleted | `Post not found` |
 
 ## POST /api/admin/posts/{postId}/reject
@@ -117,7 +160,11 @@ the post references. They are not stored.
 ### Behaviour
 
 - Sets `status = unpublished`, clears `publishedAt`.
-- Sets referenced rows that are still `PENDING` to `REJECTED`.
+- **Keeps** `flag` and `flagDetail`: together with `rejectionReason` they are the full
+  decision record — what the machine saw next to what the admin decided (ADR-025).
+- Stores the supplied `reason` in `rejection_reason` (null when the body omits it).
+- Sets referenced rows that are still `PENDING` to `REJECTED`, and records the
+  same `reason` on each of those recipe rows.
 - Leaves already-`APPROVED` rows untouched — a shared name does not become bad
   because one post reused it.
 - Deletes nothing.
@@ -127,24 +174,35 @@ the post references. They are not stored.
 | Status | Condition | Message |
 |---|---|---|
 | 200 | Rejected | `Post rejected successfully` |
-| 400 | Post is `hidden` | `A hidden post is rejected through the visibility endpoint` |
+| 400 | Post is `drafted` | `A drafted post has not been submitted for publication and cannot be moderated` |
 | 404 | Missing or soft-deleted | `Post not found` |
 
 ## Business Rules
 
 - Approval and rejection are Admin-only (BR-POST-012).
-- Every real change writes a `moderation_log` row (`APPROVE_POST` /
-  `REJECT_POST`) with actor, target and reason (BR-ADMIN-002).
-- A `hidden` post is handled through `PATCH /api/posts/{postId}/visibility`.
+- Both endpoints are how a held post is decided: the filter and the sweep only ever
+  park a post at `pending` with a blocker, they never unpublish it (ADR-023, ADR-029).
+- A `drafted` post is refused — nobody submitted it. A `pending` post is the normal
+  case; `processing`, `published`, and `unpublished` posts stay moderatable, because
+  approve/reject is also how the dish and ingredient names they introduced are decided
+  (ADR-016).
+- No audit trail is kept: no administrator action is recorded anywhere (ADR-027).
 - Approving approves the referenced names; rejecting rejects only the pending
   ones (BR-DISH-001).
-- Neither endpoint changes `flag`: an approval does not rewrite the filter's
-  verdict, and a rejection is a visibility decision, not a re-scoring.
+- Both endpoints **keep** `flag`/`flagDetail` untouched: the verdict is history the admin
+  decided on, not state belonging to the decision. `published` + `FILTER_FAILED` therefore
+  means "a human overrode the filter", which clearing the columns used to hide (ADR-025).
+- `rejection_reason` is current state, not history: rejection stores the reason
+  and approval clears it. No earlier reason survives (ADR-027).
+- Approval takes no payload; rejection accepts an optional `reason` (max 1000 chars) stored
+  on `post.rejection_reason`.
 
 ## Related
 
 - [Business rule: dish and ingredient name approval](../../brs/dish-ingredient-name-approval.md)
 - [Feature spec: component-level verification](../../feats/component-level-verification.md)
 - [ADR-016: Component-aware moderation](../../adrs/016-component-level-moderation.md)
+- [ADR-023: Post processing status and flag blocker](../../adrs/023-post-processing-status-and-flag-blocker.md)
+- [ADR-025: The post verdict survives publication](../../adrs/025-post-flag-survives-publication.md)
 - List posts (Admin): [`admin/get-posts.md`](get-posts.md)
-- Hide or unhide a post: `docs/apis/post/patch-posts-postid-visibility.md`
+- The author's own unlist action: `docs/apis/post/patch-posts-postid.md` (`publish: false`)

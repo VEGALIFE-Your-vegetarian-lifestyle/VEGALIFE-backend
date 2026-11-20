@@ -17,22 +17,6 @@ public class FilterProperties {
 
   private double acceptThreshold = 0.70;
   private double rejectThreshold = 0.45;
-
-  /**
-   * Accept and reject thresholds for the <strong>recipe body</strong> ({@code name + description +
-   * instructions}), scored against its own centroid pair. Recipe text is a different distribution
-   * from post prose — mostly imperative steps, ingredient amounts and timings — so it is calibrated
-   * separately rather than reusing the content thresholds (ADR-016).
-   *
-   * <p>Measured for {@code gemini-embedding-001} at 768 dimensions over the recipe corpus in {@code
-   * seed-recipe-on-topic.txt} / {@code seed-recipe-off-topic.txt}: lowest on-topic 0.706247,
-   * highest off-topic 0.267938, separation 0.4383097306259157. These values sit in the gap, chosen
-   * by the same rule used for the content filter. See {@code
-   * docs/feats/filter-calibration-gemini.md}.
-   */
-  private double recipeAcceptThreshold = 0.60;
-
-  private double recipeRejectThreshold = 0.38;
   private Duration sweepMaxAge = Duration.ofHours(24);
 
   /**
@@ -49,9 +33,10 @@ public class FilterProperties {
   private boolean duplicateEnabled = true;
 
   /**
-   * When false, a published post skips the semantic filter entirely and lands directly in the admin
-   * review queue ({@code flag=NEEDS_REVIEW}, {@code status=unpublished}) with no embedding call.
-   * True by default so the filter is the normal path; false is a deliberate outage mode.
+   * Fallback for the {@code content_filter_enabled} platform setting. When filtering is off, a
+   * submitted post skips the semantic filter and is parked directly in the admin review queue
+   * ({@code status=pending}, {@code flag=FILTER_SKIPPED}) with no embedding call (ADR-023,
+   * ADR-029). True by default so the filter is the normal path; false is a deliberate outage mode.
    */
   private boolean enabled = true;
 }

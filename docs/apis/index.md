@@ -15,21 +15,22 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `admin/delete-categories-categoryid.md` | `DELETE /api/admin/categories/{categoryId}` | Retire a content category (Admin) |
 | `admin/get-comments.md` | `GET /api/admin/comments` | List all comments (Admin) |
 | `admin/post-comments-commentid-moderate.md` | `POST /api/admin/comments/{commentId}/moderate` | Soft-delete a comment with a required reason (Admin) |
-| `admin/get-dashboard.md` | `GET /api/admin/dashboard` | Aggregated, time-range-filtered platform metrics, cached (Admin) |
+| `admin/get-dashboard.md` | `GET /api/admin/dashboard` | Lifetime and current-state platform snapshot, cached (Admin) |
+| `admin/get-dashboard-charts.md` | `GET /api/admin/dashboard/charts` | Bucketed revenue-by-plan and published-posts series for a day/week/month range, cached (Admin) |
 | `admin/dish-and-ingredient-crud.md` | `GET/POST/PATCH/DELETE /api/admin/dishes[/{dishId}][/approve\|/reject]` | Manage dish names, including review state; `admin/ingredients` mirrors it (Admin) |
 | `admin/dish-ingredient-crud.md` | `GET/POST/PATCH/DELETE /api/admin/dishes/{dishId}/ingredients[/{ingredientId}]` | Curate a dish's associated ingredients and which are required (Admin) |
-| `admin/post-locations.md` | `POST /api/admin/locations` | Create a location (Admin) |
-| `admin/patch-locations-locationid.md` | `PATCH /api/admin/locations/{locationId}` | Edit a location (Admin) |
-| `admin/delete-locations-locationid.md` | `DELETE /api/admin/locations/{locationId}` | Soft-delete a location (Admin) |
-| `admin/get-payments.md` | `GET /api/admin/payments` | List payments across all users with user/status/date filters (Admin) |
-| `admin/plan-crud.md` | `GET/POST/PATCH/DELETE /api/admin/plans[/{planId}]` | Manage AI subscription plans, including soft-deactivation (Admin) |
-| `admin/get-posts.md` | `GET /api/admin/posts` | List all posts across users and statuses (Admin) |
+| `admin/get-payments.md` | `GET /api/admin/payments` | List payments across all users, money-only, with user/status/date filters (Admin) |
+| `admin/plan-crud.md` | `GET/POST/PATCH/DELETE /api/admin/plans[/{planId}]` | Manage AI plans, request quotas, and descriptions, including soft-deactivation (Admin) |
+| `admin/get-posts.md` | `GET /api/admin/posts` | List and search all posts across users and statuses (Admin) |
 | `admin/post-posts-postid-moderate.md` | `POST /api/admin/posts/{postId}/moderate` | **Removed** — retained only as a record; replaced by approve/reject (ADR-016) |
 | `admin/post-posts-postid-approve.md` | `GET/POST /api/admin/posts/{postId}[/approve\|/reject]` | Read a post's component detail, approve or reject it with its components (Admin) |
-| `admin/get-recipes.md` | `GET /api/admin/recipes` | List all recipes across users with ingredients and instructions (Admin) |
+| `admin/get-recipes.md` | `GET /api/admin/recipes` | List and search all recipes across users with ingredients and instructions (Admin) |
 | `admin/recipe-crud.md` | `GET/PATCH/DELETE /api/admin/recipes[/{recipeId}][/approve\|/reject]` | Manage recipes, including review state (Admin) |
+| `admin/post-restaurants.md` | `POST /api/admin/restaurants` | Create a restaurant (Admin) |
+| `admin/patch-restaurants-restaurantid.md` | `PATCH /api/admin/restaurants/{restaurantId}` | Edit a restaurant (Admin) |
+| `admin/delete-restaurants-restaurantid.md` | `DELETE /api/admin/restaurants/{restaurantId}` | Soft-delete a restaurant (Admin) |
 | `admin/settings-crud.md` | `GET/PATCH /api/admin/settings` | Manage grouped platform settings, audited (Admin) |
-| `admin/get-users.md` | `GET /api/admin/users` | List user accounts (Admin) |
+| `admin/get-users.md` | `GET /api/admin/users` | List and search user accounts (Admin) |
 | `admin/post-restore-user.md` | `POST /api/admin/users/{userId}/restore` | Restore suspended user account (Admin) |
 | `admin/post-suspend-user.md` | `POST /api/admin/users/{userId}/suspend` | Suspend user account (Admin) |
 | `admin/get-videos.md` | `GET /api/admin/videos` | List all uploaded videos across users and statuses (Admin) |
@@ -53,8 +54,6 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `recipes/get-dishes-dishid.md` | `GET /api/dishes/{dishId}` | Read one approved dish; pending/rejected names answer 404 (authenticated) |
 | `recipes/get-dishes-dishid-ingredients-suggestions.md` | `GET /api/dishes/{dishId}/ingredients/suggestions` | Read an approved dish's curated ingredient list, with its advisory `required` flags (authenticated) |
 | `ingredients/get-ingredients.md` | `GET /api/ingredients` | List ingredients paginated, with case-insensitive name filter (authenticated) |
-| `locations/get-locations.md` | `GET /api/locations` | List recommend locations with rating/type/price/open-now filters (authenticated) |
-| `locations/get-locations-nearby.md` | `GET /api/locations/nearby` | List every active location within a radius, nearest first, no pagination (authenticated) |
 | `media/post-upload.md` | `POST /api/media/upload` | Issue a signed upload grant and media ID |
 | `media/get-media-mediaid.md` | `GET /api/media/{mediaId}` | Read a stored media record |
 | `media/delete-media-mediaid.md` | `DELETE /api/media/{mediaId}` | Soft-delete a media record (owner or Admin); physical purge is async |
@@ -62,15 +61,15 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `menus/get-menus.md` | `GET /api/menus` | List own menus as summaries, filtered by an inclusive date range, plus status (authenticated) |
 | `menus/post-menus.md` | `POST /api/menus` | Create a drafted weekly menu with its 7 days of meals (authenticated) |
 | `menus/get-menus-details.md` | `GET /api/menus/details` | Read own meal plan over a date range — every menu with its days, meals and embedded dishes (authenticated) |
+| `menus/delete-menu-menuid.md` | `DELETE /api/menus/{menuId}` | Soft-delete an owned menu in any status; deleted plans vanish from every read (authenticated) |
 | `menus/patch-menus.md` | `PATCH /api/menus/{menuId}` | Update an owned drafted or scheduled menu's meals and preferences (authenticated) |
 | `menus/post-menu-status.md` | `POST /api/menus/{menuId}/status` | Transition an owned menu's status: schedule, cancel, or complete (authenticated) |
-| `payments/get-payments.md` | `GET /api/payments` | List own payment history, newest first, with subscription and plan context (authenticated) |
-| `payments/post-checkout.md` | `POST /api/payments/checkout` | Start (or resume) a VNPay checkout for an AI plan (authenticated) |
-| `payments/get-vnpay-ipn.md` | `GET /api/payments/vnpay/ipn` | VNPay payment notification webhook; fulfils a verified payment (public, signed) |
+| `payments/get-payments.md` | `GET /api/payments` | List own payments, newest first, money-only (authenticated) |
+| `payments/get-vnpay-ipn.md` | `GET /api/payments/vnpay/ipn` | VNPay payment notification webhook; grants a verified acquisition (public, signed) |
 | `payments/get-payments-paymentid.md` | `GET /api/payments/{paymentId}` | Read one of your payments' status from the ledger (authenticated; owner only) |
 | `post/post-posts.md` | `POST /api/posts` | Create a post for the authenticated user |
-| `post/get-posts.md` | `GET /api/posts` | List the authenticated user's posts |
-| `post/get-posts-feed.md` | `GET /api/posts/feed` | Global feed of published posts, newest first (public) |
+| `post/get-posts.md` | `GET /api/posts` | Global feed of published posts, newest first, filterable by keyword, category, and date (public) |
+| `post/get-posts-me.md` | `GET /api/posts/me` | List the authenticated user's posts, filterable by status, category, and date |
 | `post/get-posts-postid.md` | `GET /api/posts/{postId}` | View a single non-deleted post by id (any status, any author, public) |
 | `post/patch-posts-postid.md` | `PATCH /api/posts/{postId}` | Edit a post (owner or Admin) |
 | `post/delete-posts-postid.md` | `DELETE /api/posts/{postId}` | Soft-delete a post (owner or Admin) |
@@ -82,20 +81,30 @@ Rows are sorted alphabetically by endpoint path, not grouped by feature folder, 
 | `post/post-posts-postid-media.md` | `POST /api/posts/{postId}/media` | Replace a post's whole attached-media set (owner or Admin) |
 | `post/post-posts-postid-recipes.md` | `POST /api/posts/{postId}/recipes` | Replace a post's whole attached-recipe set (owner or Admin) |
 | `post/get-posts-postid-related.md` | `GET /api/posts/{postId}/related` | Semantically similar published posts by embedding cosine similarity, ranked, excludes source (public) |
-| `post/patch-posts-postid-visibility.md` | `PATCH /api/posts/{postId}/visibility` | Hide or unhide a post (Admin) |
+| `post/patch-posts-postid-visibility.md` | `PATCH /api/posts/{postId}/visibility` | **Removed** — retained only as a record; hide/unhide dropped in ADR-023 |
 | `post/put-posts-postid-votes.md` | `PUT /api/posts/{postId}/votes` | Cast, switch, or remove a vote on a post (authenticated) |
 | `post/get-posts-postid-votes.md` | `GET /api/posts/{postId}/votes` | Read a post's vote counts and the caller's own vote if identified (public) |
 | `profile/put-profile.md` | `PUT /api/profile` | Update user profile |
 | `profile/get-profile.md` | `GET /api/profile` | Get own profile (authenticated; auto-creates empty row) |
 | `profile/get-profile-userid.md` | `GET /api/profile/{userId}` | Get a member's profile (public) |
 | `recipes/post-recipes.md` | `POST /api/recipes` | Create a recipe (dish + ingredients) for the authenticated user |
-| `recipes/get-recipes-me.md` | `GET /api/recipes/me` | List own recipes, newest first, unpaginated (authenticated) |
-| `recipes/get-recipes-recipeid.md` | `GET /api/recipes/{recipeId}` | Read one own recipe by id; another member's recipe answers 404 (authenticated; owner only) |
-| `search/get-search.md` | `GET /api/search` | Keyword search across posts, videos, and recipes (public) |
-| `subscriptions/get-subscriptions.md` | `GET /api/subscriptions` | List active AI plans with limits and price (public) |
-| `subscriptions/get-me.md` | `GET /api/subscriptions/me` | Get own AI subscription: tier, usage, plan, latest payment (authenticated) |
-| `subscriptions/post-cancel.md` | `POST /api/subscriptions/me/cancel` | Cancel own AI subscription immediately, cascading scheduled successors (authenticated) |
-| `subscriptions/get-history.md` | `GET /api/subscriptions/me/history` | Paginated history of own AI subscription rows, newest first (authenticated) |
-| `subscriptions/post-purchase-eligibility.md` | `POST /api/subscriptions/me/purchase/eligibility` | Check whether a plan purchase/extension is allowed; read-only (authenticated) |
-| `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts (public: published only; owner/Admin: all) |
-| `mcp/post-mcp.md` | In-process `@Tool` methods (no HTTP endpoint) | Five menu tools — get_menu, get_meal_plan, create_menu, update_menu, schedule_menu — served by the backend's own tool layer for the AI chat (ADR-013) |
+| `recipes/get-recipes.md` | `GET /api/recipes` | List approved recipes, newest first, paginated, filterable by keyword, dish, difficulty, and total time (public) |
+| `recipes/get-recipes-me.md` | `GET /api/recipes/me` | List own recipes, newest first, paginated and filterable (authenticated) |
+| `recipes/get-recipes-recipeid.md` | `GET /api/recipes/{recipeId}` | Read one recipe by id; approved is public, non-approved is author-only (public, author-aware) |
+| `recipes/delete-recipes-recipeid.md` | `DELETE /api/recipes/{recipeId}` | Soft-delete own recipe; owner only (authenticated) |
+| `restaurants/get-restaurants.md` | `GET /api/restaurants` | List recommended restaurants with rating/price/open-now/keyword filters (authenticated) |
+| `restaurants/get-restaurants-nearby.md` | `GET /api/restaurants/nearby` | List every active restaurant within a radius, nearest first, no pagination (authenticated) |
+| `restaurants/get-restaurants-restaurantid.md` | `GET /api/restaurants/{restaurantId}` | Read one active restaurant by id, with its curated dishes nested (authenticated) |
+| `saved/get-saved-posts.md` | `GET /api/saved/posts` | List own saved posts, newest save first, visible posts only (authenticated) |
+| `saved/post-saved-posts-postid.md` | `POST /api/saved/posts/{postId}` | Save a published post; idempotent (authenticated) |
+| `saved/delete-saved-posts-postid.md` | `DELETE /api/saved/posts/{postId}` | Unsave a post; idempotent (authenticated) |
+| `saved/get-saved-recipes.md` | `GET /api/saved/recipes` | List own saved recipes, newest save first, approved recipes only (authenticated) |
+| `saved/post-saved-recipes-recipeid.md` | `POST /api/saved/recipes/{recipeId}` | Save an approved recipe; idempotent (authenticated) |
+| `saved/delete-saved-recipes-recipeid.md` | `DELETE /api/saved/recipes/{recipeId}` | Unsave a recipe; idempotent (authenticated) |
+| `search/get-search.md` | `GET /api/search` | **Deprecated** — keyword search across posts, videos, recipes, and restaurants (public); use the typed list filters |
+| `subscriptions/get-subscriptions.md` | `GET /api/subscriptions` | List active AI plans with request quotas, descriptions, and price (public) |
+| `subscriptions/post-acquire.md` | `POST /api/subscriptions/acquire` | Claim a free plan or start a checkout for a paid plan (authenticated) |
+| `subscriptions/get-me.md` | `GET /api/subscriptions/me` | Read own remaining AI request allowance (authenticated) |
+| `subscriptions/get-history.md` | `GET /api/subscriptions/me/history` | Paginated acquisition history — purchases and claims — newest first (authenticated) |
+| `post/get-users-userid-posts.md` | `GET /api/users/{userId}/posts` | List a member's posts, filterable by category and date (public: published only; owner/Admin: all) |
+| `mcp/post-mcp.md` | In-process `@Tool` methods (no HTTP endpoint) | Six menu tools — get_menu, get_meal_plan, create_menu, update_menu, schedule_menu, suggest_dishes — served by the backend's own tool layer for the AI chat (ADR-013) |

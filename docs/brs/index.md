@@ -37,16 +37,20 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-POST-001 | Post Ownership Comes from Authentication | Active | 2026-09-26 |
 | BR-POST-002 | Users List Only Their Non-Deleted Posts | Active | 2026-09-26 |
 | BR-POST-003 | User Post Lists Use Bounded Newest-First Pagination | Active | 2026-09-26 |
-| BR-POST-004 | New Posts Start in the Created State | Active | 2026-09-26 |
+| BR-POST-004 | New Posts Start as Drafts, and Submitting Parks Them in Processing | Active | 2026-11-19 |
 | BR-POST-005 | Post Title and Content Are Required | Active | 2026-09-26 |
 | BR-POST-006 | Users Edit Only Their Own Non-Deleted Posts | Active | 2026-09-27 |
-| BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-09-27 |
+| BR-POST-007 | Post Edits Change Only Supplied Fields | Active | 2026-11-19 |
 | BR-POST-008 | Posts Are Soft-Deleted by Owner or Administrator | Active | 2026-09-29 |
-| BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Active | 2026-09-29 |
-| BR-POST-010 | Only Published Posts Are Public | Active | 2026-09-30 |
-| BR-POST-011 | Single Post Detail Excludes Only Deleted Posts, Not Ownership | Active | 2026-10-10 |
-| BR-POST-012 | Only Administrators Publish or Unpublish a Post as a Moderation Action | Active | 2026-10-10 |
-| BR-ADMIN-002 | Every Administrator Content-Moderation Action Is Logged | Active | 2026-10-10 |
+| BR-POST-009 | Only Administrators Hide Posts, and It Is Logged | Retired (ADR-023) | 2026-11-13 |
+| BR-POST-010 | Only Published Posts Are Public | Active | 2026-11-19 |
+| BR-POST-011 | Single Post Detail Excludes Only Deleted Posts, Not Ownership | Active | 2026-11-19 |
+| BR-POST-012 | Only Administrators Approve or Reject a Submitted Post | Active | 2026-11-19 |
+| BR-POST-013 | Only Approved Recipes May Be Attached to a Post | Active | 2026-11-12 |
+| BR-POST-014 | Post List Filters Only Narrow the Visible Set | Active | 2026-11-19 |
+| BR-POST-015 | A Post With Media Waits for Admin Review | Active | 2026-11-19 |
+| BR-POST-016 | A View Is Another Person Reading a Published Post | Active | 2026-11-20 |
+| BR-ADMIN-002 | Every Administrator Content-Moderation Action Is Logged | Retired by ADR-027 | 2026-11-19 |
 | BR-COMMENT-001 | Comment Creation Requires Authentication; Reading Is Public | Active | 2026-10-11 |
 | BR-COMMENT-002 | Only the Owner May Edit a Comment | Active | 2026-10-11 |
 | BR-COMMENT-003 | Comment Deletion Is Owner-or-Admin and Soft | Active | 2026-10-11 |
@@ -62,52 +66,70 @@ Each rule is documented in `docs/brs/<feature>.md` with ID format `BR-<FEATURE>-
 | BR-MEDIA-008 | Confirmation Trusts Only Provider Read-Back | Active | 2026-09-30 |
 | BR-MEDIA-009 | Media Deletion Is Owner-or-Admin, Idempotent, and Asynchronous | Active | 2026-10-03 |
 | BR-MEDIA-010 | Deleted Media Are Invisible on Every Read Path | Active | 2026-10-03 |
-| BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-09-30 |
-| BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-09-30 |
-| BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-09-30 |
-| BR-FILTER-007 | A Passed Filter Publishes the Post | Active | 2026-09-30 |
-| BR-FILTER-008 | A Rejected or Uncertain Filter Unpublishes the Post | Active | 2026-10-10 |
-| BR-FILTER-009 | Posts Stuck Pending Are Unpublished After 24 Hours | Active | 2026-10-10 |
+| BR-FILTER-004 | Semantic Relevance Uses Three Bands and Configured Thresholds | Active | 2026-11-13 |
+| BR-FILTER-005 | Only Publish Intent Triggers Filtering | Active | 2026-11-19 |
+| BR-FILTER-006 | Filtering Is Asynchronous Through the Outbound Queue | Active | 2026-11-13 |
+| BR-FILTER-007 | A Passed Filter Publishes the Post | Active | 2026-11-19 |
+| BR-FILTER-008 | A Failed or Uncertain Filter Holds the Post for an Admin | Active | 2026-11-19 |
+| BR-FILTER-009 | Posts Stuck in Flight Are Marked Filter-Skipped After 24 Hours | Active | 2026-11-19 |
 | BR-RECP-001 | Recipe Ownership Comes from Authentication | Active | 2026-10-01 |
 | BR-RECP-002 | Ingredient and Dish Names Are Unique Case-Insensitively | Active | 2026-10-01 |
-| BR-RECP-003 | Recipe Name, Instructions, Servings, and Dish Are Required | Active | 2026-10-01 |
+| BR-RECP-003 | Recipe Name, Instructions, Servings, and Dish Are Required | Active | 2026-11-05 |
+| BR-RECP-004 | Recipe Nutrition Is Derived From Ingredient Nutrition, Never Authored | Active | 2026-11-05 |
+| BR-RECP-005 | Ingredient Nutrition Is Per One Unit, and All-or-Nothing | Active | 2026-11-05 |
+| BR-RECP-006 | A Recipe Reports No Nutrition Unless Every Ingredient Is Resolved | Active | 2026-11-05 |
+| BR-RECP-007 | A Line's Nutrition Is Derived, Rounded Per Line, and Never Partial | Active | 2026-11-06 |
+| BR-RECP-008 | Approved Recipes Are Publicly Readable | Active | 2026-11-13 |
+| BR-RECP-009 | Recipe Catalogue Filters and Keyword Only Narrow the Visible Set | Active | 2026-11-13 |
+| BR-RECP-010 | Only the Author May Soft-Delete a Recipe | Active | 2026-11-13 |
 | BR-DISH-001 | Dish and Ingredient Names Require Admin Approval and Rejection Is Permanent | Active | 2026-10-23 |
 | BR-DISH-002 | Dish Ingredient Suggestions and Advisory Required Flag | Active | 2026-11-02 |
 | BR-DISH-003 | Dish Ingredient Entries Come From Approved Recipes or an Administrator, and Deletion Is Permanent for Seeding | Active | 2026-11-02 |
-| BR-SUBS-001 | AI Quota Window Is the Current UTC Calendar Month | Active | 2026-10-04 |
-| BR-SUBS-002 | Plan Limits and Prices Are Data-Driven | Active | 2026-10-04 |
-| BR-SUBS-003 | Members Without a Subscription Row Are FREE by Default | Active | 2026-10-07 |
-| BR-SUBS-004 | One In-Effect Subscription Row and Its Purchase Gate | Active | 2026-10-07 |
-| BR-SUBS-005 | Cancellation Is Immediate, Cascading, and Repeat-Refused | Active | 2026-10-07 |
-| BR-SUBS-006 | Subscriptions Expire Within 24 Hours of Renewal | Active | 2026-10-07 |
-| BR-PAY-001 | The Payment Webhook Is the Sole Source of Truth for Fulfilment | Active | 2026-10-04 |
+| BR-SUBS-001 | AI Quota Window Is the Current UTC Calendar Month | Superseded by ADR-021 | 2026-11-04 |
+| BR-SUBS-002 | Plan Limits and Prices Are Data-Driven | Active | 2026-11-04 |
+| BR-SUBS-003 | Members Without a Subscription Row Are FREE by Default | Superseded by ADR-021 | 2026-11-04 |
+| BR-SUBS-004 | One In-Effect Subscription Row and Its Purchase Gate | Superseded by ADR-021 | 2026-11-04 |
+| BR-SUBS-005 | Cancellation Is Immediate, Cascading, and Repeat-Refused | Superseded by ADR-021 | 2026-11-04 |
+| BR-SUBS-006 | Subscriptions Expire Within 24 Hours of Renewal | Superseded by ADR-021 | 2026-11-04 |
+| BR-SUBS-007 | Entitlement Is the Live Sum of Granted Acquisitions and Never Expires | Active | 2026-11-04 |
+| BR-SUBS-008 | A Plan Is Claimed at Most Once per Member; Purchases May Repeat | Active | 2026-11-04 |
+| BR-SUBS-009 | Deactivation Never Revokes Granted Allowance | Active | 2026-11-04 |
+| BR-SUBS-010 | Plan Quota Edits Are Retroactive | Active | 2026-11-04 |
+| BR-SUBS-011 | Plans and Acquisition Rows Are Never Hard-Deleted | Active | 2026-11-04 |
+| BR-PAY-001 | The Payment Webhook Is the Sole Source of Truth for Fulfilment | Active | 2026-11-04 |
 | BR-PAY-002 | A Payment Counts as Paid Only on a Double Zero | Active | 2026-10-04 |
 | BR-PAY-003 | The Notified Amount Must Equal the Recorded Amount | Active | 2026-10-04 |
-| BR-PAY-004 | A Payment Succeeds at Most Once | Active | 2026-10-04 |
-| BR-PAY-005 | One In-Flight Checkout per Member and Plan | Active | 2026-10-04 |
-| BR-PAY-006 | Risk-Flagged and Reversed Transactions Never Fulfil | Active | 2026-10-04 |
-| BR-PAY-007 | The Receipt Is Emailed Exactly Once, Off the Request Thread | Active | 2026-10-04 |
-| BR-PAY-008 | Renewal Date Is Paid Time Plus One Calendar Month | Active | 2026-10-04 |
-| BR-PAY-009 | Only Active, Priced VND Plans Are Purchasable | Active | 2026-10-04 |
-| BR-AI-001 | Quota Gate Precedes the Provider Call | Active | 2026-10-07 |
-| BR-AI-002 | Only Successful Replies Count Toward Quota | Active | 2026-10-07 |
+| BR-PAY-004 | A Payment Succeeds at Most Once | Active | 2026-11-04 |
+| BR-PAY-005 | One In-Flight Checkout per Member and Plan | Active | 2026-11-04 |
+| BR-PAY-006 | Risk-Flagged and Reversed Transactions Never Fulfil | Active | 2026-11-04 |
+| BR-PAY-007 | The Receipt Is Emailed Exactly Once, Off the Request Thread | Active | 2026-11-04 |
+| BR-PAY-008 | Renewal Date Is Paid Time Plus One Calendar Month | Superseded by ADR-021 | 2026-11-04 |
+| BR-PAY-009 | Only an Active, Priced, VND Plan Can Reach Checkout | Active | 2026-11-04 |
+| BR-PAY-010 | The Ledger Records Money Only; the Acquisition Records the Plan | Active | 2026-11-04 |
+| BR-AI-001 | Quota Gate Precedes the Provider Call | Active | 2026-11-04 |
+| BR-AI-002 | Only Successful Replies Count Toward Quota | Active | 2026-11-04 |
 | BR-AI-003 | Conversation Ownership Comes from Authentication | Active | 2026-10-07 |
-| BR-AI-004 | Context Is the Stored Profile (Incl. Dietary JSON and BMI) Plus Own Conversation History | Active | 2026-10-13 |
+| BR-AI-004 | Context Is the Stored Health Profile Plus Own Conversation History | Active | 2026-11-14 |
 | BR-AI-005 | Chat Provider Is OpenAI-Compatible and Set by Dedicated Env Vars | Active | 2026-10-07 |
 | BR-AI-006 | Persona Is Scoped to Vegan and Platform Topics, With a Polite Refusal Otherwise | Active | 2026-10-13 |
 | BR-AI-007 | AI Chat Can Be Disabled Platform-Wide, With No Turn, Provider Call, or Quota | Active | 2026-11-02 |
+| BR-AI-008 | Quota Is Reported Only as `remainingUsage` | Active | 2026-11-04 |
 | BR-MENU-001 | Menu Ownership Comes from Authentication | Active | 2026-10-10 |
 | BR-MENU-002 | Menu Read Windows Are Intersections | Active | 2026-10-10 |
 | BR-MENU-003 | One Scheduled Week per User, No Overlap | Active | 2026-10-10 |
 | BR-MENU-004 | Menu Windows Are Evaluated in Server (UTC) Time | Active | 2026-10-10 |
-| BR-MENU-005 | New Menus Are Drafts and Must Cover a Valid, Varied Week | Active | 2026-10-12 |
+| BR-MENU-005 | New Menus Are Drafts and Must Cover a Valid, Varied Week | Active | 2026-11-14 |
 | BR-MENU-006 | Menus Are Editable Only While Drafted or Scheduled | Active | 2026-10-12 |
 | BR-MENU-007 | Menu Status Changes Are Explicit, Legal Transitions | Active | 2026-10-12 |
+| BR-MENU-008 | Menus Are Soft-Deleted by Their Owner, in Any Status | Active | 2026-11-12 |
 | BR-MCP-001 | Tool Calls Act as the Authenticated Caller | Active | 2026-10-13 |
 | BR-MCP-002 | Exactly Six Tools Are Exposed | Active | 2026-10-25 |
 | BR-MCP-003 | Tool Calls Consume No AI Quota | Active | 2026-10-12 |
 | BR-MCP-004 | Credentials Are Never Model-Visible or Logged | Active | 2026-10-13 |
-| BR-MCP-005 | Chat Edits Only the Caller's Current-Week Draft | Active | 2026-10-13 |
+| BR-MCP-005 | Chat Edits Only the Caller's Own Upcoming Draft | Active | 2026-11-14 |
 | BR-MCP-006 | Scheduling Happens Only After Explicit User Confirmation | Active | 2026-10-12 |
-| BR-MCP-007 | Tool Failures Are Model-Readable Results, Not Transport Errors | Active | 2026-10-13 |
+| BR-MCP-007 | Tool Failures Are Model-Readable Results, Not Transport Errors | Active | 2026-11-06 |
 | BR-MCP-008 | Allergies Come from the Profile, Never from a Tool Argument | Active | 2026-10-25 |
+| BR-MCP-009 | A Browsing Tool's Filters Mirror Its Endpoint Exactly | Active | 2026-11-05 |
+| BR-SAVED-001 | A Saved Item Is Private to the Member Who Saved It | Active | 2026-11-12 |
+| BR-SAVED-002 | Only Visible Content Can Be Saved or Listed as Saved | Active | 2026-11-12 |

@@ -2,7 +2,9 @@
 
 ## Status
 
-In review
+Superseded by [`request-credits.md`](request-credits.md) — the lifecycle,
+cancellation, expiry and purchase gate described here no longer exist. Kept as
+a record of the superseded design.
 
 ## Author / owner
 
@@ -262,8 +264,9 @@ what I have paid for.
 
 - Issue: #112
 - Feature spec (amended by this one): `docs/feats/subscription-purchase.md`
-- Business rules: `docs/brs/subscriptions.md` (BR-SUBS-003 amended;
-  BR-SUBS-004/005/006 added)
-- API refs: `docs/apis/subscriptions/post-cancel.md`,
-  `docs/apis/subscriptions/get-history.md`,
-  `docs/apis/subscriptions/post-purchase-eligibility.md`
+- Superseded by: `docs/feats/request-credits.md`
+- Business rules: `docs/brs/subscriptions.md` (BR-SUBS-003/004/005/006
+  superseded by ADR-021)
+- API refs: `docs/apis/subscriptions/get-history.md` (reshaped),
+  `docs/apis/subscriptions/post-acquire.md` (replaces cancel and eligibility),
+  `docs/apis/subscriptions/get-me.md` (remaining usage only)

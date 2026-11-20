@@ -14,7 +14,6 @@ import com.vegalife.dto.request.admin.VideoListRequest;
 import com.vegalife.dto.response.admin.AdminVideoListResponse;
 import com.vegalife.dto.response.admin.AdminVideoPostResponse;
 import com.vegalife.enums.post.MediaStatus;
-import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
@@ -97,7 +96,6 @@ class AdminVideoServiceTest {
             .title("Vegan chili")
             .content("A hearty chili recipe")
             .status(PostStatus.published)
-            .flag(PostFlag.PASSED)
             .viewCount(7)
             .createdAt(Instant.parse("2026-09-21T10:00:00Z"))
             .build();

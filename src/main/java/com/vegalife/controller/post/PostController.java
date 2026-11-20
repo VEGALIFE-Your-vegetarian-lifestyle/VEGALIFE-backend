@@ -1,11 +1,11 @@
 package com.vegalife.controller.post;
 
+import com.vegalife.dto.request.post.MyPostListRequest;
 import com.vegalife.dto.request.post.PostCreateRequest;
-import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.PostFeedRequest;
 import com.vegalife.dto.request.post.PostMediaAttachRequest;
 import com.vegalife.dto.request.post.PostRecipeAttachRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
-import com.vegalife.dto.request.post.PostVisibilityRequest;
 import com.vegalife.dto.request.post.RelatedPostsRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.dto.response.post.RelatedPostResponse;
@@ -18,6 +18,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -51,14 +52,19 @@ public class PostController {
   }
 
   @GetMapping("/{postId}")
-  public ResponseEntity<ApiResponse<PostListResponse>> getPost(@PathVariable UUID postId) {
-    PostListResponse post = postService.getPost(postId);
+  public ResponseEntity<ApiResponse<PostListResponse>> getPost(
+      Authentication authentication, @PathVariable UUID postId) {
+    // The author is shown why their post was rejected; a guest gets the same payload without it.
+    UUID viewerId =
+        authentication != null && authentication.getPrincipal() instanceof UUID id ? id : null;
+    PostListResponse post = postService.getPost(viewerId, postId);
     return ResponseEntity.ok(ApiResponse.success(post, "Post retrieved successfully"));
   }
 
   @GetMapping("/{postId}/related")
   public ResponseEntity<ApiResponse<List<RelatedPostResponse>>> getRelatedPosts(
-      @PathVariable UUID postId, @Valid @ModelAttribute RelatedPostsRequest request) {
+      @PathVariable UUID postId,
+      @Valid @ParameterObject @ModelAttribute RelatedPostsRequest request) {
     List<RelatedPostResponse> related = postService.getRelatedPosts(postId, request);
     return ResponseEntity.ok(ApiResponse.success(related, "Related posts retrieved successfully"));
   }
@@ -102,18 +108,6 @@ public class PostController {
     return ResponseEntity.ok(ApiResponse.success(post, "Recipes attached successfully"));
   }
 
-  @PatchMapping("/{postId}/visibility")
-  @PreAuthorize("hasRole('ADMIN')")
-  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
-  public ResponseEntity<ApiResponse<PostListResponse>> updateVisibility(
-      @AuthenticationPrincipal UUID adminId,
-      @PathVariable UUID postId,
-      @Valid @RequestBody PostVisibilityRequest request) {
-    PostListResponse post = postService.updateVisibility(adminId, postId, request.getHidden());
-    String message = request.getHidden() ? "Post hidden successfully" : "Post is visible again";
-    return ResponseEntity.ok(ApiResponse.success(post, message));
-  }
-
   @DeleteMapping("/{postId}")
   @PreAuthorize("isAuthenticated()")
   @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
@@ -126,18 +120,19 @@ public class PostController {
   }
 
   @GetMapping
-  @PreAuthorize("isAuthenticated()")
-  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
-  public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listUserPosts(
-      @AuthenticationPrincipal UUID userId, @Valid @ModelAttribute PostListRequest request) {
-    PageResponse<PostListResponse> posts = postService.listUserPosts(userId, request);
+  public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listFeed(
+      @Valid @ParameterObject @ModelAttribute PostFeedRequest request) {
+    PageResponse<PostListResponse> posts = postService.listFeed(request);
     return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
   }
 
-  @GetMapping("/feed")
-  public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listFeed(
-      @Valid @ModelAttribute PostListRequest request) {
-    PageResponse<PostListResponse> posts = postService.listFeed(request);
+  @GetMapping("/me")
+  @PreAuthorize("isAuthenticated()")
+  @SecurityRequirement(name = OpenApiSchemeNames.BEARER_AUTH)
+  public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listUserPosts(
+      @AuthenticationPrincipal UUID userId,
+      @Valid @ParameterObject @ModelAttribute MyPostListRequest request) {
+    PageResponse<PostListResponse> posts = postService.listUserPosts(userId, request);
     return ResponseEntity.ok(ApiResponse.success(posts, "Posts retrieved successfully"));
   }
 

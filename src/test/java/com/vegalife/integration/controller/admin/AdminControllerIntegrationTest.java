@@ -181,6 +181,98 @@ class AdminControllerIntegrationTest {
   }
 
   @Test
+  void listUsers_filterByKeyword_returnsMatchingAccounts() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "REGULAR"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].displayName").value("regularuser"));
+  }
+
+  @Test
+  void listUsers_filterByKeywordOnEmail_returnsMatchingAccounts() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "suspended@"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].displayName").value("suspendeduser"));
+  }
+
+  @Test
+  void listUsers_filterByKeyword_neverReturnsSoftDeletedAccounts() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "deleteduser"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(0))
+        .andExpect(jsonPath("$.data.content.length()").value(0));
+  }
+
+  @Test
+  void listUsers_filterByKeywordWithWildcard_matchesLiterally() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "%"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(0));
+  }
+
+  @Test
+  void listUsers_filterByEmailVerified_returnsOnlyMatchingAccounts() throws Exception {
+    userRepository.save(
+        User.builder()
+            .displayName("unverified")
+            .email("unverified@example.com")
+            .passwordHash("$2a$10$test")
+            .role(UserRole.USER)
+            .status(UserStatus.activated)
+            .emailVerified(false)
+            .build());
+
+    mockMvc
+        .perform(
+            get("/api/admin/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("emailVerified", "false"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].displayName").value("unverified"));
+  }
+
+  @Test
+  void listUsers_withDisallowedSortProperty_returns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("sort", "passwordHash,asc"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void listUsers_withUsernameSort_stillSortsByDisplayName() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("sort", "username,asc"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.content[0].displayName").value("adminuser"));
+  }
+
+  @Test
   void listUsers_withNonAdminJwt_returns403() throws Exception {
     mockMvc
         .perform(get("/api/admin/users").header("Authorization", "Bearer " + userToken))

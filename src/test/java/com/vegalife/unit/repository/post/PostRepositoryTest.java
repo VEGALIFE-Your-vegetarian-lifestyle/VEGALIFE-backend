@@ -8,13 +8,16 @@ import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.post.PostSpecifications;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.context.ActiveProfiles;
 
 @DataJpaTest
@@ -36,8 +39,9 @@ class PostRepositoryTest {
     entityManager.clear();
 
     Page<Post> result =
-        postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
-            owner.getId(), PageRequest.of(0, 20));
+        postRepository.findAll(
+            PostSpecifications.filtering(null, null, owner.getId(), null, null, null, null),
+            PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt")));
 
     assertThat(result.getTotalElements()).isEqualTo(1);
     assertThat(result.getContent()).extracting(Post::getTitle).containsExactly("Owner's post");
@@ -50,11 +54,34 @@ class PostRepositoryTest {
     entityManager.clear();
 
     Page<Post> result =
-        postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(
-            owner.getId(), PageRequest.of(0, 20));
+        postRepository.findAll(
+            PostSpecifications.filtering(null, null, owner.getId(), null, null, null, null),
+            PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt")));
 
     assertThat(result.getContent()).isEmpty();
     assertThat(result.getTotalElements()).isZero();
+  }
+
+  @Test
+  void incrementViewCount_addsOneWithoutTouchingUpdatedAt() {
+    User owner = createUser("counter", "counter@example.com");
+    Post post = createPost(owner, "Viewed post", PostStatus.published, null);
+    entityManager.flush();
+    entityManager.clear();
+    Instant updatedAtBefore = postRepository.findById(post.getId()).orElseThrow().getUpdatedAt();
+
+    int updated = postRepository.incrementViewCount(post.getId());
+
+    assertThat(updated).isEqualTo(1);
+    entityManager.clear();
+    Post reloaded = postRepository.findById(post.getId()).orElseThrow();
+    assertThat(reloaded.getViewCount()).isEqualTo(1);
+    assertThat(reloaded.getUpdatedAt()).isEqualTo(updatedAtBefore);
+  }
+
+  @Test
+  void incrementViewCount_unknownPostUpdatesNothing() {
+    assertThat(postRepository.incrementViewCount(UUID.randomUUID())).isZero();
   }
 
   private User createUser(String displayName, String email) {
@@ -71,8 +98,8 @@ class PostRepositoryTest {
     return user;
   }
 
-  private void createPost(User owner, String title, PostStatus status, Instant deletedAt) {
-    entityManager.persist(
+  private Post createPost(User owner, String title, PostStatus status, Instant deletedAt) {
+    Post post =
         Post.builder()
             .user(owner)
             .title(title)
@@ -81,6 +108,8 @@ class PostRepositoryTest {
             .status(status)
             .viewCount(0)
             .deletedAt(deletedAt)
-            .build());
+            .build();
+    entityManager.persist(post);
+    return post;
   }
 }

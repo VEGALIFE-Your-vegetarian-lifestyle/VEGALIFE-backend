@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/** Lifetime content totals. In-range creates belong to the charts endpoint. */
 @Data
 @Builder
 @NoArgsConstructor
@@ -12,9 +13,6 @@ import lombok.NoArgsConstructor;
 public class DashboardContentMetrics {
 
   private long totalPosts;
-  private long newPosts;
   private long totalRecipes;
-  private long newRecipes;
   private long totalComments;
-  private long newComments;
 }

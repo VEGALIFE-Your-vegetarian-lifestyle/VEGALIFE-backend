@@ -2,7 +2,7 @@
 
 ## Overview
 
-Admin-configurable platform settings, grouped by category (issue #13; follow-up revision). Eight keys in three categories — `media`, `content`, `ai` — each backed by a real business rule and read live by its consumer on every request/decision (no cache, no snapshot at startup). Every change is audited via the existing `moderation_log` table, and the row itself records who last changed it.
+Admin-configurable platform settings, grouped by category (issue #13; follow-up revision). Eight keys in three categories — `media`, `content`, `ai` — each backed by a real business rule and read live by its consumer on every request/decision (no cache, no snapshot at startup). No audit trail is kept (ADR-027); the row itself records who last changed it.
 
 ## Endpoints
 
@@ -82,7 +82,7 @@ Nothing is persisted for a batch if any key or value in it is invalid (the whole
 | media | upload_allowed_video_types | comma list | `video/mp4,video/webm` | non-empty, subset of known video types | Accepted video content types for upload. | same |
 | media | max_image_upload_mb | int | `5` | 1–100 | Maximum accepted image upload size, in megabytes. | same |
 | media | max_video_upload_mb | int | `50` | 1–1024 | Maximum accepted video upload size, in megabytes. | same |
-| content | content_filter_enabled | boolean | `true` | — | When false, a published post skips the semantic filter and lands directly in the admin review queue. | `PostService`, `PendingFilterSweepJob` |
+| content | content_filter_enabled | boolean | `true` | — | When false, a submitted post skips the semantic filter and lands directly in the admin review queue at `pending` with `flag = FILTER_SKIPPED`. | `PostService`, `PendingFilterSweepJob` |
 | content | content_filter_accept_threshold | decimal | `0.70` | 0.0–1.0 | Relevance score at or above which a post passes the filter. | `EmbeddingRelevanceScorer` |
 | content | content_filter_reject_threshold | decimal | `0.45` | 0.0–1.0, must be less than the accept threshold | Relevance score below which a post is rejected. | same |
 | ai | ai_chat_enabled | boolean | `true` | — | When false, AI chat turns (send/stream) are refused with 503; reading existing conversations is unaffected. | `AiChatService` |
@@ -92,7 +92,7 @@ The category set is `media` / `content` / `ai` — the `auth` and `limits` categ
 ## Business Rules
 
 - Only an Administrator may view or change settings.
-- Every successful change writes a `moderation_log` row: `action = UPDATE_SETTING`, `targetType = SETTING`, `targetId` (the setting's id), `reason` (`"<key>: '<old>' -> '<new>'"`) — who/what/when (BR-ADMIN-002's audit convention). The `platform_setting.updated_by` column additionally names the admin on the row itself.
+- No audit row is written: the moderation log is gone (ADR-027). The `platform_setting.updated_by` column still names the admin who last changed the row, which is the only attribution left.
 - Every consumer reads its setting(s) live, per request or per scheduled decision — never cached, never snapshotted at startup — so a PATCH takes effect on the very next request. A missing row, a blank value, or a value that fails validation falls back to the registry default with a WARN log rather than failing the request; only a write (PATCH) rejects an invalid value.
 - Defaults are byte-identical to the `application.yml` values they replace, so a deployment with every setting at its default behaves exactly as it did before this table existed.
 

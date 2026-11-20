@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.auth.AuthMapper;
 import com.vegalife.dto.mapper.auth.LoginMapper;
 import com.vegalife.dto.request.auth.ForgotPasswordRequest;
@@ -21,16 +22,20 @@ import com.vegalife.dto.request.auth.VerifyEmailRequest;
 import com.vegalife.dto.request.auth.VerifyPasswordResetRequest;
 import com.vegalife.dto.response.auth.LoginResponse;
 import com.vegalife.dto.response.auth.RegisterResponse;
+import com.vegalife.enums.outbound.OutboundChannel;
+import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.enums.token.OtpPurpose;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
+import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.token.OtpCode;
 import com.vegalife.model.token.RefreshToken;
 import com.vegalife.model.user.User;
+import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.token.OtpCodeRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.auth.AuthService;
-import com.vegalife.service.email.EmailService;
+import com.vegalife.service.email.EmailPayload;
 import com.vegalife.service.token.JwtTokenService;
 import com.vegalife.shared.exception.DuplicateResourceException;
 import com.vegalife.shared.exception.ExpiredTokenException;
@@ -43,9 +48,11 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -61,7 +68,9 @@ class AuthServiceTest {
   @Mock(lenient = true)
   private JwtTokenService jwtTokenService;
 
-  @Mock private EmailService emailService;
+  @Mock private OutboundMessageRepository outboundMessageRepository;
+
+  @Spy private ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
   @Mock private OtpCodeRepository otpCodeRepository;
 
@@ -147,11 +156,27 @@ class AuthServiceTest {
         .markAllUnusedByUserIdAndPurpose(
             eq(userId), eq(OtpPurpose.EMAIL_VERIFICATION), any(Instant.class));
     verify(otpCodeRepository).save(any(OtpCode.class));
-    verify(emailService)
-        .sendVerificationOtp(
-            eq("test@example.com"),
-            eq("testuser"),
-            org.mockito.ArgumentMatchers.argThat(otp -> otp != null && otp.matches("\\d{6}")));
+    EmailPayload queued = singleQueuedPayload();
+    assertThat(queued.type()).isEqualTo(EmailPayload.Type.EMAIL_VERIFICATION);
+    assertThat(queued.displayName()).isEqualTo("testuser");
+    assertThat(queued.otp()).matches("\\d{6}");
+    assertThat(queued.expiryMinutes()).isEqualTo(10);
+  }
+
+  /** The queue row is now the only observable side effect of issuing an OTP. */
+  private EmailPayload singleQueuedPayload() {
+    ArgumentCaptor<OutboundMessage> captor = ArgumentCaptor.forClass(OutboundMessage.class);
+    verify(outboundMessageRepository).save(captor.capture());
+    OutboundMessage row = captor.getValue();
+    assertThat(row.getChannel()).isEqualTo(OutboundChannel.EMAIL);
+    assertThat(row.getStatus()).isEqualTo(OutboundStatus.PENDING);
+    assertThat(row.getAttempts()).isZero();
+    assertThat(row.getNextAttemptAt()).isNotNull();
+    try {
+      return objectMapper.readValue(row.getPayload(), EmailPayload.class);
+    } catch (Exception e) {
+      throw new AssertionError("Queued payload is not readable as an EmailPayload", e);
+    }
   }
 
   @Test
@@ -555,11 +580,11 @@ class AuthServiceTest {
         .markAllUnusedByUserIdAndPurpose(
             eq(userId), eq(OtpPurpose.PASSWORD_RESET), any(Instant.class));
     verify(otpCodeRepository).save(any(OtpCode.class));
-    verify(emailService)
-        .sendPasswordResetOtp(
-            eq("test@example.com"),
-            eq("testuser"),
-            org.mockito.ArgumentMatchers.argThat(otp -> otp != null && otp.matches("\\d{6}")));
+    EmailPayload queued = singleQueuedPayload();
+    assertThat(queued.type()).isEqualTo(EmailPayload.Type.PASSWORD_RESET);
+    assertThat(queued.displayName()).isEqualTo("testuser");
+    assertThat(queued.otp()).matches("\\d{6}");
+    assertThat(queued.expiryMinutes()).isEqualTo(10);
   }
 
   @Test
@@ -572,7 +597,7 @@ class AuthServiceTest {
     authService.forgotPassword(request);
 
     verify(otpCodeRepository, never()).save(any());
-    verify(emailService, never()).sendPasswordResetOtp(anyString(), anyString(), anyString());
+    verify(outboundMessageRepository, never()).save(any());
   }
 
   @Test
@@ -599,11 +624,11 @@ class AuthServiceTest {
         .markAllUnusedByUserIdAndPurpose(
             eq(userId), eq(OtpPurpose.EMAIL_VERIFICATION), any(Instant.class));
     verify(otpCodeRepository).save(any(OtpCode.class));
-    verify(emailService)
-        .sendVerificationOtp(
-            eq("test@example.com"),
-            eq("testuser"),
-            org.mockito.ArgumentMatchers.argThat(otp -> otp != null && otp.matches("\\d{6}")));
+    EmailPayload queued = singleQueuedPayload();
+    assertThat(queued.type()).isEqualTo(EmailPayload.Type.EMAIL_VERIFICATION);
+    assertThat(queued.displayName()).isEqualTo("testuser");
+    assertThat(queued.otp()).matches("\\d{6}");
+    assertThat(queued.expiryMinutes()).isEqualTo(10);
   }
 
   @Test
@@ -618,7 +643,7 @@ class AuthServiceTest {
     verify(otpCodeRepository, never())
         .markAllUnusedByUserIdAndPurpose(any(), any(), any(Instant.class));
     verify(otpCodeRepository, never()).save(any());
-    verify(emailService, never()).sendVerificationOtp(anyString(), anyString(), anyString());
+    verify(outboundMessageRepository, never()).save(any());
   }
 
   @Test
@@ -633,7 +658,7 @@ class AuthServiceTest {
     verify(otpCodeRepository, never())
         .markAllUnusedByUserIdAndPurpose(any(), any(), any(Instant.class));
     verify(otpCodeRepository, never()).save(any());
-    verify(emailService, never()).sendVerificationOtp(anyString(), anyString(), anyString());
+    verify(outboundMessageRepository, never()).save(any());
   }
 
   @Test

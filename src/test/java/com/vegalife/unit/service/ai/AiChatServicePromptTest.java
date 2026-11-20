@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.profile.ProfileMapper;
 import com.vegalife.dto.request.ai.SendMessageRequest;
+import com.vegalife.enums.user.Gender;
 import com.vegalife.model.user.DietaryPreferences;
 import com.vegalife.model.user.UserProfile;
 import com.vegalife.repository.ai.AiConversationRepository;
@@ -20,13 +21,14 @@ import com.vegalife.repository.ai.AiMessageRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.ai.AiChatService;
-import com.vegalife.service.ai.AiQuotaGuard;
 import com.vegalife.service.ai.MenuTools;
+import com.vegalife.service.credit.RequestAllowanceService;
 import com.vegalife.service.menu.MenuQueryFilterResolver;
 import com.vegalife.service.menu.MenuService;
 import jakarta.validation.Validation;
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -56,7 +58,7 @@ class AiChatServicePromptTest {
   @Mock private AiMessageRepository messageRepository;
   @Mock private UserProfileRepository userProfileRepository;
   @Mock private PlatformSettingsProvider platformSettingsProvider;
-  @Mock private AiQuotaGuard quotaGuard;
+  @Mock private RequestAllowanceService requestAllowanceService;
   @Mock private TransactionTemplate transactionTemplate;
 
   private AiChatService aiChatService;
@@ -66,15 +68,13 @@ class AiChatServicePromptTest {
   private ChatClient.CallResponseSpec callSpec;
 
   private UUID userId;
-  private AiQuotaGuard.QuotaWindow window;
+  private long remaining;
 
   @BeforeEach
   void setUp() {
     org.mockito.Mockito.lenient().when(platformSettingsProvider.isAiChatEnabled()).thenReturn(true);
     userId = UUID.randomUUID();
-    window =
-        new AiQuotaGuard.QuotaWindow(
-            Instant.parse("2026-10-01T00:00:00Z"), Instant.parse("2026-11-01T00:00:00Z"), 20, 2L);
+    remaining = 3L;
 
     chatClient = mock(ChatClient.class);
     spec = mock(ChatClient.ChatClientRequestSpec.class);
@@ -94,7 +94,7 @@ class AiChatServicePromptTest {
             messageRepository,
             userProfileRepository,
             platformSettingsProvider,
-            quotaGuard,
+            requestAllowanceService,
             transactionTemplate,
             menuTools,
             ProfileMapper.INSTANCE);
@@ -111,7 +111,7 @@ class AiChatServicePromptTest {
     when(spec.toolContext(anyMap())).thenReturn(spec);
     when(spec.call()).thenReturn(callSpec);
     when(callSpec.content()).thenReturn("ok");
-    when(quotaGuard.requireAllowance(userId)).thenReturn(window);
+    when(requestAllowanceService.requireAllowance(userId)).thenReturn(remaining);
     when(conversationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
     when(transactionTemplate.execute(any()))
         .thenAnswer(
@@ -189,10 +189,67 @@ class AiChatServicePromptTest {
     assertThat(partial).doesNotContain("Restrictions");
     assertThat(partial).doesNotContain("Health goal");
 
-    // No dietary profile at all: no dietary block.
-    String fresh = systemPromptFor(UserProfile.builder().age(25).build());
+    // No dietary profile and no health metrics: no profile block at all.
+    String fresh =
+        systemPromptFor(
+            UserProfile.builder()
+                .age(25)
+                .gender(Gender.female)
+                .description("vegan runner")
+                .build());
     assertThat(fresh).doesNotContain("Dietary profile");
-    assertThat(fresh).contains("Age: 25");
+    assertThat(fresh).doesNotContain("Health profile");
+    assertThat(fresh)
+        .doesNotContain("Age:")
+        .doesNotContain("Gender:")
+        .doesNotContain("vegan runner");
+  }
+
+  @Test
+  void systemPrompt_sendsOnlyHealthMetricsAndNeverPersonalIdentifiers() {
+    String prompt =
+        systemPromptFor(
+            UserProfile.builder()
+                .age(30)
+                .gender(Gender.female)
+                .description("Jane, marathon runner")
+                .heightCm(new BigDecimal("170.00"))
+                .weightKg(new BigDecimal("70"))
+                .build());
+
+    assertThat(prompt)
+        .contains("Health profile:")
+        .contains("Height: 170.00 cm")
+        .contains("Weight: 70 kg")
+        .contains("BMI: 24.2");
+    assertThat(prompt)
+        .doesNotContain("Member profile")
+        .doesNotContain("Age:")
+        .doesNotContain("Gender:")
+        .doesNotContain("About:")
+        .doesNotContain("Jane")
+        .doesNotContain("marathon");
+  }
+
+  @Test
+  void systemPrompt_statesTheUtcDateAndEveryExposedToolWithItsRealContract() {
+    String prompt = systemPromptFor(null);
+
+    assertThat(prompt).contains("Today's date is " + LocalDate.now(ZoneOffset.UTC) + " (UTC)");
+    assertThat(prompt)
+        .contains("get_menu")
+        .contains("get_meal_plan")
+        .contains("suggest_dishes")
+        .contains("create_menu")
+        .contains("update_menu")
+        .contains("schedule_menu");
+    // The week rules the backend actually enforces, so the model does not have to guess them.
+    assertThat(prompt)
+        .contains("tomorrow or later")
+        .contains("at most 3 times")
+        .contains("at least 5 distinct dishes");
+    // Only get_meal_plan has a current-week default; get_menu's omitted range is unbounded.
+    assertThat(prompt).contains("omitting them means unbounded");
   }
 
   @Test

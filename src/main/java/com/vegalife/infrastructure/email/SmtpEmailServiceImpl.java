@@ -1,7 +1,7 @@
 package com.vegalife.infrastructure.email;
 
+import com.vegalife.service.email.EmailPayload;
 import com.vegalife.service.email.EmailService;
-import com.vegalife.service.outbound.OutboundEmailPayload;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -83,8 +83,7 @@ public class SmtpEmailServiceImpl implements EmailService {
   }
 
   @Override
-  public void sendPaymentReceipt(
-      String to, String displayName, OutboundEmailPayload.Receipt receipt) {
+  public void sendPaymentReceipt(String to, String displayName, EmailPayload.Receipt receipt) {
     if (receipt == null) {
       throw new IllegalArgumentException("Payment receipt details are required");
     }

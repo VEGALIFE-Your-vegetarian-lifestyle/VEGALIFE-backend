@@ -2,7 +2,10 @@
 
 ## Status
 
-Implemented (pending PR review)
+Superseded. The `/moderate` endpoint this spec builds was replaced by `/approve` and `/reject`
+([ADR-016](../adrs/016-component-level-moderation.md)), and the `moderation_log` table those actions
+wrote to was itself removed ([ADR-027](../adrs/027-remove-moderation-log.md)). Kept as a record of
+the feature as specified at the time.
 
 ## Author / owner
 
@@ -10,9 +13,9 @@ Backend team; driving issue: https://github.com/VEGALIFE-Your-vegetarian-lifesty
 
 ## Summary
 
-Let an Administrator approve a post that semantic filtering withheld (publish it) or take a
-published post down (unpublish it), recording who acted and why in `moderation_log`, and make the
-admin post list surface posts awaiting review by default.
+*(Historical.)* Let an Administrator approve a post that semantic filtering withheld (publish it) or
+take a published post down (unpublish it), recording who acted and why in `moderation_log`, and make
+the admin post list surface posts awaiting review by default.
 
 ## Problem / motivation
 

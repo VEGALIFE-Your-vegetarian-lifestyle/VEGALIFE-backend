@@ -9,6 +9,7 @@ import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,7 +34,7 @@ public class IngredientController {
 
   @GetMapping
   public ResponseEntity<ApiResponse<PageResponse<IngredientResponse>>> listIngredients(
-      @Valid @ModelAttribute IngredientListRequest request) {
+      @Valid @ParameterObject @ModelAttribute IngredientListRequest request) {
     PageResponse<IngredientResponse> ingredients = ingredientService.listIngredients(request);
     return ResponseEntity.ok(
         ApiResponse.success(ingredients, "Ingredients retrieved successfully"));

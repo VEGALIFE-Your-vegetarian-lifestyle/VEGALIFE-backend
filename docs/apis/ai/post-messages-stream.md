@@ -51,7 +51,7 @@ SSE events (each `data` payload is a JSON object):
 | Event | Payload | When |
 |-------|---------|------|
 | `delta` | `{ "reply": "<text fragment>" }` | Zero or more times, as the provider streams tokens |
-| `done` | `{ "conversationId": "...", "reply": "<full reply>", "usage": { used, limit, windowStart, windowEnd } }` | Exactly once after the reply completes and history + usage are persisted |
+| `done` | `{ "conversationId": "...", "reply": "<full reply>", "usage": { "remainingUsage": N } }` | Exactly once after the reply completes and history + usage are persisted |
 | `error` | `{ "message": "AI provider request failed" }` | Provider failure; history not persisted, usage not incremented |
 
 ```
@@ -62,7 +62,7 @@ event: delta
 data: {"reply":" tofu scramble..."}
 
 event: done
-data: {"conversationId":"3f0a9d21-5f6e-4c11-9a8b-1d2e3f4a5b6c","reply":"Try tofu scramble...","usage":{"used":3,"limit":20,"windowStart":"2026-10-01T00:00:00Z","windowEnd":"2026-11-01T00:00:00Z"}}
+data: {"conversationId":"3f0a9d21-5f6e-4c11-9a8b-1d2e3f4a5b6c","reply":"Try tofu scramble...","usage":{"remainingUsage":5}}
 ```
 
 ### Error Responses (JSON body, no SSE stream opened)
@@ -72,7 +72,7 @@ data: {"conversationId":"3f0a9d21-5f6e-4c11-9a8b-1d2e3f4a5b6c","reply":"Try tofu
 | 400 | Validation failed (missing/blank message, >4000 chars) | "Validation failed" |
 | 401 | Missing/invalid access token | Auth error message |
 | 404 | `conversationId` not found or owned by another member | "Conversation not found" |
-| 429 | Monthly plan quota reached (`Retry-After` = seconds until window end) | "Monthly AI request limit reached (used/limit). Resets at the start of the next UTC month." |
+| 429 | Allowance exhausted (`remainingUsage` is 0). No `Retry-After` header — nothing resets | "No AI requests remaining. Claim a free plan or purchase one to continue." |
 | 500 | Server error | "Internal server error" |
 
 A failure **after** the stream has opened is delivered as an `error` event
@@ -88,7 +88,8 @@ with HTTP 200 already sent.
   derived BMI) + own conversation history
 - BR-AI-005 — provider configured via dedicated `AI_CHAT_*` env vars
 - BR-AI-006 — persona scoped to vegan/platform topics; polite refusal otherwise
-- BR-SUBS-001 — quota window is the current UTC calendar month
+- BR-AI-008 — quota is reported only as `remainingUsage`
+- BR-SUBS-007 — allowance is the lifetime sum of granted acquisitions, never monthly and never reset
 
 ## Example
 
@@ -109,7 +110,7 @@ event: delta
 data: {"reply":" is a balanced plan..."}
 
 event: done
-data: {"conversationId":"3f0a9d21-5f6e-4c11-9a8b-1d2e3f4a5b6c","reply":"Here is a balanced plan...","usage":{"used":4,"limit":20,"windowStart":"2026-10-01T00:00:00Z","windowEnd":"2026-11-01T00:00:00Z"}}
+data: {"conversationId":"3f0a9d21-5f6e-4c11-9a8b-1d2e3f4a5b6c","reply":"Here is a balanced plan...","usage":{"remainingUsage":4}}
 ```
 
 ---

@@ -1,6 +1,6 @@
 package com.vegalife.controller.post;
 
-import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.UserPostListRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.service.post.PostService;
 import com.vegalife.shared.dto.ApiResponse;
@@ -8,6 +8,7 @@ import com.vegalife.shared.dto.PageResponse;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,7 +29,7 @@ public class UserPostController {
   public ResponseEntity<ApiResponse<PageResponse<PostListResponse>>> listPostsOfUser(
       Authentication authentication,
       @PathVariable UUID userId,
-      @Valid @ModelAttribute PostListRequest request) {
+      @Valid @ParameterObject @ModelAttribute UserPostListRequest request) {
     UUID viewerId =
         authentication != null && authentication.getPrincipal() instanceof UUID id ? id : null;
     boolean isAdmin =

@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -36,7 +37,8 @@ public class CommentController {
 
   @GetMapping
   public ResponseEntity<ApiResponse<PageResponse<CommentThreadResponse>>> listComments(
-      @PathVariable UUID postId, @Valid @ModelAttribute CommentListRequest request) {
+      @PathVariable UUID postId,
+      @Valid @ParameterObject @ModelAttribute CommentListRequest request) {
     PageResponse<CommentThreadResponse> comments = commentService.getComments(postId, request);
     return ResponseEntity.ok(ApiResponse.success(comments, "Comments retrieved successfully"));
   }

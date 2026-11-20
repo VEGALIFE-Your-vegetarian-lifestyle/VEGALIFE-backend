@@ -49,8 +49,8 @@ No query parameters or request body.
 
 - Deletion is soft: `deleted_at` is set and the row is kept. A deleted comment's replies are untouched and keep pointing at it via `parent_id`, so the thread shape survives.
 - A non-admin gets `404` for another user's comment, so existence is not disclosed.
-- An Administrator deleting someone else's comment is written to `moderation_log` with action `DELETE_COMMENT` (`BR-ADMIN-002`). An Administrator deleting their own comment is not logged (not an override).
-- No new migration: uses the existing `comment.deleted_at` column (`V8`) and `moderation_log` table.
+- An Administrator deleting someone else's comment leaves no trace of who did it: the moderation log is gone (ADR-027).
+- Uses the existing `comment.deleted_at` column (`V8`); no new migration.
 - This endpoint does not render "[deleted]" anywhere — there is no public comment-thread read endpoint yet. See `docs/feats/delete-comments-api.md`'s open questions.
 
 ## Example

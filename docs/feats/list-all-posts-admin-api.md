@@ -10,7 +10,7 @@ Backend team; driving issue: https://github.com/VEGALIFE-Your-vegetarian-lifesty
 Allow admin users to retrieve a paginated list of every non-deleted post across the platform — all authors, all statuses — filterable by status, author, category, and creation date range, with each item carrying its semantic content-filter verdict.
 
 ## Problem / motivation
-Admins review reported and flagged content, but the post list endpoints that exist are author-scoped: `GET /api/posts` returns only the caller's own posts and `GET /api/users/{userId}/posts` returns one member's posts. Neither can answer "show me everything, including posts by other users in non-public states", so moderation of flagged content today requires database access. Issue #1 tracks this under the Content Moderation epic (Sprint 2, Priority: Medium).
+Admins review reported and flagged content, but the member-facing post list endpoints are scoped and, at the time, offered no cross-user view: `GET /api/posts` returned only the caller's own posts and `GET /api/users/{userId}/posts` returns one member's posts. Neither could answer "show me everything, including posts by other users in non-public states", so moderation of flagged content required database access. Issue #1 tracks this under the Content Moderation epic (Sprint 2, Priority: Medium).
 
 ## Goals
 - Admins can page through every non-deleted post regardless of author or status, with author identity and the content-filter verdict on each row.

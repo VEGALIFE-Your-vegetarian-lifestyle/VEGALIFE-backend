@@ -118,7 +118,10 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
         score >= acceptThreshold
             ? RelevanceScore.Band.PASS
             : score < rejectThreshold ? RelevanceScore.Band.REJECT : RelevanceScore.Band.REVIEW;
-    return new RelevanceScore(score, band);
+    // The boundary that decided the band travels with the score so a stored verdict can be
+    // re-read against the settings that were in force at the time (ADR-024).
+    double threshold = band == RelevanceScore.Band.REJECT ? rejectThreshold : acceptThreshold;
+    return new RelevanceScore(score, band, threshold);
   }
 
   /**
@@ -175,28 +178,15 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
   }
 
   /**
-   * The committed centroid set loaded from {@link #CENTROIDS_RESOURCE}.
-   *
-   * <p>Holds two pairs: the post-content pair ({@code onTopic}/{@code offTopic}/{@code mean}) and
-   * the recipe-body pair ({@code recipeOnTopic}/{@code recipeOffTopic}/{@code recipeMean}). Each
-   * pair is centered over its own corpus mean, never the other's.
+   * The committed centroid set loaded from {@link #CENTROIDS_RESOURCE}: the post-content pair
+   * ({@code onTopic}/{@code offTopic}/{@code mean}), centered over its own corpus mean.
    *
    * @param dimensions embedding dimensionality all vectors must have
    * @param onTopic normalized on-topic centroid for post content
    * @param offTopic normalized off-topic centroid for post content
    * @param mean arithmetic mean of the post-content seed corpus, used to center text and centroids
-   * @param recipeOnTopic normalized on-topic centroid for recipe bodies
-   * @param recipeOffTopic normalized off-topic centroid for recipe bodies
-   * @param recipeMean arithmetic mean of the recipe seed corpus
    */
-  public record Centroids(
-      int dimensions,
-      float[] onTopic,
-      float[] offTopic,
-      float[] mean,
-      float[] recipeOnTopic,
-      float[] recipeOffTopic,
-      float[] recipeMean) {}
+  public record Centroids(int dimensions, float[] onTopic, float[] offTopic, float[] mean) {}
 
   /** Loads and validates the committed centroids JSON from the classpath. */
   public static Centroids loadCentroids() {
@@ -217,27 +207,9 @@ public class EmbeddingRelevanceScorer implements RelevanceScorer {
             "Filter centroids lack a mean vector; regenerate with CentroidRegenerationTest: "
                 + CENTROIDS_RESOURCE);
       }
-      requireVector(centroids.recipeOnTopic(), "recipeOnTopic", centroids.dimensions());
-      requireVector(centroids.recipeOffTopic(), "recipeOffTopic", centroids.dimensions());
-      requireVector(centroids.recipeMean(), "recipeMean", centroids.dimensions());
       return centroids;
     } catch (IOException e) {
       throw new IllegalStateException("Unreadable filter centroids: " + CENTROIDS_RESOURCE, e);
-    }
-  }
-
-  /**
-   * Fails fast on an incomplete centroid pair. A missing recipe pair would otherwise be scored as
-   * an all-zero vector, which silences every off-topic recipe instead of queuing it — the exact
-   * failure mode ADR-014 decision 3 exists to prevent.
-   */
-  private static void requireVector(float[] vector, String name, int dimensions) {
-    if (vector == null || vector.length != dimensions) {
-      throw new IllegalStateException(
-          "Filter centroids are missing "
-              + name
-              + "; regenerate with CentroidRegenerationTest: "
-              + CENTROIDS_RESOURCE);
     }
   }
 

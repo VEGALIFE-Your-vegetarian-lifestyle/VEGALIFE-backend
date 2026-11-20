@@ -27,7 +27,7 @@ Users want to express sentiment on posts, and votes are a recommendation signal.
 
 - Voting on comments (explicitly deferred per issue #45).
 - Vote history or analytics (only current state and aggregate counts are kept; no event log).
-- Surfacing vote counts or the viewer's vote on the existing post endpoints (`GET /api/posts/{postId}`, `GET /api/posts`, `GET /api/posts/feed`, etc.). Those endpoints and their shared `PostListResponse`/`PostMapper` are deliberately left untouched — adding a viewer-aware vote summary to every post read path is a much larger, cross-cutting change than this issue's scope, and was explicitly decided against in favor of a dedicated vote resource.
+- Surfacing vote counts or the viewer's vote on the existing post endpoints (`GET /api/posts/{postId}`, `GET /api/posts/me`, `GET /api/posts`, etc.). Those endpoints and their shared `PostListResponse`/`PostMapper` are deliberately left untouched — adding a viewer-aware vote summary to every post read path is a much larger, cross-cutting change than this issue's scope, and was explicitly decided against in favor of a dedicated vote resource.
 
 ## Requirements
 

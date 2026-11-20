@@ -6,7 +6,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -25,15 +24,16 @@ import com.vegalife.repository.ai.AiMessageRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.ai.AiChatService;
-import com.vegalife.service.ai.AiQuotaGuard;
 import com.vegalife.service.ai.AiToolContext;
 import com.vegalife.service.ai.MenuTools;
+import com.vegalife.service.credit.RequestAllowanceService;
 import com.vegalife.service.menu.MenuQueryFilterResolver;
 import com.vegalife.service.menu.MenuService;
 import com.vegalife.shared.exception.AiProviderException;
 import com.vegalife.shared.exception.AiUnavailableException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import jakarta.validation.Validation;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +62,7 @@ class AiChatServiceTest {
   @Mock private AiMessageRepository messageRepository;
   @Mock private UserProfileRepository userProfileRepository;
   @Mock private PlatformSettingsProvider platformSettingsProvider;
-  @Mock private AiQuotaGuard quotaGuard;
+  @Mock private RequestAllowanceService requestAllowanceService;
   @Mock private TransactionTemplate transactionTemplate;
 
   private AiChatService aiChatService;
@@ -72,15 +72,13 @@ class AiChatServiceTest {
   private ChatClient.CallResponseSpec callSpec;
 
   private UUID userId;
-  private AiQuotaGuard.QuotaWindow window;
+  private long remaining;
 
   @BeforeEach
   void setUp() {
     org.mockito.Mockito.lenient().when(platformSettingsProvider.isAiChatEnabled()).thenReturn(true);
     userId = UUID.randomUUID();
-    window =
-        new AiQuotaGuard.QuotaWindow(
-            Instant.parse("2026-10-01T00:00:00Z"), Instant.parse("2026-11-01T00:00:00Z"), 20, 2L);
+    remaining = 3L;
 
     chatClient = mock(ChatClient.class);
     spec = mock(ChatClient.ChatClientRequestSpec.class);
@@ -103,7 +101,7 @@ class AiChatServiceTest {
             messageRepository,
             userProfileRepository,
             platformSettingsProvider,
-            quotaGuard,
+            requestAllowanceService,
             transactionTemplate,
             menuTools,
             ProfileMapper.INSTANCE);
@@ -134,7 +132,7 @@ class AiChatServiceTest {
   void send_newConversation_persistsBothMessagesAndCountsUsage() {
     stubClient();
     stubTransactionTemplate();
-    when(quotaGuard.requireAllowance(userId)).thenReturn(window);
+    when(requestAllowanceService.requireAllowance(userId)).thenReturn(remaining);
     when(callSpec.content()).thenReturn("Try a tofu scramble.");
     when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.empty());
     when(conversationRepository.save(any(AiConversation.class)))
@@ -152,22 +150,21 @@ class AiChatServiceTest {
 
     assertThat(response.getReply()).isEqualTo("Try a tofu scramble.");
     assertThat(response.getConversationId()).isNotNull();
-    assertThat(response.getUsage().getUsed()).isEqualTo(3L);
-    assertThat(response.getUsage().getLimit()).isEqualTo(20);
+    assertThat(response.getUsage().getRemainingUsage()).isEqualTo(2L);
 
     ArgumentCaptor<AiMessage> saved = ArgumentCaptor.forClass(AiMessage.class);
     verify(messageRepository, org.mockito.Mockito.times(2)).save(saved.capture());
     assertThat(saved.getAllValues())
         .extracting(AiMessage::getRole)
         .containsExactly(AiMessageRole.user, AiMessageRole.assistant);
-    verify(quotaGuard).record(eq(userId), eq(window));
+    verify(requestAllowanceService).record(userId);
   }
 
   @Test
   void send_truncatesConversationTitleToSixtyChars() {
     stubClient();
     stubTransactionTemplate();
-    when(quotaGuard.requireAllowance(userId)).thenReturn(window);
+    when(requestAllowanceService.requireAllowance(userId)).thenReturn(remaining);
     when(callSpec.content()).thenReturn("ok");
     when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.empty());
     when(conversationRepository.save(any(AiConversation.class)))
@@ -203,7 +200,7 @@ class AiChatServiceTest {
         .isInstanceOf(ResourceNotFoundException.class)
         .hasMessage("Conversation not found");
 
-    verify(quotaGuard, never()).requireAllowance(any());
+    verify(requestAllowanceService, never()).requireAllowance(any());
     verify(chatClient, never()).prompt();
   }
 
@@ -216,7 +213,7 @@ class AiChatServiceTest {
         .isInstanceOf(AiUnavailableException.class);
 
     verify(conversationRepository, never()).findByIdAndUserId(any(), any());
-    verify(quotaGuard, never()).requireAllowance(any());
+    verify(requestAllowanceService, never()).requireAllowance(any());
   }
 
   @Test
@@ -228,13 +225,13 @@ class AiChatServiceTest {
         .isInstanceOf(AiUnavailableException.class);
 
     verify(conversationRepository, never()).findByIdAndUserId(any(), any());
-    verify(quotaGuard, never()).requireAllowance(any());
+    verify(requestAllowanceService, never()).requireAllowance(any());
   }
 
   @Test
   void send_providerReturnsBlank_throws502AndPersistsNothing() {
     stubClient();
-    when(quotaGuard.requireAllowance(userId)).thenReturn(window);
+    when(requestAllowanceService.requireAllowance(userId)).thenReturn(remaining);
     when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.empty());
     when(callSpec.content()).thenReturn("  ");
 
@@ -244,7 +241,7 @@ class AiChatServiceTest {
 
     verify(conversationRepository, never()).save(any());
     verify(messageRepository, never()).save(any());
-    verify(quotaGuard, never()).record(any(), any());
+    verify(requestAllowanceService, never()).record(any());
   }
 
   @Test
@@ -274,8 +271,15 @@ class AiChatServiceTest {
                     .createdAt(base)
                     .build()));
     when(userProfileRepository.findByUserId(userId))
-        .thenReturn(Optional.of(UserProfile.builder().age(30).description("vegan runner").build()));
-    when(quotaGuard.requireAllowance(userId)).thenReturn(window);
+        .thenReturn(
+            Optional.of(
+                UserProfile.builder()
+                    .age(30)
+                    .description("vegan runner")
+                    .heightCm(new BigDecimal("170.00"))
+                    .weightKg(new BigDecimal("70"))
+                    .build()));
+    when(requestAllowanceService.requireAllowance(userId)).thenReturn(remaining);
     when(callSpec.content()).thenReturn("reply");
     when(conversationRepository.save(any(AiConversation.class)))
         .thenAnswer(inv -> inv.getArgument(0));
@@ -289,7 +293,10 @@ class AiChatServiceTest {
 
     ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
     verify(spec).system(systemPrompt.capture());
-    assertThat(systemPrompt.getValue()).contains("Age: 30").contains("vegan runner");
+    assertThat(systemPrompt.getValue())
+        .contains("Height: 170.00 cm")
+        .doesNotContain("Age: 30")
+        .doesNotContain("vegan runner");
 
     ArgumentCaptor<List<Message>> messages = ArgumentCaptor.forClass(List.class);
     verify(spec).messages(messages.capture());
@@ -304,7 +311,7 @@ class AiChatServiceTest {
   void send_carriesTheCallerUserIdAsToolContext() {
     stubClient();
     stubTransactionTemplate();
-    when(quotaGuard.requireAllowance(userId)).thenReturn(window);
+    when(requestAllowanceService.requireAllowance(userId)).thenReturn(remaining);
     when(callSpec.content()).thenReturn("ok");
     when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.empty());
     when(conversationRepository.save(any(AiConversation.class)))

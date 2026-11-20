@@ -37,8 +37,9 @@ spring:
     timeout-per-shutdown-phase: 20s
 
 server:
-  # Render exposes the container on $PORT (dockerPort 8080 in render.yaml);
-  # fall back to SERVER_PORT, then 8080 for local runs.
+  # Render exposes the container on $PORT; SERVER_PORT is the portable fallback
+  # and 8080 the bare local default. Declared in application.yml so the key binds
+  # on every profile, and restated here with the Render precedence.
   port: ${PORT:${SERVER_PORT:8080}}
   shutdown: graceful
 

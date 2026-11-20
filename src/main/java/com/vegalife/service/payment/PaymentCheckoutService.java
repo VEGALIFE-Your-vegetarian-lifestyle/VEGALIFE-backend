@@ -1,10 +1,10 @@
 package com.vegalife.service.payment;
 
-import com.vegalife.dto.request.payment.CheckoutRequest;
-import com.vegalife.dto.response.payment.CheckoutResponse;
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
 import com.vegalife.model.subscription.AiPlan;
+import com.vegalife.model.subscription.AiSubscription;
 import com.vegalife.model.subscription.PaymentLedger;
+import com.vegalife.repository.subscription.AiSubscriptionRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.service.subscription.PlanPurchasePolicy;
 import com.vegalife.shared.exception.PaymentGatewayException;
@@ -20,13 +20,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Starts a gateway checkout for an AI plan (FR-001..FR-006, FR-018, FR-019; BR-PAY-005, BR-PAY-009;
- * ADR-008).
+ * Starts (or resumes) a gateway checkout for a paid AI plan (issue #181, ADR-021).
  *
- * <p>Writes only {@code payment_ledger} rows: the fulfilment side effects (subscription upsert,
- * receipt) belong to the IPN webhook, so a redirect or client flag can never upgrade an account
- * (BR-PAY-001). The gateway's secure hash secret never leaves {@link VnpayProperties}; the response
- * carries only the signed redirect URL (FR-018).
+ * <p>Writes two rows in one transaction: the {@code payment_ledger} row that carries the money, and
+ * the {@code ai_subscription} acquisition that carries the plan, with {@code granted_at} null until
+ * the gateway confirms. The acquisition must exist before the money moves because the notification
+ * echoes only our own transaction reference — nothing in it names a plan — so fulfilment could
+ * otherwise not know what was bought.
+ *
+ * <p>The fulfilment side effects belong to the IPN webhook, so a redirect or a client flag can
+ * never grant an allowance. The gateway's secure hash secret never leaves {@link VnpayProperties}.
  */
 @Service
 @RequiredArgsConstructor
@@ -37,18 +40,27 @@ public class PaymentCheckoutService {
 
   private final PlanPurchasePolicy planPurchasePolicy;
   private final PaymentLedgerRepository paymentLedgerRepository;
+  private final AiSubscriptionRepository subscriptionRepository;
   private final PaymentGateway paymentGateway;
   private final PaymentProperties paymentProperties;
   private final VnpayProperties vnpayProperties;
 
-  @Transactional
-  public CheckoutResponse checkout(UUID userId, CheckoutRequest request, String ipAddress) {
-    ensureGatewayConfigured();
+  /** Everything the caller needs to redirect the member to the gateway. */
+  public record CheckoutSession(
+      String paymentId,
+      String txnRef,
+      String paymentUrl,
+      long amount,
+      String currency,
+      String status) {}
 
-    AiPlan plan = planPurchasePolicy.requirePurchasableByCode(request.getPlanCode());
+  @Transactional
+  public CheckoutSession create(UUID userId, AiPlan plan, String ipAddress) {
+    ensureGatewayConfigured();
+    planPurchasePolicy.requirePurchasable(plan);
 
     PaymentLedger ledger =
-        findReusablePending(userId, plan).orElseGet(() -> createPendingRow(userId, plan));
+        findReusablePending(userId, plan).orElseGet(() -> createPendingRows(userId, plan));
 
     String paymentUrl =
         paymentGateway.createPaymentUrl(
@@ -66,15 +78,13 @@ public class PaymentCheckoutService {
         plan.getCode(),
         ledger.getAmount(),
         ledger.getCurrency());
-    return CheckoutResponse.builder()
-        .paymentId(ledger.getId().toString())
-        .txnRef(ledger.getTxnRef())
-        .planCode(plan.getCode())
-        .amount(ledger.getAmount())
-        .currency(ledger.getCurrency())
-        .status(ledger.getStatus().name())
-        .paymentUrl(paymentUrl)
-        .build();
+    return new CheckoutSession(
+        ledger.getId().toString(),
+        ledger.getTxnRef(),
+        paymentUrl,
+        ledger.getAmount(),
+        ledger.getCurrency(),
+        ledger.getStatus().name());
   }
 
   private void ensureGatewayConfigured() {
@@ -100,18 +110,24 @@ public class PaymentCheckoutService {
     }
   }
 
+  /**
+   * The plan is no longer on the ledger, so the open session is found through its acquisition. The
+   * ledger status is still checked: a failed payment also leaves {@code granted_at} null.
+   */
   private Optional<PaymentLedger> findReusablePending(UUID userId, AiPlan plan) {
     Duration ttl = paymentProperties.getCheckoutTtl();
-    return paymentLedgerRepository
-        .findFirstByUserIdAndPlanIdAndStatusAndCreatedAtAfterOrderByCreatedAtDesc(
-            userId, plan.getId(), PaymentLedgerStatus.pending, Instant.now().minus(ttl));
+    Instant createdAfter = Instant.now().minus(ttl);
+    return subscriptionRepository.findReusablePending(userId, plan.getId(), createdAfter).stream()
+        .map(AiSubscription::getPaymentId)
+        .flatMap(paymentId -> paymentLedgerRepository.findById(paymentId).stream())
+        .filter(ledger -> ledger.getStatus() == PaymentLedgerStatus.pending)
+        .findFirst();
   }
 
-  private PaymentLedger createPendingRow(UUID userId, AiPlan plan) {
+  private PaymentLedger createPendingRows(UUID userId, AiPlan plan) {
     PaymentLedger ledger =
         PaymentLedger.builder()
             .userId(userId)
-            .planId(plan.getId())
             .amount(plan.getPriceAmount())
             .currency(plan.getPriceCurrency())
             .status(PaymentLedgerStatus.pending)
@@ -119,7 +135,17 @@ public class PaymentCheckoutService {
             .build();
     ledger = paymentLedgerRepository.saveAndFlush(ledger);
     ledger.setTxnRef(ledger.getId().toString().replace("-", ""));
-    return paymentLedgerRepository.save(ledger);
+    ledger = paymentLedgerRepository.save(ledger);
+
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(userId)
+            .planId(plan.getId())
+            .paymentId(ledger.getId())
+            .grantedAt(null)
+            .build());
+
+    return ledger;
   }
 
   private static boolean isBlank(String value) {

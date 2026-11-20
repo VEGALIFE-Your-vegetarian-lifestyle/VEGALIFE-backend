@@ -1,7 +1,10 @@
 # API Reference: GET /api/subscriptions/me/history
 
 ## Overview
-Return the authenticated member's full AI subscription history — every `ai_subscription` row they have ever had, newest first, paginated.
+Return the authenticated member's full AI acquisition history — every plan they
+have ever acquired, whether bought or claimed, newest first, paginated. This is
+the endpoint that answers "which plan did this money buy"; the payment
+endpoints are money-only and no longer carry a plan.
 
 ## Endpoint
 ```
@@ -31,26 +34,30 @@ No request body
 ```json
 {
   "success": true,
-  "message": "Subscription history retrieved successfully",
+  "message": "Acquisition history retrieved successfully",
   "data": {
     "content": [
       {
         "planCode": "PRO",
         "planName": "Pro",
-        "status": "active",
-        "startedAt": "2026-10-01T10:15:00Z",
-        "renewalDate": "2026-11-01T10:15:00Z",
-        "cancelledAt": null,
-        "createdAt": "2026-10-01T10:15:01Z"
+        "source": "PURCHASE",
+        "grantedAt": "2026-03-04T09:12:00Z",
+        "paymentId": "3f2a9d21-5f6e-4c11-9a8b-1d2e3f4a5b6c",
+        "amount": 49000,
+        "currency": "VND",
+        "status": "succeeded",
+        "createdAt": "2026-03-04T09:11:41Z"
       },
       {
-        "planCode": "PRO",
-        "planName": "Pro",
-        "status": "cancelled",
-        "startedAt": "2026-08-01T08:00:00Z",
-        "renewalDate": "2026-09-01T08:00:00Z",
-        "cancelledAt": "2026-08-20T14:00:00Z",
-        "createdAt": "2026-08-01T08:00:02Z"
+        "planCode": "FREE",
+        "planName": "Free",
+        "source": "CLAIM",
+        "grantedAt": "2026-02-01T08:00:00Z",
+        "paymentId": null,
+        "amount": null,
+        "currency": null,
+        "status": null,
+        "createdAt": "2026-02-01T08:00:00Z"
       }
     ],
     "page": 0,
@@ -63,26 +70,30 @@ No request body
 }
 ```
 
-Envelope fields follow `PageResponse` (`content`, `page`, `size`, `totalElements`, `totalPages`, `first`, `last`). Rows are ordered by `createdAt` descending — the member's most recent subscription event first.
+Envelope fields follow `PageResponse` (`content`, `page`, `size`, `totalElements`, `totalPages`, `first`, `last`). Rows are ordered by `createdAt` descending — the member's most recent acquisition first.
 
 | Field | Type | Description |
 |-------|------|--------------|
 | success | boolean | Always true for success |
 | message | string | Human-readable message |
-| data.content | array | One entry per subscription row, newest first |
-| data.content[].planCode | string | Plan code (`FREE`, `PRO`) |
-| data.content[].planName | string | Display name of the plan |
-| data.content[].status | string | `active`, `past_due`, `scheduled`, `cancelled`, or `expired` |
-| data.content[].startedAt | string \| null | ISO-8601 instant the row's period began; for a `scheduled` row, the instant its period will begin (its predecessor's renewal date) |
-| data.content[].renewalDate | string \| null | ISO-8601 instant the period ends (the sweep's expiry threshold) |
-| data.content[].cancelledAt | string \| null | ISO-8601 instant of cancellation; `null` unless the row was cancelled |
-| data.content[].createdAt | string | ISO-8601 instant the row was created (ordering key) |
+| data.content | array | One entry per acquisition, newest first |
+| data.content[].planCode | string | Plan code (`FREE`, `PRO`, …) |
+| data.content[].planName | string | Display name of the acquired plan |
+| data.content[].source | string | `PURCHASE` when `paymentId` is set, `CLAIM` when it is `null` |
+| data.content[].grantedAt | string \| null | ISO-8601 instant the grant became live. `null` for a checkout that has not been paid (pending or failed) — that row grants no quota |
+| data.content[].paymentId | string (UUID) \| null | The `payment_ledger` row that paid for this acquisition; `null` for a claim |
+| data.content[].amount | number \| null | Amount paid in whole VND; `null` for a claim |
+| data.content[].currency | string \| null | Payment currency, currently always `VND` when present; `null` for a claim |
+| data.content[].status | string \| null | Payment status: `pending`, `succeeded`, `failed` or `refunded`; `null` for a claim |
+| data.content[].createdAt | string | ISO-8601 instant the acquisition was written (ordering key) |
 | data.page / size | integer | Echo of the paging request (with defaults applied) |
-| data.totalElements | integer | Total rows for the member across all pages |
+| data.totalElements | integer | Total acquisitions for the member across all pages |
 | data.totalPages | integer | Total pages for the requested `size` |
 | data.first / last | boolean | Whether this is the first / last page |
 
-Subscription ids, `extended_from_id`, and user ids are deliberately never returned.
+Subscription ids, user ids, and internal acquisition ids are deliberately never returned.
+
+A pending checkout appears with `grantedAt: null` and `status: "pending"`, so an abandoned payment is visible rather than silently absent.
 
 ### Error Responses
 | Status Code | Condition | Message |
@@ -91,12 +102,15 @@ Subscription ids, `extended_from_id`, and user ids are deliberately never return
 | 401 | Missing, expired, or invalid JWT | "Unauthorized" |
 | 500 | Server error | "Internal server error" |
 
-A member with no rows gets 200 with empty `content`, `totalElements: 0`, `totalPages: 0` — never 404.
+A member with no acquisitions gets 200 with empty `content`, `totalElements: 0`, `totalPages: 0` — never 404.
 
 ## Business Rules
 - Read-only: no row is created or updated.
-- BR-SUBS-004 — history exposes the multi-row lifecycle (one row per purchase/extension) that the gate creates.
-- Feature spec FR-009: `docs/feats/subscription-lifecycle.md`
+- BR-SUBS-007 — only rows with `granted_at IS NOT NULL` contribute to the allowance. A row with `grantedAt: null` is history but grants nothing.
+- BR-SUBS-008 — `source` distinguishes an explicit free claim (`CLAIM`) from a purchase (`PURCHASE`); a claimed plan cannot be claimed twice.
+- BR-PAY-010 — the acquisition carries the plan and the `paymentId`; amounts and payment status come from the linked `payment_ledger` row.
+- BR-PAY-005 — a pending row inside the checkout TTL is reused by a later acquire call, so it stays visible here.
+- Feature Spec FR-014: `docs/feats/request-credits.md`
 
 ## Example
 
@@ -110,17 +124,19 @@ curl -X GET "http://localhost:8080/api/subscriptions/me/history?page=0&size=10" 
 ```json
 {
   "success": true,
-  "message": "Subscription history retrieved successfully",
+  "message": "Acquisition history retrieved successfully",
   "data": {
     "content": [
       {
         "planCode": "PRO",
         "planName": "Pro",
-        "status": "active",
-        "startedAt": "2026-10-01T10:15:00Z",
-        "renewalDate": "2026-11-01T10:15:00Z",
-        "cancelledAt": null,
-        "createdAt": "2026-10-01T10:15:01Z"
+        "source": "PURCHASE",
+        "grantedAt": null,
+        "paymentId": "8f14e45f-ceea-167a-5a36-dedd4bea2543",
+        "amount": 49000,
+        "currency": "VND",
+        "status": "pending",
+        "createdAt": "2026-03-04T09:11:41Z"
       }
     ],
     "page": 0,
@@ -134,6 +150,9 @@ curl -X GET "http://localhost:8080/api/subscriptions/me/history?page=0&size=10" 
 ```
 
 ## Related
-- Feature Spec: `docs/feats/subscription-lifecycle.md`
-- Sibling endpoint: `docs/apis/subscriptions/get-me.md` (`GET /api/subscriptions/me`, current state only)
-- Sibling endpoint: `docs/apis/subscriptions/post-cancel.md` (`POST /api/subscriptions/me/cancel`)
+- Feature Spec: `docs/feats/request-credits.md`
+- ADR: `docs/adrs/021-request-allowance-as-acquisition-sum.md`
+- Sibling endpoint: `docs/apis/subscriptions/get-me.md` (`GET /api/subscriptions/me`, remaining usage only)
+- Sibling endpoint: `docs/apis/subscriptions/post-acquire.md` (`POST /api/subscriptions/acquire`, claim or purchase)
+- Money-only counterpart: `docs/apis/payments/get-payments.md` (`GET /api/payments`, no plan context)
+- Business Rules: `docs/brs/subscriptions.md`, `docs/brs/payments.md`

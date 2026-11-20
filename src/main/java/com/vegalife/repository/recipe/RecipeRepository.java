@@ -19,22 +19,54 @@ public interface RecipeRepository
 
   List<Recipe> findByIdInAndDeletedAtIsNull(Collection<UUID> ids);
 
+  /**
+   * Recipes eligible to be attached to a post (issue #137): existing, not soft-deleted, and already
+   * approved. A {@link ModerationStatus#PENDING} or {@link ModerationStatus#REJECTED} recipe is
+   * invisible to the public, so linking one to a post would publish an unreviewed body.
+   */
+  List<Recipe> findByIdInAndDeletedAtIsNullAndModerationStatus(
+      Collection<UUID> ids, ModerationStatus moderationStatus);
+
   /** Recipes currently attached to a post, read from the owning side ({@code Recipe.posts}). */
   List<Recipe> findByPosts_IdAndDeletedAtIsNull(UUID postId);
 
-  Optional<Recipe> findByIdAndDeletedAtIsNull(UUID id);
+  /**
+   * The (post, recipe) pairs joining a page of posts to their attached, non-deleted recipes — one
+   * query for the whole page instead of one per post. Read from the owning side ({@code
+   * Recipe.posts}), the same association {@link #findByPosts_IdAndDeletedAtIsNull} uses.
+   */
+  @Query(
+      "select p.id as postId, r.id as recipeId from Recipe r join r.posts p"
+          + " where p.id in :postIds and r.deletedAt is null")
+  List<PostRecipeId> findRecipeIdsByPostIds(@Param("postIds") Collection<UUID> postIds);
 
-  /** A member's own recipes, newest first. */
-  List<Recipe> findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID userId);
+  /** One row of {@link #findRecipeIdsByPostIds}: which recipe is attached to which post. */
+  interface PostRecipeId {
+
+    UUID getPostId();
+
+    UUID getRecipeId();
+  }
+
+  Optional<Recipe> findByIdAndDeletedAtIsNull(UUID id);
 
   /** Admin dashboard (issue #12): total non-deleted recipes. */
   long countByDeletedAtIsNull();
 
-  /** Admin dashboard (issue #12): recipes created within a time range. */
-  long countByCreatedAtBetweenAndDeletedAtIsNull(Instant from, Instant to);
-
-  /** Admin dashboard (issue #12): recipes awaiting moderation review. */
+  /** Admin dashboard: recipes awaiting moderation review. */
   long countByModerationStatusAndDeletedAtIsNull(ModerationStatus moderationStatus);
+
+  /**
+   * Admin dashboard: when the oldest recipe awaiting review was created, so the queue can report
+   * age rather than only size. Empty when nothing is waiting.
+   */
+  @Query(
+      "select min(r.createdAt) from Recipe r"
+          + " where r.moderationStatus = :status and r.deletedAt is null")
+  Optional<Instant> findOldestCreatedAtByModerationStatus(@Param("status") ModerationStatus status);
+
+  /** Owner-scoped lookup for a member delete (BR-RECP-010). */
+  Optional<Recipe> findByIdAndUser_IdAndDeletedAtIsNull(UUID id, UUID userId);
 
   /**
    * Batch lookup of every recipe that could be recommended for the given dishes (issue #163).

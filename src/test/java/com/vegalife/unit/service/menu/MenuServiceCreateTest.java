@@ -22,18 +22,22 @@ import com.vegalife.repository.menu.MenuRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.service.menu.MenuService;
 import com.vegalife.service.menu.MenuValidator;
+import com.vegalife.service.recipe.RecipeRecommendationService;
 import com.vegalife.shared.exception.MenuValidationException;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -41,7 +45,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class MenuServiceCreateTest {
 
   private static final UUID USER = UUID.randomUUID();
-  private static final LocalDate MONDAY = LocalDate.of(2026, 10, 5);
+  private static final LocalDate TODAY = LocalDate.of(2026, 10, 4);
+  private static final LocalDate MONDAY = TODAY.plusDays(1);
+  private static final Clock CLOCK =
+      Clock.fixed(TODAY.atStartOfDay().toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
 
   @Mock private MenuRepository menuRepository;
 
@@ -51,9 +58,23 @@ class MenuServiceCreateTest {
 
   @Mock private DishRepository dishRepository;
 
+  @Mock private RecipeRecommendationService recipeRecommendationService;
+
   @Captor private ArgumentCaptor<List<MenuDetail>> detailsCaptor;
 
-  @InjectMocks private MenuService menuService;
+  private MenuService menuService;
+
+  @BeforeEach
+  void setUp() {
+    menuService =
+        new MenuService(
+            menuRepository,
+            menuDetailRepository,
+            menuValidator,
+            dishRepository,
+            recipeRecommendationService,
+            CLOCK);
+  }
 
   @Test
   void createMenuPersistsADraftedMenuWithDerivedEndDate() {
@@ -118,6 +139,60 @@ class MenuServiceCreateTest {
     verify(menuDetailRepository, never()).saveAll(any());
   }
 
+  @Test
+  void createMenuRejectsAWeekStartingToday() {
+    CreateMenuRequest request = requestStartingOn(TODAY);
+
+    assertThatThrownBy(() -> menuService.createMenu(USER, request))
+        .isInstanceOf(MenuValidationException.class)
+        .hasMessage("startDate must be tomorrow or later");
+
+    verify(menuRepository, never()).save(any(Menu.class));
+    verify(menuDetailRepository, never()).saveAll(any());
+  }
+
+  @Test
+  void createMenuRejectsAWeekStartingInThePast() {
+    CreateMenuRequest request = requestStartingOn(TODAY.minusWeeks(1));
+
+    assertThatThrownBy(() -> menuService.createMenu(USER, request))
+        .isInstanceOf(MenuValidationException.class)
+        .hasMessage("startDate must be tomorrow or later");
+
+    verify(menuRepository, never()).save(any(Menu.class));
+  }
+
+  @Test
+  void isUpcomingDraftOnlyAcceptsAnOwnedDraftThatHasNotStarted() {
+    UUID menuId = UUID.randomUUID();
+
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menuId, USER))
+        .thenReturn(Optional.of(menu(menuId, MONDAY, MenuStatus.drafted)));
+    assertThat(menuService.isUpcomingDraft(USER, menuId)).isTrue();
+
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menuId, USER))
+        .thenReturn(Optional.of(menu(menuId, MONDAY, MenuStatus.scheduled)));
+    assertThat(menuService.isUpcomingDraft(USER, menuId)).isFalse();
+
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menuId, USER))
+        .thenReturn(Optional.of(menu(menuId, TODAY, MenuStatus.drafted)));
+    assertThat(menuService.isUpcomingDraft(USER, menuId)).isFalse();
+
+    when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menuId, USER))
+        .thenReturn(Optional.empty());
+    assertThat(menuService.isUpcomingDraft(USER, menuId)).isFalse();
+  }
+
+  private static Menu menu(UUID id, LocalDate start, MenuStatus status) {
+    return Menu.builder()
+        .id(id)
+        .userId(USER)
+        .startDate(start)
+        .endDate(start.plusDays(6))
+        .status(status)
+        .build();
+  }
+
   private void doThrowValidation() {
     doThrow(new MenuValidationException("days must contain exactly the 7 dates"))
         .when(menuValidator)
@@ -125,12 +200,16 @@ class MenuServiceCreateTest {
   }
 
   private CreateMenuRequest validRequest() {
+    return requestStartingOn(MONDAY);
+  }
+
+  private CreateMenuRequest requestStartingOn(LocalDate startDate) {
     List<MenuDayRequest> days =
         IntStream.range(0, 7)
             .mapToObj(
                 offset ->
                     MenuDayRequest.builder()
-                        .date(MONDAY.plusDays(offset))
+                        .date(startDate.plusDays(offset))
                         .meals(
                             new ArrayList<>(
                                 List.of(
@@ -141,7 +220,7 @@ class MenuServiceCreateTest {
                                         .build())))
                         .build())
             .toList();
-    return CreateMenuRequest.builder().startDate(MONDAY).days(new ArrayList<>(days)).build();
+    return CreateMenuRequest.builder().startDate(startDate).days(new ArrayList<>(days)).build();
   }
 
   private List<Dish> dishesOf(CreateMenuRequest request) {

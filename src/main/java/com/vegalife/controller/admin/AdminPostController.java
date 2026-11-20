@@ -1,6 +1,5 @@
 package com.vegalife.controller.admin;
 
-import com.vegalife.dto.request.admin.PostApprovalRequest;
 import com.vegalife.dto.request.admin.PostListRequest;
 import com.vegalife.dto.request.admin.PostRejectionRequest;
 import com.vegalife.dto.response.admin.AdminPostDetailResponse;
@@ -13,6 +12,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -44,7 +44,7 @@ public class AdminPostController {
 
   @GetMapping("/posts")
   public ResponseEntity<ApiResponse<PageResponse<AdminPostListResponse>>> listPosts(
-      @Valid @ModelAttribute PostListRequest request) {
+      @Valid @ParameterObject @ModelAttribute PostListRequest request) {
     PageResponse<AdminPostListResponse> page = adminPostService.listPosts(request);
     return ResponseEntity.ok(ApiResponse.success(page, "Posts retrieved successfully"));
   }
@@ -57,10 +57,8 @@ public class AdminPostController {
 
   @PostMapping("/posts/{postId}/approve")
   public ResponseEntity<ApiResponse<AdminPostDetailResponse>> approvePost(
-      @AuthenticationPrincipal UUID adminId,
-      @PathVariable UUID postId,
-      @Valid @RequestBody(required = false) PostApprovalRequest request) {
-    AdminPostDetailResponse post = adminPostService.approvePost(adminId, postId, reasonOf(request));
+      @AuthenticationPrincipal UUID adminId, @PathVariable UUID postId) {
+    AdminPostDetailResponse post = adminPostService.approvePost(adminId, postId);
     return ResponseEntity.ok(ApiResponse.success(post, "Post approved successfully"));
   }
 
@@ -74,10 +72,6 @@ public class AdminPostController {
   }
 
   /** The reason is optional, so an absent body must not be a 400. */
-  private static String reasonOf(PostApprovalRequest request) {
-    return request == null ? null : request.getReason();
-  }
-
   private static String reasonOf(PostRejectionRequest request) {
     return request == null ? null : request.getReason();
   }

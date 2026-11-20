@@ -2,9 +2,9 @@ package com.vegalife.unit.service.filter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.vegalife.enums.post.PostFlag;
 import com.vegalife.service.filter.ContentFilterService;
 import com.vegalife.service.filter.EmbeddingRelevanceScorer;
+import com.vegalife.service.filter.FilterOutcome;
 import com.vegalife.service.filter.FilterVerdict;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,8 +16,10 @@ import org.springframework.ai.embedding.EmbeddingResponse;
 
 /**
  * Unit tests for {@link ContentFilterService}: every run embeds its content (FR-005), the three
- * semantic verdict bands with their score and reason payloads, and the PASSED empty-reason
- * contract.
+ * semantic bands with their score and reason payloads, and the PASS empty-reason contract.
+ *
+ * <p>The verdict vocabulary is {@link FilterOutcome} (ADR-023) — a run observes, an adapter
+ * persists.
  */
 class ContentFilterServiceTest {
 
@@ -41,36 +43,36 @@ class ContentFilterServiceTest {
   void shortContentStillEmbedsAndIsScored() {
     embeddingModel.next = new float[] {0f, 1f};
     FilterVerdict verdict = service.filter("a").verdict();
-    assertEquals(PostFlag.REJECTED, verdict.flag());
+    assertEquals(FilterOutcome.FAIL, verdict.outcome());
     assertEquals(0.0, verdict.score(), 1e-9);
     assertEquals(List.of("RELEVANCE_LOW: 0.000"), verdict.reasons());
     assertEquals(1, embeddingModel.calls());
   }
 
   @Test
-  void acceptBandReturnsPassedWithEmptyReasons() {
+  void acceptBandReturnsPassWithEmptyReasons() {
     embeddingModel.next = new float[] {1f, 0f};
     FilterVerdict verdict = service.filter(VALID_CONTENT).verdict();
-    assertEquals(PostFlag.PASSED, verdict.flag());
+    assertEquals(FilterOutcome.PASS, verdict.outcome());
     assertEquals(1.0, verdict.score(), 1e-9);
     assertEquals(List.of(), verdict.reasons());
     assertEquals(1, embeddingModel.calls());
   }
 
   @Test
-  void rejectBandReturnsRejectedWithLowReason() {
+  void rejectBandReturnsFailWithLowReason() {
     embeddingModel.next = new float[] {0f, 1f};
     FilterVerdict verdict = service.filter(VALID_CONTENT).verdict();
-    assertEquals(PostFlag.REJECTED, verdict.flag());
+    assertEquals(FilterOutcome.FAIL, verdict.outcome());
     assertEquals(0.0, verdict.score(), 1e-9);
     assertEquals(List.of("RELEVANCE_LOW: 0.000"), verdict.reasons());
   }
 
   @Test
-  void reviewBandReturnsNeedsReviewWithReason() {
+  void reviewBandReturnsUncertainWithReason() {
     embeddingModel.next = new float[] {1f, 1f};
     FilterVerdict verdict = service.filter(VALID_CONTENT).verdict();
-    assertEquals(PostFlag.NEEDS_REVIEW, verdict.flag());
+    assertEquals(FilterOutcome.UNCERTAIN, verdict.outcome());
     assertEquals(0.5, verdict.score(), 1e-9);
     assertEquals(List.of("RELEVANCE_REVIEW: 0.500"), verdict.reasons());
   }

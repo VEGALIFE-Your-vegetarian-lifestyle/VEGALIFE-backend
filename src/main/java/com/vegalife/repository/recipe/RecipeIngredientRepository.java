@@ -32,4 +32,28 @@ public interface RecipeIngredientRepository
       WHERE ri.recipeId IN :recipeIds
       """)
   List<Object[]> findIngredientNamesByRecipeIds(@Param("recipeIds") Collection<UUID> recipeIds);
+
+  /**
+   * Ids of every recipe that uses this ingredient, so a nutrition edit can recompute exactly the
+   * affected totals instead of the whole catalogue (ADR-022).
+   *
+   * <p>Includes soft-deleted recipes on purpose: they can be restored, and a stale total on a
+   * deleted row would resurface unchanged.
+   */
+  @Query(
+      """
+      SELECT ri.recipeId FROM RecipeIngredient ri
+      WHERE ri.ingredientId = :ingredientId
+      """)
+  List<UUID> findRecipeIdsByIngredientId(@Param("ingredientId") UUID ingredientId);
+
+  /** Every line of several recipes at once, for the batched nutrition recompute. */
+  @Query(
+      """
+      SELECT ri FROM RecipeIngredient ri
+      JOIN FETCH Ingredient i ON i.id = ri.ingredientId
+      WHERE ri.recipeId IN :recipeIds
+      """)
+  List<RecipeIngredient> findByRecipeIdInWithIngredient(
+      @Param("recipeIds") Collection<UUID> recipeIds);
 }

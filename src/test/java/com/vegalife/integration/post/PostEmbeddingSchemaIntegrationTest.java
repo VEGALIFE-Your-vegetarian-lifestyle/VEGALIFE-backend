@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.user.UserRole;
@@ -12,6 +13,12 @@ import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.filter.FilterOutcome;
+import com.vegalife.service.filter.FilterVerdict;
+import com.vegalife.service.filter.PostFlagDetail;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,9 +36,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * Proves the V35 and V36 schema effects on a real Postgres: the pgvector extension installs, the
  * {@code post_embedding} table and its cosine HNSW index exist, the store accepts a 768-dimension
- * vector, and {@code post.flag} admits the duplicate verdict. This is the gate that would have
- * caught the image swap being incomplete, since Flyway runs here just as it does in the other 40
- * integration contexts.
+ * vector, and {@code post.flag} admits the ADR-023/ADR-025 verdict vocabulary on every status a
+ * post can reach after submission. This is the gate that would have caught the image swap being
+ * incomplete, since Flyway runs here just as it does in the other 40 integration contexts.
  */
 @Testcontainers
 @SpringBootTest
@@ -131,14 +138,124 @@ class PostEmbeddingSchemaIntegrationTest {
   }
 
   @Test
-  void postFlagAdmitsTheDuplicateVerdict() {
+  void heldPostAdmitsTheBlockerVocabulary() {
     Post post = publishablePost();
-    post.setFlag(PostFlag.DUPLICATE);
+    post.setStatus(PostStatus.pending);
+    post.setFlag(PostFlag.SIMILAR_CONTENT);
+    UUID matched = UUID.randomUUID();
+    post.setFlagDetail(PostFlagDetail.similarContent(matched, 0.9312, 0.85));
 
     postRepository.saveAndFlush(post);
 
     Post reloaded = postRepository.findById(post.getId()).orElseThrow();
-    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.DUPLICATE);
+    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.SIMILAR_CONTENT);
+    assertThat(reloaded.getFlagDetail().path("kind").asText()).isEqualTo("SIMILAR_CONTENT");
+    assertThat(reloaded.getFlagDetail().path("postId").asText()).isEqualTo(matched.toString());
+    assertThat(reloaded.getFlagDetail().path("similarity").asDouble()).isEqualTo(0.9312);
+    assertThat(reloaded.getFlagDetail().path("threshold").asDouble()).isEqualTo(0.85);
+  }
+
+  /** ADR-024: the snapshot describes the blocker it hangs off, so the two cannot disagree. */
+  @Test
+  void aSnapshotWhoseKindDisagreesWithTheFlagIsRejectedByTheDatabase() {
+    Post post = publishablePost();
+    post.setStatus(PostStatus.pending);
+    post.setFlag(PostFlag.FILTER_FAILED);
+    post.setFlagDetail(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
+
+    assertThatThrownBy(() -> postRepository.saveAndFlush(post))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  /** ADR-024: the column holds one object; an array would make {@code ->>} silently return null. */
+  @Test
+  void aNonObjectSnapshotIsRejectedByTheDatabase() {
+    Post post = publishablePost();
+    post.setStatus(PostStatus.pending);
+    post.setFlag(PostFlag.FILTER_SKIPPED);
+    post.setFlagDetail(JsonNodeFactory.instance.arrayNode().add("DISABLED"));
+
+    assertThatThrownBy(() -> postRepository.saveAndFlush(post))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  /**
+   * ADR-025's invariant lives in the schema, not only in the services: a draft carries no verdict,
+   * because withdrawing a post is the author taking the decision back.
+   */
+  @Test
+  void aFlagOnADraftedPostIsRejectedByTheDatabase() {
+    Post post = publishablePost();
+    post.setFlag(PostFlag.FILTER_FAILED);
+
+    assertThatThrownBy(() -> postRepository.saveAndFlush(post))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  /**
+   * ADR-029: {@code processing} means the verdict is still outstanding, so the schema refuses a
+   * verdict recorded next to it — that state is {@code pending}.
+   */
+  @Test
+  void aFlagOnAProcessingPostIsRejectedByTheDatabase() {
+    Post post = publishablePost();
+    post.setStatus(PostStatus.processing);
+    post.setFlag(PostFlag.FILTER_FAILED);
+
+    assertThatThrownBy(() -> postRepository.saveAndFlush(post))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  /** ADR-029: a post waiting for an admin carries a verdict and is a legal, persisted state. */
+  @Test
+  void aPendingPostKeepsItsVerdict() {
+    Post post = publishablePost();
+    post.setStatus(PostStatus.pending);
+    post.setFlag(PostFlag.FILTER_SKIPPED);
+    post.setFlagDetail(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
+
+    postRepository.saveAndFlush(post);
+
+    Post reloaded = postRepository.findById(post.getId()).orElseThrow();
+    assertThat(reloaded.getStatus()).isEqualTo(PostStatus.pending);
+    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.FILTER_SKIPPED);
+  }
+
+  /**
+   * ADR-025: publishing keeps the verdict, so the column must accept it next to a terminal status.
+   */
+  @Test
+  void aPublishedPostKeepsItsPassVerdict() {
+    Post post = publishablePost();
+    post.setStatus(PostStatus.published);
+    post.setPublishedAt(Instant.now());
+    post.setFlag(PostFlag.FILTER_PASSED);
+    post.setFlagDetail(
+        PostFlagDetail.passed(new FilterVerdict(FilterOutcome.PASS, 0.8234, 0.70, List.of())));
+
+    postRepository.saveAndFlush(post);
+
+    Post reloaded = postRepository.findById(post.getId()).orElseThrow();
+    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.FILTER_PASSED);
+    assertThat(reloaded.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_PASSED");
+    assertThat(reloaded.getFlagDetail().path("score").asDouble()).isEqualTo(0.8234);
+    assertThat(reloaded.getFlagDetail().path("threshold").asDouble()).isEqualTo(0.70);
+  }
+
+  /** ADR-025: rejection keeps the blocker, which is what makes the decision record complete. */
+  @Test
+  void anUnpublishedPostKeepsTheFilterBlocker() {
+    Post post = publishablePost();
+    post.setStatus(PostStatus.unpublished);
+    post.setFlag(PostFlag.FILTER_FAILED);
+    post.setFlagDetail(
+        PostFlagDetail.filterFailed(new FilterVerdict(FilterOutcome.FAIL, 0.21, 0.45, List.of())));
+
+    postRepository.saveAndFlush(post);
+
+    Post reloaded = postRepository.findById(post.getId()).orElseThrow();
+    assertThat(reloaded.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
+    assertThat(reloaded.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_FAILED");
   }
 
   /** A persisted post in the default state: no flag, so the insert does not depend on V36. */
@@ -161,7 +278,7 @@ class PostEmbeddingSchemaIntegrationTest {
             .content("Món chay đơn giản cho bữa tối.")
             .rawContent(OBJECT_MAPPER.createObjectNode().put("type", "doc"))
             .viewCount(0)
-            .status(PostStatus.created)
+            .status(PostStatus.drafted)
             .build());
   }
 

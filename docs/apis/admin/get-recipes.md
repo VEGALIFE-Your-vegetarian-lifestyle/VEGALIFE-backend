@@ -1,7 +1,7 @@
 # API Reference: GET /api/admin/recipes
 
 ## Overview
-Return a paginated list of every recipe across all users — including soft-deleted rows, each reported with a derived `status` — optionally filtered by author, category, and creation date range, with ingredients, instructions, and author identity on each item. Admin only.
+Return a paginated list of every recipe across all users — including soft-deleted rows, each reported with a derived `status` — optionally filtered by author, category, review state, deletion state, dish, difficulty, total time, a text keyword, and creation date range, with ingredients, instructions, and author identity on each item. Admin only.
 
 ## Endpoint
 ```
@@ -21,11 +21,17 @@ None.
 |------|------|----------|-------------|
 | page | integer | No | 0-based page index, default 0 |
 | size | integer | No | Page size, default 20, max 100 |
-| sort | string | No | Format `property,direction`. Default `createdAt,desc`. Property must be one of: `createdAt`, `updatedAt`, `name` |
+| sort | string | No | Format `property,direction`. Default `createdAt,desc`. Property must be one of: `createdAt`, `updatedAt`, `name`, `moderationStatus` |
 | userId | uuid | No | Only recipes authored by this user |
 | categoryId | uuid | No | Only recipes linked (via `post_recipe` → `post_category`) to a post carrying this category |
+| moderationStatus | string | No | Review state: `PENDING`, `APPROVED`, or `REJECTED` (case-insensitive). `PENDING` is the review queue. Omit for every state |
+| status | string | No | Deletion state: `ACTIVE` or `DELETED` (case-insensitive). Omit to include both, which is the default. Distinct from `moderationStatus` |
+| dishId | uuid | No | Only recipes attached to this dish |
+| difficulty | string | No | `EASY`, `MEDIUM`, or `HARD` (case-insensitive) |
+| maxTotalTimeMinutes | integer | No | Keep recipes whose `prepTimeMinutes + cookTimeMinutes` is at most this value. A recipe missing either time does not match |
+| keyword | string | No | Case-insensitive substring matched against `name`, `description`, `instructions`, the dish name, or any ingredient name. `%`, `_` and `\` are matched literally. Blank or omitted applies no keyword filter |
 | createdFrom | string | No | ISO-8601 datetime lower bound (inclusive) on `createdAt`, e.g. `2026-01-01T00:00:00Z` |
-| createdTo | string | No | ISO-8601 datetime upper bound (inclusive) on `createdAt`, e.g. `2026-01-31T23:59:59Z` |
+| createdTo | string | No | ISO-8601 datetime upper bound (inclusive) on `createdAt`, e.g. `2026-01-31T23:59:59Z`. `createdFrom` after `createdTo` returns 400 |
 
 ### Request Body
 No request body
@@ -49,17 +55,32 @@ No request body
         "servings": 4,
         "difficulty": "MEDIUM",
         "status": "ACTIVE",
+        "rejectionReason": null,
         "dishId": "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
         "dishName": "Pho",
+        "imageUrl": "https://cdn.example.com/dishes/pho.jpg",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "ingredients": [
           {
             "ingredientId": "c7d8e9f0-1a2b-4c3d-8e5f-6a7b8c9d0e1f",
             "name": "shiitake mushroom",
+            "moderationStatus": "APPROVED",
             "amount": 200,
-            "unit": "g"
+            "unit": "G",
+            "calories": 68.00,
+            "proteinG": 4.40,
+            "carbohydrateG": 13.60,
+            "fatG": 0.20,
+            "fiberG": 5.00,
+            "nutritionResolved": true
           }
         ],
+        "calories": 68.00,
+        "proteinG": 4.40,
+        "carbohydrateG": 13.60,
+        "fatG": 0.20,
+        "fiberG": 5.00,
+        "nutritionResolved": true,
         "createdAt": "2026-09-28T08:00:00Z",
         "updatedAt": "2026-09-28T09:00:00Z",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
@@ -91,14 +112,21 @@ No request body
 | data.content[].servings | integer | Number of servings |
 | data.content[].difficulty | string | `EASY`, `MEDIUM`, `HARD`, or null |
 | data.content[].status | string | Derived from `deletedAt`: `ACTIVE` or `DELETED` (no stored column, not filterable) |
+| data.content[].rejectionReason | string \| null | Why an admin rejected this recipe; `null` when no reason was recorded. Cleared when the recipe is approved again (current state only — no earlier reason is kept, ADR-027) |
 | data.content[].dishId | uuid | Parent dish id |
 | data.content[].dishName | string | Parent dish name, nullable |
+| data.content[].imageUrl | string \| null | The shared dish's image. Read-only here: set it through the dish endpoints, so it is the same on every recipe using that dish. `null` when the dish has none |
 | data.content[].categoryIds | uuid[] | Category ids via the recipe's linked posts; empty when not linked |
 | data.content[].ingredients | array | Ingredients with amounts; empty when none |
 | data.content[].ingredients[].ingredientId | uuid | Ingredient id |
 | data.content[].ingredients[].name | string | Ingredient name |
-| data.content[].ingredients[].amount | number | Amount in `unit` |
-| data.content[].ingredients[].unit | string | Measurement unit (e.g. `g`, `ml`, `tbsp`) |
+| data.content[].ingredients[].moderationStatus | string | Review state of the shared ingredient name: `PENDING`, `APPROVED` or `REJECTED` |
+| data.content[].ingredients[].amount | number | Amount, expressed in the ingredient's own `unit` |
+| data.content[].ingredients[].unit | string \| null | The **ingredient's** unit: `G`, `ML`, `PIECE`, or `null` when undecided. Derived, not stored per line (ADR-022) |
+| data.content[].ingredients[].calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | This line's own contribution: `amount × the ingredient's per-unit value`, rounded to 2 decimals. All five are `null` together when the ingredient is uncurated |
+| data.content[].ingredients[].nutritionResolved | boolean | `true` when this line's five values are real rather than unknown |
+| data.content[].calories / proteinG / carbohydrateG / fatG / fiberG | number \| null | Whole-recipe totals, read from the persisted columns, never per serving. `null` means the recipe cannot be priced yet, distinct from `0` (BR-RECP-006) |
+| data.content[].nutritionResolved | boolean | `true` only when every ingredient is curated and the totals are real. This is the field to drive a curation queue from |
 | data.content[].createdAt | string | ISO-8601 creation timestamp |
 | data.content[].updatedAt | string | ISO-8601 last-update timestamp |
 | data.content[].userId | uuid | Author user id |
@@ -114,17 +142,20 @@ No request body
 ### Error Responses
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | Unknown `sort` property, invalid date format, `createdFrom` after `createdTo`, or `size` > 100 | "Validation failed" or the parse error message |
+| 400 | Unknown `sort` property, invalid `moderationStatus`/`status`/`difficulty`/date format, `createdFrom` after `createdTo`, or `size` > 100 | "Validation failed" or the parse error message |
 | 401 | Missing/invalid JWT | "Unauthorized" |
 | 403 | Authenticated non-admin | "Forbidden" |
 | 500 | Server error | "Internal server error" |
 
 ## Business Rules
 - Soft-deleted recipes are **included** and reported as `status = DELETED`; `status` is derived from `deletedAt`, not stored (issue #4 deviation, decided 2026-10-01).
-- No `status` query filter exists on this endpoint.
+- Two similarly-named filters exist and must not be confused: `status` is deletion (`ACTIVE`/`DELETED`) and `moderationStatus` is review (`PENDING`/`APPROVED`/`REJECTED`). They are independent and combine with AND, so a recipe can be `ACTIVE` and still `PENDING` review. Omitting `status` includes deleted rows, as it always has; `status=ACTIVE` is how you exclude them.
+- `keyword`, `dishId`, `difficulty` and `maxTotalTimeMinutes` use the same predicates as the member catalogue (`GET /api/recipes`), so a search returns the same recipes here as there, except that this list also sees soft-deleted and unapproved ones. A recipe matching several ingredient names is returned once.
 - Only `ROLE_ADMIN` may call this endpoint (`SecurityConfig` `/api/admin/**`).
 - `categoryId` resolves through `post_recipe` → `post_category`; a recipe not linked to any post matches only when `categoryId` is omitted.
-- Nutrition columns on `ingredient` are never returned (issue #4 non-goal).
+- `unit` on an ingredient entry is the **shared ingredient's** unit (`G`/`ML`/`PIECE`, or `null`), not a per-recipe choice (ADR-022).
+- Totals come from the persisted `recipe` columns and are not recomputed on read, so this list cannot disagree with what the suggest-dishes nutrition filters read. A recipe whose ingredients are not all curated has five `null` totals and `nutritionResolved: false` — never a partial sum (BR-RECP-006).
+- A line's values are `amount × the ingredient's per-unit value`, rounded to 2 decimals, and are `null` together when that ingredient is uncurated. Line values are rounded individually while the total is rounded once over the exact sum, so the visible lines need not add up exactly to the visible total (BR-RECP-007).
 
 ## Example
 
@@ -151,17 +182,32 @@ curl -X GET "http://localhost:8080/api/admin/recipes?page=0&size=20&userId=550e8
         "servings": 4,
         "difficulty": "MEDIUM",
         "status": "ACTIVE",
+        "rejectionReason": null,
         "dishId": "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
         "dishName": "Pho",
+        "imageUrl": "https://cdn.example.com/dishes/pho.jpg",
         "categoryIds": ["1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"],
         "ingredients": [
           {
             "ingredientId": "c7d8e9f0-1a2b-4c3d-8e5f-6a7b8c9d0e1f",
             "name": "shiitake mushroom",
+            "moderationStatus": "APPROVED",
             "amount": 200,
-            "unit": "g"
+            "unit": "G",
+            "calories": 68.00,
+            "proteinG": 4.40,
+            "carbohydrateG": 13.60,
+            "fatG": 0.20,
+            "fiberG": 5.00,
+            "nutritionResolved": true
           }
         ],
+        "calories": 68.00,
+        "proteinG": 4.40,
+        "carbohydrateG": 13.60,
+        "fatG": 0.20,
+        "fiberG": 5.00,
+        "nutritionResolved": true,
         "createdAt": "2026-09-28T08:00:00Z",
         "updatedAt": "2026-09-28T09:00:00Z",
         "userId": "550e8400-e29b-41d4-a716-446655440000",

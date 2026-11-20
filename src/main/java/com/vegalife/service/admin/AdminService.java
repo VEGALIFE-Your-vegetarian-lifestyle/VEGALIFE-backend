@@ -8,14 +8,13 @@ import com.vegalife.dto.response.admin.CommentListResponse;
 import com.vegalife.dto.response.admin.UserListResponse;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.CommentSpecifications;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.repository.user.UserSpecifications;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.token.JwtTokenService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.DuplicateResourceException;
@@ -41,12 +40,19 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class AdminService {
 
+  /** Columns an administrator may sort the user list by; {@code passwordHash} is never one. */
+  private static final Set<String> USER_SORTABLE_PROPERTIES =
+      Set.of("createdAt", "updatedAt", "displayName", "email", "status", "role");
+
+  private static final String USER_SORTABLE_PROPERTIES_MESSAGE =
+      "Sort property must be one of: createdAt, updatedAt, displayName, email, status, role";
+
   private final UserRepository userRepository;
   private final AdminUserMapper adminUserMapper;
   private final JwtTokenService jwtTokenService;
   private final CommentRepository commentRepository;
   private final AdminCommentMapper adminCommentMapper;
-  private final ModerationLogRepository moderationLogRepository;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   @Transactional(readOnly = true)
   public PageResponse<UserListResponse> listUsers(UserListRequest request) {
@@ -62,7 +68,8 @@ public class AdminService {
     Pageable pageable =
         PageRequest.of(request.getPage(), request.getSize(), parseSort(request.getSort()));
     Specification<User> spec =
-        UserSpecifications.activeWithFilters(status, role, createdFrom, createdTo);
+        UserSpecifications.activeWithFilters(
+            status, role, createdFrom, createdTo, request.getKeyword(), request.getEmailVerified());
     Page<User> page = userRepository.findAll(spec, pageable);
 
     log.debug(
@@ -118,12 +125,12 @@ public class AdminService {
   }
 
   /**
-   * BR-ADMIN-003/BR-ADMIN-002: only an Administrator may moderate a comment, and every moderation
-   * action is soft-delete plus a required reason recorded on the moderation log (issue #6). Admin
-   * editing and bulk moderation are non-goals — this is the only moderation action.
+   * BR-ADMIN-003: only an Administrator may moderate a comment. The action is a soft-delete, so the
+   * thread keeps its shape and the author retains no edit path. Admin editing and bulk moderation
+   * are non-goals — this is the only moderation action.
    */
   @Transactional
-  public void moderateComment(UUID adminId, UUID commentId, String reason) {
+  public void moderateComment(UUID adminId, UUID commentId) {
     Comment comment =
         commentRepository
             .findByIdAndDeletedAtIsNull(commentId)
@@ -132,14 +139,8 @@ public class AdminService {
     comment.setDeletedAt(Instant.now());
     Comment saved = commentRepository.saveAndFlush(comment);
 
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action("MODERATE_COMMENT")
-            .targetType("COMMENT")
-            .targetId(saved.getId())
-            .reason(reason)
-            .build());
+    // totalComments dropped, and the comment left the reported set if it was reported.
+    dashboardCache.summary();
 
     log.info("Comment {} moderated by admin {}", saved.getId(), adminId);
   }
@@ -158,6 +159,9 @@ public class AdminService {
 
     user.setStatus(UserStatus.suspended);
     userRepository.save(user);
+
+    // users.suspended and the derived activation/payer rates moved.
+    dashboardCache.summary();
 
     int revoked = jwtTokenService.revokeAllUserRefreshTokens(userId);
     log.info("User {} suspended; revoked {} refresh tokens", userId, revoked);
@@ -179,6 +183,9 @@ public class AdminService {
 
     user.setStatus(UserStatus.activated);
     userRepository.save(user);
+
+    // users.suspended fell; the status-based rates moved with it.
+    dashboardCache.summary();
 
     log.info("User {} restored; status set to activated", userId);
 
@@ -250,6 +257,9 @@ public class AdminService {
     // than let Spring Data throw a PropertyReferenceException, which would surface as a 500.
     if ("username".equals(property)) {
       property = "displayName";
+    }
+    if (!USER_SORTABLE_PROPERTIES.contains(property)) {
+      throw new ValidationException(USER_SORTABLE_PROPERTIES_MESSAGE);
     }
     Sort.Direction direction =
         parts.length == 2 && parts[1].trim().equalsIgnoreCase("asc")

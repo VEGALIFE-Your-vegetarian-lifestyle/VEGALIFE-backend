@@ -8,7 +8,7 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [002-jwt-authentication-architecture.md](002-jwt-authentication-architecture.md) | JWT Authentication Architecture | Accepted | 2026-09-22 |
 | [003-password-reset-otp-storage.md](003-password-reset-otp-storage.md) | Store Password-Reset OTPs as Hashed Rows in PostgreSQL | Accepted | 2026-09-24 |
 | [004-generalized-otp-storage.md](004-generalized-otp-storage.md) | Generalize OTP Storage with a Purpose Discriminator | Accepted | 2026-09-24 |
-| [005-persistent-outbound-message-queue.md](005-persistent-outbound-message-queue.md) | Use a Persistent Outbound Message Queue for Email Delivery | Accepted | 2026-09-26 |
+| [005-persistent-outbound-message-queue.md](005-persistent-outbound-message-queue.md) | Use a Persistent Outbound Message Queue for Email Delivery | Accepted (amended 2026-11-19) | 2026-09-26 |
 | [006-optional-otp-verified-stage.md](006-optional-otp-verified-stage.md) | Optional OTP Verified Stage on `otp_code` | Accepted | 2026-09-27 |
 | [007-post-content-filtering.md](007-post-content-filtering.md) | Filter Post Content Before Publication | Accepted | 2026-09-30 |
 | [008-vnpay-integration.md](008-vnpay-integration.md) | Integrate VNPay Through a Hand-Rolled Thin Client, Fulfilling Only From Its IPN Webhook | Accepted | 2026-10-04 |
@@ -24,3 +24,12 @@ Accepted ADRs for the Vegalife backend. Filenames follow `NNNN-short-title.md` f
 | [018-clean-architecture-package-dependencies.md](018-clean-architecture-package-dependencies.md) | Enforce Clean-Architecture Package Dependencies (Inner Layers Never Depend on Outer Layers) | Accepted | 2026-10-30 |
 | [019-display-name-instead-of-username.md](019-display-name-instead-of-username.md) | Replace the Unique `username` Handle With a Non-Unique `display_name` | Accepted | 2026-11-02 |
 | [020-embedding-failure-terminal-vs-retryable.md](020-embedding-failure-terminal-vs-retryable.md) | End the Outbound Retry on a Permanent Embedding Rejection, and Honour `Retry-After` | Accepted | 2026-11-02 |
+| [021-request-allowance-as-acquisition-sum.md](021-request-allowance-as-acquisition-sum.md) | Treat AI Request Entitlement as the Live Sum of Granted Acquisitions | Accepted | 2026-11-04 |
+| [022-ingredient-level-nutrition.md](022-ingredient-level-nutrition.md) | Derive Recipe Nutrition From Ingredient Nutrition Measured Per One Unit | Accepted | 2026-11-05 |
+| [023-post-processing-status-and-flag-blocker.md](023-post-processing-status-and-flag-blocker.md) | Model Post Moderation as Four Statuses Plus One Held-State Blocker, Drop Admin Hide | Accepted | 2026-11-13 |
+| [024-post-flag-detail-json-snapshot.md](024-post-flag-detail-json-snapshot.md) | Store the Post Blocker Detail as a Typed JSON Snapshot | Accepted | 2026-11-13 |
+| [025-post-flag-survives-publication.md](025-post-flag-survives-publication.md) | Keep the Post Verdict After Publication and Name the Passing One | Accepted | 2026-11-13 |
+| [026-remove-recipe-scoring.md](026-remove-recipe-scoring.md) | Embed Only the Post Body and Drop `recipe.score` | Accepted | 2026-11-19 |
+| [027-remove-moderation-log.md](027-remove-moderation-log.md) | Remove the `moderation_log` Audit Table | Accepted | 2026-11-19 |
+| [028-enqueue-email-from-sending-services.md](028-enqueue-email-from-sending-services.md) | Enqueue Outbound Email From the Sending Services, Not Through a Port Implementation | Accepted | 2026-11-19 |
+| [029-post-pending-status-and-media-review.md](029-post-pending-status-and-media-review.md) | Split `pending` Out of `processing`, and Hold Every Post That Carries Media | Accepted | 2026-11-19 |

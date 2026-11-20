@@ -56,9 +56,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * End-to-end acceptance coverage for post semantic content filtering (FR-007 to FR-012, BR-FILTER
- * series): the mocked semantic path, outbox delivery via {@code drainOnce}, flag transitions on the
- * post itself and flag exposure in API responses. The verdict persists only in {@code post.flag} /
- * {@code post.status}; score and reasons reach the logs.
+ * series): the mocked semantic path, outbox delivery via {@code drainOnce}, status/flag transitions
+ * on the post itself and their exposure in API responses.
+ *
+ * <p>Under ADR-023 a submitted post is {@code processing} with no flag while the verdict is
+ * outstanding; the adapter only ever writes {@code published} (pass) or {@code pending} with one of
+ * the three blockers (ADR-029). The filter never unpublishes.
  *
  * <p>Only the two AI-facing collaborators are replaced ({@link EmbeddingModel}, {@link
  * RelevanceScorer}); everything else — service, adapter, repositories, drainer — runs for real
@@ -135,8 +138,9 @@ class PostContentFilterIntegrationTest {
             "Tofu bowl for lunch", "A simple plant-based lunch with tofu and rice.");
 
     Post queued = postById(postId);
-    assertThat(queued.getFlag()).isEqualTo(PostFlag.PENDING);
-    assertThat(queued.getStatus()).isEqualTo(PostStatus.created);
+    // Submitted and in flight: status carries that, not the flag (ADR-023).
+    assertThat(queued.getStatus()).isEqualTo(PostStatus.processing);
+    assertThat(queued.getFlag()).isNull();
     assertThat(queued.getPublishedAt()).isNull();
     assertThat(contentFilterQueue()).hasSize(1);
 
@@ -144,12 +148,16 @@ class PostContentFilterIntegrationTest {
 
     Post filtered = postById(postId);
     assertThat(filtered.getStatus()).isEqualTo(PostStatus.published);
-    assertThat(filtered.getFlag()).isEqualTo(PostFlag.PASSED);
+    // Publication and the verdict are separate facts; the row keeps both (ADR-025).
+    assertThat(filtered.getFlag()).isEqualTo(PostFlag.FILTER_PASSED);
+    assertThat(filtered.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_PASSED");
+    assertThat(filtered.getFlagDetail().path("score").asDouble()).isEqualTo(0.9);
+    assertThat(filtered.getFlagDetail().path("threshold").asDouble()).isEqualTo(0.7);
     assertThat(filtered.getPublishedAt()).isNotNull();
 
     OutboundMessage message = contentFilterQueue().getFirst();
     assertThat(message.getStatus()).isEqualTo(OutboundStatus.COMPLETED);
-    assertThat(message.getPayload()).isNull();
+    assertThat(message.getPayload()).isNotBlank();
   }
 
   @Test
@@ -165,8 +173,13 @@ class PostContentFilterIntegrationTest {
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(PostStatus.unpublished);
-    assertThat(filtered.getFlag()).isEqualTo(PostFlag.REJECTED);
+    // Held, not unpublished: only an admin may unpublish (ADR-023).
+    assertThat(filtered.getStatus()).isEqualTo(PostStatus.pending);
+    assertThat(filtered.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
+    assertThat(filtered.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_FAILED");
+    assertThat(filtered.getFlagDetail().path("outcome").asText()).isEqualTo("FAIL");
+    assertThat(filtered.getFlagDetail().path("score").asDouble()).isEqualTo(0.3);
+    assertThat(filtered.getFlagDetail().path("threshold").asDouble()).isEqualTo(0.45);
     assertThat(filtered.getPublishedAt()).isNull();
 
     verify(embeddingModel).embed(anyString());
@@ -174,7 +187,7 @@ class PostContentFilterIntegrationTest {
   }
 
   @Test
-  void createWithPublish_reviewBand_flagsNeedsReviewForManualReview() throws Exception {
+  void createWithPublish_reviewBand_holdsForManualReview() throws Exception {
     stubScore(0.6, Band.REVIEW);
 
     UUID postId =
@@ -184,8 +197,8 @@ class PostContentFilterIntegrationTest {
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(PostStatus.unpublished);
-    assertThat(filtered.getFlag()).isEqualTo(PostFlag.NEEDS_REVIEW);
+    assertThat(filtered.getStatus()).isEqualTo(PostStatus.pending);
+    assertThat(filtered.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
     assertThat(filtered.getPublishedAt()).isNull();
   }
 
@@ -207,13 +220,13 @@ class PostContentFilterIntegrationTest {
                     }
                     """))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.data.status").value("created"))
+        .andExpect(jsonPath("$.data.status").value("drafted"))
         .andExpect(jsonPath("$.data.flag").doesNotExist());
 
     UUID postId = findPostId("Draft notes post");
     Post draft = postById(postId);
     assertThat(draft.getFlag()).isNull();
-    assertThat(draft.getStatus()).isEqualTo(PostStatus.created);
+    assertThat(draft.getStatus()).isEqualTo(PostStatus.drafted);
     assertThat(contentFilterQueue()).isEmpty();
 
     verifyNoInteractions(embeddingModel, relevanceScorer);
@@ -228,7 +241,7 @@ class PostContentFilterIntegrationTest {
 
     drainFilterQueue();
     assertThat(postById(postId).getStatus()).isEqualTo(PostStatus.published);
-    assertThat(postById(postId).getFlag()).isEqualTo(PostFlag.PASSED);
+    assertThat(postById(postId).getFlag()).isEqualTo(PostFlag.FILTER_PASSED);
 
     stubScore(0.3, Band.REJECT);
     mockMvc
@@ -244,30 +257,30 @@ class PostContentFilterIntegrationTest {
                     }
                     """))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("published"))
-        .andExpect(jsonPath("$.data.flag").value("PENDING"));
+        // A re-check takes the post out of the feed until the new verdict lands.
+        .andExpect(jsonPath("$.data.status").value("processing"))
+        .andExpect(jsonPath("$.data.flag").doesNotExist());
 
-    assertThat(postById(postId).getStatus()).isEqualTo(PostStatus.published);
-    assertThat(postById(postId).getFlag()).isEqualTo(PostFlag.PENDING);
+    assertThat(postById(postId).getStatus()).isEqualTo(PostStatus.processing);
+    assertThat(postById(postId).getFlag()).isNull();
     assertThat(contentFilterQueue()).hasSize(2);
 
     drainFilterQueue();
 
     Post filtered = postById(postId);
-    assertThat(filtered.getStatus()).isEqualTo(PostStatus.unpublished);
-    assertThat(filtered.getFlag()).isEqualTo(PostFlag.REJECTED);
+    assertThat(filtered.getStatus()).isEqualTo(PostStatus.pending);
+    assertThat(filtered.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
   }
 
   @Test
-  void editUnpublishedPost_requeuesAndRepublishesOnPass() throws Exception {
+  void editHeldPost_requeuesAndPublishesOnPass() throws Exception {
     stubScore(0.3, Band.REJECT);
     UUID postId =
-        createPostWithPublish(
-            "Unpublished post edit", "A body that initially lands in the reject band.");
+        createPostWithPublish("Held post edit", "A body that initially lands in the reject band.");
 
     drainFilterQueue();
-    assertThat(postById(postId).getStatus()).isEqualTo(PostStatus.unpublished);
-    assertThat(postById(postId).getFlag()).isEqualTo(PostFlag.REJECTED);
+    assertThat(postById(postId).getStatus()).isEqualTo(PostStatus.pending);
+    assertThat(postById(postId).getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
 
     stubScore(0.9, Band.PASS);
     mockMvc
@@ -283,8 +296,8 @@ class PostContentFilterIntegrationTest {
                     }
                     """))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("unpublished"))
-        .andExpect(jsonPath("$.data.flag").value("PENDING"));
+        .andExpect(jsonPath("$.data.status").value("processing"))
+        .andExpect(jsonPath("$.data.flag").doesNotExist());
 
     assertThat(contentFilterQueue()).hasSize(2);
 
@@ -292,7 +305,9 @@ class PostContentFilterIntegrationTest {
 
     Post filtered = postById(postId);
     assertThat(filtered.getStatus()).isEqualTo(PostStatus.published);
-    assertThat(filtered.getFlag()).isEqualTo(PostFlag.PASSED);
+    // Re-filtering overwrites the previous blocker instead of stacking a second one (ADR-025).
+    assertThat(filtered.getFlag()).isEqualTo(PostFlag.FILTER_PASSED);
+    assertThat(filtered.getFlagDetail().path("kind").asText()).isEqualTo("FILTER_PASSED");
     assertThat(filtered.getPublishedAt()).isNotNull();
   }
 
@@ -319,12 +334,12 @@ class PostContentFilterIntegrationTest {
     assertThat(contentFilterQueue()).hasSize(1);
     Post unchanged = postById(postId);
     assertThat(unchanged.getContent()).isEqualTo("Original content owned by the author only.");
-    assertThat(unchanged.getFlag()).isEqualTo(PostFlag.PENDING);
-    assertThat(unchanged.getStatus()).isEqualTo(PostStatus.created);
+    assertThat(unchanged.getStatus()).isEqualTo(PostStatus.processing);
+    assertThat(unchanged.getFlag()).isNull();
   }
 
   @Test
-  void flagExposedInCreateUpdateAndListResponses() throws Exception {
+  void publishedFlagIsNotExposedOnThePublicPostSurface() throws Exception {
     stubScore(0.9, Band.PASS);
 
     mockMvc
@@ -336,7 +351,7 @@ class PostContentFilterIntegrationTest {
                     """
                     {
                       "title": "Timeline flag post",
-                      "content": "A published article whose flag must be visible everywhere.",
+                      "content": "A published article whose flag must stay admin-only.",
                       "rawContent": {},
                       "categoryIds": ["%s"],
                       "publish": true
@@ -347,17 +362,25 @@ class PostContentFilterIntegrationTest {
                                 .saveAndFlush(Category.builder().name("Recipes").build())
                                 .getId())))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.data.flag").value("PENDING"));
+        .andExpect(jsonPath("$.data.status").value("processing"))
+        .andExpect(jsonPath("$.data.flag").doesNotExist());
 
     UUID postId = findPostId("Timeline flag post");
     drainFilterQueue();
 
+    // The verdict is stored...
+    assertThat(postById(postId).getFlag()).isEqualTo(PostFlag.FILTER_PASSED);
+
+    // ...but the member-facing surface does not carry it: a published post that an admin approved
+    // over a FILTER_FAILED blocker must not announce that to readers (ADR-025).
     mockMvc
-        .perform(get("/api/posts").header("Authorization", "Bearer " + accessToken))
+        .perform(get("/api/posts/me").header("Authorization", "Bearer " + accessToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.content.length()").value(1))
         .andExpect(jsonPath("$.data.content[0].id").value(postId.toString()))
-        .andExpect(jsonPath("$.data.content[0].flag").value("PASSED"));
+        .andExpect(jsonPath("$.data.content[0].status").value("published"))
+        .andExpect(jsonPath("$.data.content[0].flag").doesNotExist())
+        .andExpect(jsonPath("$.data.content[0].flagDetail").doesNotExist());
 
     mockMvc
         .perform(
@@ -368,13 +391,13 @@ class PostContentFilterIntegrationTest {
                     """
                     {
                       "title": "Timeline flag post edited",
-                      "content": "A published article whose flag must be visible everywhere.",
+                      "content": "A published article whose flag must stay admin-only.",
                       "rawContent": {}
                     }
                     """))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("published"))
-        .andExpect(jsonPath("$.data.flag").value("PENDING"));
+        .andExpect(jsonPath("$.data.status").value("processing"))
+        .andExpect(jsonPath("$.data.flag").doesNotExist());
   }
 
   private void drainFilterQueue() {
@@ -384,8 +407,14 @@ class PostContentFilterIntegrationTest {
     entityManager.clear();
   }
 
+  /**
+   * Stubs the scorer with the boundary the real one would report for that band: the accept
+   * threshold for PASS/REVIEW, the reject threshold for REJECT (ADR-024 snapshots it into {@code
+   * flag_detail}).
+   */
   private void stubScore(double score, Band band) {
-    when(relevanceScorer.score(any())).thenReturn(new RelevanceScore(score, band));
+    double threshold = band == Band.REJECT ? 0.45 : 0.70;
+    when(relevanceScorer.score(any())).thenReturn(new RelevanceScore(score, band, threshold));
   }
 
   private UUID createPostWithPublish(String title, String content) throws Exception {
@@ -407,8 +436,8 @@ class PostContentFilterIntegrationTest {
                     """
                         .formatted(title, content, category.getId())))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.data.status").value("created"))
-        .andExpect(jsonPath("$.data.flag").value("PENDING"));
+        .andExpect(jsonPath("$.data.status").value("processing"))
+        .andExpect(jsonPath("$.data.flag").doesNotExist());
     return findPostId(title);
   }
 

@@ -6,10 +6,8 @@ import com.vegalife.dto.request.admin.AdminDishCreateRequest;
 import com.vegalife.dto.request.admin.AdminDishUpdateRequest;
 import com.vegalife.dto.response.admin.AdminDishResponse;
 import com.vegalife.enums.recipe.ModerationStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.DishIngredient;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.recipe.DishIngredientRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.DishSpecifications;
@@ -53,7 +51,6 @@ public class AdminDishService {
   private final DishRepository dishRepository;
   private final DishIngredientRepository dishIngredientRepository;
   private final AdminDishIngredientMapper adminDishIngredientMapper;
-  private final ModerationLogRepository moderationLogRepository;
 
   /** Every state, including pending and rejected, so the review queue is reachable. */
   @Transactional(readOnly = true)
@@ -115,9 +112,7 @@ public class AdminDishService {
                 .moderationStatus(ModerationStatus.APPROVED)
                 .build());
 
-    // Logged because this path approves without review; an audit trail of who did that is the
-    // whole point of keeping the decision visible.
-    logDecision(adminId, "CREATE_DISH", dish.getId(), null);
+    // Logged because this path approves without review.
     log.info("Admin {} created dish {}", adminId, dish.getId());
 
     return toResponse(dish);
@@ -189,7 +184,6 @@ public class AdminDishService {
     dish.setDeletedAt(Instant.now());
     dishRepository.save(dish);
 
-    logDecision(adminId, "DELETE_DISH", dish.getId(), null);
     log.info("Admin {} soft-deleted dish {}", adminId, dish.getId());
   }
 
@@ -202,7 +196,7 @@ public class AdminDishService {
    * decision, and without it a mistyped rejection would poison a legitimate name forever.
    */
   @Transactional
-  public AdminDishResponse approveDish(UUID adminId, UUID dishId, String reason) {
+  public AdminDishResponse approveDish(UUID adminId, UUID dishId) {
     Dish dish = findActive(dishId);
     if (dish.getModerationStatus() == ModerationStatus.APPROVED) {
       return toResponse(dish);
@@ -210,7 +204,6 @@ public class AdminDishService {
 
     dish.setModerationStatus(ModerationStatus.APPROVED);
     Dish saved = dishRepository.saveAndFlush(dish);
-    logDecision(adminId, "APPROVE_COMPONENT", saved.getId(), reason);
     log.info("Admin {} approved dish {}", adminId, saved.getId());
 
     return toResponse(saved);
@@ -224,7 +217,7 @@ public class AdminDishService {
    * acting on the name itself is the authority that approved it in the first place.
    */
   @Transactional
-  public AdminDishResponse rejectDish(UUID adminId, UUID dishId, String reason) {
+  public AdminDishResponse rejectDish(UUID adminId, UUID dishId) {
     Dish dish = findActive(dishId);
     if (dish.getModerationStatus() == ModerationStatus.REJECTED) {
       return toResponse(dish);
@@ -232,7 +225,6 @@ public class AdminDishService {
 
     dish.setModerationStatus(ModerationStatus.REJECTED);
     Dish saved = dishRepository.saveAndFlush(dish);
-    logDecision(adminId, "REJECT_COMPONENT", saved.getId(), reason);
     log.info("Admin {} rejected dish {}", adminId, saved.getId());
 
     return toResponse(saved);
@@ -242,17 +234,6 @@ public class AdminDishService {
     return dishRepository
         .findByIdAndDeletedAtIsNull(dishId)
         .orElseThrow(() -> new ResourceNotFoundException("Dish not found"));
-  }
-
-  private void logDecision(UUID adminId, String action, UUID dishId, String reason) {
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action(action)
-            .targetType("DISH")
-            .targetId(dishId)
-            .reason(reason)
-            .build());
   }
 
   private String normalizeText(String value) {

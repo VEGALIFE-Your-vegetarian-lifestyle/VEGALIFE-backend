@@ -9,6 +9,7 @@ import com.vegalife.shared.openapi.OpenApiSchemeNames;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,7 +28,7 @@ public class AdminVideoController {
 
   @GetMapping("/videos")
   public ResponseEntity<ApiResponse<PageResponse<AdminVideoListResponse>>> listVideos(
-      @Valid @ModelAttribute VideoListRequest request) {
+      @Valid @ParameterObject @ModelAttribute VideoListRequest request) {
     PageResponse<AdminVideoListResponse> page = adminVideoService.listVideos(request);
     return ResponseEntity.ok(ApiResponse.success(page, "Videos retrieved successfully"));
   }

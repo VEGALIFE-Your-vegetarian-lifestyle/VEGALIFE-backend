@@ -10,7 +10,7 @@ Backend team (Huy); tracked in Sprint plan (VEGALIFE-Sprint.xlsx, "Vegalife BE" 
 Let any caller — logged in or anonymous — retrieve active content categories, paginated and optionally filtered by name, so the browse/search UI can render category chips and the create-post screen can populate its category selector (per `SWP391-VEGALIFE.docx` Screen 01 and Screen 05 mockups).
 
 ## Problem / motivation
-Categories can now be created, edited, and retired (Sprint items 31.0–33.0), but there is still no way for a client to read them back. Unlike the other category endpoints, this one's actor is "All" (not Admin) — it's a public read used to power category browsing/filtering for every visitor, matching the existing public pattern for `GET /api/users/{userId}/posts`. It follows the same request/response shape as the other list endpoints in this codebase (`GET /api/admin/users`, `GET /api/posts`) rather than a bare array, for consistency.
+Categories can now be created, edited, and retired (Sprint items 31.0–33.0), but there is still no way for a client to read them back. Unlike the other category endpoints, this one's actor is "All" (not Admin) — it's a public read used to power category browsing/filtering for every visitor, matching the existing public pattern for `GET /api/users/{userId}/posts`. It follows the same request/response shape as the other list endpoints in this codebase (`GET /api/admin/users`, `GET /api/posts/me`) rather than a bare array, for consistency.
 
 ## Goals
 - Any caller (no JWT required) can list active categories, paginated.

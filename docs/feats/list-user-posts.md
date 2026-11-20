@@ -31,7 +31,7 @@ The backend had no endpoint for a signed-in user to retrieve their posts for rev
 
 ### Functional Requirements
 
-- [x] FR-001: `GET /api/posts` requires a valid JWT and derives the owner ID from that token.
+- [x] FR-001: `GET /api/posts/me` requires a valid JWT and derives the owner ID from that token.
 - [x] FR-002: The response includes only non-soft-deleted posts owned by the authenticated user, regardless of post status.
 - [x] FR-003: Results use zero-based pagination, default to page `0` and size `20`, and accept a size from `1` to `100`.
 - [x] FR-004: Results are ordered by creation time, newest first.
@@ -66,5 +66,5 @@ Before merge, 100% of the automated acceptance scenarios for ownership, soft del
 
 ## Related
 
-- API reference: `docs/apis/post/get-posts.md`
+- API reference: `docs/apis/post/get-posts-me.md`
 - Business rules: `docs/brs/posts.md`

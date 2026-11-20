@@ -16,7 +16,9 @@ import com.vegalife.model.post.Post;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.scheduled.PendingFilterSweepJob;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.filter.FilterProperties;
+import com.vegalife.service.filter.PostFlagDetail;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -34,6 +36,8 @@ class PendingFilterSweepJobTest {
 
   @Mock private OutboundMessageRepository outboundMessageRepository;
 
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
+
   private FilterProperties properties;
 
   @BeforeEach
@@ -42,13 +46,8 @@ class PendingFilterSweepJobTest {
   }
 
   @Test
-  void sweepStalePendingPosts_movesPostWhoseLatestQueueRowIsStaleToNeedsReview() {
-    Post stalePost =
-        Post.builder()
-            .id(UUID.randomUUID())
-            .flag(PostFlag.PENDING)
-            .status(PostStatus.created)
-            .build();
+  void sweepStalePendingPosts_settlesInFlightPostAsFilterSkipped() {
+    Post stalePost = Post.builder().id(UUID.randomUUID()).status(PostStatus.processing).build();
     when(outboundMessageRepository.findRecipientsOfChannelWithLatestBefore(
             eq(OutboundChannel.CONTENT_FILTER), any(Instant.class)))
         .thenReturn(List.of(stalePost.getId().toString()));
@@ -64,34 +63,45 @@ class PendingFilterSweepJobTest {
     Instant expectedCutoff = Instant.now().minus(properties.getSweepMaxAge());
     assertThat(cutoffCaptor.getValue())
         .isBetween(expectedCutoff.minusSeconds(5), expectedCutoff.plusSeconds(5));
-    assertThat(stalePost.getFlag()).isEqualTo(PostFlag.NEEDS_REVIEW);
-    assertThat(stalePost.getStatus()).isEqualTo(PostStatus.unpublished);
+    // The filter never formed an opinion, so the post is FILTER_SKIPPED, not FILTER_FAILED, and it
+    // moves out of processing into pending, waiting for a human.
+    assertThat(stalePost.getStatus()).isEqualTo(PostStatus.pending);
+    assertThat(stalePost.getFlag()).isEqualTo(PostFlag.FILTER_SKIPPED);
+    assertThat(stalePost.getFlagDetail())
+        .isEqualTo(PostFlagDetail.skipped(PostFlagDetail.CAUSE_SWEPT));
     verify(postRepository).save(stalePost);
   }
 
   @Test
-  void sweepStalePendingPosts_whenRecipientStaleButPostNotPending_savesNothing() {
-    UUID filteredId = UUID.randomUUID();
+  void sweepStalePendingPosts_whenPostIsNotInFlight_savesNothing() {
+    UUID publishedId = UUID.randomUUID();
+    UUID heldId = UUID.randomUUID();
+    UUID draftedId = UUID.randomUUID();
     UUID deletedId = UUID.randomUUID();
-    Post alreadyFiltered =
-        Post.builder().id(filteredId).flag(PostFlag.PASSED).status(PostStatus.published).build();
+    Post alreadyPublished = Post.builder().id(publishedId).status(PostStatus.published).build();
+    Post alreadyHeld =
+        Post.builder().id(heldId).status(PostStatus.pending).flag(PostFlag.FILTER_FAILED).build();
+    Post drafted = Post.builder().id(draftedId).status(PostStatus.drafted).build();
     Post deleted =
-        Post.builder()
-            .id(deletedId)
-            .flag(PostFlag.PENDING)
-            .status(PostStatus.created)
-            .deletedAt(Instant.now())
-            .build();
+        Post.builder().id(deletedId).status(PostStatus.processing).deletedAt(Instant.now()).build();
     when(outboundMessageRepository.findRecipientsOfChannelWithLatestBefore(
             eq(OutboundChannel.CONTENT_FILTER), any(Instant.class)))
-        .thenReturn(List.of(filteredId.toString(), deletedId.toString()));
-    when(postRepository.findAllById(anyCollection())).thenReturn(List.of(alreadyFiltered, deleted));
+        .thenReturn(
+            List.of(
+                publishedId.toString(),
+                heldId.toString(),
+                draftedId.toString(),
+                deletedId.toString()));
+    when(postRepository.findAllById(anyCollection()))
+        .thenReturn(List.of(alreadyPublished, alreadyHeld, drafted, deleted));
     PendingFilterSweepJob job = createJob(true);
 
     job.sweepStalePendingPosts();
 
-    assertThat(alreadyFiltered.getFlag()).isEqualTo(PostFlag.PASSED);
-    assertThat(deleted.getFlag()).isEqualTo(PostFlag.PENDING);
+    assertThat(alreadyPublished.getFlag()).isNull();
+    assertThat(alreadyHeld.getFlag()).isEqualTo(PostFlag.FILTER_FAILED);
+    assertThat(drafted.getFlag()).isNull();
+    assertThat(deleted.getFlag()).isNull();
     verify(postRepository, never()).save(any(Post.class));
   }
 
@@ -132,6 +142,6 @@ class PendingFilterSweepJobTest {
 
   private PendingFilterSweepJob createJob(boolean schedulingEnabled) {
     return new PendingFilterSweepJob(
-        postRepository, outboundMessageRepository, properties, schedulingEnabled);
+        postRepository, outboundMessageRepository, properties, dashboardCache, schedulingEnabled);
   }
 }

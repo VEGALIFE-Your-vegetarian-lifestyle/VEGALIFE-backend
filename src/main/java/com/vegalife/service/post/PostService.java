@@ -3,10 +3,12 @@ package com.vegalife.service.post;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.dto.mapper.post.PostMapper;
+import com.vegalife.dto.request.post.MyPostListRequest;
 import com.vegalife.dto.request.post.PostCreateRequest;
-import com.vegalife.dto.request.post.PostListRequest;
+import com.vegalife.dto.request.post.PostFeedRequest;
 import com.vegalife.dto.request.post.PostUpdateRequest;
 import com.vegalife.dto.request.post.RelatedPostsRequest;
+import com.vegalife.dto.request.post.UserPostListRequest;
 import com.vegalife.dto.response.post.PostListResponse;
 import com.vegalife.dto.response.post.RelatedPostResponse;
 import com.vegalife.enums.outbound.OutboundChannel;
@@ -14,30 +16,33 @@ import com.vegalife.enums.outbound.OutboundStatus;
 import com.vegalife.enums.post.MediaStatus;
 import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
-import com.vegalife.model.admin.ModerationLog;
+import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.outbound.OutboundMessage;
 import com.vegalife.model.post.Category;
 import com.vegalife.model.post.Media;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.user.UserProfile;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.outbound.OutboundMessageRepository;
 import com.vegalife.repository.post.CategoryRepository;
 import com.vegalife.repository.post.MediaRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository;
 import com.vegalife.repository.post.PostEmbeddingRepository.NearestMatch;
 import com.vegalife.repository.post.PostRepository;
+import com.vegalife.repository.post.PostSpecifications;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.admin.PlatformSettingsProvider;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.filter.ActiveEmbeddingModel;
 import com.vegalife.service.filter.ContentFilterPayload;
+import com.vegalife.service.filter.PostFlagDetail;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -52,6 +57,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,13 +75,13 @@ public class PostService {
   private final CategoryRepository categoryRepository;
   private final MediaRepository mediaRepository;
   private final RecipeRepository recipeRepository;
-  private final ModerationLogRepository moderationLogRepository;
   private final OutboundMessageRepository outboundMessageRepository;
   private final PostMapper postMapper;
   private final ObjectMapper objectMapper;
   private final PlatformSettingsProvider platformSettingsProvider;
   private final PostEmbeddingRepository postEmbeddingRepository;
   private final ActiveEmbeddingModel activeEmbeddingModel;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   @Transactional
   public PostListResponse createPost(UUID userId, PostCreateRequest request) {
@@ -97,18 +103,17 @@ public class PostService {
     // BR-CONTENT-003 / FR-007: a post never becomes visible directly. With publish=true and the
     // filter enabled (the default) it is queued for content filtering (BR-FILTER-005) and the
     // filter callback publishes it once it passes; without it the post stays a private draft that
-    // is never filtered. The queued outbound row's creation time is the enqueue clock
-    // (BR-FILTER-009). Only when the content_filter_enabled platform setting is false (deliberate
-    // outage mode) does a published post skip the filter and land directly in the admin review
-    // queue
-    // (flag=NEEDS_REVIEW, status=unpublished) with no embedding call.
-    post.setStatus(PostStatus.created);
+    // is never filtered. A submitted post is `processing` from the moment it is queued, so
+    // "waiting for a verdict" lives on the lifecycle axis, not in `flag` (ADR-023, ADR-029). Only
+    // when the content_filter_enabled platform setting is false (deliberate outage mode) does a
+    // submitted post skip the filter and land directly in the admin review queue at `pending` with
+    // flag=FILTER_SKIPPED.
+    post.setStatus(request.isPublish() ? PostStatus.processing : PostStatus.drafted);
     boolean filterEnabled = platformSettingsProvider.isContentFilterEnabled();
-    if (request.isPublish()) {
-      post.setFlag(filterEnabled ? PostFlag.PENDING : PostFlag.NEEDS_REVIEW);
-    }
 
     Post saved = postRepository.saveAndFlush(post);
+    // totalPosts rose, and so did filterSkippedPosts when the filter is switched off.
+    dashboardCache.summary();
     if (request.isPublish()) {
       if (filterEnabled) {
         enqueueContentFilter(saved);
@@ -116,13 +121,13 @@ public class PostService {
         markForAdminReview(saved);
       }
     }
-    return toResponse(saved);
+    return toResponse(saved, userId);
   }
 
   /**
    * BR-CONTENT-001: only the owner or an administrator may edit a post. A non-admin sees other
-   * users' posts as not found. BR-ADMIN-002: an administrator's edit of someone else's post is
-   * recorded in the moderation log.
+   * users' posts as not found. An administrator's edit of someone else's post is not attributed
+   * anywhere: the platform keeps no moderation audit trail.
    */
   @Transactional
   public PostListResponse updatePost(
@@ -131,6 +136,12 @@ public class PostService {
 
     // FR-003: detected before the fields below are overwritten.
     boolean contentChanged = isContentChanged(post, request);
+    // Only gaining an image is new unreviewed content. Clearing it is the media analogue of
+    // detaching media and changes nothing (ADR-029).
+    boolean featuredImageChanged =
+        request.getFeaturedImageUrl() != null
+            && !request.getFeaturedImageUrl().isBlank()
+            && !request.getFeaturedImageUrl().equals(post.getFeaturedImageUrl());
 
     if (request.getTitle() != null) {
       post.setTitle(request.getTitle());
@@ -145,11 +156,24 @@ public class PostService {
     }
 
     boolean willEnqueue = shouldEnqueueFilter(post, request.getPublish(), contentChanged);
-    applyPublishState(post, request.getPublish(), isAdmin, willEnqueue);
-    boolean filterEnabled = platformSettingsProvider.isContentFilterEnabled();
+    applyPublishState(post, request.getPublish(), willEnqueue);
     if (willEnqueue) {
-      post.setFlag(filterEnabled ? PostFlag.PENDING : PostFlag.NEEDS_REVIEW);
+      // A new revision invalidates the previous verdict: the post is re-checked from scratch, and
+      // the new run overwrites whatever the old one recorded (ADR-025). Until it lands the post
+      // carries no flag, and it is out of view for the duration, so nobody reads content that is
+      // mid-review.
+      post.setStatus(PostStatus.processing);
+      post.setFlag(null);
+      post.setFlagDetail(null);
+    } else if (featuredImageChanged && post.getStatus() == PostStatus.published) {
+      // The filter only judges text (ADR-026), so a new image is content no run has seen. The
+      // verdict and the score still describe the text, so the flag is kept and only the status
+      // changes; an admin decides whether the image belongs (ADR-029).
+      post.setStatus(PostStatus.pending);
+      log.info("Post {} gained a featured image; held for admin review", post.getId());
     }
+
+    boolean filterEnabled = platformSettingsProvider.isContentFilterEnabled();
 
     Post saved = postRepository.saveAndFlush(post);
     if (willEnqueue) {
@@ -159,72 +183,65 @@ public class PostService {
         markForAdminReview(saved);
       }
     }
-    recordModerationIfAdminOverride(actorId, isAdmin, saved, "EDIT_POST");
-    return toResponse(saved);
+    // An edit can move a published post out of the feed (re-queued, held for a new image,
+    // withdrawn)
+    // or add one to the pending queue. Both the summary and the published-posts series can change,
+    // and deciding which did would mean re-deriving the transition this method just computed.
+    dashboardCache.all();
+    return toResponse(saved, actorId);
   }
 
   /**
    * BR-CONTENT-001: only the owner or an Administrator may delete a post. Deletion is soft ({@code
-   * deletedAt}) so the row is kept. BR-ADMIN-002: an Administrator removing someone else's post is
-   * recorded in the moderation log.
+   * deletedAt}) so the row is kept.
    */
   @Transactional
   public void deletePost(UUID actorId, boolean isAdmin, UUID postId) {
     Post post = findManageablePost(actorId, isAdmin, postId);
     post.setDeletedAt(Instant.now());
-    Post saved = postRepository.saveAndFlush(post);
-    recordModerationIfAdminOverride(actorId, isAdmin, saved, "DELETE_POST");
-  }
-
-  /**
-   * BR-ADMIN-002: an Administrator may hide any post from the platform and lift the hide. Hiding
-   * removes the publication timestamp; lifting returns the post to a private draft so it must be
-   * published again under BR-CONTENT-003. Both actions are always recorded in the moderation log.
-   */
-  @Transactional
-  public PostListResponse updateVisibility(UUID adminId, UUID postId, boolean hidden) {
-    Post post =
-        postRepository
-            .findByIdAndDeletedAtIsNull(postId)
-            .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-
-    boolean currentlyHidden = post.getStatus() == PostStatus.hidden;
-    if (hidden == currentlyHidden) {
-      if (hidden) {
-        return toResponse(post);
-      }
-      throw new ValidationException("Post is not hidden");
-    }
-
-    if (hidden) {
-      post.setStatus(PostStatus.hidden);
-      post.setPublishedAt(null);
-    } else {
-      post.setStatus(PostStatus.created);
-    }
-    Post saved = postRepository.saveAndFlush(post);
-    moderationLogRepository.save(
-        ModerationLog.builder()
-            .actorId(adminId)
-            .action(hidden ? "HIDE_POST" : "UNHIDE_POST")
-            .targetType("POST")
-            .targetId(saved.getId())
-            .build());
-    return toResponse(saved);
+    postRepository.saveAndFlush(post);
+    // totalPosts fell; a post that was published also leaves the series, and one that was pending
+    // leaves the queue.
+    dashboardCache.all();
   }
 
   /**
    * BR-POST-011: a single post is returned for any status; only soft-deleted posts are excluded.
    * Ownership is never checked — another user's post is returned and the caller's own draft is
    * returned too.
+   *
+   * <p>{@code viewerId} is only used to decide whether the admin rejection reason is included: the
+   * author sees why their post was refused, everyone else gets the same payload without it. It also
+   * decides whether this read counts as a view (BR-POST-016).
    */
-  @Transactional(readOnly = true)
-  public PostListResponse getPost(UUID postId) {
+  @Transactional
+  public PostListResponse getPost(UUID viewerId, UUID postId) {
     Post post =
         postRepository
             .findDetailById(postId)
             .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
-    return toResponse(post, attachedRecipeIds(postId));
+    PostListResponse response = toResponse(post, attachedRecipeIds(postId), viewerId);
+    if (countsAsView(post, viewerId)) {
+      postRepository.incrementViewCount(postId);
+      // The response is filled in from the value just written instead of from the entity: the
+      // increment is a bulk update that bypasses the persistence context, so the loaded entity is
+      // already stale, and mutating it would dirty it into an UPDATE that bumps {@code updated_at}.
+      Integer views = post.getViewCount();
+      response.setViewCount(views == null ? 1 : views + 1);
+    }
+    return response;
+  }
+
+  /**
+   * BR-POST-016: a view is another person reading a published post. The author's own reads are
+   * excluded — they would inflate the number the author sees — and so are non-published posts,
+   * which only their author and admins reach, and an admin's review is not an audience.
+   */
+  private boolean countsAsView(Post post, UUID viewerId) {
+    if (post.getStatus() != PostStatus.published) {
+      return false;
+    }
+    return viewerId == null || !viewerId.equals(post.getUser().getId());
   }
 
   /**
@@ -281,14 +298,28 @@ public class PostService {
    * Replaces the post's whole media set (issue #137). Only media that exists, is not soft-deleted,
    * and has {@code status = succeed} may be attached; any other id fails the whole call with a 400
    * and nothing is written. An empty {@code mediaIds} detaches every attached media.
+   *
+   * <p>The filter never sees media (ADR-026), so a {@code published} post that gains a non-empty,
+   * changed media set is moved to {@code pending} and keeps its flag: the text verdict still holds,
+   * but the new media has not been reviewed by anyone (ADR-029). Detaching media, or re-sending the
+   * same set, changes nothing.
    */
   @Transactional
   public PostListResponse attachMedia(
       UUID actorId, boolean isAdmin, UUID postId, Set<UUID> mediaIds) {
     Post post = findManageablePost(actorId, isAdmin, postId);
-    post.setMedia(resolveMedia(mediaIds));
+    Set<Media> resolved = resolveMedia(mediaIds);
+    boolean mediaChanged = !nonDeletedMediaIds(post).equals(mediaIdsOf(resolved));
+    post.setMedia(resolved);
+    if (mediaChanged && !resolved.isEmpty() && post.getStatus() == PostStatus.published) {
+      post.setStatus(PostStatus.pending);
+      log.info("Post {} gained attached media; held for admin review", post.getId());
+    }
     Post saved = postRepository.saveAndFlush(post);
-    return toResponse(saved, attachedRecipeIds(postId));
+    // Gaining media can move a published post to pending: the chart loses it and the queue gains
+    // it.
+    dashboardCache.all();
+    return toResponse(saved, attachedRecipeIds(postId), actorId);
   }
 
   /**
@@ -317,7 +348,40 @@ public class PostService {
     recipeRepository.saveAll(currentlyAttached);
     recipeRepository.saveAll(requested);
 
-    return toResponse(post, recipeIds);
+    return toResponse(post, recipeIds, actorId);
+  }
+
+  /**
+   * Shapes the posts behind a saved-items page (BR-SAVED-002).
+   *
+   * <p>Separate from the saved-item query on purpose: that query decides <em>which</em> ids are in
+   * the page and in what order, and this one decides what a post looks like on the wire. Keeping
+   * them apart means the saved list cannot drift from the feed's post shape.
+   *
+   * <p>Same as the feed, {@code recipeIds} is empty here — only the single-post and attach-recipe
+   * endpoints populate it. Avatars and the author-only rejection reason are resolved in one batch,
+   * never per row.
+   */
+  @Transactional(readOnly = true)
+  public Map<UUID, PostListResponse> readPublishedPostsByIds(
+      UUID viewerId, Collection<UUID> postIds) {
+    if (postIds == null || postIds.isEmpty()) {
+      return Map.of();
+    }
+    List<Post> posts =
+        postRepository.findWithAuthorByIdIn(postIds).stream()
+            .filter(post -> post.getDeletedAt() == null)
+            .filter(post -> post.getStatus() == PostStatus.published)
+            .toList();
+    if (posts.isEmpty()) {
+      return Map.of();
+    }
+    List<PostListResponse> responses = posts.stream().map(postMapper::toListResponse).toList();
+    applyAuthorAvatars(responses);
+    applyRejectionReason(responses, posts, viewerId);
+    Map<UUID, PostListResponse> byId = new HashMap<>();
+    responses.forEach(response -> byId.put(response.getId(), response));
+    return byId;
   }
 
   /** Owner sees own posts; an Administrator sees every non-deleted post. */
@@ -328,63 +392,53 @@ public class PostService {
         .orElseThrow(() -> new ResourceNotFoundException("Post not found"));
   }
 
-  private void recordModerationIfAdminOverride(
-      UUID actorId, boolean isAdmin, Post post, String action) {
-    if (isAdmin && !post.getUser().getId().equals(actorId)) {
-      moderationLogRepository.save(
-          ModerationLog.builder()
-              .actorId(actorId)
-              .action(action)
-              .targetType("POST")
-              .targetId(post.getId())
-              .build());
-    }
-  }
-
   /**
    * BR-CONTENT-003: a post may be published only when it has at least one active category;
-   * unpublishing returns it to a private draft (also when it was {@code unpublished}, so a
-   * withdrawn rejected post never re-queues implicitly). A post that is (or becomes, via a content
-   * re-queue) published is re-checked so an edit cannot leave it without a category. Nothing is
-   * ever flipped to {@code published} here — that happens only when the content filter passes
-   * (FR-007 / Phase 9).
+   * withdrawing returns it to a private draft from any state it can be in — including {@code
+   * processing} or {@code pending}, so a post nobody has decided on yet can still be taken back.
+   * Nothing is ever flipped to {@code published} here; that happens only when the content filter
+   * passes or an admin approves (FR-007, ADR-023, ADR-029).
    *
-   * @param willRequeue whether this update also re-queues the post for content filtering, so an
-   *     unpublished post being re-checked is validated as if it were published
+   * @param willRequeue whether this update also re-queues the post for content filtering, so a
+   *     not-yet-published post being re-checked is validated as if it were published
    */
-  private void applyPublishState(Post post, Boolean publish, boolean isAdmin, boolean willRequeue) {
+  private void applyPublishState(Post post, Boolean publish, boolean willRequeue) {
     boolean published = post.getStatus() == PostStatus.published;
-    boolean unpublished = post.getStatus() == PostStatus.unpublished;
     boolean willBePublished = publish != null ? publish : (published || willRequeue);
-    if (willBePublished) {
-      if (post.getCategories().isEmpty()) {
-        throw new ValidationException(CATEGORY_REQUIRED_TO_PUBLISH);
-      }
+    if (willBePublished && post.getCategories().isEmpty()) {
+      throw new ValidationException(CATEGORY_REQUIRED_TO_PUBLISH);
     }
     if (publish == null) {
       return;
     }
-    if (post.getStatus() == PostStatus.hidden && !isAdmin) {
-      throw new ValidationException("A hidden post can only be changed by an administrator");
-    }
-    if (!publish && (published || unpublished)) {
-      post.setStatus(PostStatus.created);
+    if (!publish && post.getStatus() != PostStatus.drafted) {
+      post.setStatus(PostStatus.drafted);
       post.setPublishedAt(null);
+      // A withdrawn post is not being held for anyone, and a draft carries no verdict: the old
+      // filter result describes content the author has taken back (ADR-025).
+      post.setFlag(null);
+      post.setFlagDetail(null);
     }
   }
 
   /**
    * BR-FILTER-005: an explicit {@code publish: true} always queues (and re-queues) for content
-   * filtering; a content change re-queues a post that is still meant to be visible — status {@code
-   * published} or {@code unpublished} (a post the filter did not pass). A withdrawn post (draft)
-   * never re-queues implicitly.
+   * filtering; a content change re-queues a post that is still meant to be visible — {@code
+   * published}, {@code unpublished} (an admin refusal the author is appealing by editing), or a
+   * {@code pending} post that is waiting for a human. A post that is merely in flight is not queued
+   * again: the pending run reads the body at delivery time, so it already sees the edit. A
+   * withdrawn post (draft) never re-queues implicitly.
    */
   private boolean shouldEnqueueFilter(Post post, Boolean publish, boolean contentChanged) {
     if (publish != null) {
       return publish;
     }
-    return contentChanged
-        && (post.getStatus() == PostStatus.published || post.getStatus() == PostStatus.unpublished);
+    if (!contentChanged) {
+      return false;
+    }
+    return post.getStatus() == PostStatus.published
+        || post.getStatus() == PostStatus.unpublished
+        || post.getStatus() == PostStatus.pending;
   }
 
   /** FR-003: only a title or content change counts as a content change. */
@@ -396,17 +450,19 @@ public class PostService {
   }
 
   /**
-   * Filter bypass ({@code content_filter_enabled} platform setting off): route a post that would
-   * have been queued for content filtering straight to the admin review queue instead — {@code
-   * flag=NEEDS_REVIEW}, {@code status=unpublished}, no publication timestamp and no outbound row.
-   * An admin then acts on it through the moderation endpoint.
+   * Filter bypass ({@code content_filter_enabled} platform setting off): hold a post that would
+   * have been queued for content filtering at {@code pending} with {@code flag=FILTER_SKIPPED},
+   * instead of sending it to the provider — no publication timestamp and no outbound row. An admin
+   * resolves it through the moderation endpoint. {@code FILTER_SKIPPED} rather than {@code
+   * FILTER_FAILED}: the filter never formed an opinion (ADR-023).
    */
   private void markForAdminReview(Post post) {
-    post.setFlag(PostFlag.NEEDS_REVIEW);
-    post.setStatus(PostStatus.unpublished);
+    post.setStatus(PostStatus.pending);
+    post.setFlag(PostFlag.FILTER_SKIPPED);
+    post.setFlagDetail(PostFlagDetail.skipped(PostFlagDetail.CAUSE_DISABLED));
     post.setPublishedAt(null);
     postRepository.saveAndFlush(post);
-    log.info("Filter disabled: forwarded post {} to admin review queue", post.getId());
+    log.info("Filter disabled: post {} is held for admin review", post.getId());
   }
 
   /**
@@ -432,12 +488,24 @@ public class PostService {
   }
 
   @Transactional(readOnly = true)
-  public PageResponse<PostListResponse> listUserPosts(UUID userId, PostListRequest request) {
-    Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
+  public PageResponse<PostListResponse> listUserPosts(UUID userId, MyPostListRequest request) {
+    Pageable pageable =
+        PageRequest.of(
+            request.getPage(), request.getSize(), Sort.by(Sort.Direction.DESC, "createdAt"));
     Page<Post> posts =
-        postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(userId, pageable);
+        postRepository.findAll(
+            PostSpecifications.filtering(
+                parseStatus(request.getStatus()),
+                null,
+                userId,
+                request.getCategoryId(),
+                request.getCreatedFrom(),
+                request.getCreatedTo(),
+                null),
+            pageable);
 
-    return toPage(posts);
+    // Always the caller's own posts, so the reason is theirs to read.
+    return toPage(posts, userId);
   }
 
   /**
@@ -446,55 +514,101 @@ public class PostService {
    */
   @Transactional(readOnly = true)
   public PageResponse<PostListResponse> listPostsOfUser(
-      UUID viewerId, boolean isAdmin, UUID ownerId, PostListRequest request) {
+      UUID viewerId, boolean isAdmin, UUID ownerId, UserPostListRequest request) {
     userRepository
         .findById(ownerId)
         .filter(owner -> owner.getDeletedAt() == null)
         .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-    Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
+    boolean callerIsOwner = ownerId.equals(viewerId);
+    boolean seesAllStatuses = isAdmin || callerIsOwner;
+    Sort sort =
+        seesAllStatuses
+            ? Sort.by(Sort.Direction.DESC, "createdAt")
+            : Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("createdAt"));
+    Pageable pageable = PageRequest.of(request.getPage(), request.getSize(), sort);
     Page<Post> posts =
-        isAdmin || ownerId.equals(viewerId)
-            ? postRepository.findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(ownerId, pageable)
-            : postRepository
-                .findByUser_IdAndStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-                    ownerId, PostStatus.published, pageable);
+        postRepository.findAll(
+            PostSpecifications.filtering(
+                seesAllStatuses ? null : PostStatus.published,
+                null,
+                ownerId,
+                request.getCategoryId(),
+                request.getCreatedFrom(),
+                request.getCreatedTo(),
+                null),
+            pageable);
 
-    return toPage(posts);
+    // Only the owner gets the reason: an Administrator browsing this endpoint is not the author,
+    // and reads the same reason from the admin surfaces instead.
+    return toPage(posts, callerIsOwner ? viewerId : null);
   }
 
   /** BR-POST-010: the public feed serves every published, non-deleted post, newest first. */
   @Transactional(readOnly = true)
-  public PageResponse<PostListResponse> listFeed(PostListRequest request) {
-    Pageable pageable = PageRequest.of(request.getPage(), request.getSize());
+  public PageResponse<PostListResponse> listFeed(PostFeedRequest request) {
+    Pageable pageable =
+        PageRequest.of(
+            request.getPage(),
+            request.getSize(),
+            Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("createdAt")));
     Page<Post> posts =
-        postRepository.findByStatusAndDeletedAtIsNullOrderByPublishedAtDescCreatedAtDesc(
-            PostStatus.published, pageable);
+        postRepository.findAll(
+            PostSpecifications.filtering(
+                PostStatus.published,
+                null,
+                null,
+                request.getCategoryId(),
+                request.getCreatedFrom(),
+                request.getCreatedTo(),
+                request.getKeyword()),
+            pageable);
 
-    return toPage(posts);
+    // Public feed: no caller, so no reason. Published posts are not rejected ones anyway.
+    return toPage(posts, null);
+  }
+
+  /** Absent or blank means "every status"; ownership already grants visibility on this route. */
+  private PostStatus parseStatus(String status) {
+    if (status == null || status.isBlank()) {
+      return null;
+    }
+    try {
+      return PostStatus.valueOf(status);
+    } catch (IllegalArgumentException ex) {
+      throw new ValidationException(
+          "Status must be one of: drafted, processing, pending, published, unpublished");
+    }
   }
 
   /**
    * Maps one post and fills in the author avatar, which {@code PostMapper} cannot reach: the avatar
    * lives on {@code UserProfile}, not on {@code User}.
+   *
+   * <p>The admin rejection reason is included only when {@code viewerId} is the author's own id, or
+   * omitted when it is null (a guest). It is deliberately not left to the mapper: this payload is
+   * shared with public endpoints, so a value populated at mapping time would leak.
    */
-  private PostListResponse toResponse(Post post) {
+  private PostListResponse toResponse(Post post, UUID viewerId) {
     PostListResponse response = postMapper.toListResponse(post);
     applyAuthorAvatars(List.of(response));
+    applyRejectionReason(List.of(response), List.of(post), viewerId);
     return response;
   }
 
-  private PostListResponse toResponse(Post post, Set<UUID> recipeIds) {
+  private PostListResponse toResponse(Post post, Set<UUID> recipeIds, UUID viewerId) {
     PostListResponse response = postMapper.toListResponse(post, recipeIds);
     applyAuthorAvatars(List.of(response));
+    applyRejectionReason(List.of(response), List.of(post), viewerId);
     return response;
   }
 
   /** Page variant: one avatar query for the whole page, never one per post. */
-  private PageResponse<PostListResponse> toPage(Page<Post> posts) {
+  private PageResponse<PostListResponse> toPage(Page<Post> posts, UUID viewerId) {
     List<PostListResponse> content =
         posts.getContent().stream().map(postMapper::toListResponse).toList();
     applyAuthorAvatars(content);
+    applyRejectionReason(content, posts.getContent(), viewerId);
     return PageResponse.<PostListResponse>builder()
         .content(content)
         .page(posts.getNumber())
@@ -504,6 +618,33 @@ public class PostService {
         .first(posts.isFirst())
         .last(posts.isLast())
         .build();
+  }
+
+  /**
+   * Reveals each post's admin rejection reason, but only on rows the caller authored.
+   *
+   * <p>Called after mapping rather than inside it, because {@code PostListResponse} is also the
+   * payload of the public single-post, feed and related endpoints. The author is the one person
+   * entitled to read why their content was refused; a guest or another member must never see it.
+   *
+   * <p>Deliberately assigns on both branches instead of only the owner one: if the mapper guard
+   * ever regresses and populates the field, clearing it here keeps the leak from reaching a
+   * response rather than depending on the guard holding forever.
+   */
+  private void applyRejectionReason(
+      List<PostListResponse> responses, List<Post> posts, UUID viewerId) {
+    Map<UUID, String> reasons = new HashMap<>();
+    if (viewerId != null) {
+      for (Post post : posts) {
+        if (post.getRejectionReason() != null) {
+          reasons.put(post.getId(), post.getRejectionReason());
+        }
+      }
+    }
+    for (PostListResponse response : responses) {
+      boolean callerIsAuthor = viewerId != null && viewerId.equals(response.getUserId());
+      response.setRejectionReason(callerIsAuthor ? reasons.get(response.getId()) : null);
+    }
   }
 
   /**
@@ -556,14 +697,40 @@ public class PostService {
     return new HashSet<>(found);
   }
 
-  /** Only recipes that exist and are not soft-deleted may be attached (issue #137). */
+  /** Ids of the post's attached media that are not soft-deleted — the set a reader can see. */
+  private static Set<UUID> nonDeletedMediaIds(Post post) {
+    return post.getMedia().stream()
+        .filter(media -> media.getDeletedAt() == null)
+        .map(Media::getId)
+        .collect(Collectors.toSet());
+  }
+
+  private static Set<UUID> mediaIdsOf(Set<Media> media) {
+    return media.stream().map(Media::getId).collect(Collectors.toSet());
+  }
+
+  /**
+   * Only recipes that exist, are not soft-deleted, and are already {@link
+   * ModerationStatus#APPROVED} may be attached (issue #137).
+   *
+   * <p>A {@code PENDING} recipe is invisible to the public, so attaching it would expose an
+   * unreviewed body through a published post; a {@code REJECTED} one is refused outright (ADR-016).
+   * Every requested id is checked, including ids that are already attached, so a post can never
+   * keep an unapproved recipe simply by never touching it.
+   *
+   * <p>An ineligible id is reported as not found rather than as a bad request: whether the recipe
+   * exists but awaits review, or does not exist at all, is not the caller's business to
+   * distinguish, and the caller has no way to prove otherwise.
+   */
   private List<Recipe> resolveRecipes(Set<UUID> ids) {
     if (ids == null || ids.isEmpty()) {
       return List.of();
     }
-    List<Recipe> found = recipeRepository.findByIdInAndDeletedAtIsNull(ids);
+    List<Recipe> found =
+        recipeRepository.findByIdInAndDeletedAtIsNullAndModerationStatus(
+            ids, ModerationStatus.APPROVED);
     if (found.size() != ids.size()) {
-      throw new ValidationException("One or more recipes do not exist or are deleted");
+      throw new ResourceNotFoundException("One or more recipes are not found or are not approved");
     }
     return found;
   }

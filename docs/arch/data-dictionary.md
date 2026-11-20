@@ -80,12 +80,16 @@ _Description: Manages community blog posts and vegetarian articles._
 |------------|-----------|-----|------------|-------------|
 | id | UUID | PK | No | Unique identifier for each post |
 | user_id | UUID | FK | No | References User(id) - Author of the post |
-| location_id | UUID | FK | Yes | References Location(id) - Location tagged in post |
+| restaurant_id | UUID | FK | Yes | References Restaurant(id) - Restaurant tagged in post |
 | title | VARCHAR(255) | - | No | Title of the blog post |
 | content | TEXT | - | No | Plain-text content body, used as the semantic-filtering input |
 | raw_content | JSONB | - | No | Rich-text document produced by the frontend editor (V27) |
 | featured_image_url | TEXT | - | Yes | Thumbnail image for feed display |
-| status | VARCHAR(20) | - | No | Post status: created, processed, published, unpublished, hidden |
+| status | VARCHAR(20) | - | No | Post lifecycle: drafted, processing, pending, published, unpublished (ADR-023, ADR-029) |
+| flag | VARCHAR(32) | - | Yes | Last verdict, kept after publication: FILTER_PASSED (filter cleared the text), FILTER_FAILED, SIMILAR_CONTENT, FILTER_SKIPPED; NULL on a drafted post, on a post still `processing` (verdict outstanding), and on a row published before verdicts were stored (V56, V58, V61, ADR-025, ADR-029) |
+| flag_detail | JSONB | - | Yes | Evidence behind `flag`: one object per verdict, always carrying `kind` = `flag` — `{kind,score,threshold}` for FILTER_PASSED, `{kind,outcome,score,threshold}` for FILTER_FAILED, `{kind,postId,similarity,threshold}` for SIMILAR_CONTENT, `{kind,cause}` for FILTER_SKIPPED (V57, ADR-024, ADR-025) |
+| content_score | DOUBLE PRECISION | - | Yes | Relevance score of title + content from the last filter run; NULL when never scored |
+| rejection_reason | TEXT | - | Yes | Why an admin rejected the post; cleared on approve |
 | view_count | INT | - | No | Number of views |
 | published_at | TIMESTAMPTZ | - | Yes | Actual publish timestamp |
 | created_at | TIMESTAMPTZ | - | No | Timestamp when the post was created |
@@ -93,13 +97,19 @@ _Description: Manages community blog posts and vegetarian articles._
 | deleted_at | TIMESTAMPTZ | - | Yes | Soft delete timestamp |
 
 **Constraints:**
-- `chk_post_status`: status IN ('created','processed','published','unpublished','hidden')
+- `chk_post_status`: status IN ('drafted','processing','pending','published','unpublished') (V61)
+- `chk_post_processing_has_no_flag`: status <> 'processing' OR flag IS NULL (V61, ADR-029)
+- `chk_post_flag`: flag IN ('FILTER_PASSED','FILTER_FAILED','SIMILAR_CONTENT','FILTER_SKIPPED') (V58)
+- `chk_post_flag_absent_on_draft`: flag IS NULL OR status <> 'drafted' (V58, ADR-025; replaced `chk_post_flag_requires_processing`)
+- `chk_post_flag_detail_requires_flag`: flag_detail IS NULL OR flag IS NOT NULL
+- `chk_post_flag_detail_is_object`: flag_detail IS NULL OR jsonb_typeof(flag_detail) = 'object'
+- `chk_post_flag_detail_kind_matches_flag`: flag_detail IS NULL OR flag_detail->>'kind' = flag (ADR-024)
 - FK: user_id REFERENCES "user"(id) ON DELETE CASCADE
-- FK: location_id REFERENCES location(id) ON DELETE SET NULL
+- FK: restaurant_id REFERENCES restaurant(id) ON DELETE SET NULL
 
 **Indexes:**
 - `idx_post_user_id` ON (user_id)
-- `idx_post_location_id` ON (location_id)
+- `idx_post_restaurant_id` ON (restaurant_id)
 - `idx_post_status` ON (status) WHERE deleted_at IS NULL
 - `idx_post_published_at` ON (published_at)
 
@@ -237,18 +247,41 @@ _Description: Master list of vegan food materials/ingredients available in the s
 |------------|-----------|-----|------------|-------------|
 | id | UUID | PK | No | Unique identifier for ingredient |
 | name | VARCHAR(100) | - | No | Ingredient name (e.g., Tofu, Mushroom, Spinach) |
+| unit | VARCHAR(10) | - | Yes | Measurement unit: `G`, `ML` or `PIECE`. `NULL` = not yet decided |
+| calories | DECIMAL(12,6) | - | Yes | kcal per **one** `unit` |
+| protein_g | DECIMAL(12,6) | - | Yes | Protein (g) per one `unit` |
+| carbohydrate_g | DECIMAL(12,6) | - | Yes | Carbohydrate (g) per one `unit` |
+| fat_g | DECIMAL(12,6) | - | Yes | Fat (g) per one `unit` |
+| fiber_g | DECIMAL(12,6) | - | Yes | Fibre (g) per one `unit` |
+| moderation_status | VARCHAR(20) | - | No | Review state: `PENDING`, `APPROVED`, `REJECTED` (ADR-016) |
 | created_at | TIMESTAMPTZ | - | No | Timestamp of creation |
 | updated_at | TIMESTAMPTZ | - | No | Timestamp of last update |
+| deleted_at | TIMESTAMPTZ | - | Yes | Soft delete timestamp |
 
-_Nutrition is not stored here. Before V43 the table carried per-100 g columns
-that had no recorded basis and could not be turned into a dish figure; they
-were dropped and the concept moved to `recipe` as author-entered totals._
+_Nutrition is stored **here**, on the ingredient, denominated per one unit of that
+ingredient's own `unit` — not per 100 g and not per serving (V49, ADR-022). V42 had
+put nutrition on `recipe` as author-entered input; it is now a derived output of the
+lines. Values are `DECIMAL(12,6)` because a per-gram figure such as cooked rice's
+0.0130 g protein/g loses a fifth of its value at two decimals._
+
+_There is deliberately no piece-weight column. A `PIECE` row's values are the
+estimate for one piece, entered as that estimate; the mass assumption is already
+folded into the number, so a second field would be unread and could silently
+disagree with it._
+
+**Constraints:**
+- `chk_ingredient_unit`: `unit IN ('G','ML','PIECE')` — a `NULL` unit satisfies a `CHECK` by SQL's three-valued logic, so "undecided" is allowed
+- `chk_ingredient_nutrition_complete`: all five nutrition values, or all null
+- `chk_ingredient_nutrition_non_negative`: no negative values
+
+**Indexes:**
+- `idx_ingredient_missing_nutrition` ON (name) WHERE `calories IS NULL AND deleted_at IS NULL` (curation queue)
 
 ---
 
 ## Table 12: Recipe
 
-_Description: Manages vegan recipes, preparation steps, and calorie values._
+_Description: Manages vegan recipes, preparation steps, and their derived nutrition totals._
 
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
@@ -262,18 +295,27 @@ _Description: Manages vegan recipes, preparation steps, and calorie values._
 | cook_time_minutes | INT | - | Yes | Estimated cooking duration in minutes |
 | servings | INT | - | No | Number of servings |
 | difficulty | VARCHAR(20) | - | Yes | Difficulty: EASY, MEDIUM, HARD |
-| calories | DECIMAL(10,2) | - | Yes | Author-entered calories for the **whole** recipe |
-| protein_g | DECIMAL(10,2) | - | Yes | Author-entered protein (g) for the whole recipe |
-| carbohydrate_g | DECIMAL(10,2) | - | Yes | Author-entered carbohydrate (g) for the whole recipe |
-| fat_g | DECIMAL(10,2) | - | Yes | Author-entered fat (g) for the whole recipe |
-| fiber_g | DECIMAL(10,2) | - | Yes | Author-entered fibre (g) for the whole recipe |
+| calories | DECIMAL(10,2) | - | Yes | Derived kcal for the **whole** recipe |
+| protein_g | DECIMAL(10,2) | - | Yes | Derived protein (g) for the whole recipe |
+| carbohydrate_g | DECIMAL(10,2) | - | Yes | Derived carbohydrate (g) for the whole recipe |
+| fat_g | DECIMAL(10,2) | - | Yes | Derived fat (g) for the whole recipe |
+| fiber_g | DECIMAL(10,2) | - | Yes | Derived fibre (g) for the whole recipe |
 | created_at | TIMESTAMPTZ | - | No | Timestamp when the recipe is created |
 | updated_at | TIMESTAMPTZ | - | No | Timestamp when the recipe is updated |
-
-_Nutrition columns (V42) are totals for the whole recipe, not per serving, and
-are nullable on purpose: `NULL` means the author did not provide the value and
-is never coerced to `0`. Per-serving values are derived from `servings`._
 | deleted_at | TIMESTAMPTZ | - | Yes | Soft delete timestamp |
+
+_Nutrition columns are **outputs, never inputs** (V49, ADR-022, BR-RECP-004).
+Each is `Σ(line.amount × ingredient.macro_per_unit)` over the recipe's lines,
+rounded once at the total to 2 dp with `HALF_UP`. No API accepts them from a
+client; the only writer is `RecipeNutritionService`, which recomputes and
+persists inside the same transaction whenever a recipe's lines or one of its
+ingredients' unit/nutrition change._
+
+_All five are `NULL` together and only when at least one ingredient is
+unresolved — no unit, or not all five values (BR-RECP-006). `NULL` means "cannot
+be priced yet" and is never coerced to `0`; a resolved recipe whose every
+ingredient is 0 kcal reports `0.00`. Totals are for the whole recipe, not per
+serving (V42 convention); per-serving values are derived from `servings`._
 
 **Constraints:**
 - `chk_difficulty`: difficulty IN ('EASY','MEDIUM','HARD')
@@ -295,8 +337,13 @@ _Description: Junction table connecting recipes with required ingredients (M:N r
 |------------|-----------|-----|------------|-------------|
 | recipe_id | UUID | PK, FK | No | References Recipe(id) |
 | ingredient_id | UUID | PK, FK | No | References Ingredient(id) |
-| amount | DECIMAL(10,3) | - | No | Required quantity for this recipe |
-| unit | VARCHAR(30) | - | No | Measurement unit (e.g., g, ml, tsp, tbsp, cup) |
+| amount | DECIMAL(10,3) | - | No | Quantity, **in the ingredient's own `unit`** |
+
+_There is no `unit` column (V49, ADR-022). The amount's meaning comes from the
+referenced ingredient, so one ingredient cannot be measured two ways across two
+recipes: `200` on a `G` ingredient is 200 g and on an `ML` ingredient is 200 ml.
+The trade-off is that changing an ingredient's unit silently reinterprets every
+stored amount — see ADR-022's consequences._
 
 **Constraints:**
 - FK: recipe_id REFERENCES recipe(id) ON DELETE CASCADE
@@ -375,19 +422,18 @@ _Description: Maps specific dishes to individual days and meals within a weekly 
 
 ---
 
-## Table 17: Location
+## Table 17: Restaurant
 
-_Description: Stores vegan restaurant and grocery store locations for map discovery._
+_Description: Stores vegan restaurant directory entries for map discovery._
 
 | Field Name | Data Type | Key | Allow Null | Description |
 |------------|-----------|-----|------------|-------------|
-| id | UUID | PK | No | Unique identifier for each location |
-| name | VARCHAR(255) | - | No | Store / Restaurant name |
+| id | UUID | PK | No | Unique identifier for each restaurant |
+| name | VARCHAR(255) | - | No | Restaurant name |
 | address | VARCHAR(255) | - | No | Physical street address |
 | latitude | DECIMAL(9,6) | - | No | GPS latitude coordinate |
 | longitude | DECIMAL(9,6) | - | No | GPS longitude coordinate |
 | phone_number | VARCHAR(20) | - | Yes | Contact phone number |
-| place_type | VARCHAR(20) | - | No | Type: restaurant, grocery, cafe, market |
 | opening_hours | JSONB | - | Yes | Structured opening hours for "open now" queries |
 | website_url | TEXT | - | Yes | External website URL |
 | rating | DECIMAL(2,1) | - | Yes | Average rating (0.0-5.0) |
@@ -397,14 +443,12 @@ _Description: Stores vegan restaurant and grocery store locations for map discov
 | deleted_at | TIMESTAMPTZ | - | Yes | Soft delete timestamp |
 
 **Constraints:**
-- `chk_place_type`: place_type IN ('restaurant','grocery','cafe','market')
 - `chk_price_level`: price_level BETWEEN 1 AND 4
 
 **Indexes:**
-- `idx_location_active` ON (id) WHERE deleted_at IS NULL
-- `idx_location_place_type` ON (place_type)
-- `idx_location_coords` ON (latitude, longitude)
-- `idx_location_opening_hours` ON (opening_hours) USING GIN
+- `idx_restaurant_active` ON (id) WHERE deleted_at IS NULL
+- `idx_restaurant_coords` ON (latitude, longitude)
+- `idx_restaurant_opening_hours` ON (opening_hours) USING GIN
 
 ---
 
@@ -622,6 +666,51 @@ _Description: Curated association between a dish and the ingredients that normal
 
 ---
 
+## Table 26: Saved_Item
+
+_Description: A member's saved post or saved recipe (V52 / BR-SAVED-001, BR-SAVED-002). One row targets exactly one thing — `post_id` or `recipe_id`, never both and never neither — so a single bookmark table backs both saved lists while every target stays a real foreign key. Saves are private to the member and never counted as a public metric._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| id | UUID | PK | No | Unique identifier for the save |
+| user_id | UUID | FK | No | References User(id) — the member who saved the item |
+| post_id | UUID | FK | Yes | References Post(id); null when the save targets a recipe |
+| recipe_id | UUID | FK | Yes | References Recipe(id); null when the save targets a post |
+| saved_at | TIMESTAMPTZ | - | No | Timestamp of the first save of this target by this member |
+
+**Constraints:**
+- PK: (id)
+- CHECK `saved_item_exactly_one_target`: exactly one of `post_id`, `recipe_id` is non-null
+- FK: user_id REFERENCES `"user"`(id) ON DELETE CASCADE
+- FK: post_id REFERENCES post(id) ON DELETE CASCADE
+- FK: recipe_id REFERENCES recipe(id) ON DELETE CASCADE
+
+**Indexes:**
+- `uq_saved_item_post` UNIQUE ON (user_id, post_id) WHERE post_id IS NOT NULL
+- `uq_saved_item_recipe` UNIQUE ON (user_id, recipe_id) WHERE recipe_id IS NOT NULL
+- `idx_saved_item_user_saved_at` ON (user_id, saved_at DESC)
+
+---
+
+## Table 27: Restaurant_Dish
+
+_Description: Curated association between a restaurant and the dishes an admin attaches to it (V55 / issue #195). Nested in the restaurant detail/create/update responses as the public 5-field `dishes` shape (id, name, description, imageUrl, cuisineType), filtered to non-soft-deleted dishes and ordered by name at read time. No extra attributes — no pricing, availability, or ordering._
+
+| Field Name | Data Type | Key | Allow Null | Description |
+|------------|-----------|-----|------------|-------------|
+| restaurant_id | UUID | PK, FK | No | References Restaurant(id) |
+| dish_id | UUID | PK, FK | No | References Dish(id) |
+
+**Constraints:**
+- PK: (restaurant_id, dish_id)
+- FK: restaurant_id REFERENCES restaurant(id) ON DELETE CASCADE
+- FK: dish_id REFERENCES dish(id) ON DELETE CASCADE
+
+**Indexes:**
+- `idx_restaurant_dish_dish_id` ON (dish_id)
+
+---
+
 ## Relationship Summary
 
 - **User** 1:N **UserProfile** (1:1 via unique FK)
@@ -637,16 +726,18 @@ _Description: Curated association between a dish and the ingredients that normal
 - **Post** M:N **Category** (via Post_Category)
 - **Post** M:N **Media** (via Post_Media)
 - **Post** M:N **Recipe** (via Post_Recipe)
-- **Post** N:1 **Location** (tagged location)
+- **Post** N:1 **Restaurant** (tagged restaurant)
 - **Comment** N:1 **Post**, N:1 **Comment** (parent)
 - **Vote** N:1 **Post**, N:1 **User** (unique per user+post)
+- **SavedItem** N:1 **User**, and N:1 **Post** *or* N:1 **Recipe** (exactly one target; unique per user+target)
 - **Recipe** N:1 **Dish** (variations of a canonical dish)
 - **Recipe** N:1 **User** (author)
 - **Recipe** M:N **Ingredient** (via Recipe_Ingredient)
 - **Dish** M:N **Ingredient** (via Dish_Ingredient; curated suggestions, soft-withdrawable)
 - **Menu** N:1 **User**
 - **MenuDetail** N:1 **Menu**, N:1 **Dish** (unique per menu+date+meal_type)
-- **Location** 1:N **Post** (via location_id)
+- **Restaurant** 1:N **Post** (via restaurant_id)
+- **Restaurant** M:N **Dish** (via Restaurant_Dish)
 - **AIConversation** N:1 **User** (nullable)
 - **AIMessage** N:1 **AIConversation**
 - **AIUsage** N:1 **User** (nullable)

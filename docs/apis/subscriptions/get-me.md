@@ -1,7 +1,10 @@
 # API Reference: GET /api/subscriptions/me
 
 ## Overview
-Return the authenticated member's AI subscription: current tier and status, monthly quota usage, renewal date, plan summary, and latest successful payment.
+Return the authenticated member's remaining AI request allowance — one number,
+derived from their granted acquisitions and lifetime consumption. This endpoint
+no longer reports a tier, a status, a plan, a usage window, or a latest
+payment.
 
 ## Endpoint
 ```
@@ -28,69 +31,42 @@ No request body
 ```json
 {
   "success": true,
-  "message": "Subscription retrieved successfully",
+  "message": "Remaining usage retrieved successfully",
   "data": {
-    "tier": "FREE",
-    "status": "active",
-    "renewalDate": null,
-    "usage": {
-      "used": 0,
-      "limit": 20,
-      "periodStart": "2026-10-01T00:00:00Z",
-      "periodEnd": "2026-11-01T00:00:00Z"
-    },
-    "currentPlan": {
-      "code": "FREE",
-      "name": "Free",
-      "monthlyRequestLimit": 20,
-      "price": {
-        "amount": 0,
-        "currency": "VND"
-      }
-    },
-    "latestPayment": null
+    "remainingUsage": 5
   }
 }
 ```
 
 | Field | Type | Description |
-|-------|------|--------------|
+|-------|------|-------------|
 | success | boolean | Always true for success |
 | message | string | Human-readable message |
-| data.tier | string | Plan code of the effective plan (`FREE`, `PRO`) |
-| data.status | string | Subscription status (`active`, `cancelled`, `past_due`). Defaults to `active` when the member has no subscription row |
-| data.renewalDate | string \| null | ISO-8601 instant of the subscription period end; `null` for the synthesized FREE default |
-| data.usage.used | integer | AI requests already made in the current period (0 when none) |
-| data.usage.limit | integer | `monthly_request_limit` of the effective plan |
-| data.usage.periodStart | string | ISO-8601 instant the usage window opens (first instant of the current UTC month) |
-| data.usage.periodEnd | string | ISO-8601 instant the usage window closes (first instant of the next UTC month) |
-| data.currentPlan.code | string | Plan code, identical to `data.tier` |
-| data.currentPlan.name | string | Display name of the plan |
-| data.currentPlan.monthlyRequestLimit | integer | Monthly request allowance — same value as `data.usage.limit` |
-| data.currentPlan.price.amount | number | Price of the plan (0 for FREE) |
-| data.currentPlan.price.currency | string | ISO-4217 currency code, e.g. `VND` |
-| data.latestPayment | object \| null | Latest succeeded payment, or `null` when none exists |
-| data.latestPayment.planCode | string | Plan the payment was for |
-| data.latestPayment.amount | number | Amount charged |
-| data.latestPayment.currency | string | ISO-4217 currency code |
-| data.latestPayment.status | string | Always `succeeded` for this field |
-| data.latestPayment.provider | string \| null | Payment provider identifier; `null` when unknown |
-| data.latestPayment.paidAt | string | ISO-8601 instant the payment succeeded |
+| data.remainingUsage | integer | `max(allowance − consumed, 0)`. Never negative; `0` when the member has no granted acquisitions or has consumed everything |
 
-Subscription ids, user ids, ledger ids, and `provider_reference` are deliberately never returned.
+`remainingUsage` is the **only** usage number any API returns. `used`, the
+plan limit, and any window start/end are not exposed anywhere.
 
 ### Error Responses
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
 | 401 | Missing, expired, or invalid JWT | "Unauthorized" |
-| 500 | Server error, including a missing seeded `FREE` plan row | "Internal server error" |
+| 500 | Server error | "Internal server error" |
 
 ## Business Rules
-- Read-only: no row is created or updated (FR-008).
-- No `ai_subscription` row means the FREE default is synthesized from the `ai_plan` row with `code = 'FREE'` — the response is identical to a real FREE subscription, except `renewalDate` is `null`. No row is written (FR-003).
-- `usage` is the current UTC calendar month; `used` sums `ai_usage.request_count` over rows whose `[period_start, period_end)` overlaps that window (FR-004).
-- `latestPayment` is the newest `payment_ledger` row with `status = 'succeeded'` by `paid_at`, or `null` (FR-005).
-- Feature Spec: `docs/feats/subscription-api.md`
+- Read-only: no row is created or updated. An account with no acquisitions is
+  not given a plan at read time (BR-SUBS-007).
+- `allowance` is the live `SUM(ai_plan.request_quota)` over the member's
+  `ai_subscription` rows with `granted_at IS NOT NULL`, **not** filtered by
+  `ai_plan.active`. `consumed` is `ai_usage.request_count`, a lifetime counter.
+  Nothing is stored on `user` and nothing is snapshotted (BR-SUBS-007).
+- A plan quota edit is retroactive: the next read already reflects it
+  (BR-SUBS-010).
+- Existing accounts have no acquisition rows, so they read `0` until they
+  explicitly claim the free plan through `POST /api/subscriptions/acquire`.
+- Deactivating a plan does not change the allowance of members who already hold
+  it (BR-SUBS-009).
+- Feature Spec: `docs/feats/request-credits.md`
 
 ## Example
 
@@ -100,43 +76,30 @@ curl -X GET "http://localhost:8080/api/subscriptions/me" \
   -H "Authorization: Bearer <access-token>"
 ```
 
-### Success Response (200)
+### Before claiming the free plan (200)
 ```json
 {
   "success": true,
-  "message": "Subscription retrieved successfully",
-  "data": {
-    "tier": "PRO",
-    "status": "active",
-    "renewalDate": "2026-11-01T00:00:00Z",
-    "usage": {
-      "used": 42,
-      "limit": 500,
-      "periodStart": "2026-10-01T00:00:00Z",
-      "periodEnd": "2026-11-01T00:00:00Z"
-    },
-    "currentPlan": {
-      "code": "PRO",
-      "name": "Pro",
-      "monthlyRequestLimit": 500,
-      "price": {
-        "amount": 49000,
-        "currency": "VND"
-      }
-    },
-    "latestPayment": {
-      "planCode": "PRO",
-      "amount": 49000,
-      "currency": "VND",
-      "status": "succeeded",
-      "provider": "momo",
-      "paidAt": "2026-10-01T10:15:00Z"
-    }
-  }
+  "message": "Remaining usage retrieved successfully",
+  "data": { "remainingUsage": 0 }
 }
 ```
 
+### After claiming FREE and buying PRO once (200)
+```json
+{
+  "success": true,
+  "message": "Remaining usage retrieved successfully",
+  "data": { "remainingUsage": 488 }
+}
+```
+
+(5 free requests + 500 PRO requests − 17 consumed.)
+
 ## Related
-- Feature Spec: `docs/feats/subscription-api.md`
-- Sibling endpoint: `docs/apis/subscriptions/get-subscriptions.md` (`GET /api/subscriptions`, public plan list)
-- Usage source: `ai_usage` table — migration `V10__create_ai_tables.sql`
+- Feature Spec: `docs/feats/request-credits.md`
+- ADR: `docs/adrs/021-request-allowance-as-acquisition-sum.md`
+- Acquire a plan: `docs/apis/subscriptions/post-acquire.md` (`POST /api/subscriptions/acquire`)
+- Acquisition history: `docs/apis/subscriptions/get-history.md` (`GET /api/subscriptions/me/history`)
+- Plan catalogue: `docs/apis/subscriptions/get-subscriptions.md` (`GET /api/subscriptions`, public plan list)
+- Business Rules: `docs/brs/subscriptions.md`

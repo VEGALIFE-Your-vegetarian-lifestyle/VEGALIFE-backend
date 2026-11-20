@@ -99,7 +99,7 @@ class AdminPlanControllerIntegrationTest {
         AiPlan.builder()
             .code("LEGACY")
             .name("Legacy")
-            .monthlyRequestLimit(5)
+            .requestQuota(5)
             .priceAmount(0)
             .priceCurrency("VND")
             .active(false)
@@ -136,7 +136,7 @@ class AdminPlanControllerIntegrationTest {
                     {
                       "code": "PREMIUM",
                       "name": "Premium",
-                      "monthlyRequestLimit": 500,
+                      "requestQuota": 500,
                       "priceAmount": 99000,
                       "priceCurrency": "VND",
                       "active": true,
@@ -154,7 +154,7 @@ class AdminPlanControllerIntegrationTest {
         AiPlan.builder()
             .code("PREMIUM")
             .name("Premium")
-            .monthlyRequestLimit(500)
+            .requestQuota(500)
             .priceAmount(99000)
             .priceCurrency("VND")
             .active(true)
@@ -171,7 +171,7 @@ class AdminPlanControllerIntegrationTest {
                     {
                       "code": "premium",
                       "name": "Premium Again",
-                      "monthlyRequestLimit": 500,
+                      "requestQuota": 500,
                       "priceAmount": 99000,
                       "priceCurrency": "VND",
                       "active": true,
@@ -193,7 +193,7 @@ class AdminPlanControllerIntegrationTest {
                     {
                       "code": "PREMIUM",
                       "name": "Premium",
-                      "monthlyRequestLimit": 500,
+                      "requestQuota": 500,
                       "priceAmount": 99000,
                       "priceCurrency": "VND",
                       "active": true,
@@ -210,7 +210,7 @@ class AdminPlanControllerIntegrationTest {
             AiPlan.builder()
                 .code("PREMIUM")
                 .name("Premium")
-                .monthlyRequestLimit(500)
+                .requestQuota(500)
                 .priceAmount(99000)
                 .priceCurrency("VND")
                 .active(true)
@@ -240,7 +240,7 @@ class AdminPlanControllerIntegrationTest {
   }
 
   @Test
-  void updatePlan_deactivatingFreePlan_returns409() throws Exception {
+  void updatePlan_deactivatingFreePlan_succeedsBecauseNoPlanIsSpecial() throws Exception {
     AiPlan free =
         aiPlanRepository
             .findByCode("FREE")
@@ -250,7 +250,7 @@ class AdminPlanControllerIntegrationTest {
                         AiPlan.builder()
                             .code("FREE")
                             .name("Free")
-                            .monthlyRequestLimit(20)
+                            .requestQuota(5)
                             .priceAmount(0)
                             .priceCurrency("VND")
                             .active(true)
@@ -263,7 +263,10 @@ class AdminPlanControllerIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"active\": false}"))
-        .andExpect(status().isConflict());
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.active").value(false));
+
+    assertThat(aiPlanRepository.findById(free.getId()).orElseThrow().isActive()).isFalse();
   }
 
   @Test
@@ -273,7 +276,7 @@ class AdminPlanControllerIntegrationTest {
             AiPlan.builder()
                 .code("PREMIUM")
                 .name("Premium")
-                .monthlyRequestLimit(500)
+                .requestQuota(500)
                 .priceAmount(99000)
                 .priceCurrency("VND")
                 .active(true)
@@ -290,7 +293,7 @@ class AdminPlanControllerIntegrationTest {
   }
 
   @Test
-  void deletePlan_freePlan_returns409() throws Exception {
+  void deletePlan_freePlan_deactivatesLikeAnyOtherPlan() throws Exception {
     AiPlan free =
         aiPlanRepository
             .findByCode("FREE")
@@ -300,7 +303,7 @@ class AdminPlanControllerIntegrationTest {
                         AiPlan.builder()
                             .code("FREE")
                             .name("Free")
-                            .monthlyRequestLimit(20)
+                            .requestQuota(5)
                             .priceAmount(0)
                             .priceCurrency("VND")
                             .active(true)
@@ -311,7 +314,9 @@ class AdminPlanControllerIntegrationTest {
         .perform(
             delete("/api/admin/plans/{id}", free.getId())
                 .header("Authorization", "Bearer " + adminToken))
-        .andExpect(status().isConflict());
+        .andExpect(status().isOk());
+
+    assertThat(aiPlanRepository.findById(free.getId()).orElseThrow().isActive()).isFalse();
   }
 
   @Test
@@ -330,7 +335,7 @@ class AdminPlanControllerIntegrationTest {
             AiPlan.builder()
                 .code("PREMIUM")
                 .name("Premium")
-                .monthlyRequestLimit(500)
+                .requestQuota(500)
                 .priceAmount(99000)
                 .priceCurrency("VND")
                 .active(true)

@@ -3,7 +3,6 @@ package com.vegalife.controller.admin;
 import com.vegalife.dto.request.admin.AdminComponentListRequest;
 import com.vegalife.dto.request.admin.AdminDishCreateRequest;
 import com.vegalife.dto.request.admin.AdminDishUpdateRequest;
-import com.vegalife.dto.request.admin.ComponentModerationRequest;
 import com.vegalife.dto.response.admin.AdminDishResponse;
 import com.vegalife.service.admin.AdminDishService;
 import com.vegalife.shared.dto.ApiResponse;
@@ -13,6 +12,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -47,7 +47,7 @@ public class AdminDishController {
 
   @GetMapping
   public ResponseEntity<ApiResponse<PageResponse<AdminDishResponse>>> listDishes(
-      @Valid @ModelAttribute AdminComponentListRequest request) {
+      @Valid @ParameterObject @ModelAttribute AdminComponentListRequest request) {
     PageResponse<AdminDishResponse> page = adminDishService.listDishes(request);
     return ResponseEntity.ok(ApiResponse.success(page, "Dishes retrieved successfully"));
   }
@@ -84,24 +84,15 @@ public class AdminDishController {
 
   @PostMapping("/{dishId}/approve")
   public ResponseEntity<ApiResponse<AdminDishResponse>> approveDish(
-      @AuthenticationPrincipal UUID adminId,
-      @PathVariable UUID dishId,
-      @Valid @RequestBody(required = false) ComponentModerationRequest request) {
-    AdminDishResponse dish = adminDishService.approveDish(adminId, dishId, reasonOf(request));
+      @AuthenticationPrincipal UUID adminId, @PathVariable UUID dishId) {
+    AdminDishResponse dish = adminDishService.approveDish(adminId, dishId);
     return ResponseEntity.ok(ApiResponse.success(dish, "Dish approved successfully"));
   }
 
   @PostMapping("/{dishId}/reject")
   public ResponseEntity<ApiResponse<AdminDishResponse>> rejectDish(
-      @AuthenticationPrincipal UUID adminId,
-      @PathVariable UUID dishId,
-      @Valid @RequestBody(required = false) ComponentModerationRequest request) {
-    AdminDishResponse dish = adminDishService.rejectDish(adminId, dishId, reasonOf(request));
+      @AuthenticationPrincipal UUID adminId, @PathVariable UUID dishId) {
+    AdminDishResponse dish = adminDishService.rejectDish(adminId, dishId);
     return ResponseEntity.ok(ApiResponse.success(dish, "Dish rejected successfully"));
-  }
-
-  /** The reason is optional, so an absent body must not be a 400. */
-  private static String reasonOf(ComponentModerationRequest request) {
-    return request == null ? null : request.getReason();
   }
 }

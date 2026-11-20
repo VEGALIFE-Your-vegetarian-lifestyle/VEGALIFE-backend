@@ -82,8 +82,20 @@ public class Post {
   private PostStatus status;
 
   @Enumerated(EnumType.STRING)
-  @Column(name = "flag", length = 16)
+  @Column(name = "flag", length = 32)
   private PostFlag flag;
+
+  /**
+   * JSON snapshot for {@link #flag}, never a free-form caption (ADR-024, ADR-025). One object per
+   * verdict, always carrying {@code kind} so it cannot describe a different verdict than {@code
+   * flag}: the matched post, similarity and threshold for {@code SIMILAR_CONTENT}; the outcome,
+   * score and applied threshold for {@code FILTER_FAILED}; the score and accept boundary for {@code
+   * FILTER_PASSED}; a cause code for {@code FILTER_SKIPPED}. Kept out of {@code flag} so the flag
+   * stays a closed, exactly-matchable vocabulary the admin filter can rely on (ADR-023).
+   */
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "flag_detail")
+  private JsonNode flagDetail;
 
   /**
    * Relevance score of {@code title + content} as produced by the content filter. {@code null}
@@ -92,6 +104,17 @@ public class Post {
    */
   @Column(name = "content_score")
   private Double contentScore;
+
+  /**
+   * The admin-supplied reason for the most recent rejection, cleared when an admin approves the
+   * post again. Current state only: no earlier reason is retained anywhere.
+   *
+   * <p>Only a human decision writes this; the content filter records its verdict in {@link #flag}
+   * instead. Nullable because the reason is optional, and because rows rejected before the column
+   * existed never had one recorded.
+   */
+  @Column(name = "rejection_reason", columnDefinition = "TEXT")
+  private String rejectionReason;
 
   @Column(name = "view_count", nullable = false)
   private Integer viewCount;

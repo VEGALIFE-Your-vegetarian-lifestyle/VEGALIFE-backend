@@ -19,13 +19,12 @@ import com.vegalife.repository.ai.AiMessageRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.service.admin.PlatformSettingsProvider;
 import com.vegalife.service.ai.AiChatService;
-import com.vegalife.service.ai.AiQuotaGuard;
 import com.vegalife.service.ai.AiToolContext;
 import com.vegalife.service.ai.MenuTools;
+import com.vegalife.service.credit.RequestAllowanceService;
 import com.vegalife.service.menu.MenuQueryFilterResolver;
 import com.vegalife.service.menu.MenuService;
 import jakarta.validation.Validation;
-import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -69,7 +68,7 @@ class AiChatServiceToolTest {
   @Mock private AiMessageRepository messageRepository;
   @Mock private UserProfileRepository userProfileRepository;
   @Mock private PlatformSettingsProvider platformSettingsProvider;
-  @Mock private AiQuotaGuard quotaGuard;
+  @Mock private RequestAllowanceService requestAllowanceService;
   @Mock private TransactionTemplate transactionTemplate;
 
   private AiChatService aiChatService;
@@ -108,7 +107,7 @@ class AiChatServiceToolTest {
             messageRepository,
             userProfileRepository,
             platformSettingsProvider,
-            quotaGuard,
+            requestAllowanceService,
             transactionTemplate,
             menuTools,
             ProfileMapper.INSTANCE);
@@ -131,13 +130,7 @@ class AiChatServiceToolTest {
   }
 
   private void stubQuotaAndPersistence() {
-    when(quotaGuard.requireAllowance(userId))
-        .thenReturn(
-            new AiQuotaGuard.QuotaWindow(
-                Instant.parse("2026-10-01T00:00:00Z"),
-                Instant.parse("2026-11-01T00:00:00Z"),
-                20,
-                1L));
+    when(requestAllowanceService.requireAllowance(userId)).thenReturn(3L);
     when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.empty());
     when(conversationRepository.save(any(AiConversation.class)))
         .thenAnswer(
@@ -202,13 +195,7 @@ class AiChatServiceToolTest {
   @Test
   void stream_carriesTheCallerUserIdAsToolContext() {
     stubChatClientAndInit();
-    when(quotaGuard.requireAllowance(userId))
-        .thenReturn(
-            new AiQuotaGuard.QuotaWindow(
-                Instant.parse("2026-10-01T00:00:00Z"),
-                Instant.parse("2026-11-01T00:00:00Z"),
-                20,
-                1L));
+    when(requestAllowanceService.requireAllowance(userId)).thenReturn(3L);
     when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.empty());
     when(spec.stream()).thenReturn(streamSpec);
     when(streamSpec.content()).thenReturn(Flux.empty());

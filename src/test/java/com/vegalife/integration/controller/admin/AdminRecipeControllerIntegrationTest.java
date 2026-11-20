@@ -1,13 +1,15 @@
 package com.vegalife.integration.controller.admin;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.vegalife.enums.post.PostFlag;
 import com.vegalife.enums.post.PostStatus;
 import com.vegalife.enums.recipe.Difficulty;
+import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.recipe.Unit;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.post.Category;
@@ -121,7 +123,6 @@ class AdminRecipeControllerIntegrationTest {
                     com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode())
                 .categories(new HashSet<>(Set.of(recipes)))
                 .status(PostStatus.published)
-                .flag(PostFlag.PASSED)
                 .viewCount(3)
                 .build());
     Recipe tofuBowl = createRecipe(author2, "Aardvark tofu bowl", null, Set.of(linkedPost), true);
@@ -152,7 +153,14 @@ class AdminRecipeControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].categoryIds[0]").value(recipes.getId().toString()))
         .andExpect(jsonPath("$.data.content[0].ingredients[0].name").value("Tofu"))
         .andExpect(jsonPath("$.data.content[0].ingredients[0].amount").value(2.5))
-        .andExpect(jsonPath("$.data.content[0].ingredients[0].unit").value("g"))
+        .andExpect(jsonPath("$.data.content[0].ingredients[0].unit").value("G"))
+        // Per-line contribution: 2.5 x 1.44 = 3.60, matching the persisted total.
+        .andExpect(jsonPath("$.data.content[0].ingredients[0].calories").value(3.6))
+        .andExpect(jsonPath("$.data.content[0].ingredients[0].proteinG").value(0.43))
+        .andExpect(jsonPath("$.data.content[0].ingredients[0].nutritionResolved").value(true))
+        .andExpect(jsonPath("$.data.content[0].calories").value(3.6))
+        .andExpect(jsonPath("$.data.content[0].proteinG").value(0.43))
+        .andExpect(jsonPath("$.data.content[0].nutritionResolved").value(true))
         .andExpect(jsonPath("$.data.content[0].createdAt").exists())
         .andExpect(jsonPath("$.data.content[0].updatedAt").exists())
         .andExpect(jsonPath("$.data.content[0].userId").value(author2.getId().toString()))
@@ -161,6 +169,32 @@ class AdminRecipeControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].passwordHash").doesNotExist())
         .andExpect(jsonPath("$.data.content[1].name").value("Soft deleted"))
         .andExpect(jsonPath("$.data.content[1].status").value("DELETED"));
+  }
+
+  @Test
+  void getRecipe_reportsTheDishImage() throws Exception {
+    Dish dish =
+        dishRepository.saveAndFlush(
+            Dish.builder()
+                .name("Imaged bowl")
+                .imageUrl("https://cdn.example.com/imaged-bowl.jpg")
+                .build());
+    Recipe recipe =
+        recipeRepository.saveAndFlush(
+            Recipe.builder()
+                .dish(dish)
+                .user(member)
+                .name("Imaged recipe")
+                .instructions("Stir and serve")
+                .servings(2)
+                .build());
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes/{recipeId}", recipe.getId())
+                .header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.imageUrl").value("https://cdn.example.com/imaged-bowl.jpg"));
   }
 
   @Test
@@ -261,6 +295,175 @@ class AdminRecipeControllerIntegrationTest {
   }
 
   @Test
+  void listRecipes_filterByKeyword_returnsOnlyMatchingRecipes() throws Exception {
+    createRecipe(author2, "Aardvark tofu bowl", null, Set.of(), false);
+    createRecipe(member, "Zebra soup", null, Set.of(), false);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "AARDVARK"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Aardvark tofu bowl"));
+  }
+
+  @Test
+  void listRecipes_filterByKeywordMatchingIngredient_returnsTheRecipeOnce() throws Exception {
+    createRecipe(author2, "Tofu bowl", null, Set.of(), true);
+    createRecipe(member, "Zebra soup", null, Set.of(), false);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "tofu"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Tofu bowl"));
+  }
+
+  @Test
+  void listRecipes_filterByKeywordWithWildcard_matchesLiterally() throws Exception {
+    createRecipe(author2, "Aardvark tofu bowl", null, Set.of(), false);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("keyword", "%"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(0));
+  }
+
+  @Test
+  void listRecipes_filterByDeletionStatus_returnsOnlyThatState() throws Exception {
+    createRecipe(author2, "Active recipe", null, Set.of(), false);
+    createRecipe(member, "Removed recipe", Instant.now(), Set.of(), false);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("status", "DELETED"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Removed recipe"))
+        .andExpect(jsonPath("$.data.content[0].status").value("DELETED"));
+  }
+
+  @Test
+  void listRecipes_withoutDeletionStatus_returnsActiveAndDeletedRecipes() throws Exception {
+    createRecipe(author2, "Active recipe", null, Set.of(), false);
+    createRecipe(member, "Removed recipe", Instant.now(), Set.of(), false);
+
+    mockMvc
+        .perform(get("/api/admin/recipes").header("Authorization", "Bearer " + adminToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(2));
+  }
+
+  @Test
+  void listRecipes_withInvalidDeletionStatus_returns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("status", "ARCHIVED"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void listRecipes_filterByDifficulty_returnsOnlyThatDifficulty() throws Exception {
+    createRecipe(author2, "Easy bowl", null, Set.of(), false);
+    Recipe hard = createRecipe(member, "Hard bowl", null, Set.of(), false);
+    hard.setDifficulty(Difficulty.HARD);
+    recipeRepository.saveAndFlush(hard);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("difficulty", "hard"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Hard bowl"));
+  }
+
+  @Test
+  void listRecipes_withInvalidDifficulty_returns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("difficulty", "EXTREME"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void listRecipes_filterByMaxTotalTime_excludesRecipesOverTheLimit() throws Exception {
+    // The helper creates prep 10 + cook 15 = 25 minutes.
+    createRecipe(author2, "Quick bowl", null, Set.of(), false);
+    Recipe slow = createRecipe(member, "Slow bowl", null, Set.of(), false);
+    slow.setPrepTimeMinutes(30);
+    slow.setCookTimeMinutes(60);
+    recipeRepository.saveAndFlush(slow);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("maxTotalTimeMinutes", "30"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Quick bowl"));
+  }
+
+  @Test
+  void listRecipes_filterByDishId_returnsOnlyRecipesForThatDish() throws Exception {
+    createRecipe(author2, "Test bowl recipe", null, Set.of(), false);
+    Dish otherDish = dishRepository.saveAndFlush(Dish.builder().name("Other plate").build());
+    recipeRepository.saveAndFlush(
+        Recipe.builder()
+            .dish(otherDish)
+            .user(member)
+            .name("Other plate recipe")
+            .instructions("Stir and serve")
+            .servings(2)
+            .difficulty(Difficulty.EASY)
+            .build());
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("dishId", otherDish.getId().toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Other plate recipe"));
+  }
+
+  @Test
+  void listRecipes_filterByModerationStatus_returnsOnlyThatState() throws Exception {
+    createRecipe(author2, "Pending recipe", null, Set.of(), false);
+    Recipe approved = createRecipe(member, "Approved recipe", null, Set.of(), false);
+    approved.setModerationStatus(ModerationStatus.APPROVED);
+    recipeRepository.saveAndFlush(approved);
+
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("moderationStatus", "approved"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.totalElements").value(1))
+        .andExpect(jsonPath("$.data.content[0].name").value("Approved recipe"));
+  }
+
+  @Test
   void listRecipes_filterByCreatedDateRange_returnsOnlyMatchingRecipes() throws Exception {
     createRecipe(member, "First", null, Set.of(), false);
     createRecipe(author2, "Second", null, Set.of(), false);
@@ -331,8 +534,20 @@ class AdminRecipeControllerIntegrationTest {
         .andExpect(
             jsonPath("$.message")
                 .value(
-                    "Sort property must be one of: createdAt, updatedAt, name, moderationStatus,"
-                        + " score"));
+                    "Sort property must be one of: createdAt, updatedAt, name, moderationStatus"));
+  }
+
+  @Test
+  void listRecipes_sortingByScore_isRejected() throws Exception {
+    // The score column and its sort property are gone (ADR-026); a client still sending it gets a
+    // validation error rather than a silently different order.
+    mockMvc
+        .perform(
+            get("/api/admin/recipes")
+                .header("Authorization", "Bearer " + adminToken)
+                .param("sort", "score,desc"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value(containsString("Sort property must be one of")));
   }
 
   @Test
@@ -426,6 +641,14 @@ class AdminRecipeControllerIntegrationTest {
               .findByNameIgnoreCase("Tofu")
               .orElseGet(
                   () -> ingredientRepository.save(Ingredient.builder().name("Tofu").build()));
+      // Curated so the response has a resolvable line: 2.5 x these values are the totals set below.
+      tofu.setUnit(Unit.G);
+      tofu.setCalories(new BigDecimal("1.440000"));
+      tofu.setProteinG(new BigDecimal("0.171900"));
+      tofu.setCarbohydrateG(new BigDecimal("0.027800"));
+      tofu.setFatG(new BigDecimal("0.087200"));
+      tofu.setFiberG(new BigDecimal("0.023000"));
+      entityManager.flush();
       RecipeIngredient link =
           RecipeIngredient.builder()
               .recipeId(recipe.getId())
@@ -433,10 +656,15 @@ class AdminRecipeControllerIntegrationTest {
               .recipe(recipe)
               .ingredient(tofu)
               .amount(new BigDecimal("2.500"))
-              .unit("g")
               .build();
       entityManager.persist(link);
       recipe.getRecipeIngredients().add(link);
+      // The persisted totals ADR-022 would have computed; the read path must not recompute them.
+      recipe.setCalories(new BigDecimal("3.60"));
+      recipe.setProteinG(new BigDecimal("0.43"));
+      recipe.setCarbohydrateG(new BigDecimal("0.07"));
+      recipe.setFatG(new BigDecimal("0.22"));
+      recipe.setFiberG(new BigDecimal("0.06"));
       entityManager.flush();
     }
     return recipe;

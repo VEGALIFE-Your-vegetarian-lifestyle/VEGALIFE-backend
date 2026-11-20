@@ -2,6 +2,7 @@ package com.vegalife.repository.recipe;
 
 import com.vegalife.enums.recipe.ModerationStatus;
 import com.vegalife.model.recipe.Dish;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,4 +29,11 @@ public interface DishRepository extends JpaRepository<Dish, UUID>, JpaSpecificat
   List<Dish> findByDeletedAtIsNullAndModerationStatusOrderByNameAsc(ModerationStatus status);
 
   Optional<Dish> findByIdAndDeletedAtIsNullAndModerationStatus(UUID id, ModerationStatus status);
+
+  /**
+   * Batch resolution of restaurant-attach candidates (issue #195): every id must come back approved
+   * and not soft-deleted, or the caller treats the whole request as invalid.
+   */
+  List<Dish> findByIdInAndDeletedAtIsNullAndModerationStatus(
+      Collection<UUID> ids, ModerationStatus status);
 }

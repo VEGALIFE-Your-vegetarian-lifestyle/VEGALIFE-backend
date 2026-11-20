@@ -6,16 +6,15 @@ import com.vegalife.dto.request.post.CommentUpdateRequest;
 import com.vegalife.dto.response.post.CommentResponse;
 import com.vegalife.dto.response.post.CommentThreadResponse;
 import com.vegalife.enums.post.PostStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.post.Comment;
 import com.vegalife.model.post.Post;
 import com.vegalife.model.user.User;
 import com.vegalife.model.user.UserProfile;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.post.CommentRepository;
 import com.vegalife.repository.post.PostRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ForbiddenException;
 import com.vegalife.shared.exception.ResourceNotFoundException;
@@ -27,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,9 +36,9 @@ public class CommentService {
 
   private final CommentRepository commentRepository;
   private final PostRepository postRepository;
-  private final ModerationLogRepository moderationLogRepository;
   private final UserRepository userRepository;
   private final UserProfileRepository userProfileRepository;
+  private final AdminDashboardCacheInvalidator dashboardCache;
 
   @Transactional
   public CommentResponse createComment(UUID userId, UUID postId, CommentCreateRequest request) {
@@ -95,8 +93,8 @@ public class CommentService {
 
   /**
    * BR-COMMENT-003: the owner may soft-delete their own comment; an Administrator may soft-delete
-   * any comment and that override is recorded in the moderation log (BR-ADMIN-002). Deletion only
-   * sets {@code deletedAt}; replies keep their {@code parentId}, so the thread shape survives.
+   * any comment. Deletion only sets {@code deletedAt}; replies keep their {@code parentId}, so the
+   * thread shape survives.
    */
   @Transactional
   public void deleteComment(UUID actorId, boolean isAdmin, UUID postId, UUID commentId) {
@@ -108,17 +106,9 @@ public class CommentService {
             .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
 
     comment.setDeletedAt(Instant.now());
-    Comment saved = commentRepository.saveAndFlush(comment);
-
-    if (isAdmin && !saved.getUserId().equals(actorId)) {
-      moderationLogRepository.save(
-          ModerationLog.builder()
-              .actorId(actorId)
-              .action("DELETE_COMMENT")
-              .targetType("COMMENT")
-              .targetId(saved.getId())
-              .build());
-    }
+    commentRepository.saveAndFlush(comment);
+    // totalComments fell, and the comment left the reported set if it had been reported.
+    dashboardCache.summary();
   }
 
   /**
@@ -136,6 +126,10 @@ public class CommentService {
 
     comment.setReportCount(comment.getReportCount() + 1);
     commentRepository.save(comment);
+    // Only the 0 -> 1 crossing changes reportedComments, but reading the previous count back to
+    // decide would have to happen before the increment; evicting unconditionally is the same cost
+    // and cannot be got wrong.
+    dashboardCache.summary();
   }
 
   /**
@@ -174,13 +168,16 @@ public class CommentService {
 
     Set<UUID> authorIds = new HashSet<>();
     collectAuthorIds(pageRoots, childrenByParentId, authorIds);
-    Map<UUID, String> displayNames =
-        userRepository.findAllById(authorIds).stream()
-            .collect(Collectors.toMap(User::getId, User::getDisplayName));
-    Map<UUID, String> avatarUrls =
-        userProfileRepository.findByUserIdIn(authorIds).stream()
-            .collect(
-                Collectors.toMap(profile -> profile.getUser().getId(), UserProfile::getAvatarUrl));
+    // Built by hand rather than Collectors.toMap: avatarUrl (and, defensively, displayName) are
+    // nullable and toMap's merge() rejects null values with an NPE.
+    Map<UUID, String> displayNames = new HashMap<>();
+    for (User user : userRepository.findAllById(authorIds)) {
+      displayNames.put(user.getId(), user.getDisplayName());
+    }
+    Map<UUID, String> avatarUrls = new HashMap<>();
+    for (UserProfile profile : userProfileRepository.findByUserIdIn(authorIds)) {
+      avatarUrls.put(profile.getUser().getId(), profile.getAvatarUrl());
+    }
 
     List<CommentThreadResponse> content =
         pageRoots.stream()

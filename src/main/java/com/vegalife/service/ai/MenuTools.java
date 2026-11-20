@@ -1,7 +1,13 @@
 package com.vegalife.service.ai;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.vegalife.dto.request.menu.CreateMenuRequest;
 import com.vegalife.dto.request.menu.MealRequest;
 import com.vegalife.dto.request.menu.MenuDayRequest;
@@ -15,12 +21,10 @@ import com.vegalife.shared.dto.ApiResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
+import java.io.IOException;
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
-import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -52,7 +56,8 @@ public class MenuTools {
 
   /** Refusal text of the update_menu pre-check (BR-MCP-005). */
   static final String UPDATE_REFUSED =
-      "update refused: the target must be the caller's own current-week menu with status drafted";
+      "update refused: the target must be the caller's own drafted menu that starts tomorrow or"
+          + " later";
 
   private static final String MISSING_IDENTITY =
       "error: caller identity missing (no caller identity on this tool invocation)";
@@ -173,23 +178,25 @@ public class MenuTools {
       resultConverter = RawTextToolResultConverter.class,
       description =
           "Create the caller's weekly menu as a drafted plan. Pass startDate (the week's first"
-              + " day) and days: exactly 7 day objects, each {date, meals[]}, meal = {mealType,"
-              + " dishId, servings} with mealType BREAKFAST, LUNCH or DINNER. All structural"
-              + " rules (7 dates, one meal per type per day, dish diversity) are validated by the"
-              + " backend, which returns a readable error when the week is invalid. Returns the"
-              + " created menu's full detail with its new id. The caller's identity comes from"
-              + " their session and is never a parameter.")
+              + " day, tomorrow or later) and days: exactly 7 day objects, each {date, meals[]},"
+              + " meal = {mealType, dishId, servings} with mealType BREAKFAST, LUNCH or DINNER."
+              + " All structural rules (7 dates, one meal per type per day, start not in the past,"
+              + " dish diversity) are validated by the backend, which returns a readable error when"
+              + " the week is invalid. Returns the created menu's full detail with its new id. The"
+              + " caller's identity comes from their session and is never a parameter.")
   public String createMenu(
       @ToolParam(
               required = true,
-              description = "First day of the week, format YYYY-MM-DD (a Monday by convention).")
+              description =
+                  "First day of the week, format YYYY-MM-DD. Must be tomorrow or later in server"
+                      + " UTC; a Monday by convention ('next week' means next Monday).")
           String startDate,
       @ToolParam(
               required = true,
               description =
                   "Exactly 7 day objects: {date: YYYY-MM-DD, meals: [{mealType, dishId,"
                       + " servings}]}.")
-          List<Day> days,
+          Days days,
       @ToolParam(
               required = true,
               description =
@@ -231,21 +238,23 @@ public class MenuTools {
       name = "update_menu",
       resultConverter = RawTextToolResultConverter.class,
       description =
-          "Replace the days of the caller's current-week drafted menu. Meals are replaced"
-              + " wholesale. Refused unless the target is the caller's own menu of the current"
-              + " week with status drafted; notes, when passed, replace the stored value. The"
+          "Replace the days of the caller's drafted menu that starts tomorrow or later. Meals are"
+              + " replaced wholesale. Refused unless the target is the caller's own drafted menu"
+              + " that has not started yet; notes, when passed, replace the stored value. The"
               + " backend re-validates the whole week. Returns the updated menu's full detail.")
   public String updateMenu(
       @ToolParam(
               required = true,
-              description = "UUID of the menu to replace: the caller's current-week drafted menu.")
+              description =
+                  "UUID of the menu to replace: the caller's drafted menu whose week starts tomorrow"
+                      + " or later.")
           String menuId,
       @ToolParam(
               required = true,
               description =
                   "The complete new week: exactly 7 day objects {date, meals[]}; meals are"
                       + " replaced wholesale.")
-          List<Day> days,
+          Days days,
       @ToolParam(
               required = true,
               description =
@@ -264,7 +273,7 @@ public class MenuTools {
       return "error: menuId is required";
     }
 
-    String refusal = preCheckCurrentWeekDraft(userId, id);
+    String refusal = preCheckUpcomingDraft(userId, id);
     if (refusal != null) {
       return refusal;
     }
@@ -319,6 +328,80 @@ public class MenuTools {
   /** One meal slot of a day; mealType is BREAKFAST, LUNCH or DINNER (the service validates). */
   public record Meal(String mealType, String dishId, Integer servings) {}
 
+  /**
+   * The seven-day week the model passes to {@code create_menu} and {@code update_menu} (issue
+   * #190).
+   *
+   * <p>It is a {@link List} of {@link Day} so the tool schema the model reads is unchanged — still
+   * {@code "type": "array"} of the same day objects — but it accepts the shapes providers actually
+   * emit for a structured parameter: a real array, a JSON string holding the array, a loosely
+   * quoted string (single quotes, unquoted field names, trailing commas), or the array wrapped in a
+   * {@code {"days": [...]}} object. Spring AI binds arguments by re-serializing whatever the model
+   * sent and handing it to Jackson, so without this tolerance a weaker model's stringified week
+   * failed binding before {@link #createMenu} was ever entered.
+   *
+   * <p>Validation is unaffected: {@link #toDayRequests} still maps this onto the service DTOs and
+   * the backend still enforces every BR-MENU-005 rule. Tolerance is about shape, not content.
+   */
+  @JsonDeserialize(using = Days.Deserializer.class)
+  public static class Days extends ArrayList<Day> {
+
+    /** Reads the shapes listed on {@link Days}; anything unrecognized binds as an empty week. */
+    static final class Deserializer extends JsonDeserializer<Days> {
+
+      /** Only used to read text the provider did not quote correctly; never used for output. */
+      private static final ObjectMapper LENIENT =
+          new ObjectMapper()
+              .configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true)
+              .configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true)
+              .configure(JsonParser.Feature.ALLOW_TRAILING_COMMA, true);
+
+      @Override
+      public Days deserialize(JsonParser parser, DeserializationContext context)
+          throws IOException {
+        Days days = new Days();
+        JsonNode node = unwrap(parser.readValueAsTree());
+        if (node == null || !node.isArray()) {
+          return days;
+        }
+        JavaType dayList = LENIENT.getTypeFactory().constructCollectionType(List.class, Day.class);
+        days.addAll(LENIENT.convertValue(node, dayList));
+        return days;
+      }
+
+      /**
+       * Reduces a wrapper or a stringified week to the array itself. Returns null when the value is
+       * not (and does not contain) an array, so the caller yields an empty week and the backend
+       * reports the readable "days must contain exactly the 7 dates" rule instead of a bind
+       * failure.
+       */
+      private static JsonNode unwrap(JsonNode node) {
+        for (int depth = 0; node != null && depth < 3; depth++) {
+          if (node.isArray()) {
+            return node;
+          }
+          if (node.isTextual()) {
+            node = readLenient(node.asText());
+          } else if (node.isObject() && node.size() == 1 && node.has("days")) {
+            node = node.get("days");
+          } else {
+            return null;
+          }
+        }
+        return node != null && node.isArray() ? node : null;
+      }
+
+      /** Parses a stringified value; null when it is not JSON at all (e.g. free prose). */
+      private static JsonNode readLenient(String text) {
+        try {
+          return LENIENT.readTree(text);
+        } catch (JsonProcessingException e) {
+          return null;
+        }
+      }
+    }
+  }
+
   @Tool(
       name = "suggest_dishes",
       resultConverter = RawTextToolResultConverter.class,
@@ -330,9 +413,13 @@ public class MenuTools {
               + " the result is already filtered for them — allergies are never a parameter."
               + " Results are ordered by dish name and paginated. Filters narrow BOTH which dishes"
               + " appear and which recipes are recommended, so a dish is never shown for a recipe"
-              + " that was filtered out. Nutrition values are totals for the whole recipe, not per"
-              + " serving, and may be absent; never assume a missing value is zero. The caller is"
-              + " always identified from the conversation context, never from an argument.")
+              + " that was filtered out. Nutrition filters exist for calories, protein,"
+              + " carbohydrate, fat and fiber, each with an optional minimum and maximum; a recipe"
+              + " whose nutrition is unknown is excluded by every bound rather than treated as"
+              + " zero. Nutrition values are totals for the whole recipe, not per serving, and are"
+              + " reported with nutritionResolved so an absent value is never mistaken for 0. The"
+              + " caller is always identified from the conversation context, never from an"
+              + " argument.")
   public String suggestDishes(
       @ToolParam(required = false, description = "Case-insensitive substring of the dish name.")
           String name,
@@ -364,6 +451,35 @@ public class MenuTools {
               required = false,
               description = "Only recipes with at least this many grams of protein per recipe.")
           BigDecimal minProtein,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at most this many grams of protein per recipe.")
+          BigDecimal maxProtein,
+      @ToolParam(
+              required = false,
+              description =
+                  "Only recipes with at least this many grams of carbohydrate per recipe.")
+          BigDecimal minCarbohydrate,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at most this many grams of carbohydrate per recipe.")
+          BigDecimal maxCarbohydrate,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at least this many grams of fat per recipe.")
+          BigDecimal minFat,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at most this many grams of fat per recipe.")
+          BigDecimal maxFat,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at least this many grams of fiber per recipe.")
+          BigDecimal minFiber,
+      @ToolParam(
+              required = false,
+              description = "Only recipes with at most this many grams of fiber per recipe.")
+          BigDecimal maxFiber,
       @ToolParam(required = false, description = "Zero-based page index. Omit for 0.") Integer page,
       @ToolParam(required = false, description = "Dishes per page, 1 to 50. Omit for 20.")
           Integer size,
@@ -385,6 +501,13 @@ public class MenuTools {
             .minCalories(minCalories)
             .maxCalories(maxCalories)
             .minProtein(minProtein)
+            .maxProtein(maxProtein)
+            .minCarbohydrate(minCarbohydrate)
+            .maxCarbohydrate(maxCarbohydrate)
+            .minFat(minFat)
+            .maxFat(maxFat)
+            .minFiber(minFiber)
+            .maxFiber(maxFiber)
             .page(page == null ? DEFAULT_PAGE : Math.max(0, page))
             .size(size == null ? DEFAULT_SIZE : Math.min(50, Math.max(1, size)))
             .recipesPerDish(
@@ -401,30 +524,17 @@ public class MenuTools {
   }
 
   /**
-   * BR-MCP-005 pre-check: update_menu may target only the caller's own current-week drafted menu.
-   * The backend no longer resolves a week for us (BR-MENU-002 is a flat from/to pair), so this
-   * computes the Monday–Sunday window of the current server-UTC day and asks for that range; it
-   * only compares membership and status. Returns null when the pre-check passes, or the refusal
-   * message.
+   * BR-MCP-005 pre-check: update_menu may target only the caller's own drafted menu that has not
+   * started yet ({@code startDate >= tomorrow}, server UTC). A menu that was already scheduled is
+   * excluded precisely because its window may contain past days. Returns null when the pre-check
+   * passes, or the refusal message.
    */
-  private String preCheckCurrentWeekDraft(UUID userId, UUID menuId) {
-    LocalDate today = LocalDate.now(ZoneOffset.UTC);
+  private String preCheckUpcomingDraft(UUID userId, UUID menuId) {
     try {
-      MenuQueryFilter currentWeek =
-          filterResolver.resolve(
-              today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString(),
-              today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toString(),
-              "drafted");
-      var page = menuService.listMenus(userId, currentWeek, DEFAULT_PAGE, DEFAULT_SIZE, null);
-      for (var summary : page.getContent()) {
-        if (menuId.equals(summary.getId())) {
-          return null;
-        }
-      }
-      return UPDATE_REFUSED;
+      return menuService.isUpcomingDraft(userId, menuId) ? null : UPDATE_REFUSED;
     } catch (RuntimeException e) {
-      log.debug("current-week draft could not be verified for the update_menu pre-check", e);
-      return UPDATE_REFUSED + " (the current-week draft could not be verified)";
+      log.debug("upcoming draft could not be verified for the update_menu pre-check", e);
+      return UPDATE_REFUSED + " (the draft could not be verified)";
     }
   }
 

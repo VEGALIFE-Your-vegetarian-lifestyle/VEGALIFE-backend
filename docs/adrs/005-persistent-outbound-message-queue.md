@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Accepted; amended 2026-11-19 (payload retention — see the
+"Amendment" section at the end).
 
 ## Date
 
@@ -48,7 +49,8 @@ Constraints shaping the options:
 Replace inline SMTP sends with a **persistent outbound message queue
 (a transactional outbox)** in PostgreSQL: business methods write an
 `outbound_message` row in the same transaction in which they create the
-OTP (via a new `@Primary` `OutboxEmailService`), a scheduled background
+OTP (via a new `@Primary` `OutboxEmailService` — since retired, see
+ADR-028), a scheduled background
 drainer claims due rows with `FOR UPDATE SKIP LOCKED` and dispatches
 them through a channel-adapter interface (the existing
 `SmtpEmailServiceImpl` becomes the EMAIL channel adapter), retrying
@@ -114,7 +116,8 @@ performs no supersession logic.
   password-reset) until it reaches a terminal state — while `otp_code`
   keeps only hashes. Mitigated by clearing `payload` on every terminal
   transition and by the 7-day retention purge; still a broader
-  plaintext window than today.
+  plaintext window than today. **Superseded by the 2026-11-19
+  amendment below: the payload is no longer cleared.**
 - On resend, a stale queued email for a superseded OTP can still be
   delivered (the code inside is already invalidated by
   BR-AUTH-021) — accepted; the alternative is business logic inside
@@ -135,3 +138,47 @@ performs no supersession logic.
   is deemed unacceptable — in which case move OTP material out of the
   payload (e.g. reference-by-id with a one-shot read) before adding
   more channels.
+
+## Amendment 2026-11-19: payload retention instead of terminal clearing
+
+The original decision cleared `payload` on every terminal transition
+(`COMPLETED`, `FAILED`, `EXPIRED`) to shorten the plaintext-OTP window.
+
+That mitigation is withdrawn. A settled row now keeps its payload until
+the retention purge deletes the whole row, so what is left in the table
+is a readable record of what was queued and what was sent.
+
+Why: the clearing bought very little. It only applied to rows that had
+already reached a terminal state, and the plaintext window it shortened
+was already bounded by the business deadline — an OTP row expires
+within the OTP validity (10 minutes by default) whether or not anyone
+clears anything, and a receipt payload contains no credential at all.
+Against that, it cost a diagnostic trail: a row that had been cleared
+could no longer answer "what exactly did we try to send to this
+address, and with what content", which is the main reason to keep a
+settled queue row at all. The drainer also already held the claimed
+`OutboundMessage` objects in memory, so the in-memory copy was never
+affected by the DB-side nulling; only post-hoc readers noticed.
+
+Consequences of the amendment:
+
+- The plaintext-OTP window is now **the OTP's own lifetime plus the
+  7-day retention purge**, not "until the first terminal transition".
+  This is a wider window than the original ADR accepted, and it is
+  taken deliberately. `otp_code` still stores only the SHA-256 hash
+  (BR-AUTH-019); the queue row is the only place a usable code sits.
+- Failed and expired rows also keep their payload, so a delivery
+  failure can be reproduced rather than guessed at.
+- The `OutboundRetentionJob` purge is now the only mechanism that
+  removes payload material. Any future change to the retention period
+  is therefore also a change to this exposure window and must be
+  reviewed as such.
+- Everything else in this ADR — at-least-once delivery, retry and
+  deferral cadence, deduplication being a business-layer concern —
+  stands unchanged.
+
+The enqueue-side shape changed alongside this: `OutboxEmailService` is
+gone, and the services that send email build the `outbound_message` row
+themselves, the same way the content-filter and media-purge channels
+already did. The queue seam is unchanged in behaviour; only the code
+that fills it moved.

@@ -10,7 +10,7 @@ Vegalife backend team
 
 ## Summary
 
-Allow the owner (or an Administrator) to partially edit a post: title, content, image, video, categories, and draft/published state, following BR-CONTENT-001 to 004 and BR-ADMIN-002.
+Allow the owner (or an Administrator) to partially edit a post: title, content, image, video, categories, and draft/published state, following BR-CONTENT-001 to 004 and BR-POST-006 to 007.
 
 ## Problem / motivation
 
@@ -25,7 +25,7 @@ Users can create and list their posts, but currently cannot correct or update co
 ## Non-goals
 
 - Running semantic filtering inside this endpoint: an edit that changes content only re-queues the async filter job (BR-POST-007); see `docs/feats/post-content-filtering.md`.
-- Editing posts owned by another user, except by an Administrator (BR-CONTENT-001, logged per BR-ADMIN-002).
+- Editing posts owned by another user, except by an Administrator (BR-CONTENT-001; the action leaves no audit trail — ADR-027).
 - Deleting posts, restoring soft-deleted posts, or changing ownership.
 - Clearing an image by sending `null`; an omitted or null field leaves the current value unchanged.
 

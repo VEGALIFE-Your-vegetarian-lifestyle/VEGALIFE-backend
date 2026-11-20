@@ -17,13 +17,15 @@ public final class MenuSpecifications {
    * The caller's own menus intersecting an optional inclusive window (BR-MENU-002) and optional
    * status. Only the clauses whose bound is present are added, so PostgreSQL never sees an untyped
    * {@code ? is null} parameter. A menu intersects when {@code startDate <= to AND endDate >=
-   * from}.
+   * from}. BR-MENU-008: deleted menus are always excluded, so every caller of this specification
+   * sees only live menus.
    */
   public static Specification<Menu> ownedByWithinWindowAndStatus(
       UUID userId, LocalDate from, LocalDate to, MenuStatus status) {
     return (root, query, cb) -> {
       List<Predicate> predicates = new ArrayList<>();
       predicates.add(cb.equal(root.get("userId"), userId));
+      predicates.add(cb.isNull(root.get("deletedAt")));
       if (from != null) {
         predicates.add(cb.greaterThanOrEqualTo(root.get("endDate"), from));
       }

@@ -1,13 +1,13 @@
 package com.vegalife.integration.controller.subscription;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vegalife.enums.subscription.PaymentLedgerStatus;
-import com.vegalife.enums.subscription.SubscriptionStatus;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.subscription.AiPlan;
@@ -21,14 +21,7 @@ import com.vegalife.repository.subscription.AiUsageRepository;
 import com.vegalife.repository.subscription.PaymentLedgerRepository;
 import com.vegalife.repository.user.UserRepository;
 import com.vegalife.service.token.JwtTokenService;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
-import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.YearMonth;
-import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +39,13 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+/**
+ * The post-#181 subscription surface: a plan catalogue, one acquire route that claims or checks
+ * out, a single-number {@code /me}, and an acquisition history.
+ *
+ * <p>Runs on real PostgreSQL because the claim relies on partial-index conflict inference, which H2
+ * does not support.
+ */
 @Testcontainers
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -72,674 +72,302 @@ class SubscriptionControllerIntegrationTest {
   }
 
   @Autowired private MockMvc mockMvc;
-
+  @Autowired private ObjectMapper objectMapper;
   @Autowired private UserRepository userRepository;
-
   @Autowired private AiPlanRepository planRepository;
-
   @Autowired private AiSubscriptionRepository subscriptionRepository;
-
   @Autowired private AiUsageRepository usageRepository;
-
   @Autowired private PaymentLedgerRepository paymentLedgerRepository;
-
   @Autowired private JwtTokenService jwtTokenService;
 
-  @PersistenceContext private EntityManager entityManager;
-
-  private User testUser;
+  private User member;
   private String accessToken;
+  private AiPlan freePlan;
+  private AiPlan proPlan;
 
   @BeforeEach
   void setUp() {
-    testUser =
-        User.builder()
-            .displayName("subuser")
-            .email("sub@example.com")
-            .passwordHash("$2a$10$test")
-            .role(UserRole.USER)
-            .status(UserStatus.activated)
-            .emailVerified(true)
-            .build();
-    testUser = userRepository.save(testUser);
-
-    accessToken = jwtTokenService.generateAccessToken(testUser);
-  }
-
-  @Test
-  void getMySubscription_withoutAuthentication_returns401() throws Exception {
-    mockMvc
-        .perform(get("/api/subscriptions/me"))
-        .andExpect(status().isUnauthorized())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Unauthorized"));
-  }
-
-  @Test
-  void getMySubscription_withoutSubscriptionRow_returnsFreeDefaultWithoutWriting()
-      throws Exception {
-    AiPlan freePlan = planRepository.findByCode("FREE").orElseThrow();
-    YearMonth currentMonth = YearMonth.now(ZoneOffset.UTC);
-    Instant periodStart = currentMonth.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-    Instant periodEnd =
-        currentMonth.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-
-    mockMvc
-        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.message").value("Subscription retrieved successfully"))
-        .andExpect(jsonPath("$.data.tier").value("FREE"))
-        .andExpect(jsonPath("$.data.status").value("active"))
-        .andExpect(jsonPath("$.data.renewalDate").doesNotExist())
-        .andExpect(jsonPath("$.data.usage.used").value(0))
-        .andExpect(jsonPath("$.data.usage.limit").value(freePlan.getMonthlyRequestLimit()))
-        .andExpect(jsonPath("$.data.usage.periodStart").value(periodStart.toString()))
-        .andExpect(jsonPath("$.data.usage.periodEnd").value(periodEnd.toString()))
-        .andExpect(jsonPath("$.data.currentPlan.code").value("FREE"))
-        .andExpect(jsonPath("$.data.currentPlan.name").value("Free"))
-        .andExpect(
-            jsonPath("$.data.currentPlan.monthlyRequestLimit")
-                .value(freePlan.getMonthlyRequestLimit()))
-        .andExpect(
-            jsonPath("$.data.currentPlan.price.amount").value((int) freePlan.getPriceAmount()))
-        .andExpect(jsonPath("$.data.currentPlan.price.currency").value(freePlan.getPriceCurrency()))
-        .andExpect(jsonPath("$.data.latestPayment").doesNotExist());
-
-    assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
-  }
-
-  @Test
-  void getMySubscription_withoutSubscriptionRow_ignoresExistingPayment() throws Exception {
-    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
-    // FR-003: even with a succeeded payment on file, a member with no
-    // subscription row reads as FREE with no latestPayment.
-    paymentLedgerRepository.save(
-        PaymentLedger.builder()
-            .userId(testUser.getId())
-            .planId(proPlan.getId())
-            .amount(proPlan.getPriceAmount())
-            .currency(proPlan.getPriceCurrency())
-            .status(PaymentLedgerStatus.succeeded)
-            .provider("vnpay")
-            .paidAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
-            .build());
-
-    mockMvc
-        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.tier").value("FREE"))
-        .andExpect(jsonPath("$.data.latestPayment").doesNotExist());
-
-    assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
-  }
-
-  @Test
-  void getMySubscription_withSubscription_returnsQuotaWindowAndLatestSucceededPayment()
-      throws Exception {
-    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
-    Instant renewalDate = Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
-    subscriptionRepository.save(
-        AiSubscription.builder()
-            .userId(testUser.getId())
-            .planId(proPlan.getId())
-            .status(SubscriptionStatus.active)
-            .renewalDate(renewalDate)
-            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
-            .build());
-
-    YearMonth currentMonth = YearMonth.now(ZoneOffset.UTC);
-    Instant periodStart = currentMonth.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-    Instant periodEnd =
-        currentMonth.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-
-    // Row inside the current window: counted.
-    usageRepository.save(
-        AiUsage.builder()
-            .userId(testUser.getId())
-            .requestCount(3)
-            .periodStart(periodStart)
-            .periodEnd(periodEnd)
-            .build());
-    // Row ending exactly at the window start: outside the window, must not count.
-    usageRepository.save(
-        AiUsage.builder()
-            .userId(testUser.getId())
-            .requestCount(99)
-            .periodStart(periodStart.minus(31, ChronoUnit.DAYS))
-            .periodEnd(periodStart)
-            .build());
-
-    Instant latestPaidAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-    paymentLedgerRepository.save(
-        PaymentLedger.builder()
-            .userId(testUser.getId())
-            .planId(proPlan.getId())
-            .amount(proPlan.getPriceAmount())
-            .currency(proPlan.getPriceCurrency())
-            .status(PaymentLedgerStatus.succeeded)
-            .provider("vnpay")
-            .paidAt(latestPaidAt.minus(1, ChronoUnit.DAYS))
-            .build());
-    paymentLedgerRepository.save(
-        PaymentLedger.builder()
-            .userId(testUser.getId())
-            .planId(proPlan.getId())
-            .amount(proPlan.getPriceAmount())
-            .currency(proPlan.getPriceCurrency())
-            .status(PaymentLedgerStatus.succeeded)
-            .provider("vnpay")
-            .paidAt(latestPaidAt)
-            .build());
-    // Newer but not succeeded: must be ignored by the latest-payment lookup.
-    paymentLedgerRepository.save(
-        PaymentLedger.builder()
-            .userId(testUser.getId())
-            .planId(proPlan.getId())
-            .amount(proPlan.getPriceAmount())
-            .currency(proPlan.getPriceCurrency())
-            .status(PaymentLedgerStatus.pending)
-            .provider("vnpay")
-            .paidAt(latestPaidAt.plus(1, ChronoUnit.MINUTES))
-            .build());
-
-    mockMvc
-        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.data.tier").value("PRO"))
-        .andExpect(jsonPath("$.data.status").value("active"))
-        .andExpect(jsonPath("$.data.renewalDate").value(renewalDate.toString()))
-        .andExpect(jsonPath("$.data.usage.used").value(3))
-        .andExpect(jsonPath("$.data.usage.limit").value(proPlan.getMonthlyRequestLimit()))
-        .andExpect(jsonPath("$.data.usage.periodStart").value(periodStart.toString()))
-        .andExpect(jsonPath("$.data.usage.periodEnd").value(periodEnd.toString()))
-        .andExpect(jsonPath("$.data.currentPlan.code").value("PRO"))
-        .andExpect(
-            jsonPath("$.data.currentPlan.monthlyRequestLimit")
-                .value(proPlan.getMonthlyRequestLimit()))
-        .andExpect(
-            jsonPath("$.data.currentPlan.price.amount").value((int) proPlan.getPriceAmount()))
-        .andExpect(jsonPath("$.data.currentPlan.price.currency").value(proPlan.getPriceCurrency()))
-        .andExpect(jsonPath("$.data.latestPayment.planCode").value("PRO"))
-        .andExpect(jsonPath("$.data.latestPayment.amount").value((int) proPlan.getPriceAmount()))
-        .andExpect(jsonPath("$.data.latestPayment.currency").value(proPlan.getPriceCurrency()))
-        .andExpect(jsonPath("$.data.latestPayment.status").value("succeeded"))
-        .andExpect(jsonPath("$.data.latestPayment.provider").value("vnpay"))
-        .andExpect(jsonPath("$.data.latestPayment.paidAt").value(latestPaidAt.toString()));
-  }
-
-  @Test
-  void getAvailablePlans_withoutAuthentication_returnsActivePlansOrderedBySortOrder()
-      throws Exception {
-    AiPlan freePlan = planRepository.findByCode("FREE").orElseThrow();
-    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
-    long planCountBefore = planRepository.count();
-
-    mockMvc
-        .perform(get("/api/subscriptions"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.message").value("Plans retrieved successfully"))
-        .andExpect(jsonPath("$.data", hasSize(2)))
-        .andExpect(jsonPath("$.data[0].code").value("FREE"))
-        .andExpect(jsonPath("$.data[0].name").value(freePlan.getName()))
-        .andExpect(
-            jsonPath("$.data[0].monthlyRequestLimit").value(freePlan.getMonthlyRequestLimit()))
-        .andExpect(jsonPath("$.data[0].price.amount").value((int) freePlan.getPriceAmount()))
-        .andExpect(jsonPath("$.data[0].price.currency").value(freePlan.getPriceCurrency()))
-        .andExpect(jsonPath("$.data[1].code").value("PRO"))
-        .andExpect(jsonPath("$.data[1].name").value(proPlan.getName()))
-        .andExpect(
-            jsonPath("$.data[1].monthlyRequestLimit").value(proPlan.getMonthlyRequestLimit()))
-        .andExpect(jsonPath("$.data[1].price.amount").value((int) proPlan.getPriceAmount()))
-        .andExpect(jsonPath("$.data[1].price.currency").value(proPlan.getPriceCurrency()))
-        // NFR-SEC-001: catalogue rows expose no internal ids or bookkeeping columns.
-        .andExpect(jsonPath("$.data[0].id").doesNotExist())
-        .andExpect(jsonPath("$.data[0].sortOrder").doesNotExist())
-        .andExpect(jsonPath("$.data[0].createdAt").doesNotExist());
-
-    // FR-008: reading the catalogue never writes plan rows.
-    assertThat(planRepository.count()).isEqualTo(planCountBefore);
-  }
-
-  @Test
-  void getAvailablePlans_omitsInactivePlans() throws Exception {
-    planRepository.save(
-        AiPlan.builder()
-            .code("LEGACY")
-            .name("Legacy")
-            .monthlyRequestLimit(1)
-            .priceAmount(100)
-            .priceCurrency("VND")
-            .active(false)
-            .sortOrder(3)
-            .build());
-
-    mockMvc
-        .perform(get("/api/subscriptions"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data", hasSize(2)))
-        .andExpect(jsonPath("$.data[?(@.code == 'LEGACY')]", hasSize(0)));
-  }
-
-  @Test
-  void cancelSubscription_withoutAuthentication_returns401() throws Exception {
-    mockMvc
-        .perform(post("/api/subscriptions/me/cancel"))
-        .andExpect(status().isUnauthorized())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Unauthorized"));
-  }
-
-  @Test
-  void cancelSubscription_whenNoRowInEffect_returns409AndWritesNothing() throws Exception {
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/cancel").header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Subscription already cancelled"));
-
-    assertThat(subscriptionRepository.findByUserId(testUser.getId())).isEmpty();
-  }
-
-  @Test
-  void cancelSubscription_cancelsRowInEffectAndScheduledSuccessor_thenReadsFreeAndRepeatIs409()
-      throws Exception {
-    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
-    subscriptionRepository.save(
-        AiSubscription.builder()
-            .userId(testUser.getId())
-            .planId(proPlan.getId())
-            .status(SubscriptionStatus.active)
-            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
-            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
-            .build());
-    subscriptionRepository.save(
-        AiSubscription.builder()
-            .userId(testUser.getId())
-            .planId(proPlan.getId())
-            .status(SubscriptionStatus.scheduled)
-            .startedAt(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
-            .renewalDate(Instant.now().plus(60, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
-            .build());
-
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/cancel").header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.message").value("Subscription cancelled successfully"))
-        .andExpect(jsonPath("$.data.status").value("cancelled"))
-        .andExpect(jsonPath("$.data.cancelledAt").isNotEmpty());
-
-    entityManager.clear();
-    List<AiSubscription> rows = subscriptionRepository.findAllByUserId(testUser.getId());
-    assertThat(rows).hasSize(2);
-    assertThat(rows)
-        .allSatisfy(
-            row -> {
-              assertThat(row.getStatus()).isEqualTo(SubscriptionStatus.cancelled);
-              assertThat(row.getCancelledAt()).isNotNull();
-            });
-    assertThat(rows.get(0).getCancelledAt().truncatedTo(ChronoUnit.SECONDS))
-        .isEqualTo(rows.get(1).getCancelledAt().truncatedTo(ChronoUnit.SECONDS));
-    assertThat(subscriptionRepository.findInEffect(testUser.getId())).isEmpty();
-
-    mockMvc
-        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.tier").value("FREE"))
-        .andExpect(jsonPath("$.data.status").value("active"))
-        .andExpect(jsonPath("$.data.renewalDate").doesNotExist())
-        .andExpect(jsonPath("$.data.latestPayment").doesNotExist());
-
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/cancel").header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Subscription already cancelled"));
-  }
-
-  @Test
-  void getSubscriptionHistory_withoutAuthentication_returns401() throws Exception {
-    mockMvc
-        .perform(get("/api/subscriptions/me/history"))
-        .andExpect(status().isUnauthorized())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Unauthorized"));
-  }
-
-  @Test
-  void getSubscriptionHistory_withNoRows_returnsEmptyDefaultPage() throws Exception {
-    mockMvc
-        .perform(
-            get("/api/subscriptions/me/history").header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.message").value("Subscription history retrieved successfully"))
-        .andExpect(jsonPath("$.data.content", hasSize(0)))
-        .andExpect(jsonPath("$.data.page").value(0))
-        .andExpect(jsonPath("$.data.size").value(20))
-        .andExpect(jsonPath("$.data.totalElements").value(0));
-  }
-
-  @Test
-  void getSubscriptionHistory_returnsNewestFirstScopedToUserAndHidesInternalFields()
-      throws Exception {
-    AiPlan freePlan = planRepository.findByCode("FREE").orElseThrow();
-    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
-
-    AiSubscription rowA =
-        subscriptionRepository.save(
-            AiSubscription.builder()
-                .userId(testUser.getId())
-                .planId(freePlan.getId())
-                .status(SubscriptionStatus.cancelled)
-                .startedAt(Instant.parse("2026-01-01T00:00:00Z"))
-                .cancelledAt(Instant.parse("2026-02-01T00:00:00Z"))
-                .build());
-    AiSubscription rowB =
-        subscriptionRepository.save(
-            AiSubscription.builder()
-                .userId(testUser.getId())
-                .planId(proPlan.getId())
-                .status(SubscriptionStatus.active)
-                .startedAt(Instant.parse("2026-02-01T00:00:00Z"))
-                .renewalDate(Instant.parse("2026-03-01T00:00:00Z"))
-                .build());
-    AiSubscription rowC =
-        subscriptionRepository.save(
-            AiSubscription.builder()
-                .userId(testUser.getId())
-                .planId(proPlan.getId())
-                .status(SubscriptionStatus.scheduled)
-                .startedAt(Instant.parse("2026-03-01T00:00:00Z"))
-                .renewalDate(Instant.parse("2026-04-01T00:00:00Z"))
-                .build());
-
-    // FR-009: another member's row must never leak into this history.
-    User otherUser =
+    member =
         userRepository.save(
             User.builder()
-                .displayName("subuser2")
-                .email("sub2@example.com")
+                .displayName("credituser" + UUID.randomUUID())
+                .email(UUID.randomUUID() + "@example.com")
                 .passwordHash("$2a$10$test")
                 .role(UserRole.USER)
                 .status(UserStatus.activated)
                 .emailVerified(true)
                 .build());
+    accessToken = jwtTokenService.generateAccessToken(member);
+    freePlan = planRepository.findByCode("FREE").orElseThrow();
+    proPlan = planRepository.findByCode("PRO").orElseThrow();
+  }
+
+  @Test
+  void getPlans_isPublicAndExposesDescriptionAndQuota() throws Exception {
+    mockMvc
+        .perform(get("/api/subscriptions"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(
+            jsonPath("$.data[?(@.code == 'FREE')].requestQuota", org.hamcrest.Matchers.hasItem(5)))
+        .andExpect(
+            jsonPath(
+                "$.data[?(@.code == 'FREE')].description",
+                org.hamcrest.Matchers.hasItem(
+                    org.hamcrest.Matchers.not(org.hamcrest.Matchers.blankOrNullString()))))
+        .andExpect(
+            jsonPath("$.data[?(@.code == 'FREE')].price.amount", org.hamcrest.Matchers.hasItem(0)))
+        .andExpect(
+            jsonPath("$.data[?(@.code == 'PRO')].requestQuota", org.hamcrest.Matchers.hasItem(500)))
+        // Nothing here says whether the caller already holds a plan: paid plans stack.
+        .andExpect(jsonPath("$.data[0].owned").doesNotExist());
+  }
+
+  @Test
+  void getMyRemainingUsage_withoutAuthentication_returns401() throws Exception {
+    mockMvc
+        .perform(get("/api/subscriptions/me"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void getMyRemainingUsage_freshAccountIsZeroUntilTheFreePlanIsClaimed() throws Exception {
+    mockMvc
+        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.remainingUsage").value(0))
+        // The contract is one number: no total, no consumed count, no window.
+        .andExpect(jsonPath("$.data.totalUsage").doesNotExist())
+        .andExpect(jsonPath("$.data.used").doesNotExist())
+        .andExpect(jsonPath("$.data.limit").doesNotExist())
+        .andExpect(jsonPath("$.data.windowStart").doesNotExist());
+  }
+
+  @Test
+  void acquire_freePlan_claimsItAndGrantsTheQuota() throws Exception {
+    acquire("FREE")
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.planCode").value("FREE"))
+        .andExpect(jsonPath("$.data.action").value("CLAIMED"))
+        .andExpect(jsonPath("$.data.remainingUsage").value(5))
+        .andExpect(jsonPath("$.data.paymentUrl").doesNotExist());
+
+    assertThat(subscriptionRepository.findAllByUserId(member.getId())).hasSize(1);
+    assertThat(paymentLedgerRepository.count()).isZero();
+
+    mockMvc
+        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.remainingUsage").value(5));
+  }
+
+  @Test
+  void acquire_freePlanTwice_returns409AndKeepsOneAcquisition() throws Exception {
+    acquire("FREE").andExpect(status().isOk());
+
+    acquire("FREE")
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.message").value("Plan already claimed"));
+
+    assertThat(subscriptionRepository.findAllByUserId(member.getId())).hasSize(1);
+  }
+
+  @Test
+  void acquire_inactivePlan_returns400() throws Exception {
+    freePlan.setActive(false);
+    planRepository.saveAndFlush(freePlan);
+
+    acquire("FREE")
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("Plan is not available"));
+
+    assertThat(subscriptionRepository.findAllByUserId(member.getId())).isEmpty();
+  }
+
+  @Test
+  void acquire_unknownPlan_returns404() throws Exception {
+    acquire("NOPE")
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.message").value("Plan not found"));
+  }
+
+  @Test
+  void acquire_missingPlanCode_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/subscriptions/acquire")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.success").value(false));
+  }
+
+  @Test
+  void remainingUsage_subtractsLifetimeConsumption() throws Exception {
+    granted(freePlan.getId(), null, Instant.now().minusSeconds(60));
+    granted(proPlan.getId(), null, Instant.now().minusSeconds(60));
+    usageRepository.save(AiUsage.builder().userId(member.getId()).requestCount(7).build());
+
+    mockMvc
+        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.remainingUsage").value(498));
+  }
+
+  @Test
+  void remainingUsage_floorsAtZeroAndNeverShowsDebt() throws Exception {
+    granted(freePlan.getId(), null, Instant.now());
+    usageRepository.save(AiUsage.builder().userId(member.getId()).requestCount(9).build());
+
+    mockMvc
+        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.remainingUsage").value(0));
+  }
+
+  @Test
+  void remainingUsage_keepsCountingADeactivatedPlansGrantedAllowance() throws Exception {
+    acquire("FREE").andExpect(status().isOk());
+
+    freePlan.setActive(false);
+    planRepository.saveAndFlush(freePlan);
+
+    mockMvc
+        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.remainingUsage").value(5));
+  }
+
+  @Test
+  void remainingUsage_ignoresUngrantedCheckouts() throws Exception {
+    PaymentLedger pending =
+        paymentLedgerRepository.save(
+            PaymentLedger.builder()
+                .userId(member.getId())
+                .amount(49000L)
+                .currency("VND")
+                .status(PaymentLedgerStatus.pending)
+                .provider("vnpay")
+                .txnRef("txn-open-" + UUID.randomUUID())
+                .build());
     subscriptionRepository.save(
         AiSubscription.builder()
-            .userId(otherUser.getId())
+            .userId(member.getId())
             .planId(proPlan.getId())
-            .status(SubscriptionStatus.active)
-            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
-            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
+            .paymentId(pending.getId())
+            .grantedAt(null)
             .build());
 
-    backdate(rowA.getId(), Instant.parse("2026-01-01T00:00:00Z"));
-    backdate(rowB.getId(), Instant.parse("2026-02-01T00:00:00Z"));
-    backdate(rowC.getId(), Instant.parse("2026-03-01T00:00:00Z"));
+    mockMvc
+        .perform(get("/api/subscriptions/me").header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.remainingUsage").value(0));
+  }
+
+  @Test
+  void getHistory_listsClaimsAndPurchasesWithSourceAndMoneyFields() throws Exception {
+    Instant now = Instant.now().minusSeconds(120);
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(member.getId())
+            .planId(freePlan.getId())
+            .paymentId(null)
+            .grantedAt(now)
+            .build());
+    PaymentLedger paid =
+        paymentLedgerRepository.saveAndFlush(
+            PaymentLedger.builder()
+                .userId(member.getId())
+                .amount(49000L)
+                .currency("VND")
+                .status(PaymentLedgerStatus.succeeded)
+                .provider("vnpay")
+                .txnRef("txn-history-" + UUID.randomUUID())
+                .paidAt(now)
+                .build());
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(member.getId())
+            .planId(proPlan.getId())
+            .paymentId(paid.getId())
+            .grantedAt(now)
+            .build());
 
     mockMvc
         .perform(
             get("/api/subscriptions/me/history").header("Authorization", "Bearer " + accessToken))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.message").value("Subscription history retrieved successfully"))
-        .andExpect(jsonPath("$.data.content", hasSize(3)))
-        .andExpect(jsonPath("$.data.totalElements").value(3))
-        .andExpect(jsonPath("$.data.content[0].planCode").value("PRO"))
-        .andExpect(jsonPath("$.data.content[0].status").value("scheduled"))
-        .andExpect(jsonPath("$.data.content[0].createdAt").value("2026-03-01T00:00:00Z"))
-        .andExpect(jsonPath("$.data.content[1].planCode").value("PRO"))
-        .andExpect(jsonPath("$.data.content[1].status").value("active"))
-        .andExpect(jsonPath("$.data.content[1].createdAt").value("2026-02-01T00:00:00Z"))
-        .andExpect(jsonPath("$.data.content[2].planCode").value("FREE"))
-        .andExpect(jsonPath("$.data.content[2].status").value("cancelled"))
-        .andExpect(jsonPath("$.data.content[2].cancelledAt").isNotEmpty())
-        .andExpect(jsonPath("$.data.content[2].createdAt").value("2026-01-01T00:00:00Z"))
-        // NFR-SEC-001: history rows expose only the seven whitelisted fields.
-        .andExpect(jsonPath("$.data.content[0].id").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].userId").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].planId").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].extendedFromId").doesNotExist());
-  }
-
-  @Test
-  void getSubscriptionHistory_pageBeyondRange_returns200WithEmptyContent() throws Exception {
-    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
-    subscriptionRepository.save(
-        AiSubscription.builder()
-            .userId(testUser.getId())
-            .planId(proPlan.getId())
-            .status(SubscriptionStatus.active)
-            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
-            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
-            .build());
-
-    mockMvc
-        .perform(
-            get("/api/subscriptions/me/history")
-                .param("page", "5")
-                .param("size", "10")
-                .header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.data.content", hasSize(0)))
-        .andExpect(jsonPath("$.data.totalElements").value(1));
-  }
-
-  @Test
-  void getSubscriptionHistory_withInvalidPagingParams_returns400ValidationError() throws Exception {
-    mockMvc
-        .perform(
-            get("/api/subscriptions/me/history")
-                .param("size", "0")
-                .header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Validation failed"));
-
-    mockMvc
-        .perform(
-            get("/api/subscriptions/me/history")
-                .param("page", "-1")
-                .header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Validation failed"));
-  }
-
-  @Test
-  void purchaseEligibility_withoutAuthentication_returns401() throws Exception {
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/purchase/eligibility")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"planCode\":\"PRO\"}"))
-        .andExpect(status().isUnauthorized())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Unauthorized"));
-  }
-
-  @Test
-  void purchaseEligibility_whenNothingInEffect_returnsAllowedAndWritesNothing() throws Exception {
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/purchase/eligibility")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"planCode\":\"PRO\"}"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.message").value("Purchase allowed"))
-        .andExpect(jsonPath("$.data.allowed").value(true));
-
-    assertThat(subscriptionRepository.findAllByUserId(testUser.getId())).isEmpty();
-  }
-
-  @Test
-  void purchaseEligibility_whenPlanCodeMissingOrBlank_returns400ValidationError() throws Exception {
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/purchase/eligibility")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Validation failed"));
-
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/purchase/eligibility")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"planCode\":\"   \"}"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Validation failed"));
-  }
-
-  @Test
-  void purchaseEligibility_whenPlanCodeUnknown_returns404PlanNotFound() throws Exception {
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/purchase/eligibility")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"planCode\":\"GOLD\"}"))
-        .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("Plan not found"));
-  }
-
-  @Test
-  void purchaseEligibility_whenPlanNotPurchasable_returns400() throws Exception {
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/purchase/eligibility")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"planCode\":\"FREE\"}"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.data.totalElements").value(2))
         .andExpect(
-            jsonPath("$.message")
-                .value("Plan is not purchasable: price must be greater than zero"));
-  }
-
-  @Test
-  void purchaseEligibility_whenSamePlanInEffect_returnsAllowedExtensionAndWritesNothing()
-      throws Exception {
-    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
-    subscriptionRepository.save(
-        AiSubscription.builder()
-            .userId(testUser.getId())
-            .planId(proPlan.getId())
-            .status(SubscriptionStatus.active)
-            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
-            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
-            .build());
-
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/purchase/eligibility")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"planCode\":\"PRO\"}"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.data.allowed").value(true));
-
-    entityManager.clear();
-    List<AiSubscription> rows = subscriptionRepository.findAllByUserId(testUser.getId());
-    assertThat(rows).hasSize(1);
-    assertThat(rows.get(0).getStatus()).isEqualTo(SubscriptionStatus.active);
-  }
-
-  @Test
-  void purchaseEligibility_whenDifferentPlanInEffect_returns409AndWritesNothing() throws Exception {
-    AiPlan freePlan = planRepository.findByCode("FREE").orElseThrow();
-    subscriptionRepository.save(
-        AiSubscription.builder()
-            .userId(testUser.getId())
-            .planId(freePlan.getId())
-            .status(SubscriptionStatus.active)
-            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
-            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
-            .build());
-
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/purchase/eligibility")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"planCode\":\"PRO\"}"))
-        .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.success").value(false))
+            jsonPath("$.data.content[*].planCode", org.hamcrest.Matchers.hasItems("FREE", "PRO")))
         .andExpect(
-            jsonPath("$.message")
-                .value("Cancel your current subscription before purchasing a different plan"));
+            jsonPath(
+                "$.data.content[*].source", org.hamcrest.Matchers.hasItems("CLAIM", "PURCHASE")))
+        // No lifecycle field survives: allowance never expires.
+        .andExpect(jsonPath("$.data.content[0].renewalDate").doesNotExist());
 
-    entityManager.clear();
-    List<AiSubscription> rows = subscriptionRepository.findAllByUserId(testUser.getId());
-    assertThat(rows).hasSize(1);
-    assertThat(rows.get(0).getStatus()).isEqualTo(SubscriptionStatus.active);
-    assertThat(rows.get(0).getCancelledAt()).isNull();
+    com.fasterxml.jackson.databind.JsonNode rows =
+        objectMapper
+            .readTree(
+                mockMvc
+                    .perform(
+                        get("/api/subscriptions/me/history")
+                            .header("Authorization", "Bearer " + accessToken))
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString())
+            .get("data")
+            .get("content");
+
+    com.fasterxml.jackson.databind.JsonNode claimRow = null;
+    com.fasterxml.jackson.databind.JsonNode purchaseRow = null;
+    for (com.fasterxml.jackson.databind.JsonNode row : rows) {
+      if ("FREE".equals(row.get("planCode").asText())) {
+        claimRow = row;
+      } else {
+        purchaseRow = row;
+      }
+    }
+
+    assertThat(claimRow).isNotNull();
+    assertThat(claimRow.get("paymentId").isNull()).isTrue();
+    assertThat(claimRow.get("amount").isNull()).isTrue();
+    assertThat(claimRow.get("source").asText()).isEqualTo("CLAIM");
+
+    assertThat(purchaseRow).isNotNull();
+    assertThat(purchaseRow.get("paymentId").asText()).isEqualTo(paid.getId().toString());
+    assertThat(purchaseRow.get("amount").asLong()).isEqualTo(49000L);
+    assertThat(purchaseRow.get("currency").asText()).isEqualTo("VND");
+    assertThat(purchaseRow.get("status").asText()).isEqualTo("succeeded");
+    assertThat(purchaseRow.get("source").asText()).isEqualTo("PURCHASE");
   }
 
   @Test
-  void purchaseEligibility_whenScheduledSuccessorExists_returns409AndWritesNothing()
-      throws Exception {
-    AiPlan proPlan = planRepository.findByCode("PRO").orElseThrow();
-    subscriptionRepository.save(
-        AiSubscription.builder()
-            .userId(testUser.getId())
-            .planId(proPlan.getId())
-            .status(SubscriptionStatus.active)
-            .startedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS))
-            .renewalDate(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
-            .build());
-    subscriptionRepository.save(
-        AiSubscription.builder()
-            .userId(testUser.getId())
-            .planId(proPlan.getId())
-            .status(SubscriptionStatus.scheduled)
-            .startedAt(Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
-            .renewalDate(Instant.now().plus(60, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS))
-            .build());
-
-    mockMvc
-        .perform(
-            post("/api/subscriptions/me/purchase/eligibility")
-                .header("Authorization", "Bearer " + accessToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"planCode\":\"PRO\"}"))
-        .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.message").value("A renewal is already scheduled for this plan"));
-
-    entityManager.clear();
-    List<AiSubscription> rows = subscriptionRepository.findAllByUserId(testUser.getId());
-    assertThat(rows).hasSize(2);
-    assertThat(rows)
-        .extracting(AiSubscription::getStatus)
-        .containsExactlyInAnyOrder(SubscriptionStatus.active, SubscriptionStatus.scheduled);
+  void getHistory_withoutAuthentication_returns401() throws Exception {
+    mockMvc.perform(get("/api/subscriptions/me/history")).andExpect(status().isUnauthorized());
   }
 
-  private void backdate(UUID subscriptionId, Instant when) {
-    subscriptionRepository.flush();
-    entityManager
-        .createNativeQuery("UPDATE ai_subscription SET created_at = :ts WHERE id = :id")
-        .setParameter("ts", Timestamp.from(when))
-        .setParameter("id", subscriptionId)
-        .executeUpdate();
-    entityManager.flush();
-    entityManager.clear();
+  private org.springframework.test.web.servlet.ResultActions acquire(String planCode)
+      throws Exception {
+    return mockMvc.perform(
+        post("/api/subscriptions/acquire")
+            .header("Authorization", "Bearer " + accessToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"planCode\":\"" + planCode + "\"}"));
+  }
+
+  private void granted(UUID planId, UUID paymentId, Instant grantedAt) {
+    subscriptionRepository.save(
+        AiSubscription.builder()
+            .userId(member.getId())
+            .planId(planId)
+            .paymentId(paymentId)
+            .grantedAt(grantedAt)
+            .build());
   }
 }

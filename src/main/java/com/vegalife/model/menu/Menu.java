@@ -55,4 +55,12 @@ public class Menu {
   @UpdateTimestamp
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
+
+  /**
+   * When the owner deleted this menu, or {@code null} while it exists. Deletion is soft so a plan
+   * can be removed without destroying its recorded days; every menu read and the scheduling overlap
+   * check treat a non-null value as absent (BR-MENU-008).
+   */
+  @Column(name = "deleted_at")
+  private Instant deletedAt;
 }

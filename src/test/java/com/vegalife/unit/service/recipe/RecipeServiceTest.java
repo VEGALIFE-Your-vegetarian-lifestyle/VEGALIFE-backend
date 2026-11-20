@@ -16,11 +16,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.vegalife.dto.mapper.recipe.RecipeMapper;
+import com.vegalife.dto.request.recipe.MyRecipeListRequest;
 import com.vegalife.dto.request.recipe.RecipeCreateRequest;
 import com.vegalife.dto.request.recipe.RecipeIngredientItem;
+import com.vegalife.dto.response.recipe.RecipeIngredientResponse;
 import com.vegalife.dto.response.recipe.RecipeResponse;
 import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.recipe.Unit;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
@@ -31,8 +34,11 @@ import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.recipe.DishIngredientService;
+import com.vegalife.service.recipe.RecipeNutritionService;
 import com.vegalife.service.recipe.RecipeService;
+import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
 import java.math.BigDecimal;
@@ -48,6 +54,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -69,7 +80,11 @@ class RecipeServiceTest {
 
   @Mock private DishIngredientService dishIngredientService;
 
+  @Mock private RecipeNutritionService recipeNutritionService;
+
   @Mock private TransactionTemplate transactionTemplate;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private RecipeService recipeService;
 
@@ -99,7 +114,12 @@ class RecipeServiceTest {
         .thenAnswer(invocation -> Dish.builder().id(dishId).name("tofu stir-fry").build());
     when(ingredientRepository.findByNameIgnoreCase("tofu")).thenReturn(Optional.empty());
     when(ingredientRepository.saveAndFlush(any(Ingredient.class)))
-        .thenAnswer(invocation -> Ingredient.builder().id(ingredientId).name("tofu").build());
+        .thenAnswer(
+            invocation -> {
+              Ingredient ingredient = invocation.getArgument(0);
+              ingredient.setId(ingredientId);
+              return ingredient;
+            });
     when(recipeRepository.save(any(Recipe.class)))
         .thenAnswer(
             invocation -> {
@@ -123,6 +143,8 @@ class RecipeServiceTest {
     ArgumentCaptor<Ingredient> ingredientCaptor = ArgumentCaptor.forClass(Ingredient.class);
     verify(ingredientRepository).saveAndFlush(ingredientCaptor.capture());
     assertThat(ingredientCaptor.getValue().getName()).isEqualTo("tofu");
+    // The member's unit becomes the new ingredient's unit; it is not stored per recipe line.
+    assertThat(ingredientCaptor.getValue().getUnit()).isEqualTo(Unit.G);
 
     ArgumentCaptor<Recipe> recipeCaptor = ArgumentCaptor.forClass(Recipe.class);
     verify(recipeRepository).save(recipeCaptor.capture());
@@ -141,7 +163,6 @@ class RecipeServiceTest {
     assertThat(link.getRecipeId()).isEqualTo(recipeId);
     assertThat(link.getIngredientId()).isEqualTo(ingredientId);
     assertThat(link.getAmount()).isEqualByComparingTo("150");
-    assertThat(link.getUnit()).isEqualTo("g");
   }
 
   @Test
@@ -340,7 +361,12 @@ class RecipeServiceTest {
         .thenAnswer(invocation -> Dish.builder().id(dishId).name("tofu stir-fry").build());
     when(ingredientRepository.findByNameIgnoreCase("tofu")).thenReturn(Optional.empty());
     when(ingredientRepository.saveAndFlush(any(Ingredient.class)))
-        .thenAnswer(invocation -> Ingredient.builder().id(ingredientId).name("tofu").build());
+        .thenAnswer(
+            invocation -> {
+              Ingredient ingredient = invocation.getArgument(0);
+              ingredient.setId(ingredientId);
+              return ingredient;
+            });
     when(recipeRepository.save(any(Recipe.class)))
         .thenAnswer(
             invocation -> {
@@ -394,7 +420,7 @@ class RecipeServiceTest {
             .instructions("Chop and cook")
             .servings(2)
             .build();
-    Ingredient tofu = Ingredient.builder().id(ingredientId).name("tofu").build();
+    Ingredient tofu = Ingredient.builder().id(ingredientId).name("tofu").unit(Unit.G).build();
     RecipeResponse expected = RecipeResponse.builder().id(recipeId).build();
     when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.of(recipe));
     when(recipeIngredientRepository.findByRecipeId(recipeId))
@@ -405,7 +431,6 @@ class RecipeServiceTest {
                     .ingredientId(ingredientId)
                     .ingredient(tofu)
                     .amount(new BigDecimal("150"))
-                    .unit("g")
                     .build()));
     when(recipeMapper.toResponse(eq(recipe), eq("tofu stir-fry"), anyList())).thenReturn(expected);
 
@@ -467,6 +492,128 @@ class RecipeServiceTest {
   }
 
   @Test
+  void deleteRecipe_ownRecipeStampsDeletedAtAndKeepsTheRow() {
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .user(user)
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .build();
+    when(recipeRepository.findByIdAndUser_IdAndDeletedAtIsNull(recipeId, userId))
+        .thenReturn(Optional.of(recipe));
+
+    recipeService.deleteRecipe(userId, recipeId);
+
+    ArgumentCaptor<Recipe> saved = ArgumentCaptor.forClass(Recipe.class);
+    verify(recipeRepository).save(saved.capture());
+    assertThat(saved.getValue().getId()).isEqualTo(recipeId);
+    assertThat(saved.getValue().getDeletedAt()).isNotNull();
+  }
+
+  @Test
+  void deleteRecipe_anotherMembersOrMissingRecipe_isReportedAsNotFound() {
+    when(recipeRepository.findByIdAndUser_IdAndDeletedAtIsNull(recipeId, userId))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> recipeService.deleteRecipe(userId, recipeId))
+        .isInstanceOf(ResourceNotFoundException.class)
+        .hasMessage("Recipe not found");
+    verify(recipeRepository, never()).save(any(Recipe.class));
+  }
+
+  @Test
+  void getRecipe_lineCarriesItsOwnContributionWhenTheIngredientIsCurated() {
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .user(user)
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .calories(new BigDecimal("288.00"))
+            .build();
+    // 200 x 1.44 kcal/g = 288.00, the same figure the stored total carries.
+    Ingredient tofu =
+        Ingredient.builder()
+            .id(ingredientId)
+            .name("tofu")
+            .unit(Unit.G)
+            .calories(new BigDecimal("1.440000"))
+            .proteinG(new BigDecimal("0.171900"))
+            .carbohydrateG(new BigDecimal("0.027800"))
+            .fatG(new BigDecimal("0.087200"))
+            .fiberG(new BigDecimal("0.023000"))
+            .build();
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.of(recipe));
+    when(recipeIngredientRepository.findByRecipeId(recipeId))
+        .thenReturn(
+            List.of(
+                RecipeIngredient.builder()
+                    .recipeId(recipeId)
+                    .ingredientId(ingredientId)
+                    .ingredient(tofu)
+                    .amount(new BigDecimal("200"))
+                    .build()));
+    when(recipeMapper.toResponse(eq(recipe), eq("tofu stir-fry"), anyList()))
+        .thenReturn(RecipeResponse.builder().id(recipeId).build());
+
+    recipeService.getRecipe(userId, recipeId);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<List<RecipeIngredientResponse>> captor = ArgumentCaptor.forClass(List.class);
+    verify(recipeMapper).toResponse(eq(recipe), eq("tofu stir-fry"), captor.capture());
+
+    RecipeIngredientResponse line = captor.getValue().get(0);
+    assertThat(line.getUnit()).isEqualTo("G");
+    assertThat(line.isNutritionResolved()).isTrue();
+    assertThat(line.getCalories()).isEqualByComparingTo("288.00");
+    assertThat(line.getProteinG()).isEqualByComparingTo("34.38");
+  }
+
+  @Test
+  void getRecipe_lineReportsNoNutritionWhenItsIngredientIsUncurated() {
+    Recipe recipe =
+        Recipe.builder()
+            .id(recipeId)
+            .user(user)
+            .dish(Dish.builder().id(dishId).name("tofu stir-fry").build())
+            .name("Rainbow Bowl")
+            .instructions("Chop and cook")
+            .servings(2)
+            .build();
+    Ingredient bare = Ingredient.builder().id(ingredientId).name("muối").build();
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.of(recipe));
+    when(recipeIngredientRepository.findByRecipeId(recipeId))
+        .thenReturn(
+            List.of(
+                RecipeIngredient.builder()
+                    .recipeId(recipeId)
+                    .ingredientId(ingredientId)
+                    .ingredient(bare)
+                    .amount(BigDecimal.TEN)
+                    .build()));
+    when(recipeMapper.toResponse(eq(recipe), eq("tofu stir-fry"), anyList()))
+        .thenReturn(RecipeResponse.builder().id(recipeId).build());
+
+    recipeService.getRecipe(userId, recipeId);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<List<RecipeIngredientResponse>> captor = ArgumentCaptor.forClass(List.class);
+    verify(recipeMapper).toResponse(eq(recipe), eq("tofu stir-fry"), captor.capture());
+
+    // Unknown is five nulls, never a zero: 10 g of an uncurated ingredient is not 0 kcal.
+    RecipeIngredientResponse line = captor.getValue().get(0);
+    assertThat(line.isNutritionResolved()).isFalse();
+    assertThat(line.getCalories()).isNull();
+    assertThat(line.getProteinG()).isNull();
+    assertThat(line.getFiberG()).isNull();
+  }
+
+  @Test
   void listMyRecipes_mapsEveryRecipeWithItsIngredientLines() {
     Recipe first =
         Recipe.builder()
@@ -478,12 +625,15 @@ class RecipeServiceTest {
             .servings(2)
             .build();
     RecipeResponse expected = RecipeResponse.builder().id(recipeId).build();
-    when(recipeRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId))
-        .thenReturn(List.of(first));
+    Page<Recipe> page = new PageImpl<>(List.of(first), PageRequest.of(0, 20), 1);
+    when(recipeRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
     when(recipeIngredientRepository.findByRecipeId(recipeId)).thenReturn(List.of());
     when(recipeMapper.toResponse(eq(first), eq("tofu stir-fry"), anyList())).thenReturn(expected);
 
-    assertThat(recipeService.listMyRecipes(userId)).containsExactly(expected);
+    PageResponse<RecipeResponse> result =
+        recipeService.listMyRecipes(userId, new MyRecipeListRequest());
+
+    assertThat(result.getContent()).containsExactly(expected);
   }
 
   private void stubUserFound() {

@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.recipe.Unit;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
 import com.vegalife.model.recipe.Dish;
@@ -21,6 +22,7 @@ import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.repository.user.UserProfileRepository;
 import com.vegalife.repository.user.UserRepository;
+import com.vegalife.service.recipe.RecipeNutritionCalculator;
 import com.vegalife.service.token.JwtTokenService;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -261,8 +263,12 @@ class DishControllerIntegrationTest {
   void suggestDishes_excludesDishesWhoseOnlyRecipeUsesAStoredAllergen() throws Exception {
     Dish safeDish = dishRepository.save(approved("pho chay"));
     Dish unsafeDish = dishRepository.save(approved("pad thai"));
-    recipeRepository.save(approvedRecipe(safeDish, "Pho chay", "tofu"));
-    recipeRepository.save(approvedRecipe(unsafeDish, "Pad thai", "peanut"));
+    recipeRepository.save(
+        approvedRecipe(
+            safeDish, "Pho chay", "tofu", priced("21.50", "21.50", "10.00", "4.00", "2.00")));
+    recipeRepository.save(
+        approvedRecipe(
+            unsafeDish, "Pad thai", "peanut", priced("300.00", "10.00", "40.00", "8.00", "3.00")));
     saveAllergies("Peanut");
 
     mockMvc
@@ -274,7 +280,9 @@ class DishControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].name").value("pho chay"))
         .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].name").value("Pho chay"))
         .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].servings").value(2))
-        .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].proteinG").value(21.50));
+        .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].proteinG").value(21.50))
+        .andExpect(
+            jsonPath("$.data.content[0].recommendedRecipes[0].nutritionResolved").value(true));
   }
 
   @Test
@@ -297,7 +305,9 @@ class DishControllerIntegrationTest {
         .perform(get("/api/dishes/suggestions").header("Authorization", "Bearer " + accessToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].calories").doesNotExist())
-        .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].fatG").doesNotExist());
+        .andExpect(jsonPath("$.data.content[0].recommendedRecipes[0].fatG").doesNotExist())
+        .andExpect(
+            jsonPath("$.data.content[0].recommendedRecipes[0].nutritionResolved").value(false));
   }
 
   @Test
@@ -333,28 +343,68 @@ class DishControllerIntegrationTest {
   }
 
   private Recipe approvedRecipe(Dish dish, String name, String ingredientName) {
+    return approvedRecipe(dish, name, ingredientName, null);
+  }
+
+  /**
+   * A recipe whose single ingredient is unresolved (no unit, no nutrition), so the recipe's own
+   * totals are null — the shape ADR-022 calls "cannot be priced yet".
+   */
+  private Recipe approvedRecipe(
+      Dish dish,
+      String name,
+      String ingredientName,
+      RecipeNutritionCalculator.NutritionTotals totals) {
     User owner = userRepository.findAll().get(0);
     Ingredient ingredient =
-        ingredientRepository.saveAndFlush(Ingredient.builder().name(ingredientName).build());
+        ingredientRepository.saveAndFlush(
+            totals == null
+                ? Ingredient.builder().name(ingredientName).build()
+                : Ingredient.builder()
+                    .name(ingredientName)
+                    .unit(Unit.G)
+                    .calories(totals.calories())
+                    .proteinG(totals.proteinG())
+                    .carbohydrateG(totals.carbohydrateG())
+                    .fatG(totals.fatG())
+                    .fiberG(totals.fiberG())
+                    .build());
     Recipe recipe =
-        recipeRepository.saveAndFlush(
-            Recipe.builder()
-                .dish(dish)
-                .user(owner)
-                .name(name)
-                .instructions("Cook it")
-                .servings(2)
-                .proteinG(new BigDecimal("21.50"))
-                .moderationStatus(ModerationStatus.APPROVED)
-                .build());
+        Recipe.builder()
+            .dish(dish)
+            .user(owner)
+            .name(name)
+            .instructions("Cook it")
+            .servings(2)
+            .moderationStatus(ModerationStatus.APPROVED)
+            .build();
+    if (totals != null) {
+      // One unit of the ingredient, so the recipe total equals the ingredient's per-unit values.
+      recipe.setCalories(totals.calories());
+      recipe.setProteinG(totals.proteinG());
+      recipe.setCarbohydrateG(totals.carbohydrateG());
+      recipe.setFatG(totals.fatG());
+      recipe.setFiberG(totals.fiberG());
+    }
+    Recipe saved = recipeRepository.saveAndFlush(recipe);
     recipeIngredientRepository.saveAndFlush(
         RecipeIngredient.builder()
-            .recipeId(recipe.getId())
+            .recipeId(saved.getId())
             .ingredientId(ingredient.getId())
             .amount(BigDecimal.ONE)
-            .unit("g")
             .build());
-    return recipe;
+    return saved;
+  }
+
+  /** A recipe with complete nutrition: 21.50 kcal and 21.50 g protein per one gram consumed. */
+  private static RecipeNutritionCalculator.NutritionTotals priced(
+      String calories, String protein, String carbs, String fat, String fiber) {
+    return new RecipeNutritionCalculator.NutritionTotals(
+        new BigDecimal(calories),
+        new BigDecimal(protein),
+        new BigDecimal(carbs),
+        new BigDecimal(fat),
+        new BigDecimal(fiber));
   }
 
   private void saveAllergies(String... allergies) {

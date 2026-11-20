@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,24 +14,25 @@ import com.vegalife.dto.request.admin.RecipeListRequest;
 import com.vegalife.dto.response.admin.AdminRecipeListResponse;
 import com.vegalife.enums.recipe.Difficulty;
 import com.vegalife.enums.recipe.ModerationStatus;
+import com.vegalife.enums.recipe.Unit;
 import com.vegalife.enums.user.UserRole;
 import com.vegalife.enums.user.UserStatus;
-import com.vegalife.model.admin.ModerationLog;
 import com.vegalife.model.recipe.Dish;
 import com.vegalife.model.recipe.Ingredient;
 import com.vegalife.model.recipe.Recipe;
 import com.vegalife.model.recipe.RecipeIngredient;
 import com.vegalife.model.user.User;
-import com.vegalife.repository.admin.ModerationLogRepository;
 import com.vegalife.repository.recipe.DishRepository;
 import com.vegalife.repository.recipe.IngredientRepository;
 import com.vegalife.repository.recipe.RecipeIngredientRepository;
 import com.vegalife.repository.recipe.RecipeRepository;
 import com.vegalife.service.admin.AdminRecipeService;
+import com.vegalife.service.cache.AdminDashboardCacheInvalidator;
 import com.vegalife.service.recipe.DishIngredientService;
 import com.vegalife.shared.dto.PageResponse;
 import com.vegalife.shared.exception.ResourceNotFoundException;
 import com.vegalife.shared.exception.ValidationException;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -40,7 +40,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -58,8 +57,6 @@ class AdminRecipeServiceTest {
 
   @Mock private AdminRecipeMapper adminRecipeMapper;
 
-  @Mock private ModerationLogRepository moderationLogRepository;
-
   @Mock private DishRepository dishRepository;
 
   @Mock private IngredientRepository ingredientRepository;
@@ -67,6 +64,8 @@ class AdminRecipeServiceTest {
   @Mock private RecipeIngredientRepository recipeIngredientRepository;
 
   @Mock private DishIngredientService dishIngredientService;
+
+  @Mock private AdminDashboardCacheInvalidator dashboardCache;
 
   @InjectMocks private AdminRecipeService adminRecipeService;
 
@@ -190,8 +189,7 @@ class AdminRecipeServiceTest {
 
     assertThatThrownBy(() -> adminRecipeService.listRecipes(request))
         .isInstanceOf(ValidationException.class)
-        .hasMessage(
-            "Sort property must be one of: createdAt, updatedAt, name, moderationStatus, score");
+        .hasMessage("Sort property must be one of: createdAt, updatedAt, name, moderationStatus");
   }
 
   @Test
@@ -241,6 +239,76 @@ class AdminRecipeServiceTest {
   }
 
   @Test
+  void getRecipe_populatesPerLineNutritionAndTheResolvedFlag() {
+    Ingredient tofu =
+        Ingredient.builder()
+            .id(UUID.randomUUID())
+            .name("tofu")
+            .unit(Unit.G)
+            .moderationStatus(ModerationStatus.APPROVED)
+            .calories(new BigDecimal("1.440000"))
+            .proteinG(new BigDecimal("0.171900"))
+            .carbohydrateG(new BigDecimal("0.027800"))
+            .fatG(new BigDecimal("0.087200"))
+            .fiberG(new BigDecimal("0.023000"))
+            .build();
+    recipe.setCalories(new BigDecimal("288.00"));
+    recipe.setProteinG(new BigDecimal("34.38"));
+    recipe.setRecipeIngredients(
+        List.of(
+            RecipeIngredient.builder()
+                .recipeId(recipe.getId())
+                .ingredientId(tofu.getId())
+                .ingredient(tofu)
+                .amount(new BigDecimal("200"))
+                .build()));
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
+        .thenReturn(Optional.of(recipe));
+    when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
+
+    AdminRecipeListResponse result = adminRecipeService.getRecipe(recipe.getId());
+
+    assertThat(result.isNutritionResolved()).isTrue();
+    AdminRecipeListResponse.IngredientItem line = result.getIngredients().get(0);
+    assertThat(line.getUnit()).isEqualTo("G");
+    assertThat(line.isNutritionResolved()).isTrue();
+    // 200 x 1.44 = 288.00: the same figure the persisted recipe total carries.
+    assertThat(line.getCalories()).isEqualByComparingTo("288.00");
+    assertThat(line.getProteinG()).isEqualByComparingTo("34.38");
+  }
+
+  @Test
+  void getRecipe_uncuratedIngredientReportsNoLineOrTotalNutrition() {
+    Ingredient bare =
+        Ingredient.builder()
+            .id(UUID.randomUUID())
+            .name("muối")
+            .moderationStatus(ModerationStatus.PENDING)
+            .build();
+    recipe.setRecipeIngredients(
+        List.of(
+            RecipeIngredient.builder()
+                .recipeId(recipe.getId())
+                .ingredientId(bare.getId())
+                .ingredient(bare)
+                .amount(BigDecimal.TEN)
+                .build()));
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
+        .thenReturn(Optional.of(recipe));
+    when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
+
+    AdminRecipeListResponse result = adminRecipeService.getRecipe(recipe.getId());
+
+    // The consuming admin queue needs "not computed yet" to be visible, not inferred from a null
+    // total that could also read as zero.
+    assertThat(result.isNutritionResolved()).isFalse();
+    AdminRecipeListResponse.IngredientItem line = result.getIngredients().get(0);
+    assertThat(line.isNutritionResolved()).isFalse();
+    assertThat(line.getCalories()).isNull();
+    assertThat(line.getUnit()).isNull();
+  }
+
+  @Test
   void getRecipe_missingOrSoftDeleted_throwsResourceNotFound() {
     UUID recipeId = UUID.randomUUID();
     when(recipeRepository.findByIdAndDeletedAtIsNull(recipeId)).thenReturn(Optional.empty());
@@ -251,9 +319,8 @@ class AdminRecipeServiceTest {
   }
 
   @Test
-  void updateRecipe_changesFieldsButLeavesModerationStateAndScore() {
+  void updateRecipe_changesFieldsButLeavesModerationState() {
     recipe.setModerationStatus(ModerationStatus.PENDING);
-    recipe.setScore(0.42);
     when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
         .thenReturn(Optional.of(recipe));
     when(recipeRepository.saveAndFlush(recipe)).thenReturn(recipe);
@@ -273,10 +340,8 @@ class AdminRecipeServiceTest {
     assertThat(recipe.getInstructions()).isEqualTo("Simmer longer");
     assertThat(recipe.getServings()).isEqualTo(6);
     assertThat(recipe.getDifficulty()).isEqualTo(Difficulty.HARD);
-    // The admin is the approver, so an edit is not a reason to re-queue the recipe...
+    // The admin is the approver, so an edit is not a reason to re-queue the recipe.
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.PENDING);
-    // ...and the score records why it was queued, so editing must not rewrite it.
-    assertThat(recipe.getScore()).isEqualTo(0.42);
     // An omitted field keeps its value.
     assertThat(recipe.getDescription()).isNull();
   }
@@ -314,7 +379,7 @@ class AdminRecipeServiceTest {
   }
 
   @Test
-  void deleteRecipe_softDeletesAndLogs() {
+  void deleteRecipe_softDeletes() {
     UUID adminId = UUID.randomUUID();
     when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
         .thenReturn(Optional.of(recipe));
@@ -325,16 +390,10 @@ class AdminRecipeServiceTest {
     verify(recipeRepository).save(recipe);
     // Soft, never hard: post_recipe rows still point at it.
     verify(recipeRepository, never()).delete(any(Recipe.class));
-
-    ModerationLog entry = lastLog();
-    assertThat(entry.getActorId()).isEqualTo(adminId);
-    assertThat(entry.getAction()).isEqualTo("DELETE_RECIPE");
-    assertThat(entry.getTargetType()).isEqualTo("RECIPE");
-    assertThat(entry.getTargetId()).isEqualTo(recipe.getId());
   }
 
   @Test
-  void approveRecipe_pending_becomesApprovedAndLogs() {
+  void approveRecipe_pending_becomesApproved() {
     UUID adminId = UUID.randomUUID();
     recipe.setModerationStatus(ModerationStatus.PENDING);
     when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
@@ -342,29 +401,25 @@ class AdminRecipeServiceTest {
     when(recipeRepository.saveAndFlush(recipe)).thenReturn(recipe);
     when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
 
-    adminRecipeService.approveRecipe(adminId, recipe.getId(), "fine");
+    adminRecipeService.approveRecipe(adminId, recipe.getId());
 
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
-    ModerationLog entry = lastLog();
-    assertThat(entry.getAction()).isEqualTo("APPROVE_COMPONENT");
-    assertThat(entry.getReason()).isEqualTo("fine");
   }
 
   @Test
-  void approveRecipe_alreadyApproved_isNoOpWithoutLog() {
+  void approveRecipe_alreadyApproved_isNoOp() {
     recipe.setModerationStatus(ModerationStatus.APPROVED);
     when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
         .thenReturn(Optional.of(recipe));
     when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
 
-    adminRecipeService.approveRecipe(UUID.randomUUID(), recipe.getId(), null);
+    adminRecipeService.approveRecipe(UUID.randomUUID(), recipe.getId());
 
     verify(recipeRepository, never()).saveAndFlush(any(Recipe.class));
-    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
   }
 
   @Test
-  void rejectRecipe_approved_becomesRejectedAndLogs() {
+  void rejectRecipe_approved_becomesRejected() {
     UUID adminId = UUID.randomUUID();
     recipe.setModerationStatus(ModerationStatus.APPROVED);
     when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
@@ -376,12 +431,30 @@ class AdminRecipeServiceTest {
 
     // An admin acting on the name itself may withdraw an earlier approval; nothing is deleted.
     assertThat(recipe.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
+    assertThat(recipe.getRejectionReason()).isEqualTo("instructions are off-topic");
     assertThat(recipe.getDeletedAt()).isNull();
-    assertThat(lastLog().getAction()).isEqualTo("REJECT_COMPONENT");
   }
 
   @Test
-  void rejectRecipe_alreadyRejected_isNoOpWithoutLog() {
+  void rejectThenApproveRecipe_clearsTheStoredRejectionReason() {
+    UUID adminId = UUID.randomUUID();
+    recipe.setModerationStatus(ModerationStatus.APPROVED);
+    when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
+        .thenReturn(Optional.of(recipe));
+    when(recipeRepository.saveAndFlush(recipe)).thenReturn(recipe);
+    when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
+
+    adminRecipeService.rejectRecipe(adminId, recipe.getId(), "instructions are off-topic");
+    assertThat(recipe.getRejectionReason()).isEqualTo("instructions are off-topic");
+
+    adminRecipeService.approveRecipe(adminId, recipe.getId());
+
+    // Current state, not history: the reason must not survive a reversal.
+    assertThat(recipe.getRejectionReason()).isNull();
+  }
+
+  @Test
+  void rejectRecipe_alreadyRejected_isNoOp() {
     recipe.setModerationStatus(ModerationStatus.REJECTED);
     when(recipeRepository.findByIdAndDeletedAtIsNull(recipe.getId()))
         .thenReturn(Optional.of(recipe));
@@ -390,7 +463,6 @@ class AdminRecipeServiceTest {
     adminRecipeService.rejectRecipe(UUID.randomUUID(), recipe.getId(), null);
 
     verify(recipeRepository, never()).saveAndFlush(any(Recipe.class));
-    verify(moderationLogRepository, never()).save(any(ModerationLog.class));
   }
 
   @Test
@@ -417,7 +489,7 @@ class AdminRecipeServiceTest {
     when(recipeIngredientRepository.findByRecipeId(recipe.getId())).thenReturn(List.of(line));
     when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
 
-    adminRecipeService.approveRecipe(adminId, recipe.getId(), "looks good");
+    adminRecipeService.approveRecipe(adminId, recipe.getId());
 
     // Approving the recipe is a human accepting the names it introduced.
     assertThat(dish.getModerationStatus()).isEqualTo(ModerationStatus.APPROVED);
@@ -426,12 +498,6 @@ class AdminRecipeServiceTest {
     verify(ingredientRepository).save(tofu);
     // ...and the approved recipe contributes its ingredients to the dish's suggestion list.
     verify(dishIngredientService).seedFromApprovedRecipe(recipe);
-
-    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository, atLeastOnce()).save(captor.capture());
-    assertThat(captor.getAllValues())
-        .extracting(ModerationLog::getTargetType)
-        .containsExactlyInAnyOrder("RECIPE", "DISH", "INGREDIENT");
   }
 
   @Test
@@ -449,16 +515,10 @@ class AdminRecipeServiceTest {
     when(recipeRepository.saveAndFlush(recipe)).thenReturn(recipe);
     when(adminRecipeMapper.toResponse(recipe)).thenReturn(recipeResponse);
 
-    adminRecipeService.approveRecipe(UUID.randomUUID(), recipe.getId(), null);
+    adminRecipeService.approveRecipe(UUID.randomUUID(), recipe.getId());
 
     // A rejection is permanent (BR-DISH-001): approving a recipe must not launder the name.
     assertThat(rejectedDish.getModerationStatus()).isEqualTo(ModerationStatus.REJECTED);
     verify(dishRepository, never()).save(any(Dish.class));
-  }
-
-  private ModerationLog lastLog() {
-    ArgumentCaptor<ModerationLog> captor = ArgumentCaptor.forClass(ModerationLog.class);
-    verify(moderationLogRepository, atLeastOnce()).save(captor.capture());
-    return captor.getAllValues().get(captor.getAllValues().size() - 1);
   }
 }

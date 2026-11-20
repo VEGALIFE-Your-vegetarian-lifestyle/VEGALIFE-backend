@@ -76,14 +76,6 @@ public class Recipe {
   private Difficulty difficulty;
 
   /**
-   * Relevance score of the recipe body ({@code name + description + instructions}). {@code null}
-   * means never scored; distinct from a low score, same convention as {@code Post.contentScore}
-   * (ADR-016).
-   */
-  @Column(name = "score")
-  private Double score;
-
-  /**
    * Review state of this recipe (ADR-016). A recipe created through {@code POST /api/recipes}
    * starts {@link ModerationStatus#PENDING}; existing rows were backfilled to {@code APPROVED}.
    */
@@ -91,6 +83,16 @@ public class Recipe {
   @Column(name = "moderation_status", length = 20, nullable = false)
   @Builder.Default
   private ModerationStatus moderationStatus = ModerationStatus.PENDING;
+
+  /**
+   * The admin-supplied reason for the most recent rejection, cleared when an admin approves the
+   * recipe again. Current state only: no earlier reason is retained anywhere.
+   *
+   * <p>Nullable because the reason is optional, and because rows rejected before the column existed
+   * never had one recorded.
+   */
+  @Column(name = "rejection_reason", columnDefinition = "TEXT")
+  private String rejectionReason;
 
   /**
    * Author-entered nutrition for the <em>whole</em> recipe, not per serving (issue #163). Null

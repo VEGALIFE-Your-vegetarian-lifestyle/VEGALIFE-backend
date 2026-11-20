@@ -29,7 +29,7 @@ No path parameters.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| startDate | date (`YYYY-MM-DD`) | Yes | First day of the week. `endDate` is derived as `startDate + 6`; it is never accepted from the client. |
+| startDate | date (`YYYY-MM-DD`) | Yes | First day of the week. Must be tomorrow or later in server UTC (BR-MENU-004); today or a past date is rejected. `endDate` is derived as `startDate + 6`; it is never accepted from the client. |
 | notes | string | No | Free-text note (the week's summary: theme and honored restrictions). |
 | days | array of day objects | Yes | Exactly the 7 dates `startDate .. startDate + 6`, each appearing once. |
 
@@ -56,6 +56,8 @@ Meal object:
 - Every `dish_id` exists and is not soft-deleted.
 - No dish appears more than 3 times in the menu; at least 5 distinct dishes
   are referenced.
+- `start_date` is tomorrow or later in server UTC — a week that has already
+  started is never accepted.
 - Identity is never a body field (`user_id` is not accepted).
 
 Any violation returns 400 and persists nothing.
@@ -84,12 +86,14 @@ Any violation returns 400 and persists nothing.
             "mealType": "BREAKFAST",
             "dishId": "9b4d1e77-1f2a-4c5d-8e6f-3a7b2c9d0e11",
             "dishName": "Tofu Scramble",
+            "imageUrl": "https://cdn.example.com/dishes/tofu-scramble.jpg",
             "servings": 2
           },
           {
             "mealType": "LUNCH",
             "dishId": "2e8c5a10-9b3d-4f7a-8c1e-6d4b0a9f3e22",
             "dishName": "Chickpea Buddha Bowl",
+            "imageUrl": null,
             "servings": 1
           }
         ]
@@ -100,17 +104,17 @@ Any violation returns 400 and persists nothing.
 ```
 
 The `data` payload is the menu-detail shape (`MenuDetailResponse`), whose meals
-identify each dish by `dishId` and `dishName` only. To read a plan back with
-the dishes embedded in full, use `GET /api/menus/details`, which returns a
-richer and deliberately different meal shape. Store the returned id and re-read
-the menu later with either.
+carry each dish's `dishId`, `dishName` and `imageUrl`, but do not embed the rest
+of the dish. To read a plan back with the dishes embedded in full, use
+`GET /api/menus/details`, which returns a richer and deliberately different meal
+shape. Store the returned id and re-read the menu later with either.
 
 ### Error Responses
 
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
 | 400 | Missing/malformed body fields, `servings` < 1 | Bean-validation or parse message |
-| 400 | A structural rule of BR-MENU-005 is violated (wrong dates, duplicate `meal_type`, unknown dish, too few distinct dishes, dish repeated too often) | Clear message naming the rule, e.g. `days must contain exactly the 7 dates from start_date to start_date + 6` |
+| 400 | A structural rule of BR-MENU-005 is violated (wrong dates, duplicate `meal_type`, unknown dish, too few distinct dishes, dish repeated too often, start date today or in the past) | Clear message naming the rule, e.g. `days must contain exactly the 7 dates from start_date to start_date + 6` or `startDate must be tomorrow or later` |
 | 401 | JWT is missing, invalid, or the account is inactive | `Unauthorized` |
 | 500 | Unexpected server error | `Internal server error` |
 

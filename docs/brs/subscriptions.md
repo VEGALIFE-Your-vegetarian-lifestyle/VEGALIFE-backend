@@ -2,6 +2,8 @@
 
 Constraints governing AI plans, quota accounting, and subscription reads. ID format `BR-SUBS-<NNN>`.
 
+BR-SUBS-001/003/004/005/006 described the monthly subscription lifecycle and are superseded by [ADR-021](../adrs/021-request-allowance-as-acquisition-sum.md). BR-SUBS-002 survives with `request_quota` as the column name; BR-SUBS-007 onward are the standing rules of the acquisition model.
+
 ---
 
 # Business Rule: AI Quota Window Is the Current UTC Calendar Month
@@ -10,24 +12,22 @@ Constraints governing AI plans, quota accounting, and subscription reads. ID for
 `BR-SUBS-001`
 
 ## Status
-Active
+Superseded by ADR-021 — replaced by BR-SUBS-007
 
 ## Statement
-A member's AI quota for a read is counted over the current UTC calendar month: the window opens at `00:00:00 UTC` on the first day of the month and closes at `00:00:00 UTC` on the first day of the next month. `used` is the sum of `ai_usage.request_count` for rows of that user whose `[period_start, period_end)` interval **overlaps** that window — not rows nested inside it, and not rows whose period starts after the window opened. Usage rows the quota recorder writes must themselves be non-overlapping (monthly rows are the expected shape), because overlapping persisted periods would be double-counted by this sum.
+_Retired._ This rule defined AI quota over the current UTC calendar month, counting `ai_usage.request_count` for rows whose `[period_start, period_end)` interval overlapped that window. The window, the per-month usage rows, and the overlap predicate all no longer exist: `ai_usage` is one lifetime row per member and the allowance never resets (BR-SUBS-007).
 
 ## Rationale
-The overlap predicate is what makes the sum correct for a caller whose usage rows and the calendar window disagree at the edges: a row spanning a month boundary still contributes its portion, and a row entirely outside contributes nothing. A stricter `period_start >= windowStart AND period_start < windowEnd` predicate would silently drop a boundary-spanning row. Non-overlapping persisted periods are the complementary half of the same guarantee — the read side can only assume the write side does not overlap itself.
+The window existed to expire an allowance the member had not used by the end of the month. Acquired requests are now non-expiring, so a periodic boundary has nothing left to mean — and keeping one would destroy requests the member acquired.
 
 ## Scope & Exceptions
-Applies to every read of AI quota, starting with `GET /api/subscriptions/me`. It does **not** align with `ai_subscription.renewal_date`: for a mid-month subscriber the calendar window drifts from the billing period, and aligning the two is a deliberate follow-up decision, not a silent behaviour change. No exception for any tier — FREE and PRO use the same window.
+None — the rule is not enforced anywhere.
 
 ## Enforcement
-- `SubscriptionService` computes the window from the current instant in UTC and issues one aggregate query against `ai_usage` (index `idx_ai_usage_user_id`), never an in-memory scan
-- The quota recorder (a future feature) is the write-side half: it must emit non-overlapping `[period_start, period_end)` rows
-- API: `usage.periodStart` / `usage.periodEnd` are returned so the caller sees the window actually used; `used` is `0`, never `null`, when no row matches
+- Removed: window computation and the overlap aggregate in `SubscriptionService`, `usage.periodStart` / `usage.periodEnd` in the API, and `ai_usage.period_start` / `period_end`
 
 ## Last Reviewed
-2026-10-04, by Vegalife backend team
+2026-11-04, by Vegalife backend team
 
 ---
 
@@ -40,21 +40,21 @@ Applies to every read of AI quota, starting with `GET /api/subscriptions/me`. It
 Active
 
 ## Statement
-Every plan limit and price served by the subscription APIs comes from the `ai_plan` table. No plan code, monthly request limit, price, or currency exists as a constant in Java source — including in tests, which seed or read the rows instead of restating their values. Changing the PRO price or the FREE monthly limit is a data change.
+Every plan quota and price served by the subscription APIs comes from the `ai_plan` table. No plan code, request quota, price, or currency exists as a constant in Java source — including in tests, which seed or read the rows instead of restating their values. Changing the PRO price or a plan's `request_quota` is a data change.
 
 ## Rationale
-Plan terms are commercial facts that change for business reasons. A constant in Java means a price change becomes a code change with a release cycle, and — worse — lets different layers of the application disagree: a hardcoded `20` in one service and a seeded `20` in the database is a discrepancy that surfaces only as a wrong number in a response. Tests that restate the value have the same defect in reverse: they pass while the seed drifts.
+Plan terms are commercial facts that change for business reasons. A constant in Java means a price change becomes a code change with a release cycle, and — worse — lets different layers of the application disagree: a hardcoded `5` in one service and a seeded `5` in the database is a discrepancy that surfaces only as a wrong number in a response. Tests that restate the value have the same defect in reverse: they pass while the seed drifts.
 
 ## Scope & Exceptions
-Applies to every endpoint that returns plan data (`GET /api/subscriptions`, the `currentPlan` and `usage.limit` parts of `GET /api/subscriptions/me`) and to any future feature that gates behaviour on tier. Plan **seed** data lives in the migration that creates the tables — that is data, not a constant. No exception for `code = 'FREE'`: even the FREE fallback resolves through the `ai_plan` row rather than through inlined limits.
+Applies to every endpoint that returns plan data (`GET /api/subscriptions`, `GET /api/admin/plans`) and to the entitlement calculation, which reads `ai_plan.request_quota` live for every granted acquisition (BR-SUBS-010). Plan **seed** data lives in the migration that creates the tables — that is data, not a constant. There is no exception for the FREE tier: it is an ordinary `ai_plan` row claimed through the acquire endpoint, not a code fallback.
 
 ## Enforcement
-- `SubscriptionService` resolves the effective plan exclusively through `AiPlanRepository` queries
-- Seed rows are created by `V25__create_ai_subscription_tables.sql`; a plan change is a new migration or a data update
-- Feature spec `NFR-MAINT-001` records the check: grep for a plan limit constant in `src/main/java` must return nothing
+- `PlanAcquisitionService` / `RequestAllowanceService` resolve plans exclusively through `AiPlanRepository` queries
+- Seed rows are created by `V25__create_ai_subscription_tables.sql` and adjusted by `V48`; a plan change is a new migration or an admin data update
+- Feature spec `NFR-MAINT-001` records the check: grep for a plan quota constant in `src/main/java` must return nothing
 
 ## Last Reviewed
-2026-10-04, by Vegalife backend team
+2026-11-04, by Vegalife backend team
 
 ---
 
@@ -64,24 +64,22 @@ Applies to every endpoint that returns plan data (`GET /api/subscriptions`, the 
 `BR-SUBS-003`
 
 ## Status
-Active
+Superseded by ADR-021 — replaced by BR-SUBS-007 and BR-SUBS-008
 
 ## Statement
-A member with no `ai_subscription` row **in effect** reads as an active FREE subscriber: `tier` and `currentPlan` come from the `ai_plan` row with `code = 'FREE'`, `status = 'active'`, and `renewalDate = null`. A row is *in effect* iff its status is `active` or `past_due`; rows in `cancelled`, `expired`, or `scheduled` status do not count — so a cancelled member, a member whose rows have all expired, and a member holding only an unactivated `scheduled` extension all read as FREE. Reading a subscription **never creates, updates, or upserts** a row — the FREE default is synthesized in memory and discarded with the response. `GET /api/subscriptions/me` therefore answers `200`, never `404`, regardless of what tables contain.
+_Retired._ This rule made a member with no in-effect `ai_subscription` row read as an active FREE subscriber, with `tier`, `currentPlan` and `status` synthesized from the `code = 'FREE'` plan row at read time. There is no synthesized tier any more: `GET /api/subscriptions/me` returns only `remainingUsage`, and an account with no acquisition rows has an allowance of `0` until it explicitly claims the free plan.
 
 ## Rationale
-`ai_subscription` rows are written only by purchase fulfilment and the lifecycle actions (cancel, extension, sweep) — never by a read. Backfilling a row per user at read time would make a read endpoint a write endpoint: it needs a transaction that can fail, it races under concurrent first requests, and it manufactures rows that a payment flow must then reconcile. The same reasoning covers a member whose rows are all terminal or who holds only a `scheduled` row: nothing is in effect, so synthesizing the FREE default is the correct reading of "no current subscription". Synthesizing costs nothing and keeps the read path read-only, which is also what makes it safe to scale.
+The fallback existed because the FREE tier was not a purchasable or claimable thing — it was the absence of a subscription. Making the free tier an explicit acquisition removes the need to infer a tier at all, and stops every account from implicitly holding an allowance it never acquired (which made "claim once" impossible to define).
 
 ## Scope & Exceptions
-Applies to `GET /api/subscriptions/me` and to any future read that resolves a member's effective tier. Absence of a row in effect means FREE in three shapes: no rows at all, only terminal rows (`cancelled` / `expired`), or only an unactivated `scheduled` row. An `active` row whose `renewal_date` has passed but which the daily sweep has not yet processed still counts as in effect — reads show `active` for at most ~24 h past lapse (BR-SUBS-006). The `latestPayment` field follows the same shape for its own data: no `payment_ledger` row means `null`, not an error. Administrative tooling that intentionally creates subscriptions is outside this rule.
+None — the rule is not enforced anywhere.
 
 ## Enforcement
-- `SubscriptionService.getMySubscription` resolves the member's row in effect (status `active` or `past_due`) and falls back to the `FREE` plan lookup when the query returns empty; the method is `@Transactional(readOnly = true)` so any accidental write fails rather than commits
-- Feature specs record the contract: `FR-003` / `FR-008` / `FR-009` (`docs/feats/subscription-api.md`) and `FR-011` (`docs/feats/subscription-lifecycle.md`) — no row written, no `404` on absent data
-- API: `200 Subscription retrieved successfully` with `renewalDate: null` and `latestPayment: null`
+- Removed: the `code = 'FREE'` fallback in `SubscriptionService` and `AiQuotaGuard.resolvePlan`, and the `tier` / `currentPlan` / `status` fields of `GET /api/subscriptions/me`
 
 ## Last Reviewed
-2026-10-07, by Vegalife backend team
+2026-11-04, by Vegalife backend team
 
 ---
 
@@ -91,31 +89,22 @@ Applies to `GET /api/subscriptions/me` and to any future read that resolves a me
 `BR-SUBS-004`
 
 ## Status
-Active
+Superseded by ADR-021 — replaced by BR-SUBS-008
 
 ## Statement
-At most one `ai_subscription` row of a member is in effect (`active` or `past_due`) at any instant, and while one is, the only further row a purchase may create is that row's single `scheduled` successor. One shared purchase gate decides from the row in effect:
-1. **None in effect** — any purchasable plan may be purchased; fulfilment creates a new `active` row (`started_at = paidAt`, `renewal_date = paidAt + 1 month`, BR-PAY-008).
-2. **Row in effect, same plan, no `scheduled` successor** — the same plan may be purchased once more; fulfilment creates a `scheduled` row with `extended_from_id` pointing at the current row, `started_at` = current `renewal_date`, `renewal_date` = current `renewal_date + 1 month`, leaving the current row untouched.
-3. **Row in effect, different plan** — refused with `409`: "Cancel your current subscription before purchasing a different plan".
-4. **Row in effect, same plan, `scheduled` successor exists** — refused with `409`: "A renewal is already scheduled for this plan".
-
-The gate exists in exactly one method. The read-only eligibility endpoint and IPN fulfilment both call it; when fulfilment (BR-PAY-001, the authority) finds a violation it writes no subscription row and logs WARN with userId, planId, and reason — the payment stays succeeded.
+_Retired._ This rule allowed at most one in-effect subscription row per member and defined a shared purchase gate: no row in effect → new purchase; same plan with no successor → one scheduled extension; different plan → `409`; same plan with a scheduled successor → `409`. With no renewal and no lifecycle, acquisitions stack: buying a plan again legitimately adds a second acquisition and its quota. The gate, the eligibility endpoint and both `409` denials are deleted.
 
 ## Rationale
-Two rows in effect at once would make cancel ambiguous (which row ends access?), history read misleading, and the `/me` response order-dependent — the invariant the whole lifecycle reads through. The single-successor limit prevents stacking extensions faster than time passes: buying the same plan twelve times in one sitting would be prepaying, a product decision that was never designed. Refusing a different plan while one is active avoids silently inventing proration or downgrade semantics. Running the gate in one method (rather than re-deriving branches in the endpoint and in fulfilment) is what keeps the eligibility answer the frontend sees identical to the decision fulfilment later makes.
+The invariant existed to keep "which row is in effect" unambiguous for cancellation, expiry and the `/me` read. None of those concepts survive; entitlement is now a SUM over every granted row, which is order-independent by construction. A purchase gate on top would deny legitimate re-purchases.
 
 ## Scope & Exceptions
-Applies to every user-triggered write path of `ai_subscription`: the eligibility endpoint (which checks and writes nothing), and IPN fulfilment (which writes). Plan-level checks — unknown plan (`404 Plan not found`), inactive plan, price ≤ 0, non-VND (BR-PAY-009) — are a separate concern that runs **before** this gate. Reads (`GET /api/subscriptions/me`, history) do not gate; the cancel endpoint does not gate (BR-SUBS-005 supersedes it for that action). Checkout itself still only creates a `payment_ledger` row — it never touches `ai_subscription`. Administrative tooling is outside this rule. The invariant is enforced application-side: the issue scopes the migration to four named changes, so no partial unique index guards it — correctness rests on the gate plus the pessimistic write lock on the member's rows (pattern: `findByIdForUpdate` in `PaymentLedgerRepository`).
+None — the rule is not enforced anywhere.
 
 ## Enforcement
-- `SubscriptionService` owns the single gate method; the eligibility endpoint and `PaymentCheckoutService.activatePlan` both call it (feature spec NFR-MAINT-001)
-- Gate and cancel run under a pessimistic write lock so concurrent purchases cannot both pass branch 1
-- API: `409` messages exactly as stated; `docs/apis/subscriptions/post-purchase-eligibility.md`
-- Feature spec FR-006 / FR-007 / FR-008 (`docs/feats/subscription-lifecycle.md`)
+- Removed: the shared gate method and its pessimistic lock, `POST /api/subscriptions/me/purchase/eligibility`, `activatePlan`, and the `409` messages "Cancel your current subscription before purchasing a different plan" and "A renewal is already scheduled for this plan"
 
 ## Last Reviewed
-2026-10-07, by Vegalife backend team
+2026-11-04, by Vegalife backend team
 
 ---
 
@@ -125,24 +114,22 @@ Applies to every user-triggered write path of `ai_subscription`: the eligibility
 `BR-SUBS-005`
 
 ## Status
-Active
+Superseded by ADR-021 — no replacement
 
 ## Statement
-`POST /api/subscriptions/me/cancel` sets the member's row in effect to `cancelled` with `cancelled_at = now`, and in the same transaction every `scheduled` row of that member to `cancelled` with the same `cancelled_at`. The effect is immediate: the next read of `GET /api/subscriptions/me` treats the member as FREE (BR-SUBS-003). There is no grace period, no un-cancel endpoint, and no refund handling — a later purchase starts a brand-new subscription. When no row is in effect (already cancelled, expired, or FREE), the endpoint refuses with `409`: "Subscription already cancelled", writing nothing.
+_Retired._ This rule defined `POST /api/subscriptions/me/cancel`: the in-effect row and every `scheduled` successor became `cancelled` immediately, and a repeat call returned `409 "Subscription already cancelled"`. There is nothing to cancel once a grant never expires; a member simply stops acquiring. The endpoint, the `cancelled` status and `cancelled_at` are deleted.
 
 ## Rationale
-Immediate, permanent loss of access is the only cancellation semantics that needs no follow-up machinery: no scheduled downgrade, no access window to honour. Cascading to every `scheduled` row is required for that permanence — a surviving `scheduled` successor would be promoted to `active` by the sweep once its `renewal_date` arrives, silently resurrecting access nobody asked to keep. The 409-on-repeat guard makes the endpoint idempotent to retry: a double-click cannot double-write, and the message tells the caller the desired end state already holds. Cancelling forfeits any remaining paid period — deliberate, because proration is a non-goal of the lifecycle feature.
+Cancellation was the way to stop a renewal. There is no renewal, so cancelling would have to mean revoking requests the member already acquired — the opposite of a non-expiring allowance, and a refund question this feature does not answer.
 
 ## Scope & Exceptions
-Applies to `POST /api/subscriptions/me/cancel` for the authenticated member only (the target row set is derived from the JWT, never from a parameter — no IDOR). Applies to a row in `active` status; a `past_due` row in effect is treated identically for completeness; `cancelled` / `expired` / FREE members receive the 409. `scheduled` rows are never a cancel target on their own — they are reached only as cascade members of an in-effect row. Amounts already paid are governed by the payment rules (BR-PAY-001 onward); this rule deliberately says nothing about refunds.
+None — the rule is not enforced anywhere.
 
 ## Enforcement
-- `SubscriptionService.cancelMySubscription`: one transaction, pessimistic lock, cascade update of the in-effect row plus all `scheduled` rows of the member
-- API: `200` with `{"status": "cancelled", "cancelledAt": ...}`; `409` via the existing `DuplicateResourceException` → `GlobalExceptionHandler`, no handler changes
-- Feature spec FR-003 / FR-004 / FR-005 (`docs/feats/subscription-lifecycle.md`); `docs/apis/subscriptions/post-cancel.md`
+- Removed: `SubscriptionService.cancelMySubscription`, `POST /api/subscriptions/me/cancel`, and the `status` / `cancelled_at` columns
 
 ## Last Reviewed
-2026-10-07, by Vegalife backend team
+2026-11-04, by Vegalife backend team
 
 ---
 
@@ -152,21 +139,164 @@ Applies to `POST /api/subscriptions/me/cancel` for the authenticated member only
 `BR-SUBS-006`
 
 ## Status
+Superseded by ADR-021 — no replacement
+
+## Statement
+_Retired._ This rule required the daily expiry sweep to move rows past `renewal_date` to `expired`, promoting a `scheduled` successor when one existed. Nothing expires now: `renewal_date`, the `scheduled` status, the successor link and `SubscriptionExpirySweepJob` are all deleted, and no scheduled job touches allowance.
+
+## Rationale
+The sweep existed to end a monthly period. Acquired requests have no period to end, and an expiring sweep would be the exact behaviour this feature removes.
+
+## Scope & Exceptions
+None — the rule is not enforced anywhere.
+
+## Enforcement
+- Removed: `SubscriptionExpirySweepJob`, the `(status, renewal_date)` index, and the `renewal_date` / `status` / `extended_from_id` columns
+
+## Last Reviewed
+2026-11-04, by Vegalife backend team
+
+---
+
+# Business Rule: Entitlement Is the Live Sum of Granted Acquisitions and Never Expires
+
+## Rule ID
+`BR-SUBS-007`
+
+## Status
 Active
 
 ## Statement
-Once a row's `renewal_date` has passed, it must not remain in effect past the next run of the daily expiry sweep (`0 0 0 * * *` UTC, gated on `app.scheduling.enabled`). For every `active` / `past_due` row with `renewal_date <= now`: if that member has a `scheduled` successor, the old row becomes `expired` and the successor becomes `active` with **both rows' dates unchanged**; otherwise the old row alone becomes `expired`. Reads may therefore still show `active` for at most ~24 hours after lapse — in that window the member keeps access, in the member's favour. The sweep is a query over `(status, renewal_date)`, so it is idempotent and catches up automatically after downtime: rows that lapsed while the scheduler was off are processed on the next run.
+A member's request allowance is the live sum of the `request_quota` of every plan they have acquired:
+
+```
+allowance      = Σ ai_plan.request_quota over the member's ai_subscription
+                 rows where granted_at IS NOT NULL (never filtered by active)
+consumed       = ai_usage.request_count        (lifetime, one row per member)
+remainingUsage = max(allowance − consumed, 0)
+```
+
+Nothing is stored on `user` and no granted quota is snapshotted on the acquisition row. An acquisition with `granted_at IS NULL` — a pending or failed checkout — grants nothing. Purchases and claims never expire: there is no monthly window, no renewal, no expiry sweep and no reset. `remainingUsage` is the only usage number any API returns.
 
 ## Rationale
-A daily sweep matches the issue's design and keeps the cost proportional to rows actually due, not to total subscriptions (BR-SCALE-001). Promoting an already-paid `scheduled` successor rather than creating anything preserves BR-PAY-001: the sweep never invents a paid period, it only activates the period the member's earlier payment purchased. Expiring instead of renewing keeps the payment system the sole source of subscription starts — automatic renewal charging is a non-goal. The ≤24 h lag is the accepted trade-off for a cron over a per-row event; a member is never disadvantaged (their access outlives payment by hours, never the reverse).
+One stored consumption counter plus a live sum is the smallest model that can answer "how many requests does this member have left?" without a credit table, a consumption ordering rule, or an expiry comparison. The subtraction has exactly one variable per side: the allowance comes only from `ai_plan`, consumption only from `ai_usage`. Deriving the allowance instead of storing it keeps plan terms honest — a quota edit applies immediately rather than drifting per row.
 
 ## Scope & Exceptions
-Applies to rows in `active` or `past_due` status with `renewal_date <= now`, and only through the sweep job — no read path, endpoint, or payment callback performs expiry as a side effect. The sweep never creates rows, never touches `cancelled` or `expired` rows, never alters dates, and never writes to `payment_ledger`. When the scheduler is disabled (`app.scheduling.enabled = false`, e.g. some local/test environments) nothing expires — consumers in that configuration must read `renewal_date` themselves.
+Applies to every AI send (JSON and SSE), `GET /api/subscriptions/me`, and the `remainingUsage` field of the acquire endpoint. A member with no granted acquisitions has an allowance of `0`; this includes every pre-existing account until it claims the free plan. `consumed` may exceed `allowance` after a quota decrease; `remainingUsage` floors at `0` and the excess is not remembered. An inactive plan still contributes its quota (BR-SUBS-009). No exception for FREE or PRO.
 
 ## Enforcement
-- `SubscriptionExpirySweepJob` (thin, following `PendingFilterSweepJob`) delegates to a `SubscriptionService` sweep method; daily cron, UTC, `app.scheduling.enabled`-gated
-- Migration V27 adds the `(status, renewal_date)` index backing the due-rows query (feature spec FR-001 / NFR-SCALE-001)
-- Feature spec FR-010 / FR-012 (`docs/feats/subscription-lifecycle.md`)
+- `RequestAllowanceService` is the only implementation of the two queries and the subtraction; `AiChatService`, the acquire response and `/me` all call it (feature spec NFR-MAINT-002)
+- Allowance is one aggregate over `ai_subscription` joined to `ai_plan` for one member (index `idx_ai_subscription_user_id`); consumption is one lookup by `ai_usage.user_id`
+- Consumption is written by exactly one atomic upsert (`RequestAllowanceService.record`) and only after a successful reply (BR-AI-002)
+- Migration `V48` collapses existing monthly usage rows into one lifetime total
 
 ## Last Reviewed
-2026-10-07, by Vegalife backend team
+2026-11-04, by Vegalife backend team
+
+---
+
+# Business Rule: A Plan Is Claimed at Most Once per Member; Purchases May Repeat
+
+## Rule ID
+`BR-SUBS-008`
+
+## Status
+Active
+
+## Statement
+A zero-priced plan (`price_amount = 0`) may be claimed once per member. This is enforced by the partial unique index `uq_ai_subscription_one_claim ON ai_subscription (user_id, plan_id) WHERE payment_id IS NULL`, not by an application check. The claim is one `INSERT ... ON CONFLICT ... DO NOTHING RETURNING id`: one row returns `200 CLAIMED`, zero rows means the plan was already claimed and returns `409 "Plan already claimed"`. Priced acquisitions carry a `payment_id` and are outside the index, so buying the same plan again is legitimate and stacks another acquisition and its quota.
+
+## Rationale
+Claims have no payment to distinguish them, so "the member already holds this free plan" has to be a database fact rather than a race-prone read-then-write. An `exists()` pre-check would let two simultaneous requests both observe "not claimed" and both insert; the partial index turns the loser into a clean zero-row result with no lock or retry loop. Purchases deserve the opposite behaviour: a member buying the same plan twice has paid twice and should receive twice the quota.
+
+## Scope & Exceptions
+Applies to claims only (`payment_id IS NULL`), which in practice means `price_amount = 0` plans — claimability is `active AND price_amount = 0`, with no `claimable` column. It does not apply to `granted_at`, so a pending purchase cannot collide with a claim. Reactivating a plan does not let prior claimers claim it again; the index covers the row they already have. Free claims are not reversible: there is no refund or revoke path for quota already granted.
+
+## Enforcement
+- `PlanClaimService` issues the single `ON CONFLICT (user_id, plan_id) WHERE payment_id IS NULL DO NOTHING RETURNING id` statement; no `exists()` pre-check exists
+- Migration `V48` creates `uq_ai_subscription_one_claim` and `uq_ai_subscription_payment` (one payment produces at most one acquisition)
+- Concurrent-claim test required: two parallel claims → one `CLAIMED`, one `409`
+
+## Last Reviewed
+2026-11-04, by Vegalife backend team
+
+---
+
+# Business Rule: Deactivation Never Revokes Granted Allowance
+
+## Rule ID
+`BR-SUBS-009`
+
+## Status
+Active
+
+## Statement
+An administrator may deactivate any plan, including FREE, by `PATCH /api/admin/plans/{planId}` with `active: false` or `DELETE /api/admin/plans/{planId}` (a soft deactivation). Deactivation stops new acquisition: the plan disappears from `GET /api/subscriptions`, and acquiring it returns `400 "Plan is not available"`. It never revokes allowance already granted, because the allowance query does not filter `ai_plan.active`. Existing acquisition rows are untouched and prior claimers cannot claim the plan again even if it is reactivated.
+
+## Rationale
+`active` is a catalogue visibility flag, not an entitlement flag. If deactivation removed granted quota, retiring a product would silently delete what members already acquired — and because the quota is summed live, a single `AND p.active` in the allowance query would cause exactly that, invisibly. Separating the two means an admin can stop selling a plan without touching anyone's balance.
+
+## Scope & Exceptions
+Applies to every plan, with no FREE exception: the three `FREE_PLAN_CODE` guards in `AdminPlanService` are deleted. Deactivation is reversible (`active: true`); reactivation makes the plan acquirable again but does not restore a claim a member already used. Not covered: deleting a plan outright — hard delete is forbidden outright (BR-SUBS-011).
+
+## Enforcement
+- `AdminPlanService` has no FREE guard; `PATCH active:false` and `DELETE` both succeed on FREE (`200`)
+- The allowance aggregate in `RequestAllowanceService` deliberately has **no** `AND p.active` predicate, and must never gain one (feature spec NFR-MAINT-003)
+- `POST /api/subscriptions/acquire` filters on `active` **before** branching to claim or checkout, so deactivation blocks new acquisitions only
+
+## Last Reviewed
+2026-11-04, by Vegalife backend team
+
+---
+
+# Business Rule: Plan Quota Edits Are Retroactive
+
+## Rule ID
+`BR-SUBS-010`
+
+## Status
+Active
+
+## Statement
+Editing `ai_plan.request_quota` changes the allowance of every member who already holds that plan, on their next read, with no migration, backfill job, or per-row update. No granted quota is snapshotted on the acquisition row. Raising a quota adds the difference immediately; lowering it lowers the allowance, and `remainingUsage` floors at `0` when the new allowance is below what the member has consumed. Price edits affect only future checkouts, because the amount is frozen on the ledger at creation (BR-PAY-003).
+
+## Rationale
+Quota is a product term, not a contract sold at a point in time. A live sum means the catalogue is the single source of truth and there is no drift between "what the plan says" and "what a holder gets". A snapshot would require deciding what a mid-life edit means for every historical row, and would make the admin UI show one value while members hold another.
+
+## Scope & Exceptions
+Applies to every plan with at least one granted acquisition, including inactive plans (BR-SUBS-009). It does not apply to consumption: `ai_usage.request_count` is never adjusted by a quota edit. Setting a quota to `0` makes the plan worth nothing to existing holders; that is a deliberate consequence, not a bug. Historical acquisitions do not preserve the quota that applied when they were bought.
+
+## Enforcement
+- The allowance is a live `SUM(ai_plan.request_quota)` joined per request; there is no `granted_quota` column to fall out of date
+- `AdminPlanService` writes only the `ai_plan` row; no fan-out update exists
+- Tests assert that a quota change is visible to an existing holder without any other write
+
+## Last Reviewed
+2026-11-04, by Vegalife backend team
+
+---
+
+# Business Rule: Plans and Acquisition Rows Are Never Hard-Deleted
+
+## Rule ID
+`BR-SUBS-011`
+
+## Status
+Active
+
+## Statement
+`ai_plan` rows and `ai_subscription` rows are never hard-deleted. Plans are retired by `active = false` (BR-SUBS-009). Acquisitions are permanent history and the only record linking a plan to a payment; there is no endpoint or scheduled job that deletes them. `ai_subscription.payment_id` uses `ON DELETE CASCADE`, so a deleted `payment_ledger` row would take its acquisition with it — payments must therefore not be hard-deleted either.
+
+## Rationale
+The allowance is computed by joining acquisitions to plans, and the member's history is the acquisition table itself. Deleting either breaks a member's balance or erases evidence of a paid grant. The cascade is a safety net for data cleanup, not a licence to delete payments: with `SET NULL` a deleted payment would turn its acquisition into `payment_id = NULL`, which the schema reads as "claimed for free" and would grant quota that nobody paid for.
+
+## Scope & Exceptions
+Applies to `ai_plan`, `ai_subscription` and `payment_ledger`. `DELETE /api/admin/plans/{planId}` is a soft deactivation, not a delete, despite the verb. Pending and failed checkout acquisitions are retained even though they grant nothing (BR-SUBS-007) — they are history and are visible in `GET /api/subscriptions/me/history`. No exception for test fixtures or administrative cleanup.
+
+## Enforcement
+- `AdminPlanService.deactivatePlan` sets `active = false`; no repository delete method is exposed for plans or acquisitions
+- Migration `V48` defines `payment_id UUID REFERENCES payment_ledger(id) ON DELETE CASCADE`
+- Feature spec NFR-DATA-001 records the rule
+
+## Last Reviewed
+2026-11-04, by Vegalife backend team
