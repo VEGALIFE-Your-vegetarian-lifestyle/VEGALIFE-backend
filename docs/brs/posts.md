@@ -472,7 +472,7 @@ A browse filter is a narrowing tool. If a filter could bypass BR-POST-010 (only 
 
 ## Scope & Exceptions
 
-Applies to the three post list routes named above. It does not apply to `GET /api/posts/{postId}` (BR-POST-011) or the admin listings, which have their own filters. `keyword` is only on the public feed; the author-scoped routes deliberately omit it.
+Applies to the three post list routes named above. It does not apply to `GET /api/posts/{postId}` (BR-POST-011) or the admin listing, which has its own filter set. Among the member routes, `keyword` is only on the public feed; the author-scoped routes deliberately omit it. The admin listing (`GET /api/admin/posts`) reuses this same keyword predicate — same fields, same literal-wildcard rule — because a search there must mean what it means to a member.
 
 ## Enforcement
 

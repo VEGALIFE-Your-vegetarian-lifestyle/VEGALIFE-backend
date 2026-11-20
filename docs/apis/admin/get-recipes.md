@@ -1,7 +1,7 @@
 # API Reference: GET /api/admin/recipes
 
 ## Overview
-Return a paginated list of every recipe across all users — including soft-deleted rows, each reported with a derived `status` — optionally filtered by author, category, and creation date range, with ingredients, instructions, and author identity on each item. Admin only.
+Return a paginated list of every recipe across all users — including soft-deleted rows, each reported with a derived `status` — optionally filtered by author, category, review state, deletion state, dish, difficulty, total time, a text keyword, and creation date range, with ingredients, instructions, and author identity on each item. Admin only.
 
 ## Endpoint
 ```
@@ -21,11 +21,17 @@ None.
 |------|------|----------|-------------|
 | page | integer | No | 0-based page index, default 0 |
 | size | integer | No | Page size, default 20, max 100 |
-| sort | string | No | Format `property,direction`. Default `createdAt,desc`. Property must be one of: `createdAt`, `updatedAt`, `name` |
+| sort | string | No | Format `property,direction`. Default `createdAt,desc`. Property must be one of: `createdAt`, `updatedAt`, `name`, `moderationStatus` |
 | userId | uuid | No | Only recipes authored by this user |
 | categoryId | uuid | No | Only recipes linked (via `post_recipe` → `post_category`) to a post carrying this category |
+| moderationStatus | string | No | Review state: `PENDING`, `APPROVED`, or `REJECTED` (case-insensitive). `PENDING` is the review queue. Omit for every state |
+| status | string | No | Deletion state: `ACTIVE` or `DELETED` (case-insensitive). Omit to include both, which is the default. Distinct from `moderationStatus` |
+| dishId | uuid | No | Only recipes attached to this dish |
+| difficulty | string | No | `EASY`, `MEDIUM`, or `HARD` (case-insensitive) |
+| maxTotalTimeMinutes | integer | No | Keep recipes whose `prepTimeMinutes + cookTimeMinutes` is at most this value. A recipe missing either time does not match |
+| keyword | string | No | Case-insensitive substring matched against `name`, `description`, `instructions`, the dish name, or any ingredient name. `%`, `_` and `\` are matched literally. Blank or omitted applies no keyword filter |
 | createdFrom | string | No | ISO-8601 datetime lower bound (inclusive) on `createdAt`, e.g. `2026-01-01T00:00:00Z` |
-| createdTo | string | No | ISO-8601 datetime upper bound (inclusive) on `createdAt`, e.g. `2026-01-31T23:59:59Z` |
+| createdTo | string | No | ISO-8601 datetime upper bound (inclusive) on `createdAt`, e.g. `2026-01-31T23:59:59Z`. `createdFrom` after `createdTo` returns 400 |
 
 ### Request Body
 No request body
@@ -136,14 +142,15 @@ No request body
 ### Error Responses
 | Status Code | Condition | Message |
 |-------------|-----------|---------|
-| 400 | Unknown `sort` property, invalid date format, `createdFrom` after `createdTo`, or `size` > 100 | "Validation failed" or the parse error message |
+| 400 | Unknown `sort` property, invalid `moderationStatus`/`status`/`difficulty`/date format, `createdFrom` after `createdTo`, or `size` > 100 | "Validation failed" or the parse error message |
 | 401 | Missing/invalid JWT | "Unauthorized" |
 | 403 | Authenticated non-admin | "Forbidden" |
 | 500 | Server error | "Internal server error" |
 
 ## Business Rules
 - Soft-deleted recipes are **included** and reported as `status = DELETED`; `status` is derived from `deletedAt`, not stored (issue #4 deviation, decided 2026-10-01).
-- No `status` query filter exists on this endpoint.
+- Two similarly-named filters exist and must not be confused: `status` is deletion (`ACTIVE`/`DELETED`) and `moderationStatus` is review (`PENDING`/`APPROVED`/`REJECTED`). They are independent and combine with AND, so a recipe can be `ACTIVE` and still `PENDING` review. Omitting `status` includes deleted rows, as it always has; `status=ACTIVE` is how you exclude them.
+- `keyword`, `dishId`, `difficulty` and `maxTotalTimeMinutes` use the same predicates as the member catalogue (`GET /api/recipes`), so a search returns the same recipes here as there, except that this list also sees soft-deleted and unapproved ones. A recipe matching several ingredient names is returned once.
 - Only `ROLE_ADMIN` may call this endpoint (`SecurityConfig` `/api/admin/**`).
 - `categoryId` resolves through `post_recipe` → `post_category`; a recipe not linked to any post matches only when `categoryId` is omitted.
 - `unit` on an ingredient entry is the **shared ingredient's** unit (`G`/`ML`/`PIECE`, or `null`), not a per-recipe choice (ADR-022).

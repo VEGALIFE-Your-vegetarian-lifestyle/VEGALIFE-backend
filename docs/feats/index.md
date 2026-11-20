@@ -68,3 +68,4 @@ Product-level feature specs with design overview, success metrics, and acceptanc
 | `remove-recipe-scoring.md`          | Remove Recipe-Body Scoring                | In progress | 2026-11-19 |
 | `media-aware-post-moderation.md`    | Media-Aware Post Moderation and a `pending` Status | In progress | 2026-11-19 |
 | `admin-post-list-superset-of-post-list.md` | Admin Post List Is a Superset of the Member Post List | Approved | 2026-11-20 |
+| `admin-list-filter-parity.md`       | Admin List Filter Parity and Search       | Approved    | 2026-11-20 |
